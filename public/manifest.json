@@ -1,0 +1,156 @@
+{
+  "id": "com.ethiolearn.pwa",
+  "name": "EthioLearn Pro Campus",
+  "short_name": "EthioLearn",
+  "description": "Premium AI Learning Platform featuring personalized study assistants, active recall flashcards, and high-fidelity soundscapes modeled for school &amp; university students.",
+  "lang": "en-US",
+  "dir": "ltr",
+  "categories": [
+    "education",
+    "productivity",
+    "utilities",
+    "books"
+  ],
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "theme_color": "#0a1128",
+  "background_color": "#0a1128",
+  "display": "standalone",
+  "display_override": [
+    "standalone"
+  ],
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/ethiolearn_icon.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "/ethiolearn_icon.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/ethiolearn_icon.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "/ethiolearn_icon.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/ethiolearn_icon.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "form_factor": "wide",
+      "label": "EthioLearn Pro Portal - Study Desktop Dashboard"
+    },
+    {
+      "src": "/ethiolearn_icon.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "EthioLearn Pro Mobile Suite"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "AI Campus Assistant",
+      "short_name": "Tutor",
+      "description": "Open your premium AI study companion chat",
+      "url": "/?shortcut=tutor",
+      "icons": [
+        {
+          "src": "/ethiolearn_icon.jpg",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Mind Relax Soundscapes",
+      "short_name": "SoundSpace",
+      "description": "Calming spatial binaural ambient synthesis",
+      "url": "/?shortcut=mindlax",
+      "icons": [
+        {
+          "src": "/ethiolearn_icon.jpg",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
+  "edge_side_panel": {
+    "preferred_width": 440
+  },
+  "note_taking": {
+    "new_note_url": "/?shortcut=notes"
+  },
+  "prefer_related_applications": false,
+  "file_handlers": [
+    {
+      "action": "/?action=open-file",
+      "accept": {
+        "text/plain": [
+          ".txt",
+          ".md"
+        ],
+        "application/json": [
+          ".json"
+        ]
+      }
+    }
+  ],
+  "protocol_handlers": [
+    {
+      "protocol": "web+ethiolearn",
+      "url": "/?uri=%s"
+    }
+  ],
+  "share_target": {
+    "action": "/?action=share-to-campus",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  "widgets": [
+    {
+      "name": "Study Streak Tracker",
+      "short_name": "Streak",
+      "description": "See your active memory study cycle metrics.",
+      "tag": "streak-widget",
+      "ms_ac_template": "",
+      "icons": [
+        {
+          "src": "/ethiolearn_icon.jpg",
+          "sizes": "192x192",
+          "type": "image/jpeg"
+        }
+      ],
+      "screenshots": [
+        {
+          "src": "/ethiolearn_icon.jpg",
+          "sizes": "512x512",
+          "type": "image/jpeg",
+          "label": "Streak Widget Monitor View"
+        }
+      ]
+    }
+  ],
+  "iarc_rating_id": "e830fbf0-ffbe-4d43-91ee-e6d234a413d7"
+}

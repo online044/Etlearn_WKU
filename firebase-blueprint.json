@@ -1,0 +1,142 @@
+{
+  "entities": {
+    "profile": {
+      "title": "StudentProfile",
+      "description": "The student learning profile, school level, and academic settings.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "university": { "type": "string" },
+        "year": { "type": "string" },
+        "subjects": { "type": "array" },
+        "claudeApiKey": { "type": "string" },
+        "dailyGoalHours": { "type": "integer" },
+        "theme": { "type": "string" },
+        "language": { "type": "string" }
+      },
+      "required": ["name", "year", "subjects"]
+    },
+    "note": {
+      "title": "CustomNote",
+      "description": "A student study note, generated summary, or textbook highlight.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "subject": { "type": "string" },
+        "tags": { "type": "array" },
+        "color": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title", "content", "subject"]
+    },
+    "study_session": {
+      "title": "StudySession",
+      "description": "A tracked active study session.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "subject": { "type": "string" },
+        "date": { "type": "string" },
+        "durationMinutes": { "type": "integer" }
+      },
+      "required": ["id", "subject", "date", "durationMinutes"]
+    },
+    "promotion": {
+      "title": "Promotion",
+      "description": "A promotional discount code for subscription upgrades.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "discountPercentage": { "type": "integer" },
+        "fixedDiscountETB": { "type": "integer" },
+        "maxUses": { "type": "integer" },
+        "usedCount": { "type": "integer" },
+        "expiresAt": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "description": { "type": "string" }
+      },
+      "required": ["code", "discountPercentage", "isActive"]
+    },
+    "book": {
+      "title": "Book",
+      "description": "A university textbook or digital learning module.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "university": { "type": "string" },
+        "department": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "course": { "type": "string" },
+        "subject": { "type": "string" },
+        "unit": { "type": "string" },
+        "accessLevel": { "type": "string", "enum": ["free", "pro"] },
+        "allowDownload": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["draft", "published", "archived"] },
+        "pdfUrl": { "type": "string" },
+        "coverUrl": { "type": "string" },
+        "fileSize": { "type": "integer" },
+        "pageCount": { "type": "integer" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "title", "university", "department", "course", "subject", "status", "accessLevel"]
+    },
+    "exam_sheet": {
+      "title": "ExamSheet",
+      "description": "An authentic university past exam, midterm, final, or national exit exam paper.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "university": { "type": "string" },
+        "department": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "course": { "type": "string" },
+        "subject": { "type": "string" },
+        "examType": { "type": "string", "enum": ["midterm", "final", "model", "quiz", "exit_exam"] },
+        "examYear": { "type": "string" },
+        "accessLevel": { "type": "string", "enum": ["free", "pro"] },
+        "allowDownload": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["draft", "published", "archived"] },
+        "pdfUrl": { "type": "string" },
+        "fileSize": { "type": "integer" },
+        "pageCount": { "type": "integer" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "title", "university", "department", "course", "subject", "examType", "examYear", "status", "accessLevel"]
+    }
+  },
+  "firestore": {
+    "/profiles/{userId}": {
+      "schema": "profile",
+      "description": "Collection of student learning profiles mapped by Firebase UID."
+    },
+    "/profiles/{userId}/notes/{noteId}": {
+      "schema": "note",
+      "description": "Subcollection of custom study guides and notes for the student."
+    },
+    "/profiles/{userId}/study_sessions/{sessionId}": {
+      "schema": "study_session",
+      "description": "Subcollection of logged active focus study sessions."
+    },
+    "/promotions/{promoId}": {
+      "schema": "promotion",
+      "description": "Collection of promotion and discount codes for subscription upgrades."
+    },
+    "/books/{bookId}": {
+      "schema": "book",
+      "description": "Collection of real university curriculum textbooks and digital study modules."
+    },
+    "/exam_sheets/{examId}": {
+      "schema": "exam_sheet",
+      "description": "Collection of real university exam sheets, midterms, finals, and exit exams."
+    }
+  }
+}

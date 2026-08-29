@@ -1,0 +1,150 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net - default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Liveness test collection
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    // Common Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'ezrat2116@gmail.com' ||
+        request.auth.token.role == 'admin' ||
+        request.auth.token.role == 'super_admin'
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Profiles Schema Validation
+    function isValidProfile(data) {
+      return data.keys().hasAll(['name', 'year', 'subjects'])
+        && data.name is string && data.name.size() <= 200
+        && data.year is string && data.year.size() <= 50
+        && data.subjects is list;
+    }
+
+    // Notes Schema Validation
+    function isValidNote(data) {
+      return data.keys().hasAll(['id', 'title', 'content', 'subject'])
+        && data.id is string && data.id.size() <= 128
+        && data.title is string && data.title.size() <= 300
+        && data.content is string && data.content.size() <= 500000
+        && data.subject is string && data.subject.size() <= 200;
+    }
+
+    // Study Sessions Schema Validation
+    function isValidStudySession(data) {
+      return data.keys().hasAll(['id', 'subject', 'date', 'durationMinutes'])
+        && data.id is string && data.id.size() <= 128
+        && data.subject is string && data.subject.size() <= 200
+        && data.date is string && data.date.size() <= 50
+        && data.durationMinutes is int;
+    }
+
+    // Promotions Schema Validation
+    function isValidPromotion(data) {
+      return data.keys().hasAll(['code', 'discountPercentage', 'isActive'])
+        && data.code is string && data.code.size() <= 64
+        && data.discountPercentage is int
+        && data.isActive is bool;
+    }
+
+    // Books Schema Validation
+    function isValidBook(data) {
+      return data.keys().hasAll(['id', 'title', 'university', 'department', 'course', 'subject', 'status', 'accessLevel'])
+        && data.id is string && data.id.size() <= 128
+        && data.title is string && data.title.size() <= 300
+        && data.university is string && data.university.size() <= 200
+        && data.department is string && data.department.size() <= 200
+        && data.course is string && data.course.size() <= 200
+        && data.subject is string && data.subject.size() <= 200
+        && (data.accessLevel == 'free' || data.accessLevel == 'pro')
+        && (data.status == 'draft' || data.status == 'published' || data.status == 'archived');
+    }
+
+    // Exam Sheets Schema Validation
+    function isValidExamSheet(data) {
+      return data.keys().hasAll(['id', 'title', 'university', 'department', 'course', 'subject', 'examType', 'examYear', 'status', 'accessLevel'])
+        && data.id is string && data.id.size() <= 128
+        && data.title is string && data.title.size() <= 300
+        && data.university is string && data.university.size() <= 200
+        && data.department is string && data.department.size() <= 200
+        && data.course is string && data.course.size() <= 200
+        && data.subject is string && data.subject.size() <= 200
+        && data.examYear is string && data.examYear.size() <= 64
+        && (data.accessLevel == 'free' || data.accessLevel == 'pro')
+        && (data.status == 'draft' || data.status == 'published' || data.status == 'archived');
+    }
+
+    // 2. Profiles Collection
+    match /profiles/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidProfile(request.resource.data);
+      allow update: if (isOwner(userId) && isValidProfile(request.resource.data)) || isAdmin();
+      allow delete: if isOwner(userId) || isAdmin();
+
+      // 3. Notes Subcollection
+      match /notes/{noteId} {
+        allow list, get: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidId(noteId) && isValidNote(request.resource.data);
+        allow update: if isOwner(userId) && isValidId(noteId) && isValidNote(request.resource.data);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+
+      // 4. Study Sessions Subcollection
+      match /study_sessions/{sessionId} {
+        allow list, get: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidId(sessionId) && isValidStudySession(request.resource.data);
+        allow update: if isOwner(userId) && isValidId(sessionId) && isValidStudySession(request.resource.data);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    // 5. Promotions Collection - Read-only for normal users, write strictly restricted to Admin
+    match /promotions/{promoId} {
+      allow list, get: if true;
+      allow create, update: if isAdmin() && isValidPromotion(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // 6. Announcements Collection - Read-only for all, write strictly restricted to Admin
+    match /announcements/{announcementId} {
+      allow list, get: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 7. Books Collection - Published books visible to students; write/draft strictly restricted to Admin
+    match /books/{bookId} {
+      allow list, get: if resource.data.status == 'published' || isAdmin();
+      allow create: if isAdmin() && isValidId(bookId) && isValidBook(request.resource.data);
+      allow update: if isAdmin() && isValidId(bookId) && isValidBook(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // 8. Exam Sheets Collection - Published exam sheets visible to students; write/draft strictly restricted to Admin
+    match /exam_sheets/{examId} {
+      allow list, get: if resource.data.status == 'published' || isAdmin();
+      allow create: if isAdmin() && isValidId(examId) && isValidExamSheet(request.resource.data);
+      allow update: if isAdmin() && isValidId(examId) && isValidExamSheet(request.resource.data);
+      allow delete: if isAdmin();
+    }
+  }
+}

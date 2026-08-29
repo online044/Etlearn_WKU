@@ -1,0 +1,6 @@
+{
+  "name": "ET_LEARN",
+  "description": "ET_LEARN - Learn Smarter. Prepare Better. A complete commercial-grade Ethiopian digital learning platform with courses, national exams prep, AI Tutor, and student progress analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

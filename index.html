@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a1128" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="ET_LEARN" />
+    <link rel="apple-touch-icon" href="/ethiolearn_icon.jpg" />
+    <title>ET_LEARN | Learn Smarter. Prepare Better.</title>
+    <!-- Telegram Web App SDK -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Chart.js CDN requested by user -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Google AdSense for Free Tier Students -->
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7081291575190781" crossorigin="anonymous"></script>
+    <link rel="manifest" href="/manifest.json" />
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.getRegistrations().then((registrations) => {
+            for (const reg of registrations) {
+              reg.update();
+            }
+          });
+          navigator.serviceWorker.register('/sw.js')
+            .then((reg) => console.log('[Service Worker] Active scope:', reg.scope))
+            .catch((err) => console.error('[Service Worker] Failed:', err));
+        });
+      }
+    </script>
+  </head>
+  <body class="bg-[#0a1128] text-[#F0EDE8]">
+    <div id="root">
+      <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: #0a1128; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-user-select: none; user-select: none;">
+        <div style="display: flex; flex-direction: column; align-items: center; text-align: center; padding: 20px;">
+          <img src="/ethiolearn_icon.jpg" alt="EthioLearn Pro" style="width: 100px; height: 100px; border-radius: 22px; box-shadow: 0 12px 30px rgba(0,0,0,0.4); margin-bottom: 24px; animation: logo-pulse 2s infinite ease-in-out; border: 2px solid rgba(255,255,255,0.08);" />
+          <h1 style="color: #ffffff; font-size: 24px; font-weight: 900; margin: 0; letter-spacing: 3px;">ETHIOLEARN</h1>
+          <p style="color: #00a2e8; font-size: 11px; font-weight: 800; margin: 8px 0 0 0; text-transform: uppercase; letter-spacing: 5px; opacity: 0.9;">LEARN &bull; GROW &bull; ACHIEVE</p>
+          
+          <div style="margin-top: 40px; width: 60px; height: 4px; background-color: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; position: relative;">
+            <div style="width: 30px; height: 100%; background: linear-gradient(90deg, #00a2e8, #00a896); border-radius: 2px; position: absolute; top: 0; left: 0; animation: loading-bar-swipe 1.5s infinite ease-in-out;"></div>
+          </div>
+        </div>
+      </div>
+      <style>
+        @keyframes logo-pulse {
+          0%, 100% { transform: scale(1); opacity: 0.95; }
+          50% { transform: scale(1.04); opacity: 1; }
+        }
+        @keyframes loading-bar-swipe {
+          0% { left: -50%; }
+          100% { left: 100%; }
+        }
+      </style>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

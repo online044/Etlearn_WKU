@@ -1,0 +1,456 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+export type SubscriptionTier = 'free' | 'pro_monthly' | 'exam_season_pass' | 'subject_bundle';
+export type SubscriptionStatus = 'active' | 'pending' | 'expired' | 'none';
+export type PaymentProvider = 'telebirr' | 'cbe_birr' | 'chapa' | 'santim_pay' | 'manual';
+export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded';
+
+export interface SubscriptionRecord {
+  id: string;
+  userId: string;
+  tier: SubscriptionTier;
+  status: SubscriptionStatus;
+  subjectBundleId?: string;
+  startDate: string;
+  endDate?: string;
+  paymentMethod: PaymentProvider;
+  autoRenew: boolean;
+}
+
+export interface PaymentRecord {
+  id: string;
+  userId: string;
+  subscriptionId?: string;
+  amount: number;
+  originalAmount?: number;
+  couponCode?: string;
+  discountETB?: number;
+  currency: string;
+  provider: PaymentProvider;
+  providerTxnId: string;
+  senderName: string;
+  senderPhone?: string;
+  receiptImage?: string; // Base64 data URL or image preview URL of receipt
+  agreedToTerms?: boolean;
+  status: PaymentStatus;
+  createdAt: string;
+}
+
+export interface FeatureUsageRecord {
+  userId: string;
+  featureType: 'ai_tutor_queries' | 'quiz_attempts' | 'pdf_downloads';
+  count: number;
+  resetAt: string; // ISO Date String
+}
+
+export interface AccountInfo {
+  email: string;
+  passwordEncrypted: string;
+  rememberMe: boolean;
+  profile: StudentProfile;
+}
+
+export interface StudentProfile {
+  name: string;
+  email?: string;
+  university: string;
+  year: string;
+  subjects: string[];
+  claudeApiKey: string;
+  dailyGoalHours: number;
+  theme: 'dark' | 'light' | 'auto';
+  language: 'en' | 'am' | 'both';
+  avatar?: string; // Preset name or Base64 string of student photo
+  phone?: string;
+  isRegistered?: boolean;
+  unregisteredAICredits?: number;
+  // Premium subscription details
+  isPro?: boolean;
+  tier?: SubscriptionTier;
+  proStatus?: 'none' | 'trial' | 'pending' | 'active' | 'expired';
+  proPaymentTxn?: string;
+  proPaymentDate?: string;
+  proStartDate?: string;
+  proEndDate?: string;
+  purchasedBundles?: string[]; // Array of subject bundle IDs purchased
+  senderName?: string;
+  proPaymentPhone?: string;
+  paymentMethod?: PaymentProvider;
+  proReceiptImage?: string; // Base64 data string or image URL of payment receipt
+  agreedToTerms?: boolean;
+  agreedToTermsDate?: string;
+  telegramId?: string;
+  telegramUsername?: string;
+  referralCode?: string;
+  referredBy?: string;
+  userRole?: 'student' | 'instructor' | 'admin' | 'super_admin';
+}
+
+export interface CouponCode {
+  code: string;
+  discountPercentage: number;
+  fixedDiscountETB?: number;
+  maxUses: number;
+  usedCount: number;
+  expiresAt: string;
+  isActive: boolean;
+  description?: string;
+}
+
+export interface Promotion {
+  id?: string;
+  code: string;
+  title?: string;
+  description?: string;
+  discountPercentage: number;
+  fixedDiscountETB?: number;
+  maxUses?: number;
+  usedCount?: number;
+  expiresAt?: string;
+  isActive: boolean;
+  applicableTiers?: SubscriptionTier[];
+}
+
+export interface PlatformAnnouncement {
+  id: string;
+  title: string;
+  message: string;
+  date: string;
+  badgeText?: string;
+  isImportant?: boolean;
+  status?: 'draft' | 'published' | 'archived';
+  createdAt?: string;
+}
+
+export type CourseStatus = 'draft' | 'published' | 'archived';
+
+export interface CourseRecord {
+  id: string;
+  title: string;
+  description: string;
+  subject: string;
+  level: 'Grade 12' | 'University' | 'Grade 12 New Curriculum' | 'Common Courses';
+  status: CourseStatus;
+  lessonsCount: number;
+  goalDays: number;
+  instructorId?: string;
+  instructorName?: string;
+  thumbnailUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LessonRecord {
+  id: string;
+  courseId: string;
+  title: string;
+  chapterNumber: number;
+  content: string;
+  duration: string;
+  status: CourseStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LessonResource {
+  id: string;
+  title: string;
+  type: 'pdf' | 'summary' | 'cheat_sheet' | 'exercise';
+  url?: string;
+  size?: string;
+}
+
+export interface LessonRecord {
+  id: string;
+  courseId: string;
+  title: string;
+  chapterNumber: number;
+  unitTitle?: string;
+  content: string;
+  duration: string;
+  videoUrl?: string;
+  audioUrl?: string;
+  resources?: LessonResource[];
+  status: CourseStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StudentCourseProgress {
+  courseId: string;
+  completedLessonIds: string[];
+  lastAccessedLessonId?: string;
+  progressPercentage: number;
+  totalLessons: number;
+  completedLessonsCount: number;
+  lastUpdated: string;
+}
+
+export type QuestionType = 'mcq' | 'true_false' | 'short_answer';
+
+export interface ExamQuestion {
+  id: number | string;
+  question?: string;
+  text?: string;
+  questionNumber?: number;
+  options: string[];
+  correctAnswer: string;
+  explanation: string;
+  subject?: string;
+  topic?: string;
+  subjectTopic?: string;
+  unitName?: string;
+  questionType?: QuestionType;
+  difficulty?: 'easy' | 'medium' | 'hard';
+}
+
+export interface ExamPaper {
+  id: string;
+  title: string;
+  subject: string;
+  level: 'University' | 'Grade 12' | 'Common Courses';
+  university?: string;
+  year?: string;
+  durationMinutes: number;
+  totalQuestions: number;
+  passingPercentage?: number;
+  passingScore?: number;
+  instructions?: string;
+  questions: ExamQuestion[];
+  status?: 'published' | 'draft' | 'archived';
+  description?: string;
+}
+
+export interface ExamAttemptRecord {
+  id: string;
+  userId?: string;
+  examId: string;
+  examTitle: string;
+  subject: string;
+  score: number;
+  totalQuestions: number;
+  percentage: number;
+  grade: 'A' | 'B' | 'C' | 'D' | 'F';
+  isPassed: boolean;
+  timeSpentSeconds: number;
+  userAnswers: { [questionId: string]: string };
+  flaggedQuestions: (string | number)[];
+  date: string;
+  weakTopics: string[];
+  incorrectQuestions?: Array<{
+    id: string | number;
+    question: string;
+    studentAnswer: string;
+    correctAnswer: string;
+    explanation: string;
+    subjectTopic?: string;
+  }>;
+}
+
+export type AITeacherMode = 'teaching' | 'quiz' | 'exam_feedback' | 'chat' | 'free_chat';
+
+export interface AITeacherContext {
+  mode: AITeacherMode;
+  courseTitle?: string;
+  lessonTitle?: string;
+  lessonContent?: string;
+  subject?: string;
+  examErrors?: Array<{
+    question: string;
+    studentAnswer: string;
+    correctAnswer: string;
+    explanation: string;
+    subjectTopic?: string;
+  }>;
+}
+
+export interface SavedChatSession {
+  id: string;
+  title: string;
+  subject: string;
+  mode: AITeacherMode;
+  messages: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+    attachment?: {
+      name?: string;
+      mimeType: string;
+      data: string;
+    };
+    fileData?: {
+      name?: string;
+      mimeType: string;
+      data: string;
+    };
+    timestamp?: string;
+  }>;
+  createdAt: string;
+  updatedAt: string;
+  isPinned?: boolean;
+  modelUsed?: string;
+  summary?: string;
+}
+
+export interface AdminDashboardStats {
+  totalStudents: number;
+  publishedCourses: number;
+  draftCourses: number;
+  totalLessons: number;
+  publishedBooks?: number;
+  draftBooks?: number;
+  publishedExams?: number;
+  draftExams?: number;
+  totalRevenueETB: number;
+  pendingPaymentsCount: number;
+  totalPaymentsCount: number;
+  activeAnnouncementsCount: number;
+  activeCouponsCount: number;
+  recentActivity: {
+    id: string;
+    type: 'user_registered' | 'course_published' | 'course_created' | 'payment_received' | 'announcement_posted' | 'book_published' | 'exam_published';
+    title: string;
+    description: string;
+    timestamp: string;
+  }[];
+}
+
+export type ContentAccessLevel = 'free' | 'pro';
+export type ContentStatus = 'draft' | 'published' | 'archived';
+export type ExamType = 'midterm' | 'final' | 'model' | 'quiz' | 'exit_exam';
+
+export interface BookRecord {
+  id: string;
+  title: string;
+  description: string;
+  university: string;
+  department: string;
+  academicYear: string;
+  course: string;
+  subject: string;
+  unit: string;
+  accessLevel: ContentAccessLevel;
+  allowDownload: boolean;
+  status: ContentStatus;
+  pdfUrl: string;
+  pdfStoragePath?: string;
+  coverUrl?: string;
+  coverStoragePath?: string;
+  fileSize?: number;
+  pageCount?: number;
+  downloadsCount?: number;
+  viewsCount?: number;
+  publishedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExamSheetRecord {
+  id: string;
+  title: string;
+  description: string;
+  university: string;
+  department: string;
+  academicYear: string;
+  course: string;
+  subject: string;
+  examType: ExamType;
+  examYear: string;
+  accessLevel: ContentAccessLevel;
+  allowDownload: boolean;
+  status: ContentStatus;
+  pdfUrl: string;
+  pdfStoragePath?: string;
+  fileSize?: number;
+  pageCount?: number;
+  downloadsCount?: number;
+  viewsCount?: number;
+  publishedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Flashcard {
+  id: string;
+  question: string;
+  answer: string;
+  difficulty?: string;
+  explanation?: string;
+  // SM-2 Spaced Repetition Fields
+  interval: number; // in days
+  repetition: number;
+  easeFactor: number;
+  dueDate: string; // ISO string
+}
+
+export interface Deck {
+  id: string;
+  title: string;
+  subject: string;
+  cards: Flashcard[];
+}
+
+export interface CustomNote {
+  id: string;
+  title: string;
+  content: string;
+  subject: string;
+  tags: string[];
+  color: string; // Tailwind bg color class
+  createdAt: string;
+}
+
+export interface ExamSession {
+  id: string;
+  subject: string;
+  date: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  questionsCount: number;
+  score: number;
+  grade: 'A' | 'B' | 'C' | 'D' | 'F';
+  weakAreas: string[];
+}
+
+export interface StudySession {
+  id: string;
+  subject: string;
+  date: string; // YYYY-MM-DD
+  durationMinutes: number;
+}
+
+export interface FlashcardReviewLog {
+  date: string; // YYYY-MM-DD
+  reviewedCount: number;
+  correctCount: number;
+}
+
+export interface StudyTask {
+  id: string;
+  userId?: string;
+  title: string;
+  subject?: string;
+  courseTitle?: string;
+  durationMinutes?: number;
+  duration?: string;
+  isCompleted: boolean;
+  type?: 'review' | 'quiz' | 'lesson' | 'reading';
+  dueDate?: string;
+  createdAt?: string;
+}
+
+export interface AppState {
+  currentPage: string;
+  profile: StudentProfile | null;
+  streak: {
+    current: number;
+    highest: number;
+    lastActiveDate: string | null;
+  };
+  customNotes: CustomNote[];
+  examSessions: ExamSession[];
+  studySessions: StudySession[];
+  flashcardLogs: FlashcardReviewLog[];
+  decksState: { [deckId: string]: Flashcard[] }; // Overrides / stores review state of cards in a deck
+}
