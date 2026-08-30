@@ -600,13 +600,27 @@ export async function uploadBookPdf(req: Request, res: Response) {
   try {
     const { bookId, fileName, fileBase64, fileSize, pageCount } = req.body;
     if (!fileBase64) {
-      return res.status(400).json({ error: 'fileBase64 data is required.' });
+      return res.status(400).json({ success: false, error: 'fileBase64 data is required.' });
     }
 
     ensureStorageDirectories();
 
     const cleanBase64 = fileBase64.replace(/^data:application\/pdf;base64,/, '').replace(/^data:.*;base64,/, '');
     const buffer = Buffer.from(cleanBase64, 'base64');
+
+    if (buffer.length < 4 || buffer.subarray(0, 4).toString('ascii') !== '%PDF') {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid file format. The uploaded file is not a valid PDF document (missing %PDF header).'
+      });
+    }
+
+    if (buffer.length > 50 * 1024 * 1024) {
+      return res.status(400).json({
+        success: false,
+        error: 'File size exceeds the maximum allowed limit of 50MB.'
+      });
+    }
 
     const id = bookId || `book_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
     const storagePath = path.join(PRIVATE_BOOKS_DIR, `${id}.pdf`);
@@ -615,11 +629,36 @@ export async function uploadBookPdf(req: Request, res: Response) {
 
     const actualSize = buffer.length;
 
+    // Optional Supabase Storage mirror upload if credentials exist
+    let supabaseUrl: string | undefined = undefined;
+    const supabase = getSupabaseAdmin();
+    if (supabase) {
+      try {
+        const safeName = (fileName || `${id}.pdf`).replace(/[^a-zA-Z0-9._-]/g, '_');
+        const storagePathSupabase = `books/${id}/${safeName}`;
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from('books')
+          .upload(storagePathSupabase, buffer, {
+            contentType: 'application/pdf',
+            upsert: true
+          });
+        if (!uploadErr && uploadData) {
+          const { data: publicUrlData } = supabase.storage.from('books').getPublicUrl(storagePathSupabase);
+          if (publicUrlData?.publicUrl) {
+            supabaseUrl = publicUrlData.publicUrl;
+          }
+        }
+      } catch (sbErr) {
+        console.warn('[uploadBookPdf] Supabase storage upload warning (fallback to local private storage):', sbErr);
+      }
+    }
+
     // If bookId matches an existing book, update its storage path
     const books = readBooksFromStore();
     const idx = books.findIndex(b => b.id === id);
     if (idx !== -1) {
       books[idx].pdfStoragePath = storagePath;
+      if (supabaseUrl) books[idx].pdfUrl = supabaseUrl;
       books[idx].fileSize = actualSize;
       if (pageCount) books[idx].pageCount = Number(pageCount);
       books[idx].updatedAt = new Date().toISOString();
@@ -630,12 +669,13 @@ export async function uploadBookPdf(req: Request, res: Response) {
       success: true,
       id,
       pdfStoragePath: storagePath,
+      pdfUrl: supabaseUrl,
       fileSize: actualSize,
       fileName: fileName || `${id}.pdf`
     });
   } catch (error: any) {
     console.error('[Admin Content API] uploadBookPdf error:', error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ success: false, error: error.message || 'Failed to upload and process PDF file.' });
   }
 }
 
@@ -845,7 +885,7 @@ export async function uploadExamPdf(req: Request, res: Response) {
   try {
     const { examId, fileName, fileBase64, fileSize, pageCount } = req.body;
     if (!fileBase64) {
-      return res.status(400).json({ error: 'fileBase64 data is required.' });
+      return res.status(400).json({ success: false, error: 'fileBase64 data is required.' });
     }
 
     ensureStorageDirectories();
@@ -853,16 +893,55 @@ export async function uploadExamPdf(req: Request, res: Response) {
     const cleanBase64 = fileBase64.replace(/^data:application\/pdf;base64,/, '').replace(/^data:.*;base64,/, '');
     const buffer = Buffer.from(cleanBase64, 'base64');
 
+    if (buffer.length < 4 || buffer.subarray(0, 4).toString('ascii') !== '%PDF') {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid file format. The uploaded file is not a valid PDF document (missing %PDF header).'
+      });
+    }
+
+    if (buffer.length > 50 * 1024 * 1024) {
+      return res.status(400).json({
+        success: false,
+        error: 'File size exceeds the maximum allowed limit of 50MB.'
+      });
+    }
+
     const id = examId || `exam_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
     const storagePath = path.join(PRIVATE_EXAMS_DIR, `${id}.pdf`);
 
     fs.writeFileSync(storagePath, buffer);
     const actualSize = buffer.length;
 
+    // Optional Supabase storage mirror upload
+    let supabaseUrl: string | undefined = undefined;
+    const supabase = getSupabaseAdmin();
+    if (supabase) {
+      try {
+        const safeName = (fileName || `${id}.pdf`).replace(/[^a-zA-Z0-9._-]/g, '_');
+        const storagePathSupabase = `exams/${id}/${safeName}`;
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from('exams')
+          .upload(storagePathSupabase, buffer, {
+            contentType: 'application/pdf',
+            upsert: true
+          });
+        if (!uploadErr && uploadData) {
+          const { data: publicUrlData } = supabase.storage.from('exams').getPublicUrl(storagePathSupabase);
+          if (publicUrlData?.publicUrl) {
+            supabaseUrl = publicUrlData.publicUrl;
+          }
+        }
+      } catch (sbErr) {
+        console.warn('[uploadExamPdf] Supabase storage upload warning (fallback to local storage):', sbErr);
+      }
+    }
+
     const exams = readExamsFromStore();
     const idx = exams.findIndex(e => e.id === id);
     if (idx !== -1) {
       exams[idx].pdfStoragePath = storagePath;
+      if (supabaseUrl) exams[idx].pdfUrl = supabaseUrl;
       exams[idx].fileSize = actualSize;
       if (pageCount) exams[idx].pageCount = Number(pageCount);
       exams[idx].updatedAt = new Date().toISOString();
@@ -873,11 +952,12 @@ export async function uploadExamPdf(req: Request, res: Response) {
       success: true,
       id,
       pdfStoragePath: storagePath,
+      pdfUrl: supabaseUrl,
       fileSize: actualSize,
       fileName: fileName || `${id}.pdf`
     });
   } catch (error: any) {
     console.error('[Admin Content API] uploadExamPdf error:', error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ success: false, error: error.message || 'Failed to upload and process exam PDF.' });
   }
 }

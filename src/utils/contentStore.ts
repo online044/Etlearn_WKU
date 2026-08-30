@@ -238,6 +238,31 @@ export async function requestContentDownload(
 // ADMIN CONSOLE CONTENT MANAGEMENT APIS
 // ============================================================================
 
+async function safeParseResponse(res: Response): Promise<{ ok: boolean; status: number; data: any; error?: string }> {
+  const status = res.status;
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    try {
+      const json = await res.json();
+      return { ok: res.ok, status, data: json, error: json.error || json.message };
+    } catch (err: any) {
+      return { ok: false, status, data: null, error: `Invalid JSON response from server: ${err.message}` };
+    }
+  } else {
+    try {
+      const text = await res.text();
+      return {
+        ok: res.ok,
+        status,
+        data: null,
+        error: text.length < 200 && !text.includes('<!DOCTYPE') ? text : `Server error (HTTP ${status})`
+      };
+    } catch {
+      return { ok: false, status, data: null, error: `Server error (HTTP ${status})` };
+    }
+  }
+}
+
 /**
  * Fetch all books for Admin Console (draft, published, archived)
  */
@@ -246,11 +271,9 @@ export async function fetchAdminBooks(): Promise<BookRecord[]> {
     const res = await fetch('/api/admin/books', {
       headers: getAuthHeaders()
     });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && Array.isArray(data.books)) {
-        return data.books;
-      }
+    const parsed = await safeParseResponse(res);
+    if (parsed.ok && parsed.data?.success && Array.isArray(parsed.data.books)) {
+      return parsed.data.books;
     }
   } catch (e) {
     console.error('[ContentStore] fetchAdminBooks error:', e);
@@ -267,51 +290,67 @@ export async function saveAdminBook(
   coverFile?: File | null
 ): Promise<{ success: boolean; book?: BookRecord; error?: string }> {
   try {
+    const bookId = bookData.id || `book_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     let pdfStoragePath = bookData.pdfStoragePath || '';
     let coverUrl = bookData.coverUrl || '';
     let fileSize = bookData.fileSize || 0;
 
-    // 1. Upload PDF if provided
+    // 1. Validate & Upload PDF if provided
     if (pdfFile) {
+      if (!pdfFile.name.toLowerCase().endsWith('.pdf') && pdfFile.type !== 'application/pdf') {
+        return { success: false, error: 'The selected file is not a valid PDF document.' };
+      }
+      if (pdfFile.size > 50 * 1024 * 1024) {
+        return { success: false, error: 'PDF file size exceeds the 50MB limit.' };
+      }
+
       const base64 = await fileToBase64(pdfFile);
       const uploadRes = await fetch('/api/admin/books/upload-pdf', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          bookId: bookData.id,
+          bookId,
           fileName: pdfFile.name,
           fileBase64: base64,
           fileSize: pdfFile.size
         })
       });
-      const uploadData = await uploadRes.json();
-      if (uploadRes.ok && uploadData.success) {
-        pdfStoragePath = uploadData.pdfStoragePath;
-        fileSize = uploadData.fileSize;
+      const parsedUpload = await safeParseResponse(uploadRes);
+      if (!parsedUpload.ok || !parsedUpload.data?.success) {
+        return {
+          success: false,
+          error: parsedUpload.data?.error || parsedUpload.error || 'Failed to upload PDF file to server storage.'
+        };
       }
+      pdfStoragePath = parsedUpload.data.pdfStoragePath;
+      fileSize = parsedUpload.data.fileSize;
     }
 
     // 2. Upload Cover Image if provided
     if (coverFile) {
+      if (coverFile.size > 10 * 1024 * 1024) {
+        return { success: false, error: 'Cover image exceeds the 10MB limit.' };
+      }
       const base64 = await fileToBase64(coverFile);
       const coverRes = await fetch('/api/admin/books/upload-cover', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          bookId: bookData.id,
+          bookId,
           fileBase64: base64,
           mimeType: coverFile.type
         })
       });
-      const coverData = await coverRes.json();
-      if (coverRes.ok && coverData.success) {
-        coverUrl = coverData.coverUrl;
+      const parsedCover = await safeParseResponse(coverRes);
+      if (parsedCover.ok && parsedCover.data?.success) {
+        coverUrl = parsedCover.data.coverUrl;
       }
     }
 
     // 3. Save Book record
-    const payload = {
+    const payload: Partial<BookRecord> = {
       ...bookData,
+      id: bookId,
       pdfStoragePath,
       coverUrl,
       fileSize: fileSize || bookData.fileSize
@@ -323,23 +362,24 @@ export async function saveAdminBook(
       body: JSON.stringify(payload)
     });
 
-    const data = await res.json();
-    if (!res.ok) {
-      return { success: false, error: data.error || 'Failed to save book.' };
+    const parsed = await safeParseResponse(res);
+    if (!parsed.ok || !parsed.data?.success) {
+      return { success: false, error: parsed.data?.error || parsed.error || 'Failed to save book metadata.' };
     }
 
     // Synchronize to Firestore for real-time consistency
-    if (db && data.book) {
+    if (db && parsed.data.book) {
       try {
-        await setDoc(doc(db, 'books', data.book.id), data.book);
+        await setDoc(doc(db, 'books', parsed.data.book.id), parsed.data.book);
       } catch (e) {
         console.warn('[ContentStore] Firestore book sync warning:', e);
       }
     }
 
-    return { success: true, book: data.book };
+    return { success: true, book: parsed.data.book };
   } catch (e: any) {
-    return { success: false, error: e.message || 'Error saving book.' };
+    console.error('[ContentStore] saveAdminBook error:', e);
+    return { success: false, error: e.message || 'Failed to save book' };
   }
 }
 
@@ -352,9 +392,9 @@ export async function deleteAdminBook(id: string): Promise<{ success: boolean; e
       method: 'DELETE',
       headers: getAuthHeaders()
     });
-    const data = await res.json();
-    if (!res.ok) {
-      return { success: false, error: data.error || 'Failed to delete book.' };
+    const parsed = await safeParseResponse(res);
+    if (!parsed.ok || !parsed.data?.success) {
+      return { success: false, error: parsed.data?.error || parsed.error || 'Failed to delete book.' };
     }
 
     if (db) {
@@ -382,18 +422,18 @@ export async function togglePublishAdminBook(
       headers: getAuthHeaders(),
       body: JSON.stringify({ status })
     });
-    const data = await res.json();
-    if (!res.ok) {
-      return { success: false, error: data.error || 'Failed to update publication status.' };
+    const parsed = await safeParseResponse(res);
+    if (!parsed.ok || !parsed.data?.success) {
+      return { success: false, error: parsed.data?.error || parsed.error || 'Failed to update publication status.' };
     }
 
-    if (db && data.book) {
+    if (db && parsed.data.book) {
       try {
-        await setDoc(doc(db, 'books', data.book.id), data.book, { merge: true });
+        await setDoc(doc(db, 'books', parsed.data.book.id), parsed.data.book, { merge: true });
       } catch (e) { /* ignore */ }
     }
 
-    return { success: true, book: data.book };
+    return { success: true, book: parsed.data.book };
   } catch (e: any) {
     return { success: false, error: e.message };
   }
@@ -427,30 +467,43 @@ export async function saveAdminExam(
   pdfFile?: File | null
 ): Promise<{ success: boolean; exam?: ExamSheetRecord; error?: string }> {
   try {
+    const examId = examData.id || `exam_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     let pdfStoragePath = examData.pdfStoragePath || '';
     let fileSize = examData.fileSize || 0;
 
     if (pdfFile) {
+      if (!pdfFile.name.toLowerCase().endsWith('.pdf') && pdfFile.type !== 'application/pdf') {
+        return { success: false, error: 'The selected exam file is not a valid PDF document.' };
+      }
+      if (pdfFile.size > 50 * 1024 * 1024) {
+        return { success: false, error: 'Exam PDF file size exceeds the 50MB limit.' };
+      }
+
       const base64 = await fileToBase64(pdfFile);
       const uploadRes = await fetch('/api/admin/exams/upload-pdf', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          examId: examData.id,
+          examId,
           fileName: pdfFile.name,
           fileBase64: base64,
           fileSize: pdfFile.size
         })
       });
-      const uploadData = await uploadRes.json();
-      if (uploadRes.ok && uploadData.success) {
-        pdfStoragePath = uploadData.pdfStoragePath;
-        fileSize = uploadData.fileSize;
+      const parsedUpload = await safeParseResponse(uploadRes);
+      if (!parsedUpload.ok || !parsedUpload.data?.success) {
+        return {
+          success: false,
+          error: parsedUpload.data?.error || parsedUpload.error || 'Failed to upload exam PDF file.'
+        };
       }
+      pdfStoragePath = parsedUpload.data.pdfStoragePath;
+      fileSize = parsedUpload.data.fileSize;
     }
 
-    const payload = {
+    const payload: Partial<ExamSheetRecord> = {
       ...examData,
+      id: examId,
       pdfStoragePath,
       fileSize: fileSize || examData.fileSize
     };
@@ -461,21 +514,22 @@ export async function saveAdminExam(
       body: JSON.stringify(payload)
     });
 
-    const data = await res.json();
-    if (!res.ok) {
-      return { success: false, error: data.error || 'Failed to save exam sheet.' };
+    const parsed = await safeParseResponse(res);
+    if (!parsed.ok || !parsed.data?.success) {
+      return { success: false, error: parsed.data?.error || parsed.error || 'Failed to save exam sheet metadata.' };
     }
 
-    if (db && data.exam) {
+    if (db && parsed.data.exam) {
       try {
-        await setDoc(doc(db, 'exam_sheets', data.exam.id), data.exam);
+        await setDoc(doc(db, 'exam_sheets', parsed.data.exam.id), parsed.data.exam);
       } catch (e) {
         console.warn('[ContentStore] Firestore exam sync warning:', e);
       }
     }
 
-    return { success: true, exam: data.exam };
+    return { success: true, exam: parsed.data.exam };
   } catch (e: any) {
+    console.error('[ContentStore] saveAdminExam error:', e);
     return { success: false, error: e.message || 'Error saving exam sheet.' };
   }
 }
@@ -489,9 +543,9 @@ export async function deleteAdminExam(id: string): Promise<{ success: boolean; e
       method: 'DELETE',
       headers: getAuthHeaders()
     });
-    const data = await res.json();
-    if (!res.ok) {
-      return { success: false, error: data.error || 'Failed to delete exam sheet.' };
+    const parsed = await safeParseResponse(res);
+    if (!parsed.ok || !parsed.data?.success) {
+      return { success: false, error: parsed.data?.error || parsed.error || 'Failed to delete exam sheet.' };
     }
 
     if (db) {
@@ -519,18 +573,18 @@ export async function togglePublishAdminExam(
       headers: getAuthHeaders(),
       body: JSON.stringify({ status })
     });
-    const data = await res.json();
-    if (!res.ok) {
-      return { success: false, error: data.error || 'Failed to update publication status.' };
+    const parsed = await safeParseResponse(res);
+    if (!parsed.ok || !parsed.data?.success) {
+      return { success: false, error: parsed.data?.error || parsed.error || 'Failed to update publication status.' };
     }
 
-    if (db && data.exam) {
+    if (db && parsed.data.exam) {
       try {
-        await setDoc(doc(db, 'exam_sheets', data.exam.id), data.exam, { merge: true });
+        await setDoc(doc(db, 'exam_sheets', parsed.data.exam.id), parsed.data.exam, { merge: true });
       } catch (e) { /* ignore */ }
     }
 
-    return { success: true, exam: data.exam };
+    return { success: true, exam: parsed.data.exam };
   } catch (e: any) {
     return { success: false, error: e.message };
   }

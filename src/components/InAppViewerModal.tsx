@@ -12,12 +12,16 @@ interface InAppViewerModalProps {
 export default function InAppViewerModal({ url, title, onClose }: InAppViewerModalProps) {
   const isPdf = url.toLowerCase().includes('.pdf') || url.includes('drive.google.com/file');
   
-  // Decide default viewer mode: for PDF use Google Docs GView preview, otherwise use direct url iframe
-  const [viewerMode, setViewerMode] = useState<'embed' | 'direct'>(isPdf ? 'embed' : 'direct');
+  // Decide default viewer mode: for local stream endpoints (/api/...) use direct frame, for external public pdf use embed or direct
+  const isLocalEndpoint = url.startsWith('/') || url.startsWith('blob:') || url.startsWith('data:');
+  const [viewerMode, setViewerMode] = useState<'embed' | 'direct'>(isPdf && !isLocalEndpoint ? 'embed' : 'direct');
   const [iframeKey, setIframeKey] = useState<number>(0);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
   const getTargetUrl = () => {
+    if (isLocalEndpoint) {
+      return url;
+    }
     if (viewerMode === 'embed' && isPdf) {
       return `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`;
     }

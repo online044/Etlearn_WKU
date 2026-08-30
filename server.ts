@@ -107,8 +107,8 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'x-ethiolearn-auth', 'x-ethiolearn-session-token', 'x-telegram-init-data', 'x-dev-admin-key']
 }));
 
-app.use(express.json({ limit: '20mb' }));
-app.use(express.urlencoded({ limit: '20mb', extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Global input sanitization
 app.use((req: Request, res: Response, next: NextFunction) => {
@@ -1261,9 +1261,28 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   if (res.headersSent) {
     return next(err);
   }
-  return res.status(err.status || 500).json({
-    error: err.name || 'InternalServerError',
-    message: process.env.NODE_ENV === 'production' ? 'An unexpected server error occurred.' : (err.message || 'Server error')
+
+  // Handle payload too large (413)
+  if (err.type === 'entity.too.large' || err.status === 413) {
+    return res.status(413).json({
+      success: false,
+      error: 'File or payload size exceeds the maximum allowed 50MB limit. Please choose a smaller file or compress the PDF.'
+    });
+  }
+
+  // Handle JSON parse error (400)
+  if (err instanceof SyntaxError && (err as any).status === 400 && 'body' in err) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid JSON payload received by server.'
+    });
+  }
+
+  const statusCode = err.status || err.statusCode || 500;
+  return res.status(statusCode).json({
+    success: false,
+    error: err.message || 'An unexpected server error occurred.',
+    errorType: err.name || 'InternalServerError'
   });
 });
 

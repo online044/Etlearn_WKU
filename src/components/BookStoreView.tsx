@@ -5,12 +5,13 @@ import {
   BookOpenCheck, Sliders, Sun, Moon, Type, ChevronLeft, ChevronRight, Share2, HelpCircle, X, Check, Database, AlertTriangle, MessageSquare,
   ExternalLink, Star
 } from 'lucide-react';
-import { StudentProfile } from '../types';
+import { StudentProfile, BookRecord } from '../types';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
 import { submitClaudeChat } from '../utils/ai';
 import { fetchSupabaseBooks, getSupabase, saveSupabaseCredentials, clearSupabaseCredentials } from '../utils/supabaseClient';
 import { getChapterContent } from '../data/textbookChapterContent';
 import { safeStorage } from '../utils/safeStorage';
+import { fetchPublishedBooks, requestContentViewUrl } from '../utils/contentStore';
 
 interface BookStoreViewProps {
   profile: StudentProfile;
@@ -35,6 +36,12 @@ interface ModuleResource {
   pdfUrl?: string;
   contentJson?: string;
   isSupabase?: boolean;
+  isServerRecord?: boolean;
+  fileSize?: number;
+  allowDownload?: boolean;
+  department?: string;
+  university?: string;
+  course?: string;
 }
 
 const PREBUILT_MODULES: ModuleResource[] = [
@@ -566,9 +573,56 @@ export default function BookStoreView({
   const [supabaseUrlInput, setSupabaseUrlInput] = useState(() => safeStorage.getItem('ethiolearn_supabase_url') || '');
   const [supabaseKeyInput, setSupabaseKeyInput] = useState(() => safeStorage.getItem('ethiolearn_supabase_key') || '');
 
+  // Server books sync & active PDF stream
+  const [serverBooksLoading, setServerBooksLoading] = useState(false);
+  const [activeStreamUrl, setActiveStreamUrl] = useState<string>('');
+
+  const loadPublishedBooks = async () => {
+    setServerBooksLoading(true);
+    try {
+      const books = await fetchPublishedBooks();
+      if (books && books.length > 0) {
+        const mappedServerModules: ModuleResource[] = books.map(b => ({
+          id: b.id,
+          title: b.title,
+          subject: b.subject || b.course || 'Curriculum',
+          grade: b.academicYear ? (b.academicYear.includes('Grade') ? b.academicYear : `University (${b.academicYear})`) : 'University',
+          chapters: b.unit ? [b.unit] : ['Chapter 1: ' + (b.course || b.subject || 'Overview'), 'Chapter 2: Core Analysis', 'Chapter 3: Exercises & Solutions'],
+          pages: b.pageCount || (b.fileSize ? Math.max(10, Math.round(b.fileSize / 50000)) : 120),
+          description: b.description || `${b.course || ''} - ${b.department || ''} (${b.university || 'Wolkite University'})`,
+          languageSupport: 'Bilingual',
+          proRequired: b.accessLevel === 'pro',
+          pdfUrl: b.pdfUrl || `/api/content/stream?token=auto&itemId=${b.id}`,
+          isServerRecord: true,
+          fileSize: b.fileSize,
+          allowDownload: b.allowDownload,
+          department: b.department,
+          university: b.university,
+          course: b.course
+        }));
+
+        setAllModules(prev => {
+          const customSaved = prev.filter(m => m.id.startsWith('custom_book_'));
+          const serverIds = new Set(mappedServerModules.map(m => m.id));
+          const remainingPrebuilt = PREBUILT_MODULES.filter(m => !serverIds.has(m.id));
+          return [...mappedServerModules, ...customSaved, ...remainingPrebuilt];
+        });
+      }
+    } catch (e) {
+      console.warn('[BookStore] Failed to load published server books:', e);
+    } finally {
+      setServerBooksLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPublishedBooks();
+  }, []);
+
   // In-app Reader states
   const [isReaderOpen, setIsReaderOpen] = useState(false);
   const [viewingPdfMode, setViewingPdfMode] = useState(false);
+  const [readerViewMode, setReaderViewMode] = useState<'pdf' | 'notes'>('pdf');
   const [readerTheme, setReaderTheme] = useState<'light' | 'dark' | 'sepia'>('light');
   const [readerFontSize, setReaderFontSize] = useState<number>(14);
   const [readerSearchQuery, setReaderSearchQuery] = useState('');
@@ -576,6 +630,47 @@ export default function BookStoreView({
   const [inlineAiQuestion, setInlineAiQuestion] = useState('');
   const [inlineAiResponse, setInlineAiResponse] = useState('');
   const [inlineAiLoading, setInlineAiLoading] = useState(false);
+
+  const handleOpenPdfReader = async (mod: ModuleResource) => {
+    playClickChime();
+    
+    // If it's a server book with a real PDF, request secure stream
+    if (mod.id && (mod.pdfUrl || mod.isServerRecord)) {
+      try {
+        const tokenRes = await requestContentViewUrl(mod.id, 'book', profile);
+        if (tokenRes.success && tokenRes.url) {
+          setActiveStreamUrl(tokenRes.url);
+          if (onOpenInAppViewer) {
+            onOpenInAppViewer(tokenRes.url, mod.title);
+            return;
+          } else {
+            setIsReaderOpen(true);
+            return;
+          }
+        } else if (tokenRes.error) {
+          if (tokenRes.code === 'PRO_REQUIRED') {
+            playFailureChime();
+            alert(language === 'en' 
+              ? 'This textbook requires EthioLearn Pro. Please upgrade to access full PDF reader.' 
+              : 'ይህ መጽሐፍ የፕሮ አባልነት ይጠይቃል። እባክዎ አካውንትዎን ያሻሽሉ።');
+            onNavigate('upgrade');
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('PDF stream request failed, fallback to direct:', e);
+      }
+    }
+
+    if (mod.pdfUrl) {
+      if (onOpenInAppViewer) {
+        onOpenInAppViewer(mod.pdfUrl, mod.title);
+        return;
+      }
+    }
+
+    setIsReaderOpen(true);
+  };
 
   // Custom book addition form/modal states
   const [showAddBookModal, setShowAddBookModal] = useState(false);
@@ -1449,7 +1544,7 @@ Ensure the layout utilizes clear headers, a detailed markdown text explanation, 
                 <div className="pt-2 pb-1 border-t border-slate-100 dark:border-zinc-800 space-y-3">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <button
-                      onClick={() => { playClickChime(); setIsReaderOpen(true); }}
+                      onClick={() => handleOpenPdfReader(activeModule)}
                       className="py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl text-xs font-extrabold uppercase tracking-widest cursor-pointer shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
                     >
                       <BookOpenCheck className="w-5 h-5 shrink-0" />
@@ -1458,14 +1553,7 @@ Ensure the layout utilizes clear headers, a detailed markdown text explanation, 
 
                     {activeModule.pdfUrl ? (
                       <button
-                        onClick={() => {
-                          playClickChime();
-                          if (onOpenInAppViewer) {
-                            onOpenInAppViewer(activeModule.pdfUrl!, activeModule.title);
-                          } else {
-                            setViewingPdfMode(!viewingPdfMode);
-                          }
-                        }}
+                        onClick={() => handleOpenPdfReader(activeModule)}
                         className={`py-4 rounded-2xl text-xs font-extrabold uppercase tracking-widest cursor-pointer shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 border-2 ${
                           viewingPdfMode 
                             ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 text-[#078930] dark:text-emerald-400 font-black' 
@@ -1490,22 +1578,15 @@ Ensure the layout utilizes clear headers, a detailed markdown text explanation, 
                     <div className="bg-slate-50 dark:bg-zinc-900/60 p-3 rounded-xl border border-dashed border-slate-200 dark:border-zinc-800 flex items-center justify-between text-xs">
                       <div className="space-y-0.5 max-w-[70%]">
                         <p className="font-bold text-[#078930] dark:text-emerald-404 flex items-center gap-1 text-[11px]">
-                          📥 Original PDF Detected
+                          📥 Verified Curriculum PDF Available
                         </p>
                         <p className="text-[10px] text-slate-400 dark:text-zinc-500 truncate">
-                          File: {activeModule.pdfUrl.split('/').pop() || 'Textbook Document'}
+                          {activeModule.title} {activeModule.fileSize ? `(${Math.round(activeModule.fileSize / 1024 / 1024 * 10) / 10} MB)` : ''}
                         </p>
                       </div>
                       <button
                         type="button"
-                        onClick={() => {
-                          playSuccessChime();
-                          if (onOpenInAppViewer) {
-                            onOpenInAppViewer(activeModule.pdfUrl!, activeModule.title);
-                          } else {
-                            window.open(activeModule.pdfUrl, "_blank");
-                          }
-                        }}
+                        onClick={() => handleOpenPdfReader(activeModule)}
                         className="px-3 py-1.5 bg-emerald-605 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer"
                       >
                         <Download className="w-3.5 h-3.5" />
@@ -1824,6 +1905,30 @@ Ensure the layout utilizes clear headers, a detailed markdown text explanation, 
                 {/* E-Reader Controls Row */}
                 <div className="flex flex-wrap items-center gap-2.5">
                   
+                  {/* Mode Switch: PDF Document vs Notes */}
+                  {(activeStreamUrl || activeModule.pdfUrl) && (
+                    <div className="flex items-center bg-black/10 dark:bg-white/10 p-1 rounded-xl gap-1">
+                      <button
+                        onClick={() => { playClickChime(); setReaderViewMode('pdf'); }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all ${
+                          readerViewMode === 'pdf' ? 'bg-[#078930] text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>PDF Document</span>
+                      </button>
+                      <button
+                        onClick={() => { playClickChime(); setReaderViewMode('notes'); }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all ${
+                          readerViewMode === 'notes' ? 'bg-[#078930] text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <BookOpen className="w-3.5 h-3.5" />
+                        <span>Study Notes</span>
+                      </button>
+                    </div>
+                  )}
+
                   {/* Theme Selectors */}
                   <div className="flex items-center bg-black/10 dark:bg-white/10 p-1 rounded-xl gap-1">
                     <button
@@ -1939,96 +2044,128 @@ Ensure the layout utilizes clear headers, a detailed markdown text explanation, 
                       </div>
                     </div>
 
-                    {/* 2. Middle Textbook Chapter Content canvas (6 Columns) */}
-                    <div className="lg:col-span-6 p-6 overflow-y-auto space-y-6 flex flex-col justify-between select-text" style={{ fontSize: `${readerFontSize}px` }}>
+                    {/* 2. Middle Textbook Content Canvas (6 Columns) */}
+                    <div className="lg:col-span-6 p-4 md:p-6 overflow-y-auto space-y-6 flex flex-col justify-between select-text" style={{ fontSize: `${readerFontSize}px` }}>
                       
-                      {/* Active Page Header indicator */}
-                      <div className="space-y-4 font-sans">
-                        <div className="flex items-center justify-between text-xs text-slate-400 dark:text-zinc-500 font-mono border-b pb-2">
-                          <span>Curriculum Section Unit</span>
-                          <span>PAGE 12 OF {activeModule.pages}</span>
-                        </div>
-
-                        {/* Chapter Title Headings */}
-                        <div className="space-y-1">
-                          <h2 className="text-xl md:text-2xl font-serif font-black tracking-tight text-emerald-805 dark:text-emerald-400">
-                            {currentChapterData.title}
-                          </h2>
-                          <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed italic">
-                            {currentChapterData.intro}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Body Textbook Content rendering */}
-                      <div className="space-y-5 font-serif leading-relaxed text-justify">
-                        {currentChapterData.sections.map((sect, sIdx) => (
-                          <div key={sIdx} className="space-y-2">
-                            <h4 className="text-sm font-sans font-black uppercase text-slate-700 dark:text-zinc-200 tracking-tight">
-                              {sect.title}
-                            </h4>
-                            <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                              {sect.body}
-                            </p>
+                      {readerViewMode === 'pdf' && (activeStreamUrl || activeModule.pdfUrl) ? (
+                        /* Original PDF Document Frame */
+                        <div className="flex-1 flex flex-col min-h-[560px] h-full space-y-3">
+                          <div className="flex items-center justify-between text-xs text-slate-400 dark:text-zinc-500 font-mono border-b pb-2">
+                            <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold">
+                              <FileText className="w-4 h-4" /> Official PDF Stream
+                            </span>
+                            <a
+                              href={activeStreamUrl || activeModule.pdfUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> Fullscreen Tab
+                            </a>
                           </div>
-                        ))}
-                      </div>
 
-                      {/* ASCII Diagram Area */}
-                      {currentChapterData.asciiDiagram && (
-                        <div className="my-4 font-mono">
-                          <p className="text-[10px] uppercase font-bold text-slate-400 dark:text-zinc-500 mb-2 font-sans">
-                            Fig 1.1 Structural System Flow:
-                          </p>
-                          <pre className="text-[10px] leading-tight p-3 bg-black/10 dark:bg-black/30 border border-emerald-800/10 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 rounded-xl overflow-x-auto select-none">
-                            {currentChapterData.asciiDiagram}
-                          </pre>
-                        </div>
-                      )}
-
-                      {/* Formulas Blackboard Box */}
-                      {currentChapterData.formulas && (
-                        <div className="my-5 p-4 bg-slate-900 border border-zinc-805 text-neutral-100 rounded-2xl shadow-inner font-sans">
-                          <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 uppercase tracking-widest font-black border-b border-zinc-800 pb-2 mb-3">
-                            <span>📐 Essential Formulas & Constants</span>
+                          <div className="flex-1 w-full h-full min-h-[500px] rounded-2xl overflow-hidden border border-slate-200 dark:border-zinc-800 bg-slate-900 shadow-inner">
+                            <iframe
+                              src={activeStreamUrl || activeModule.pdfUrl}
+                              title={`PDF Viewer: ${activeModule.title}`}
+                              className="w-full h-full min-h-[500px] border-0 bg-white"
+                              referrerPolicy="no-referrer"
+                              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                            />
                           </div>
-                          <div className="space-y-3.5 text-xs">
-                            {currentChapterData.formulas?.map((frm, fIdx) => (
-                              <div key={fIdx} className="space-y-1">
-                                <p className="font-extrabold text-[#C8962E]">{frm.name}</p>
-                                <div className="p-2 bg-black/40 rounded-lg text-emerald-400 font-mono text-center my-1 select-all font-bold">
-                                  {frm.formula}
-                                </div>
-                                <p className="text-[11px] text-neutral-400 leading-snug">{frm.description}</p>
+                        </div>
+                      ) : (
+                        /* Structured Study Notes Mode */
+                        <>
+                          {/* Active Page Header indicator */}
+                          <div className="space-y-4 font-sans">
+                            <div className="flex items-center justify-between text-xs text-slate-400 dark:text-zinc-500 font-mono border-b pb-2">
+                              <span>Curriculum Section Unit</span>
+                              <span>PAGE 12 OF {activeModule.pages}</span>
+                            </div>
+
+                            {/* Chapter Title Headings */}
+                            <div className="space-y-1">
+                              <h2 className="text-xl md:text-2xl font-serif font-black tracking-tight text-emerald-805 dark:text-emerald-400">
+                                {currentChapterData.title}
+                              </h2>
+                              <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed italic">
+                                {currentChapterData.intro}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Body Textbook Content rendering */}
+                          <div className="space-y-5 font-serif leading-relaxed text-justify">
+                            {currentChapterData.sections.map((sect, sIdx) => (
+                              <div key={sIdx} className="space-y-2">
+                                <h4 className="text-sm font-sans font-black uppercase text-slate-700 dark:text-zinc-200 tracking-tight">
+                                  {sect.title}
+                                </h4>
+                                <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                                  {sect.body}
+                                </p>
                               </div>
                             ))}
                           </div>
-                        </div>
-                      )}
 
-                      {/* Ministry Exam Alert Card */}
-                      {currentChapterData.examAlert && (
-                        <div className="p-4 bg-rose-500/10 border-l-4 border-rose-500 text-rose-800 dark:text-rose-400 rounded-r-xl space-y-1.5 font-sans leading-relaxed">
-                          <div className="flex items-center gap-1.5 text-xs font-black uppercase text-rose-600 dark:text-rose-400">
-                            <AlertTriangle className="w-4 h-4 shrink-0" />
-                            <span>National Exam Pitfalls Warning</span>
+                          {/* ASCII Diagram Area */}
+                          {currentChapterData.asciiDiagram && (
+                            <div className="my-4 font-mono">
+                              <p className="text-[10px] uppercase font-bold text-slate-400 dark:text-zinc-500 mb-2 font-sans">
+                                Fig 1.1 Structural System Flow:
+                              </p>
+                              <pre className="text-[10px] leading-tight p-3 bg-black/10 dark:bg-black/30 border border-emerald-800/10 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 rounded-xl overflow-x-auto select-none">
+                                {currentChapterData.asciiDiagram}
+                              </pre>
+                            </div>
+                          )}
+
+                          {/* Formulas Blackboard Box */}
+                          {currentChapterData.formulas && (
+                            <div className="my-5 p-4 bg-slate-900 border border-zinc-805 text-neutral-100 rounded-2xl shadow-inner font-sans">
+                              <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 uppercase tracking-widest font-black border-b border-zinc-800 pb-2 mb-3">
+                                <span>📐 Essential Formulas & Constants</span>
+                              </div>
+                              <div className="space-y-3.5 text-xs">
+                                {currentChapterData.formulas?.map((frm, fIdx) => (
+                                  <div key={fIdx} className="space-y-1">
+                                    <p className="font-extrabold text-[#C8962E]">{frm.name}</p>
+                                    <div className="p-2 bg-black/40 rounded-lg text-emerald-400 font-mono text-center my-1 select-all font-bold">
+                                      {frm.formula}
+                                    </div>
+                                    <p className="text-[11px] text-neutral-400 leading-snug">{frm.description}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Ministry Exam Alert Card */}
+                          {currentChapterData.examAlert && (
+                            <div className="p-4 bg-rose-500/10 border-l-4 border-rose-500 text-rose-800 dark:text-rose-400 rounded-r-xl space-y-1.5 font-sans leading-relaxed">
+                              <div className="flex items-center gap-1.5 text-xs font-black uppercase text-rose-600 dark:text-rose-400">
+                                <AlertTriangle className="w-4 h-4 shrink-0" />
+                                <span>National Exam Pitfalls Warning</span>
+                              </div>
+                              <p className="text-xs leading-normal">
+                                {currentChapterData.examAlert}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Sticky bottom page controls */}
+                          <div className="pt-6 border-t mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 font-sans text-xs">
+                            <p className="text-slate-400">
+                              Bilingual study tools strictly compliant with Ministry standards.
+                            </p>
+                            <div className="flex items-center gap-1.5">
+                              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+                              <span className="font-bold text-slate-500 dark:text-zinc-400">Fully Dynamic Reader</span>
+                            </div>
                           </div>
-                          <p className="text-xs leading-normal">
-                            {currentChapterData.examAlert}
-                          </p>
-                        </div>
+                        </>
                       )}
-
-                      {/* Sticky bottom page controls */}
-                      <div className="pt-6 border-t mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 font-sans text-xs">
-                        <p className="text-slate-400">
-                          Bilingual study tools strictly compliant with Ministry standards.
-                        </p>
-                        <div className="flex items-center gap-1.5">
-                          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
-                          <span className="font-bold text-slate-500 dark:text-zinc-400">Fully Dynamic Reader</span>
-                        </div>
-                      </div>
 
                     </div>
 

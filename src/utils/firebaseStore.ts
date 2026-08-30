@@ -36,14 +36,14 @@ export const db = (() => {
     if (dbId) {
       try {
         return initializeFirestore(app, {
-          experimentalForceLongPolling: true,
+          experimentalAutoDetectLongPolling: true,
         }, dbId);
       } catch {
         return getFirestore(app, dbId);
       }
     }
     return initializeFirestore(app, {
-      experimentalForceLongPolling: true,
+      experimentalAutoDetectLongPolling: true,
     });
   } catch (err) {
     try {
@@ -131,24 +131,15 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 export async function testFirestoreConnection() {
   const currentDb = getDb();
   if (!currentDb) {
-    console.warn('[Firestore Service] Firestore database instance is not available.');
     return;
   }
   try {
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Firestore network timeout')), 3000)
-    );
-    await Promise.race([
-      getDocFromServer(doc(currentDb, 'test', 'connection')),
-      timeoutPromise
-    ]);
-    console.log('[Firestore Service] Initial boot liveness check succeeded.');
-  } catch (error: any) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn("Please check your Firebase configuration or network connection.");
-    } else {
-      console.warn("[Firestore Service] Operating in cached/offline mode:", error?.message || error);
+    const snap = await getDoc(doc(currentDb, 'test', 'connection'));
+    if (snap.exists()) {
+      console.log('[Firestore Service] Firestore connection active.');
     }
+  } catch (error: any) {
+    console.info("[Firestore Service] Operating in offline-ready/cached mode:", error?.message || 'ready');
   }
 }
 
