@@ -33,41 +33,16 @@ service cloud.firestore {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    // Profiles Schema Validation
-    function isValidProfile(data) {
-      return data.keys().hasAll(['name', 'year', 'subjects'])
+    // 1. Users Schema Validation
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'name', 'year', 'subjects'])
+        && data.id is string && data.id.size() <= 128
         && data.name is string && data.name.size() <= 200
         && data.year is string && data.year.size() <= 50
         && data.subjects is list;
     }
 
-    // Notes Schema Validation
-    function isValidNote(data) {
-      return data.keys().hasAll(['id', 'title', 'content', 'subject'])
-        && data.id is string && data.id.size() <= 128
-        && data.title is string && data.title.size() <= 300
-        && data.content is string && data.content.size() <= 500000
-        && data.subject is string && data.subject.size() <= 200;
-    }
-
-    // Study Sessions Schema Validation
-    function isValidStudySession(data) {
-      return data.keys().hasAll(['id', 'subject', 'date', 'durationMinutes'])
-        && data.id is string && data.id.size() <= 128
-        && data.subject is string && data.subject.size() <= 200
-        && data.date is string && data.date.size() <= 50
-        && data.durationMinutes is int;
-    }
-
-    // Promotions Schema Validation
-    function isValidPromotion(data) {
-      return data.keys().hasAll(['code', 'discountPercentage', 'isActive'])
-        && data.code is string && data.code.size() <= 64
-        && data.discountPercentage is int
-        && data.isActive is bool;
-    }
-
-    // Books Schema Validation
+    // 2. Books Schema Validation
     function isValidBook(data) {
       return data.keys().hasAll(['id', 'title', 'university', 'department', 'course', 'subject', 'status', 'accessLevel'])
         && data.id is string && data.id.size() <= 128
@@ -80,8 +55,17 @@ service cloud.firestore {
         && (data.status == 'draft' || data.status == 'published' || data.status == 'archived');
     }
 
-    // Exam Sheets Schema Validation
-    function isValidExamSheet(data) {
+    // 3. Chapters Schema Validation
+    function isValidChapter(data) {
+      return data.keys().hasAll(['id', 'bookId', 'chapterNumber', 'title'])
+        && data.id is string && data.id.size() <= 128
+        && data.bookId is string && data.bookId.size() <= 128
+        && data.chapterNumber is int
+        && data.title is string && data.title.size() <= 300;
+    }
+
+    // 4. Exams Schema Validation
+    function isValidExam(data) {
       return data.keys().hasAll(['id', 'title', 'university', 'department', 'course', 'subject', 'examType', 'examYear', 'status', 'accessLevel'])
         && data.id is string && data.id.size() <= 128
         && data.title is string && data.title.size() <= 300
@@ -94,56 +78,92 @@ service cloud.firestore {
         && (data.status == 'draft' || data.status == 'published' || data.status == 'archived');
     }
 
-    // 2. Profiles Collection
-    match /profiles/{userId} {
+    // 5. Questions Schema Validation
+    function isValidQuestion(data) {
+      return data.keys().hasAll(['id', 'examId', 'questionNumber', 'text', 'options', 'correctAnswerId'])
+        && data.id is string && data.id.size() <= 128
+        && data.examId is string && data.examId.size() <= 128
+        && data.questionNumber is int
+        && data.text is string && data.text.size() <= 5000
+        && data.options is list
+        && data.correctAnswerId is string && data.correctAnswerId.size() <= 64;
+    }
+
+    // 6. Results Schema Validation
+    function isValidResult(data) {
+      return data.keys().hasAll(['id', 'userId', 'examId', 'score', 'totalQuestions', 'correctAnswers'])
+        && data.id is string && data.id.size() <= 128
+        && data.userId is string && data.userId.size() <= 128
+        && data.examId is string && data.examId.size() <= 128
+        && data.score is int
+        && data.totalQuestions is int
+        && data.correctAnswers is int;
+    }
+
+    // 7. Promotions Schema Validation
+    function isValidPromotion(data) {
+      return data.keys().hasAll(['code', 'discountPercentage', 'isActive'])
+        && data.code is string && data.code.size() <= 64
+        && data.discountPercentage is int
+        && data.isActive is bool;
+    }
+
+    // ================= COLLECTIONS =================
+
+    // 1. Users Collection
+    match /users/{userId} {
       allow get: if isOwner(userId) || isAdmin();
-      allow create: if isOwner(userId) && isValidProfile(request.resource.data);
-      allow update: if (isOwner(userId) && isValidProfile(request.resource.data)) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUser(request.resource.data);
+      allow update: if (isOwner(userId) && isValidId(userId) && isValidUser(request.resource.data)) || isAdmin();
       allow delete: if isOwner(userId) || isAdmin();
-
-      // 3. Notes Subcollection
-      match /notes/{noteId} {
-        allow list, get: if isOwner(userId) || isAdmin();
-        allow create: if isOwner(userId) && isValidId(noteId) && isValidNote(request.resource.data);
-        allow update: if isOwner(userId) && isValidId(noteId) && isValidNote(request.resource.data);
-        allow delete: if isOwner(userId) || isAdmin();
-      }
-
-      // 4. Study Sessions Subcollection
-      match /study_sessions/{sessionId} {
-        allow list, get: if isOwner(userId) || isAdmin();
-        allow create: if isOwner(userId) && isValidId(sessionId) && isValidStudySession(request.resource.data);
-        allow update: if isOwner(userId) && isValidId(sessionId) && isValidStudySession(request.resource.data);
-        allow delete: if isOwner(userId) || isAdmin();
-      }
     }
 
-    // 5. Promotions Collection - Read-only for normal users, write strictly restricted to Admin
-    match /promotions/{promoId} {
-      allow list, get: if true;
-      allow create, update: if isAdmin() && isValidPromotion(request.resource.data);
-      allow delete: if isAdmin();
-    }
-
-    // 6. Announcements Collection - Read-only for all, write strictly restricted to Admin
-    match /announcements/{announcementId} {
-      allow list, get: if true;
-      allow create, update, delete: if isAdmin();
-    }
-
-    // 7. Books Collection - Published books visible to students; write/draft strictly restricted to Admin
+    // 2. Books Collection
     match /books/{bookId} {
-      allow list, get: if resource.data.status == 'published' || isAdmin();
+      allow get, list: if resource.data.status == 'published' || isAdmin();
       allow create: if isAdmin() && isValidId(bookId) && isValidBook(request.resource.data);
       allow update: if isAdmin() && isValidId(bookId) && isValidBook(request.resource.data);
       allow delete: if isAdmin();
     }
 
-    // 8. Exam Sheets Collection - Published exam sheets visible to students; write/draft strictly restricted to Admin
-    match /exam_sheets/{examId} {
-      allow list, get: if resource.data.status == 'published' || isAdmin();
-      allow create: if isAdmin() && isValidId(examId) && isValidExamSheet(request.resource.data);
-      allow update: if isAdmin() && isValidId(examId) && isValidExamSheet(request.resource.data);
+    // 3. Chapters Collection
+    match /chapters/{chapterId} {
+      allow get, list: if true;
+      allow create: if isAdmin() && isValidId(chapterId) && isValidChapter(request.resource.data);
+      allow update: if isAdmin() && isValidId(chapterId) && isValidChapter(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // 4. Exams Collection
+    match /exams/{examId} {
+      allow get, list: if resource.data.status == 'published' || isAdmin();
+      allow create: if isAdmin() && isValidId(examId) && isValidExam(request.resource.data);
+      allow update: if isAdmin() && isValidId(examId) && isValidExam(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // 5. Questions Collection
+    match /questions/{questionId} {
+      allow get, list: if true;
+      allow create: if isAdmin() && isValidId(questionId) && isValidQuestion(request.resource.data);
+      allow update: if isAdmin() && isValidId(questionId) && isValidQuestion(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // 6. Results Collection
+    match /results/{resultId} {
+      allow get: if isOwner(resource.data.userId) || isAdmin();
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid && isValidId(resultId) && isValidResult(request.resource.data);
+      allow update: if isAdmin();
+      allow delete: if isOwner(resource.data.userId) || isAdmin();
+    }
+
+    // 7. Promotions Collection
+    match /promotions/{promoId} {
+      allow get, list: if true;
+      allow create, update: if isAdmin() && isValidPromotion(request.resource.data);
       allow delete: if isAdmin();
     }
   }

@@ -334,7 +334,7 @@ export interface BookRecord {
   accessLevel: ContentAccessLevel;
   allowDownload: boolean;
   status: ContentStatus;
-  pdfUrl: string;
+  pdfUrl?: string;
   pdfStoragePath?: string;
   coverUrl?: string;
   coverStoragePath?: string;
@@ -343,6 +343,109 @@ export interface BookRecord {
   downloadsCount?: number;
   viewsCount?: number;
   publishedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type FirestoreBook = BookRecord;
+
+export interface FirestoreChapter {
+  id: string;
+  bookId: string;
+  chapterNumber: number;
+  title: string;
+  intro?: string;
+  sections: Array<{ title: string; body: string }>;
+  asciiDiagram?: string;
+  formulas?: Array<{ name: string; formula: string; description: string }>;
+  examAlert?: string;
+  summary?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface FirestoreExam {
+  id: string;
+  title: string;
+  description?: string;
+  university: string;
+  department: string;
+  academicYear: string;
+  course: string;
+  subject: string;
+  examType: ExamType;
+  examYear: string;
+  durationMinutes: number;
+  totalMarks?: number;
+  passingScore: number;
+  totalQuestions: number;
+  accessLevel: ContentAccessLevel;
+  allowDownload: boolean;
+  status: ContentStatus;
+  pdfUrl?: string;
+  fileSize?: number;
+  pageCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QuestionOption {
+  id: string;
+  text: string;
+  textAmharic?: string;
+}
+
+export interface FirestoreQuestion {
+  id: string;
+  examId: string;
+  questionNumber: number;
+  text: string;
+  textAmharic?: string;
+  options: QuestionOption[];
+  correctAnswerId: string;
+  explanation: string;
+  explanationAmharic?: string;
+  difficulty?: 'easy' | 'medium' | 'hard';
+  points?: number;
+  createdAt: string;
+}
+
+export interface FirestoreResult {
+  id: string;
+  userId: string;
+  examId: string;
+  examTitle: string;
+  subject: string;
+  score: number;
+  totalQuestions: number;
+  correctAnswers?: number;
+  percentage: number;
+  passed?: boolean;
+  isPassed?: boolean;
+  grade?: 'A' | 'B' | 'C' | 'D' | 'F';
+  timeSpentSeconds: number;
+  answers?: { [questionId: string]: string };
+  userAnswers?: { [questionId: string]: string };
+  flaggedQuestions?: string[];
+  weakTopics?: string[];
+  incorrectQuestions?: any[];
+  completedAt?: string;
+  createdAt: string;
+}
+
+export interface FirestoreUser {
+  id: string;
+  email?: string;
+  name: string;
+  university: string;
+  department: string;
+  year: string;
+  subjects: string[];
+  studyStreak: number;
+  totalStudyMinutes: number;
+  isPro: boolean;
+  theme?: 'dark' | 'light' | 'auto';
+  language?: 'en' | 'am' | 'both';
   createdAt: string;
   updatedAt: string;
 }

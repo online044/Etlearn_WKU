@@ -8,6 +8,12 @@ import {
 import { ExamPaper, ExamQuestion, ExamAttemptRecord, StudentProfile, AITeacherContext } from '../types';
 import { PRACTICE_QUESTIONS } from '../data/practiceQuestions';
 import { saveExamAttempt, fetchStudentExamAttempts } from '../utils/supabaseCourses';
+import { 
+  saveExamResultToFirestore, 
+  fetchUserExamResultsFromFirestore, 
+  fetchExamsFromFirestore, 
+  fetchQuestionsForExamFromFirestore 
+} from '../utils/firebaseStore';
 import { playClickChime, playSuccessChime } from '../utils/audio';
 
 // Built-in authentic Ethiopian exam papers
@@ -275,10 +281,33 @@ export default function ExamEngineView({
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const userId = profile?.email || 'guest_user';
 
-  // Load past attempts
+  // Load past attempts from Firestore and Supabase
   useEffect(() => {
     async function loadPastAttempts() {
       try {
+        const firestoreResults = await fetchUserExamResultsFromFirestore(userId);
+        if (firestoreResults && firestoreResults.length > 0) {
+          const mapped: ExamAttemptRecord[] = firestoreResults.map(r => ({
+            id: r.id,
+            userId: r.userId,
+            examId: r.examId,
+            examTitle: r.examTitle,
+            subject: r.subject,
+            score: r.score,
+            totalQuestions: r.totalQuestions,
+            percentage: r.percentage,
+            grade: r.grade as any,
+            isPassed: r.isPassed,
+            timeSpentSeconds: r.timeSpentSeconds,
+            userAnswers: r.userAnswers,
+            flaggedQuestions: r.flaggedQuestions,
+            weakTopics: r.weakTopics,
+            incorrectQuestions: r.incorrectQuestions,
+            date: r.createdAt
+          }));
+          setPastAttempts(mapped);
+          return;
+        }
         const history = await fetchStudentExamAttempts(userId);
         setPastAttempts(history || []);
       } catch (err) {
@@ -420,12 +449,29 @@ export default function ExamEngineView({
 
     if (onStudyAction) onStudyAction();
 
-    // Persist attempt to Supabase
+    // Persist attempt to Firestore and Supabase
     try {
+      await saveExamResultToFirestore({
+        userId,
+        examId: activeExam.id,
+        examTitle: activeExam.title,
+        subject: activeExam.subject,
+        score,
+        totalQuestions,
+        percentage,
+        grade,
+        isPassed,
+        timeSpentSeconds,
+        userAnswers,
+        flaggedQuestions,
+        weakTopics: Array.from(weakTopicsSet),
+        incorrectQuestions
+      });
       await saveExamAttempt(attemptRecord, userId);
       setPastAttempts(prev => [attemptRecord, ...prev]);
     } catch (e) {
-      console.warn('Error recording exam attempt:', e);
+      console.warn('Error recording exam attempt to Firestore/Supabase:', e);
+      setPastAttempts(prev => [attemptRecord, ...prev]);
     }
   };
 

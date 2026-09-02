@@ -1,68 +1,30 @@
 {
   "entities": {
-    "profile": {
-      "title": "StudentProfile",
-      "description": "The student learning profile, school level, and academic settings.",
+    "user": {
+      "title": "User",
+      "description": "User profile, learning statistics, study streak, and academic configuration.",
       "type": "object",
       "properties": {
-        "name": { "type": "string" },
+        "id": { "type": "string" },
         "email": { "type": "string" },
+        "name": { "type": "string" },
         "university": { "type": "string" },
+        "department": { "type": "string" },
         "year": { "type": "string" },
         "subjects": { "type": "array" },
-        "claudeApiKey": { "type": "string" },
-        "dailyGoalHours": { "type": "integer" },
+        "studyStreak": { "type": "integer" },
+        "totalStudyMinutes": { "type": "integer" },
+        "isPro": { "type": "boolean" },
         "theme": { "type": "string" },
-        "language": { "type": "string" }
+        "language": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
       },
-      "required": ["name", "year", "subjects"]
-    },
-    "note": {
-      "title": "CustomNote",
-      "description": "A student study note, generated summary, or textbook highlight.",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "title": { "type": "string" },
-        "content": { "type": "string" },
-        "subject": { "type": "string" },
-        "tags": { "type": "array" },
-        "color": { "type": "string" },
-        "createdAt": { "type": "string" }
-      },
-      "required": ["id", "title", "content", "subject"]
-    },
-    "study_session": {
-      "title": "StudySession",
-      "description": "A tracked active study session.",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "subject": { "type": "string" },
-        "date": { "type": "string" },
-        "durationMinutes": { "type": "integer" }
-      },
-      "required": ["id", "subject", "date", "durationMinutes"]
-    },
-    "promotion": {
-      "title": "Promotion",
-      "description": "A promotional discount code for subscription upgrades.",
-      "type": "object",
-      "properties": {
-        "code": { "type": "string" },
-        "discountPercentage": { "type": "integer" },
-        "fixedDiscountETB": { "type": "integer" },
-        "maxUses": { "type": "integer" },
-        "usedCount": { "type": "integer" },
-        "expiresAt": { "type": "string" },
-        "isActive": { "type": "boolean" },
-        "description": { "type": "string" }
-      },
-      "required": ["code", "discountPercentage", "isActive"]
+      "required": ["id", "name", "year", "subjects"]
     },
     "book": {
       "title": "Book",
-      "description": "A university textbook or digital learning module.",
+      "description": "Authentic university curriculum textbook or digital study module.",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -86,9 +48,29 @@
       },
       "required": ["id", "title", "university", "department", "course", "subject", "status", "accessLevel"]
     },
-    "exam_sheet": {
-      "title": "ExamSheet",
-      "description": "An authentic university past exam, midterm, final, or national exit exam paper.",
+    "chapter": {
+      "title": "Chapter",
+      "description": "Textbook chapter with structured learning content, formulas, and diagrams.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "bookId": { "type": "string" },
+        "chapterNumber": { "type": "integer" },
+        "title": { "type": "string" },
+        "intro": { "type": "string" },
+        "sections": { "type": "array" },
+        "asciiDiagram": { "type": "string" },
+        "formulas": { "type": "array" },
+        "examAlert": { "type": "string" },
+        "summary": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "bookId", "chapterNumber", "title"]
+    },
+    "exam": {
+      "title": "Exam",
+      "description": "Authentic university past exam, midterm, final, or exit exam paper.",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -101,6 +83,10 @@
         "subject": { "type": "string" },
         "examType": { "type": "string", "enum": ["midterm", "final", "model", "quiz", "exit_exam"] },
         "examYear": { "type": "string" },
+        "durationMinutes": { "type": "integer" },
+        "totalMarks": { "type": "integer" },
+        "passingScore": { "type": "integer" },
+        "totalQuestions": { "type": "integer" },
         "accessLevel": { "type": "string", "enum": ["free", "pro"] },
         "allowDownload": { "type": "boolean" },
         "status": { "type": "string", "enum": ["draft", "published", "archived"] },
@@ -111,32 +97,94 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["id", "title", "university", "department", "course", "subject", "examType", "examYear", "status", "accessLevel"]
+    },
+    "question": {
+      "title": "Question",
+      "description": "Curriculum exam question with bilingual prompt, options, correct answer, and explanation.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "examId": { "type": "string" },
+        "questionNumber": { "type": "integer" },
+        "text": { "type": "string" },
+        "textAmharic": { "type": "string" },
+        "options": { "type": "array" },
+        "correctAnswerId": { "type": "string" },
+        "explanation": { "type": "string" },
+        "explanationAmharic": { "type": "string" },
+        "difficulty": { "type": "string" },
+        "points": { "type": "integer" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "examId", "questionNumber", "text", "options", "correctAnswerId"]
+    },
+    "result": {
+      "title": "Result",
+      "description": "Student exam score, question answers, completion time, and performance analytics.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "examId": { "type": "string" },
+        "examTitle": { "type": "string" },
+        "subject": { "type": "string" },
+        "score": { "type": "integer" },
+        "totalQuestions": { "type": "integer" },
+        "correctAnswers": { "type": "integer" },
+        "percentage": { "type": "integer" },
+        "passed": { "type": "boolean" },
+        "timeSpentSeconds": { "type": "integer" },
+        "answers": { "type": "object" },
+        "completedAt": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "examId", "score", "totalQuestions", "correctAnswers"]
+    },
+    "promotion": {
+      "title": "Promotion",
+      "description": "A promotional discount code for subscription upgrades.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "discountPercentage": { "type": "integer" },
+        "fixedDiscountETB": { "type": "integer" },
+        "maxUses": { "type": "integer" },
+        "usedCount": { "type": "integer" },
+        "expiresAt": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "description": { "type": "string" }
+      },
+      "required": ["code", "discountPercentage", "isActive"]
     }
   },
   "firestore": {
-    "/profiles/{userId}": {
-      "schema": "profile",
-      "description": "Collection of student learning profiles mapped by Firebase UID."
+    "/users/{userId}": {
+      "schema": "user",
+      "description": "Collection of student learning profiles, progress, and settings."
     },
-    "/profiles/{userId}/notes/{noteId}": {
-      "schema": "note",
-      "description": "Subcollection of custom study guides and notes for the student."
+    "/books/{bookId}": {
+      "schema": "book",
+      "description": "Collection of authentic university curriculum textbooks and digital study modules."
     },
-    "/profiles/{userId}/study_sessions/{sessionId}": {
-      "schema": "study_session",
-      "description": "Subcollection of logged active focus study sessions."
+    "/chapters/{chapterId}": {
+      "schema": "chapter",
+      "description": "Collection of structured textbook chapters linked to books."
+    },
+    "/exams/{examId}": {
+      "schema": "exam",
+      "description": "Collection of authentic university exam sheets, midterms, finals, and exit exams."
+    },
+    "/questions/{questionId}": {
+      "schema": "question",
+      "description": "Collection of exam questions, options, correct answers, and explanations."
+    },
+    "/results/{resultId}": {
+      "schema": "result",
+      "description": "Collection of student exam submission results, scores, and answer histories."
     },
     "/promotions/{promoId}": {
       "schema": "promotion",
       "description": "Collection of promotion and discount codes for subscription upgrades."
-    },
-    "/books/{bookId}": {
-      "schema": "book",
-      "description": "Collection of real university curriculum textbooks and digital study modules."
-    },
-    "/exam_sheets/{examId}": {
-      "schema": "exam_sheet",
-      "description": "Collection of real university exam sheets, midterms, finals, and exit exams."
     }
   }
 }

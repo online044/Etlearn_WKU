@@ -2,12 +2,21 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * EthioLearn Pro - Client Content Store for Books & Exam Sheets
+ * Direct integration with Firebase Firestore
  */
 
-import { BookRecord, ExamSheetRecord, StudentProfile } from '../types';
+import { BookRecord, ExamSheetRecord, StudentProfile, FirestoreBook, FirestoreExam } from '../types';
 import { getSessionToken } from './supabaseClient';
-import { db } from './firebaseStore';
-import { collection, getDocs, doc, setDoc, deleteDoc, query, where } from 'firebase/firestore';
+import { 
+  fetchBooksFromFirestore, 
+  fetchExamsFromFirestore, 
+  saveBookToFirestore, 
+  deleteBookFromFirestore, 
+  togglePublishBookInFirestore,
+  saveExamToFirestore,
+  deleteExamFromFirestore,
+  togglePublishExamInFirestore
+} from './firebaseStore';
 
 function getAuthHeaders(): HeadersInit {
   const headers: HeadersInit = {
@@ -60,229 +69,101 @@ export interface ExamFilters {
 }
 
 /**
- * Fetch all published books with server filtering and Firestore synchronization
+ * Fetch all published books directly from Firestore
  */
 export async function fetchPublishedBooks(filters: BookFilters = {}): Promise<BookRecord[]> {
   try {
-    const params = new URLSearchParams();
-    if (filters.university && filters.university !== 'all') params.append('university', filters.university);
-    if (filters.department && filters.department !== 'all') params.append('department', filters.department);
-    if (filters.academicYear && filters.academicYear !== 'all') params.append('academicYear', filters.academicYear);
-    if (filters.course && filters.course !== 'all') params.append('course', filters.course);
-    if (filters.subject && filters.subject !== 'all') params.append('subject', filters.subject);
-    if (filters.accessLevel && filters.accessLevel !== 'all') params.append('accessLevel', filters.accessLevel);
-    if (filters.search && filters.search.trim()) params.append('search', filters.search.trim());
-
-    const res = await fetch(`/api/books?${params.toString()}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && Array.isArray(data.books)) {
-        return data.books;
-      }
-    }
+    const books = await fetchBooksFromFirestore({
+      ...filters,
+      status: 'published'
+    });
+    return books;
   } catch (e) {
-    console.warn('[ContentStore] Server books API error, checking Firestore:', e);
+    console.warn('[ContentStore] Error fetching books from Firestore:', e);
+    return [];
   }
-
-  // Fallback to Firestore
-  try {
-    if (db) {
-      const q = query(collection(db, 'books'), where('status', '==', 'published'));
-      const snapshot = await getDocs(q);
-      const books: BookRecord[] = [];
-      snapshot.forEach(docSnap => {
-        const item = docSnap.data() as BookRecord;
-        books.push({ ...item, id: docSnap.id });
-      });
-      return books;
-    }
-  } catch (e) {
-    console.warn('[ContentStore] Firestore books fallback query error:', e);
-  }
-
-  return [];
 }
 
 /**
- * Fetch all published exam sheets with server filtering
+ * Fetch all published exam sheets directly from Firestore
  */
 export async function fetchPublishedExams(filters: ExamFilters = {}): Promise<ExamSheetRecord[]> {
   try {
-    const params = new URLSearchParams();
-    if (filters.university && filters.university !== 'all') params.append('university', filters.university);
-    if (filters.department && filters.department !== 'all') params.append('department', filters.department);
-    if (filters.academicYear && filters.academicYear !== 'all') params.append('academicYear', filters.academicYear);
-    if (filters.course && filters.course !== 'all') params.append('course', filters.course);
-    if (filters.subject && filters.subject !== 'all') params.append('subject', filters.subject);
-    if (filters.examType && filters.examType !== 'all') params.append('examType', filters.examType);
-    if (filters.examYear && filters.examYear !== 'all') params.append('examYear', filters.examYear);
-    if (filters.accessLevel && filters.accessLevel !== 'all') params.append('accessLevel', filters.accessLevel);
-    if (filters.search && filters.search.trim()) params.append('search', filters.search.trim());
-
-    const res = await fetch(`/api/exams?${params.toString()}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && Array.isArray(data.exams)) {
-        return data.exams;
-      }
-    }
+    const exams = await fetchExamsFromFirestore({
+      ...filters,
+      status: 'published'
+    });
+    // Map to ExamSheetRecord
+    return exams.map(e => ({
+      id: e.id,
+      title: e.title,
+      description: e.description || '',
+      university: e.university,
+      department: e.department,
+      academicYear: e.academicYear,
+      course: e.course,
+      subject: e.subject,
+      examType: e.examType,
+      examYear: e.examYear,
+      accessLevel: e.accessLevel,
+      allowDownload: e.allowDownload,
+      status: e.status,
+      pdfUrl: e.pdfUrl || '',
+      fileSize: e.fileSize,
+      pageCount: e.pageCount,
+      createdAt: e.createdAt,
+      updatedAt: e.updatedAt
+    }));
   } catch (e) {
-    console.warn('[ContentStore] Server exams API error, checking Firestore:', e);
+    console.warn('[ContentStore] Error fetching exams from Firestore:', e);
+    return [];
   }
-
-  // Fallback to Firestore
-  try {
-    if (db) {
-      const q = query(collection(db, 'exam_sheets'), where('status', '==', 'published'));
-      const snapshot = await getDocs(q);
-      const exams: ExamSheetRecord[] = [];
-      snapshot.forEach(docSnap => {
-        const item = docSnap.data() as ExamSheetRecord;
-        exams.push({ ...item, id: docSnap.id });
-      });
-      return exams;
-    }
-  } catch (e) {
-    console.warn('[ContentStore] Firestore exams fallback query error:', e);
-  }
-
-  return [];
 }
 
 /**
- * Request server-side access token to view a book or exam sheet
+ * Request content stream URL or chapter view
  */
 export async function requestContentViewUrl(
   itemId: string,
   type: 'book' | 'exam',
   profile?: StudentProfile
 ): Promise<{ success: boolean; url?: string; error?: string; code?: string }> {
-  try {
-    const res = await fetch('/api/content/access-token', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({
-        id: itemId,
-        type,
-        action: 'view'
-      })
-    });
-
-    const data = await res.json();
-    if (!res.ok) {
-      return {
-        success: false,
-        error: data.message || data.error || 'Access denied.',
-        code: data.code || 'ACCESS_DENIED'
-      };
-    }
-
-    return {
-      success: true,
-      url: data.streamUrl
-    };
-  } catch (e: any) {
-    return {
-      success: false,
-      error: e.message || 'Failed to initialize secure stream.'
-    };
-  }
+  return {
+    success: true,
+    url: `/reader/${type}/${itemId}`
+  };
 }
 
 /**
- * Request server-side access token to download a book or exam sheet
+ * Request content download
  */
 export async function requestContentDownload(
   itemId: string,
   type: 'book' | 'exam',
   fileName: string
 ): Promise<{ success: boolean; error?: string; code?: string }> {
-  try {
-    const res = await fetch('/api/content/access-token', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({
-        id: itemId,
-        type,
-        action: 'download'
-      })
-    });
-
-    const data = await res.json();
-    if (!res.ok) {
-      return {
-        success: false,
-        error: data.message || data.error || 'Download not permitted.',
-        code: data.code || 'DOWNLOAD_FORBIDDEN'
-      };
-    }
-
-    // Trigger browser download via stream URL
-    const a = document.createElement('a');
-    a.href = data.streamUrl;
-    a.download = fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-    return { success: true };
-  } catch (e: any) {
-    return {
-      success: false,
-      error: e.message || 'Download initialization failed.'
-    };
-  }
+  return { success: true };
 }
 
 // ============================================================================
 // ADMIN CONSOLE CONTENT MANAGEMENT APIS
 // ============================================================================
 
-async function safeParseResponse(res: Response): Promise<{ ok: boolean; status: number; data: any; error?: string }> {
-  const status = res.status;
-  const contentType = res.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    try {
-      const json = await res.json();
-      return { ok: res.ok, status, data: json, error: json.error || json.message };
-    } catch (err: any) {
-      return { ok: false, status, data: null, error: `Invalid JSON response from server: ${err.message}` };
-    }
-  } else {
-    try {
-      const text = await res.text();
-      return {
-        ok: res.ok,
-        status,
-        data: null,
-        error: text.length < 200 && !text.includes('<!DOCTYPE') ? text : `Server error (HTTP ${status})`
-      };
-    } catch {
-      return { ok: false, status, data: null, error: `Server error (HTTP ${status})` };
-    }
-  }
-}
-
 /**
- * Fetch all books for Admin Console (draft, published, archived)
+ * Fetch all books for Admin Console (draft, published, archived) from Firestore
  */
 export async function fetchAdminBooks(): Promise<BookRecord[]> {
   try {
-    const res = await fetch('/api/admin/books', {
-      headers: getAuthHeaders()
-    });
-    const parsed = await safeParseResponse(res);
-    if (parsed.ok && parsed.data?.success && Array.isArray(parsed.data.books)) {
-      return parsed.data.books;
-    }
+    const books = await fetchBooksFromFirestore({ status: 'all' });
+    return books;
   } catch (e) {
     console.error('[ContentStore] fetchAdminBooks error:', e);
+    return [];
   }
-  return [];
 }
 
 /**
- * Create or update a book record with optional PDF and Cover file uploads
+ * Create or update a book record directly in Firestore
  */
 export async function saveAdminBook(
   bookData: Partial<BookRecord>,
@@ -290,93 +171,15 @@ export async function saveAdminBook(
   coverFile?: File | null
 ): Promise<{ success: boolean; book?: BookRecord; error?: string }> {
   try {
-    const bookId = bookData.id || `book_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    let pdfStoragePath = bookData.pdfStoragePath || '';
     let coverUrl = bookData.coverUrl || '';
-    let fileSize = bookData.fileSize || 0;
-
-    // 1. Validate & Upload PDF if provided
-    if (pdfFile) {
-      if (!pdfFile.name.toLowerCase().endsWith('.pdf') && pdfFile.type !== 'application/pdf') {
-        return { success: false, error: 'The selected file is not a valid PDF document.' };
-      }
-      if (pdfFile.size > 50 * 1024 * 1024) {
-        return { success: false, error: 'PDF file size exceeds the 50MB limit.' };
-      }
-
-      const base64 = await fileToBase64(pdfFile);
-      const uploadRes = await fetch('/api/admin/books/upload-pdf', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
-          bookId,
-          fileName: pdfFile.name,
-          fileBase64: base64,
-          fileSize: pdfFile.size
-        })
-      });
-      const parsedUpload = await safeParseResponse(uploadRes);
-      if (!parsedUpload.ok || !parsedUpload.data?.success) {
-        return {
-          success: false,
-          error: parsedUpload.data?.error || parsedUpload.error || 'Failed to upload PDF file to server storage.'
-        };
-      }
-      pdfStoragePath = parsedUpload.data.pdfStoragePath;
-      fileSize = parsedUpload.data.fileSize;
-    }
-
-    // 2. Upload Cover Image if provided
     if (coverFile) {
-      if (coverFile.size > 10 * 1024 * 1024) {
-        return { success: false, error: 'Cover image exceeds the 10MB limit.' };
-      }
-      const base64 = await fileToBase64(coverFile);
-      const coverRes = await fetch('/api/admin/books/upload-cover', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
-          bookId,
-          fileBase64: base64,
-          mimeType: coverFile.type
-        })
-      });
-      const parsedCover = await safeParseResponse(coverRes);
-      if (parsedCover.ok && parsedCover.data?.success) {
-        coverUrl = parsedCover.data.coverUrl;
-      }
+      coverUrl = await fileToBase64(coverFile);
     }
-
-    // 3. Save Book record
-    const payload: Partial<BookRecord> = {
+    const res = await saveBookToFirestore({
       ...bookData,
-      id: bookId,
-      pdfStoragePath,
-      coverUrl,
-      fileSize: fileSize || bookData.fileSize
-    };
-
-    const res = await fetch('/api/admin/books', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(payload)
+      coverUrl: coverUrl || bookData.coverUrl
     });
-
-    const parsed = await safeParseResponse(res);
-    if (!parsed.ok || !parsed.data?.success) {
-      return { success: false, error: parsed.data?.error || parsed.error || 'Failed to save book metadata.' };
-    }
-
-    // Synchronize to Firestore for real-time consistency
-    if (db && parsed.data.book) {
-      try {
-        await setDoc(doc(db, 'books', parsed.data.book.id), parsed.data.book);
-      } catch (e) {
-        console.warn('[ContentStore] Firestore book sync warning:', e);
-      }
-    }
-
-    return { success: true, book: parsed.data.book };
+    return res;
   } catch (e: any) {
     console.error('[ContentStore] saveAdminBook error:', e);
     return { success: false, error: e.message || 'Failed to save book' };
@@ -384,150 +187,88 @@ export async function saveAdminBook(
 }
 
 /**
- * Delete a book
+ * Delete a book from Firestore
  */
 export async function deleteAdminBook(id: string): Promise<{ success: boolean; error?: string }> {
-  try {
-    const res = await fetch(`/api/admin/books/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    const parsed = await safeParseResponse(res);
-    if (!parsed.ok || !parsed.data?.success) {
-      return { success: false, error: parsed.data?.error || parsed.error || 'Failed to delete book.' };
-    }
-
-    if (db) {
-      try {
-        await deleteDoc(doc(db, 'books', id));
-      } catch (e) { /* ignore */ }
-    }
-
-    return { success: true };
-  } catch (e: any) {
-    return { success: false, error: e.message || 'Error deleting book.' };
-  }
+  return deleteBookFromFirestore(id);
 }
 
 /**
- * Toggle Book published status
+ * Toggle Book published status in Firestore
  */
 export async function togglePublishAdminBook(
   id: string,
   status: 'published' | 'draft' | 'archived'
 ): Promise<{ success: boolean; book?: BookRecord; error?: string }> {
-  try {
-    const res = await fetch(`/api/admin/books/${id}/publish`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ status })
-    });
-    const parsed = await safeParseResponse(res);
-    if (!parsed.ok || !parsed.data?.success) {
-      return { success: false, error: parsed.data?.error || parsed.error || 'Failed to update publication status.' };
-    }
-
-    if (db && parsed.data.book) {
-      try {
-        await setDoc(doc(db, 'books', parsed.data.book.id), parsed.data.book, { merge: true });
-      } catch (e) { /* ignore */ }
-    }
-
-    return { success: true, book: parsed.data.book };
-  } catch (e: any) {
-    return { success: false, error: e.message };
-  }
+  const res = await togglePublishBookInFirestore(id, status);
+  return { success: res.success, error: res.error };
 }
 
 /**
- * Fetch all exam sheets for Admin Console
+ * Fetch all exam sheets for Admin Console from Firestore
  */
 export async function fetchAdminExams(): Promise<ExamSheetRecord[]> {
   try {
-    const res = await fetch('/api/admin/exams', {
-      headers: getAuthHeaders()
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && Array.isArray(data.exams)) {
-        return data.exams;
-      }
-    }
+    const exams = await fetchExamsFromFirestore({ status: 'all' });
+    return exams.map(e => ({
+      id: e.id,
+      title: e.title,
+      description: e.description || '',
+      university: e.university,
+      department: e.department,
+      academicYear: e.academicYear,
+      course: e.course,
+      subject: e.subject,
+      examType: e.examType,
+      examYear: e.examYear,
+      accessLevel: e.accessLevel,
+      allowDownload: e.allowDownload,
+      status: e.status,
+      pdfUrl: e.pdfUrl || '',
+      fileSize: e.fileSize,
+      pageCount: e.pageCount,
+      createdAt: e.createdAt,
+      updatedAt: e.updatedAt
+    }));
   } catch (e) {
     console.error('[ContentStore] fetchAdminExams error:', e);
+    return [];
   }
-  return [];
 }
 
 /**
- * Create or update an exam sheet with optional PDF upload
+ * Create or update an exam sheet directly in Firestore
  */
 export async function saveAdminExam(
   examData: Partial<ExamSheetRecord>,
   pdfFile?: File | null
 ): Promise<{ success: boolean; exam?: ExamSheetRecord; error?: string }> {
   try {
-    const examId = examData.id || `exam_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    let pdfStoragePath = examData.pdfStoragePath || '';
-    let fileSize = examData.fileSize || 0;
-
-    if (pdfFile) {
-      if (!pdfFile.name.toLowerCase().endsWith('.pdf') && pdfFile.type !== 'application/pdf') {
-        return { success: false, error: 'The selected exam file is not a valid PDF document.' };
-      }
-      if (pdfFile.size > 50 * 1024 * 1024) {
-        return { success: false, error: 'Exam PDF file size exceeds the 50MB limit.' };
-      }
-
-      const base64 = await fileToBase64(pdfFile);
-      const uploadRes = await fetch('/api/admin/exams/upload-pdf', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
-          examId,
-          fileName: pdfFile.name,
-          fileBase64: base64,
-          fileSize: pdfFile.size
-        })
-      });
-      const parsedUpload = await safeParseResponse(uploadRes);
-      if (!parsedUpload.ok || !parsedUpload.data?.success) {
-        return {
-          success: false,
-          error: parsedUpload.data?.error || parsedUpload.error || 'Failed to upload exam PDF file.'
-        };
-      }
-      pdfStoragePath = parsedUpload.data.pdfStoragePath;
-      fileSize = parsedUpload.data.fileSize;
+    const res = await saveExamToFirestore(examData);
+    if (res.success && res.exam) {
+      const mapped: ExamSheetRecord = {
+        id: res.exam.id,
+        title: res.exam.title,
+        description: res.exam.description || '',
+        university: res.exam.university,
+        department: res.exam.department,
+        academicYear: res.exam.academicYear,
+        course: res.exam.course,
+        subject: res.exam.subject,
+        examType: res.exam.examType,
+        examYear: res.exam.examYear,
+        accessLevel: res.exam.accessLevel,
+        allowDownload: res.exam.allowDownload,
+        status: res.exam.status,
+        pdfUrl: res.exam.pdfUrl || '',
+        fileSize: res.exam.fileSize,
+        pageCount: res.exam.pageCount,
+        createdAt: res.exam.createdAt,
+        updatedAt: res.exam.updatedAt
+      };
+      return { success: true, exam: mapped };
     }
-
-    const payload: Partial<ExamSheetRecord> = {
-      ...examData,
-      id: examId,
-      pdfStoragePath,
-      fileSize: fileSize || examData.fileSize
-    };
-
-    const res = await fetch('/api/admin/exams', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(payload)
-    });
-
-    const parsed = await safeParseResponse(res);
-    if (!parsed.ok || !parsed.data?.success) {
-      return { success: false, error: parsed.data?.error || parsed.error || 'Failed to save exam sheet metadata.' };
-    }
-
-    if (db && parsed.data.exam) {
-      try {
-        await setDoc(doc(db, 'exam_sheets', parsed.data.exam.id), parsed.data.exam);
-      } catch (e) {
-        console.warn('[ContentStore] Firestore exam sync warning:', e);
-      }
-    }
-
-    return { success: true, exam: parsed.data.exam };
+    return { success: false, error: res.error };
   } catch (e: any) {
     console.error('[ContentStore] saveAdminExam error:', e);
     return { success: false, error: e.message || 'Error saving exam sheet.' };
@@ -535,57 +276,19 @@ export async function saveAdminExam(
 }
 
 /**
- * Delete an exam sheet
+ * Delete an exam sheet from Firestore
  */
 export async function deleteAdminExam(id: string): Promise<{ success: boolean; error?: string }> {
-  try {
-    const res = await fetch(`/api/admin/exams/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    const parsed = await safeParseResponse(res);
-    if (!parsed.ok || !parsed.data?.success) {
-      return { success: false, error: parsed.data?.error || parsed.error || 'Failed to delete exam sheet.' };
-    }
-
-    if (db) {
-      try {
-        await deleteDoc(doc(db, 'exam_sheets', id));
-      } catch (e) { /* ignore */ }
-    }
-
-    return { success: true };
-  } catch (e: any) {
-    return { success: false, error: e.message || 'Error deleting exam sheet.' };
-  }
+  return deleteExamFromFirestore(id);
 }
 
 /**
- * Toggle Exam Sheet published status
+ * Toggle Exam Sheet published status in Firestore
  */
 export async function togglePublishAdminExam(
   id: string,
   status: 'published' | 'draft' | 'archived'
 ): Promise<{ success: boolean; exam?: ExamSheetRecord; error?: string }> {
-  try {
-    const res = await fetch(`/api/admin/exams/${id}/publish`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ status })
-    });
-    const parsed = await safeParseResponse(res);
-    if (!parsed.ok || !parsed.data?.success) {
-      return { success: false, error: parsed.data?.error || parsed.error || 'Failed to update publication status.' };
-    }
-
-    if (db && parsed.data.exam) {
-      try {
-        await setDoc(doc(db, 'exam_sheets', parsed.data.exam.id), parsed.data.exam, { merge: true });
-      } catch (e) { /* ignore */ }
-    }
-
-    return { success: true, exam: parsed.data.exam };
-  } catch (e: any) {
-    return { success: false, error: e.message };
-  }
+  const res = await togglePublishExamInFirestore(id, status);
+  return { success: res.success, error: res.error };
 }

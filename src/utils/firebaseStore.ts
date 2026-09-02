@@ -14,10 +14,30 @@ import {
   deleteDoc, 
   collection, 
   getDocs, 
+  query,
+  where,
+  orderBy,
+  limit,
   getDocFromServer 
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { StudentProfile, CustomNote, Promotion } from '../types';
+import { 
+  StudentProfile, 
+  CustomNote, 
+  Promotion,
+  FirestoreBook,
+  FirestoreChapter,
+  FirestoreExam,
+  FirestoreQuestion,
+  FirestoreResult,
+  FirestoreUser
+} from '../types';
+import { 
+  INITIAL_BOOKS, 
+  INITIAL_CHAPTERS, 
+  INITIAL_EXAMS, 
+  INITIAL_QUESTIONS 
+} from '../data/initialFirestoreContent';
 
 // Safe initialization to prevent "duplicate default app" warnings and missing service crashes
 export const app = (() => {
@@ -495,3 +515,714 @@ export async function incrementPromotionUsage(code: string): Promise<void> {
     }
   } catch {}
 }
+
+// ============================================================================
+// 1. "users" COLLECTION: Profiles, Study Progress, Streaks & Stats
+// ============================================================================
+
+export async function syncUserToFirestore(userData: Partial<FirestoreUser> & { id: string }): Promise<FirestoreUser | null> {
+  const currentDb = getDb();
+  if (!currentDb) return null;
+  const path = `users/${userData.id}`;
+  try {
+    const now = new Date().toISOString();
+    const existingSnap = await getDoc(doc(currentDb, 'users', userData.id));
+    const prev = existingSnap.exists() ? existingSnap.data() : {};
+
+    const cleanUser: FirestoreUser = {
+      id: userData.id,
+      name: userData.name || prev.name || 'Ethiopian Scholar',
+      email: userData.email || prev.email || '',
+      university: userData.university || prev.university || 'Wolkite University',
+      department: userData.department || prev.department || 'Freshman Common Courses',
+      year: userData.year || prev.year || 'Year 1 (Freshman)',
+      subjects: userData.subjects || prev.subjects || ['Mathematics', 'Physics', 'Emerging Technologies'],
+      studyStreak: userData.studyStreak ?? prev.studyStreak ?? 1,
+      totalStudyMinutes: userData.totalStudyMinutes ?? prev.totalStudyMinutes ?? 0,
+      isPro: userData.isPro !== undefined ? userData.isPro : (prev.isPro ?? false),
+      theme: userData.theme || prev.theme || 'dark',
+      language: userData.language || prev.language || 'en',
+      createdAt: prev.createdAt || userData.createdAt || now,
+      updatedAt: now
+    };
+
+    await setDoc(doc(currentDb, 'users', userData.id), cleanUser);
+    return cleanUser;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function fetchUserFromFirestore(userId: string): Promise<FirestoreUser | null> {
+  const currentDb = getDb();
+  if (!currentDb) return null;
+  const path = `users/${userId}`;
+  try {
+    const snap = await getDoc(doc(currentDb, 'users', userId));
+    if (snap.exists()) {
+      return snap.data() as FirestoreUser;
+    }
+    return null;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, path);
+  }
+}
+
+// ============================================================================
+// 2. "books" COLLECTION: Authentic University & Grade 12 Textbooks
+// ============================================================================
+
+export interface FirestoreBookFilters {
+  university?: string;
+  department?: string;
+  academicYear?: string;
+  course?: string;
+  subject?: string;
+  accessLevel?: string;
+  search?: string;
+  status?: string;
+}
+
+export async function fetchBooksFromFirestore(filters: FirestoreBookFilters = {}): Promise<FirestoreBook[]> {
+  const currentDb = getDb();
+  let dbBooks: FirestoreBook[] = [];
+
+  if (currentDb) {
+    try {
+      const snap = await getDocs(collection(currentDb, 'books'));
+      snap.forEach(docSnap => {
+        const item = docSnap.data() as FirestoreBook;
+        dbBooks.push({ ...item, id: docSnap.id });
+      });
+    } catch (error) {
+      console.warn('[Firestore Books] Notice, using initial/cached dataset:', error);
+    }
+  }
+
+  // Combine with initial authentic books
+  const bookMap = new Map<string, FirestoreBook>();
+  INITIAL_BOOKS.forEach(b => bookMap.set(b.id, b));
+  dbBooks.forEach(b => bookMap.set(b.id, b));
+
+  let results = Array.from(bookMap.values());
+
+  // Apply filters
+  if (filters.status && filters.status !== 'all') {
+    results = results.filter(b => b.status === filters.status);
+  } else if (!filters.status) {
+    // By default for students, show published only
+    results = results.filter(b => b.status === 'published' || !b.status);
+  }
+
+  if (filters.university && filters.university !== 'all') {
+    results = results.filter(b => b.university?.toLowerCase().includes(filters.university!.toLowerCase()));
+  }
+  if (filters.department && filters.department !== 'all') {
+    results = results.filter(b => b.department?.toLowerCase().includes(filters.department!.toLowerCase()));
+  }
+  if (filters.academicYear && filters.academicYear !== 'all') {
+    results = results.filter(b => b.academicYear === filters.academicYear || b.academicYear?.includes(filters.academicYear!));
+  }
+  if (filters.course && filters.course !== 'all') {
+    results = results.filter(b => b.course?.toLowerCase().includes(filters.course!.toLowerCase()));
+  }
+  if (filters.subject && filters.subject !== 'all') {
+    results = results.filter(b => b.subject?.toLowerCase().includes(filters.subject!.toLowerCase()));
+  }
+  if (filters.accessLevel && filters.accessLevel !== 'all') {
+    results = results.filter(b => b.accessLevel === filters.accessLevel);
+  }
+  if (filters.search && filters.search.trim()) {
+    const s = filters.search.trim().toLowerCase();
+    results = results.filter(b => 
+      b.title.toLowerCase().includes(s) || 
+      b.description.toLowerCase().includes(s) || 
+      b.subject.toLowerCase().includes(s) ||
+      b.course.toLowerCase().includes(s)
+    );
+  }
+
+  return results.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+}
+
+export async function fetchBookByIdFromFirestore(bookId: string): Promise<FirestoreBook | null> {
+  const currentDb = getDb();
+  if (currentDb) {
+    try {
+      const snap = await getDoc(doc(currentDb, 'books', bookId));
+      if (snap.exists()) {
+        return { ...snap.data(), id: snap.id } as FirestoreBook;
+      }
+    } catch (e) {
+      console.warn('[Firestore Book by ID] notice:', e);
+    }
+  }
+
+  const found = INITIAL_BOOKS.find(b => b.id === bookId);
+  return found || null;
+}
+
+export async function saveBookToFirestore(book: Partial<FirestoreBook>): Promise<{ success: boolean; book?: FirestoreBook; error?: string }> {
+  const currentDb = getDb();
+  if (!currentDb) return { success: false, error: 'Database service unavailable' };
+  
+  const id = book.id || `book_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const now = new Date().toISOString();
+  const path = `books/${id}`;
+
+  const cleanBook: FirestoreBook = {
+    id,
+    title: book.title?.trim() || 'Untitled Textbook',
+    description: book.description?.trim() || '',
+    university: book.university?.trim() || 'Wolkite University',
+    department: book.department?.trim() || 'Freshman Common Courses',
+    academicYear: book.academicYear?.trim() || 'Year 1 (Freshman)',
+    course: book.course?.trim() || 'General',
+    subject: book.subject?.trim() || 'General',
+    unit: book.unit?.trim() || 'Full Curriculum',
+    accessLevel: book.accessLevel || 'free',
+    allowDownload: book.allowDownload !== undefined ? book.allowDownload : true,
+    status: book.status || 'published',
+    pdfUrl: book.pdfUrl || '',
+    coverUrl: book.coverUrl || '',
+    fileSize: Number(book.fileSize || 0),
+    pageCount: Number(book.pageCount || 0),
+    createdAt: book.createdAt || now,
+    updatedAt: now
+  };
+
+  try {
+    await setDoc(doc(currentDb, 'books', id), cleanBook);
+    return { success: true, book: cleanBook };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteBookFromFirestore(bookId: string): Promise<{ success: boolean; error?: string }> {
+  const currentDb = getDb();
+  if (!currentDb) return { success: false, error: 'Database service unavailable' };
+  const path = `books/${bookId}`;
+
+  try {
+    await deleteDoc(doc(currentDb, 'books', bookId));
+    // Also delete associated chapters
+    try {
+      const q = query(collection(currentDb, 'chapters'), where('bookId', '==', bookId));
+      const snap = await getDocs(q);
+      snap.forEach(async (d) => {
+        await deleteDoc(doc(currentDb, 'chapters', d.id));
+      });
+    } catch {}
+
+    return { success: true };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+export async function togglePublishBookInFirestore(bookId: string, status: 'published' | 'draft' | 'archived'): Promise<{ success: boolean; error?: string }> {
+  const currentDb = getDb();
+  if (!currentDb) return { success: false, error: 'Database service unavailable' };
+  const path = `books/${bookId}`;
+
+  try {
+    await setDoc(doc(currentDb, 'books', bookId), { status, updatedAt: new Date().toISOString() }, { merge: true });
+    return { success: true };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+// ============================================================================
+// 3. "chapters" COLLECTION: Structured Textbook Chapter Learning Modules
+// ============================================================================
+
+export async function fetchChaptersForBookFromFirestore(bookId: string): Promise<FirestoreChapter[]> {
+  const currentDb = getDb();
+  let dbChapters: FirestoreChapter[] = [];
+
+  if (currentDb) {
+    try {
+      const q = query(collection(currentDb, 'chapters'), where('bookId', '==', bookId));
+      const snap = await getDocs(q);
+      snap.forEach(docSnap => {
+        const item = docSnap.data() as FirestoreChapter;
+        dbChapters.push({ ...item, id: docSnap.id });
+      });
+    } catch (e) {
+      console.warn('[Firestore Chapters] Notice, checking initial dataset:', e);
+    }
+  }
+
+  // Combine with initial chapters
+  const initialMatches = INITIAL_CHAPTERS.filter(c => c.bookId === bookId);
+  const chapterMap = new Map<string, FirestoreChapter>();
+  initialMatches.forEach(c => chapterMap.set(c.id, c));
+  dbChapters.forEach(c => chapterMap.set(c.id, c));
+
+  return Array.from(chapterMap.values()).sort((a, b) => a.chapterNumber - b.chapterNumber);
+}
+
+export async function saveChapterToFirestore(chapter: Partial<FirestoreChapter>): Promise<{ success: boolean; chapter?: FirestoreChapter; error?: string }> {
+  const currentDb = getDb();
+  if (!currentDb) return { success: false, error: 'Database service unavailable' };
+
+  if (!chapter.bookId) return { success: false, error: 'bookId is required' };
+
+  const id = chapter.id || `chap_${chapter.bookId}_${chapter.chapterNumber || Date.now()}`;
+  const now = new Date().toISOString();
+  const path = `chapters/${id}`;
+
+  const cleanChapter: FirestoreChapter = {
+    id,
+    bookId: chapter.bookId,
+    chapterNumber: Number(chapter.chapterNumber || 1),
+    title: chapter.title?.trim() || 'Untitled Chapter',
+    intro: chapter.intro?.trim() || '',
+    sections: chapter.sections || [],
+    asciiDiagram: chapter.asciiDiagram || '',
+    formulas: chapter.formulas || [],
+    examAlert: chapter.examAlert || '',
+    summary: chapter.summary || '',
+    createdAt: chapter.createdAt || now,
+    updatedAt: now
+  };
+
+  try {
+    await setDoc(doc(currentDb, 'chapters', id), cleanChapter);
+    return { success: true, chapter: cleanChapter };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteChapterFromFirestore(chapterId: string): Promise<{ success: boolean; error?: string }> {
+  const currentDb = getDb();
+  if (!currentDb) return { success: false, error: 'Database service unavailable' };
+  const path = `chapters/${chapterId}`;
+
+  try {
+    await deleteDoc(doc(currentDb, 'chapters', chapterId));
+    return { success: true };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+// ============================================================================
+// 4. "exams" COLLECTION: University Midterm, Final, & Model Past Exam Papers
+// ============================================================================
+
+export interface FirestoreExamFilters {
+  university?: string;
+  department?: string;
+  academicYear?: string;
+  course?: string;
+  subject?: string;
+  examType?: string;
+  examYear?: string;
+  accessLevel?: string;
+  search?: string;
+  status?: string;
+}
+
+export async function fetchExamsFromFirestore(filters: FirestoreExamFilters = {}): Promise<FirestoreExam[]> {
+  const currentDb = getDb();
+  let dbExams: FirestoreExam[] = [];
+
+  if (currentDb) {
+    try {
+      const snap = await getDocs(collection(currentDb, 'exams'));
+      snap.forEach(docSnap => {
+        const item = docSnap.data() as FirestoreExam;
+        dbExams.push({ ...item, id: docSnap.id });
+      });
+    } catch (e) {
+      console.warn('[Firestore Exams] Notice, using initial/cached dataset:', e);
+    }
+  }
+
+  // Combine with initial authentic exams
+  const examMap = new Map<string, FirestoreExam>();
+  INITIAL_EXAMS.forEach(ex => examMap.set(ex.id, ex));
+  dbExams.forEach(ex => examMap.set(ex.id, ex));
+
+  let results = Array.from(examMap.values());
+
+  if (filters.status && filters.status !== 'all') {
+    results = results.filter(e => e.status === filters.status);
+  } else if (!filters.status) {
+    results = results.filter(e => e.status === 'published' || !e.status);
+  }
+
+  if (filters.university && filters.university !== 'all') {
+    results = results.filter(e => e.university?.toLowerCase().includes(filters.university!.toLowerCase()));
+  }
+  if (filters.department && filters.department !== 'all') {
+    results = results.filter(e => e.department?.toLowerCase().includes(filters.department!.toLowerCase()));
+  }
+  if (filters.academicYear && filters.academicYear !== 'all') {
+    results = results.filter(e => e.academicYear === filters.academicYear || e.academicYear?.includes(filters.academicYear!));
+  }
+  if (filters.subject && filters.subject !== 'all') {
+    results = results.filter(e => e.subject?.toLowerCase().includes(filters.subject!.toLowerCase()));
+  }
+  if (filters.examType && filters.examType !== 'all') {
+    results = results.filter(e => e.examType === filters.examType);
+  }
+  if (filters.accessLevel && filters.accessLevel !== 'all') {
+    results = results.filter(e => e.accessLevel === filters.accessLevel);
+  }
+  if (filters.search && filters.search.trim()) {
+    const s = filters.search.trim().toLowerCase();
+    results = results.filter(e => 
+      e.title.toLowerCase().includes(s) || 
+      (e.description && e.description.toLowerCase().includes(s)) ||
+      e.subject.toLowerCase().includes(s) ||
+      e.course.toLowerCase().includes(s)
+    );
+  }
+
+  return results.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+}
+
+export async function fetchExamByIdFromFirestore(examId: string): Promise<FirestoreExam | null> {
+  const currentDb = getDb();
+  if (currentDb) {
+    try {
+      const snap = await getDoc(doc(currentDb, 'exams', examId));
+      if (snap.exists()) {
+        return { ...snap.data(), id: snap.id } as FirestoreExam;
+      }
+    } catch (e) {
+      console.warn('[Firestore Exam by ID] notice:', e);
+    }
+  }
+
+  const found = INITIAL_EXAMS.find(e => e.id === examId);
+  return found || null;
+}
+
+export async function saveExamToFirestore(exam: Partial<FirestoreExam>): Promise<{ success: boolean; exam?: FirestoreExam; error?: string }> {
+  const currentDb = getDb();
+  if (!currentDb) return { success: false, error: 'Database service unavailable' };
+
+  const id = exam.id || `exam_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const now = new Date().toISOString();
+  const path = `exams/${id}`;
+
+  const cleanExam: FirestoreExam = {
+    id,
+    title: exam.title?.trim() || 'Untitled Examination',
+    description: exam.description?.trim() || '',
+    university: exam.university?.trim() || 'Wolkite University',
+    department: exam.department?.trim() || 'Freshman Common Courses',
+    academicYear: exam.academicYear?.trim() || 'Year 1 (Freshman)',
+    course: exam.course?.trim() || 'General',
+    subject: exam.subject?.trim() || 'General',
+    examType: exam.examType || 'midterm',
+    examYear: exam.examYear?.trim() || '2025/2026',
+    durationMinutes: Number(exam.durationMinutes || 30),
+    totalMarks: Number(exam.totalMarks || 30),
+    passingScore: Number(exam.passingScore || 50),
+    totalQuestions: Number(exam.totalQuestions || 10),
+    accessLevel: exam.accessLevel || 'free',
+    allowDownload: exam.allowDownload !== undefined ? exam.allowDownload : true,
+    status: exam.status || 'published',
+    pdfUrl: exam.pdfUrl || '',
+    fileSize: Number(exam.fileSize || 0),
+    pageCount: Number(exam.pageCount || 0),
+    createdAt: exam.createdAt || now,
+    updatedAt: now
+  };
+
+  try {
+    await setDoc(doc(currentDb, 'exams', id), cleanExam);
+    return { success: true, exam: cleanExam };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteExamFromFirestore(examId: string): Promise<{ success: boolean; error?: string }> {
+  const currentDb = getDb();
+  if (!currentDb) return { success: false, error: 'Database service unavailable' };
+  const path = `exams/${examId}`;
+
+  try {
+    await deleteDoc(doc(currentDb, 'exams', examId));
+    // Also delete associated questions
+    try {
+      const q = query(collection(currentDb, 'questions'), where('examId', '==', examId));
+      const snap = await getDocs(q);
+      snap.forEach(async (d) => {
+        await deleteDoc(doc(currentDb, 'questions', d.id));
+      });
+    } catch {}
+
+    return { success: true };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+export async function togglePublishExamInFirestore(examId: string, status: 'published' | 'draft' | 'archived'): Promise<{ success: boolean; error?: string }> {
+  const currentDb = getDb();
+  if (!currentDb) return { success: false, error: 'Database service unavailable' };
+  const path = `exams/${examId}`;
+
+  try {
+    await setDoc(doc(currentDb, 'exams', examId), { status, updatedAt: new Date().toISOString() }, { merge: true });
+    return { success: true };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+// ============================================================================
+// 5. "questions" COLLECTION: Exam Questions, Options & Explanations
+// ============================================================================
+
+export async function fetchQuestionsForExamFromFirestore(examId: string): Promise<FirestoreQuestion[]> {
+  const currentDb = getDb();
+  let dbQuestions: FirestoreQuestion[] = [];
+
+  if (currentDb) {
+    try {
+      const q = query(collection(currentDb, 'questions'), where('examId', '==', examId));
+      const snap = await getDocs(q);
+      snap.forEach(docSnap => {
+        const item = docSnap.data() as FirestoreQuestion;
+        dbQuestions.push({ ...item, id: docSnap.id });
+      });
+    } catch (e) {
+      console.warn('[Firestore Questions] Notice, checking initial dataset:', e);
+    }
+  }
+
+  // Combine with initial questions
+  const initialMatches = INITIAL_QUESTIONS.filter(q => q.examId === examId);
+  const qMap = new Map<string, FirestoreQuestion>();
+  initialMatches.forEach(q => qMap.set(q.id, q));
+  dbQuestions.forEach(q => qMap.set(q.id, q));
+
+  return Array.from(qMap.values()).sort((a, b) => a.questionNumber - b.questionNumber);
+}
+
+export async function saveQuestionToFirestore(question: Partial<FirestoreQuestion>): Promise<{ success: boolean; question?: FirestoreQuestion; error?: string }> {
+  const currentDb = getDb();
+  if (!currentDb) return { success: false, error: 'Database service unavailable' };
+
+  if (!question.examId) return { success: false, error: 'examId is required' };
+
+  const id = question.id || `q_${question.examId}_${question.questionNumber || Date.now()}`;
+  const now = new Date().toISOString();
+  const path = `questions/${id}`;
+
+  const cleanQuestion: FirestoreQuestion = {
+    id,
+    examId: question.examId,
+    questionNumber: Number(question.questionNumber || 1),
+    text: question.text?.trim() || 'Question text',
+    textAmharic: question.textAmharic?.trim() || '',
+    options: question.options || [
+      { id: 'A', text: 'Option A' },
+      { id: 'B', text: 'Option B' },
+      { id: 'C', text: 'Option C' },
+      { id: 'D', text: 'Option D' }
+    ],
+    correctAnswerId: question.correctAnswerId || 'A',
+    explanation: question.explanation?.trim() || '',
+    explanationAmharic: question.explanationAmharic?.trim() || '',
+    difficulty: question.difficulty || 'medium',
+    points: Number(question.points || 1),
+    createdAt: question.createdAt || now
+  };
+
+  try {
+    await setDoc(doc(currentDb, 'questions', id), cleanQuestion);
+    return { success: true, question: cleanQuestion };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteQuestionFromFirestore(questionId: string): Promise<{ success: boolean; error?: string }> {
+  const currentDb = getDb();
+  if (!currentDb) return { success: false, error: 'Database service unavailable' };
+  const path = `questions/${questionId}`;
+
+  try {
+    await deleteDoc(doc(currentDb, 'questions', questionId));
+    return { success: true };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+// ============================================================================
+// 6. "results" COLLECTION: Student Exam Scores, Answers & Performance History
+// ============================================================================
+
+export async function saveExamResultToFirestore(result: Partial<FirestoreResult> & { userId: string; examId: string }): Promise<{ success: boolean; result?: FirestoreResult; error?: string }> {
+  const currentDb = getDb();
+  const id = result.id || `res_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const now = new Date().toISOString();
+  const path = `results/${id}`;
+
+  const cleanResult: FirestoreResult = {
+    id,
+    userId: result.userId,
+    examId: result.examId,
+    examTitle: result.examTitle || 'Exam Submission',
+    subject: result.subject || 'General',
+    score: Number(result.score || 0),
+    totalQuestions: Number(result.totalQuestions || 1),
+    correctAnswers: Number(result.correctAnswers || 0),
+    percentage: Number(result.percentage || 0),
+    passed: Boolean(result.passed),
+    timeSpentSeconds: Number(result.timeSpentSeconds || 0),
+    answers: result.answers || {},
+    completedAt: result.completedAt || now,
+    createdAt: result.createdAt || now
+  };
+
+  if (currentDb) {
+    try {
+      await setDoc(doc(currentDb, 'results', id), cleanResult);
+      
+      // Update user statistics in users collection
+      try {
+        const userDocRef = doc(currentDb, 'users', result.userId);
+        const userSnap = await getDoc(userDocRef);
+        if (userSnap.exists()) {
+          const u = userSnap.data();
+          const addedMinutes = Math.max(1, Math.round(cleanResult.timeSpentSeconds / 60));
+          await setDoc(userDocRef, {
+            totalStudyMinutes: (u.totalStudyMinutes || 0) + addedMinutes,
+            updatedAt: now
+          }, { merge: true });
+        }
+      } catch {}
+
+    } catch (error) {
+      console.warn('[Firestore saveExamResult error]:', error);
+    }
+  }
+
+  // Also cache locally for immediate UI reactivity
+  try {
+    const key = `ethiolearn_results_${result.userId}`;
+    const raw = localStorage.getItem(key);
+    const list: FirestoreResult[] = raw ? JSON.parse(raw) : [];
+    list.unshift(cleanResult);
+    localStorage.setItem(key, JSON.stringify(list.slice(0, 50)));
+  } catch {}
+
+  return { success: true, result: cleanResult };
+}
+
+export async function fetchUserExamResultsFromFirestore(userId: string): Promise<FirestoreResult[]> {
+  const currentDb = getDb();
+  let dbResults: FirestoreResult[] = [];
+
+  if (currentDb && userId) {
+    try {
+      const q = query(collection(currentDb, 'results'), where('userId', '==', userId));
+      const snap = await getDocs(q);
+      snap.forEach(docSnap => {
+        const item = docSnap.data() as FirestoreResult;
+        dbResults.push({ ...item, id: docSnap.id });
+      });
+    } catch (e) {
+      console.warn('[Firestore User Results notice]:', e);
+    }
+  }
+
+  // Fallback to local storage
+  let localResults: FirestoreResult[] = [];
+  try {
+    const key = `ethiolearn_results_${userId}`;
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) localResults = list;
+    }
+  } catch {}
+
+  const resultMap = new Map<string, FirestoreResult>();
+  localResults.forEach(r => resultMap.set(r.id, r));
+  dbResults.forEach(r => resultMap.set(r.id, r));
+
+  return Array.from(resultMap.values()).sort((a, b) => new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime());
+}
+
+// ============================================================================
+// 7. AUTO-SEEDING INITIAL AUTHENTIC FIRESTORE DATA
+// ============================================================================
+
+export async function seedInitialFirestoreData(): Promise<void> {
+  const currentDb = getDb();
+  if (!currentDb) return;
+
+  try {
+    const seededFlagKey = 'ethiolearn_firestore_seeded_v1';
+    if (typeof localStorage !== 'undefined' && localStorage.getItem(seededFlagKey)) {
+      return;
+    }
+
+    // 1. Seed Books
+    for (const b of INITIAL_BOOKS) {
+      const bookDoc = doc(currentDb, 'books', b.id);
+      const snap = await getDoc(bookDoc);
+      if (!snap.exists()) {
+        await setDoc(bookDoc, b);
+      }
+    }
+
+    // 2. Seed Chapters
+    for (const c of INITIAL_CHAPTERS) {
+      const chapDoc = doc(currentDb, 'chapters', c.id);
+      const snap = await getDoc(chapDoc);
+      if (!snap.exists()) {
+        await setDoc(chapDoc, c);
+      }
+    }
+
+    // 3. Seed Exams
+    for (const e of INITIAL_EXAMS) {
+      const examDoc = doc(currentDb, 'exams', e.id);
+      const snap = await getDoc(examDoc);
+      if (!snap.exists()) {
+        await setDoc(examDoc, e);
+      }
+    }
+
+    // 4. Seed Questions
+    for (const q of INITIAL_QUESTIONS) {
+      const qDoc = doc(currentDb, 'questions', q.id);
+      const snap = await getDoc(qDoc);
+      if (!snap.exists()) {
+        await setDoc(qDoc, q);
+      }
+    }
+
+    // 5. Seed Promotions
+    for (const p of DEFAULT_PROMOTIONS) {
+      const pDoc = doc(currentDb, 'promotions', p.code);
+      const snap = await getDoc(pDoc);
+      if (!snap.exists()) {
+        await setDoc(pDoc, p);
+      }
+    }
+
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(seededFlagKey, 'true');
+    }
+    console.log('[Firestore] Successfully initialized and verified real standalone dataset in Firestore.');
+  } catch (err) {
+    console.info('[Firestore] Seeding notice (cached mode active):', err);
+  }
+}
+
