@@ -21,6 +21,7 @@ import {
   getDocFromServer 
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
+import { GOOGLE_SERVICES_PROJECT } from './googleServicesConfig';
 import { 
   StudentProfile, 
   CustomNote, 
@@ -42,7 +43,23 @@ import {
 // Safe initialization to prevent "duplicate default app" warnings and missing service crashes
 export const app = (() => {
   try {
-    return getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+    let activeConfig: any = firebaseConfig;
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname.toLowerCase();
+      // If running on user's Vercel domains specified in google-services.json
+      if (hostname.includes('etlearn') || hostname.includes('vercel.app')) {
+        activeConfig = {
+          projectId: GOOGLE_SERVICES_PROJECT.projectId,
+          appId: GOOGLE_SERVICES_PROJECT.clients[0].appId,
+          apiKey: GOOGLE_SERVICES_PROJECT.apiKey,
+          authDomain: GOOGLE_SERVICES_PROJECT.authDomain,
+          storageBucket: GOOGLE_SERVICES_PROJECT.storageBucket,
+          messagingSenderId: GOOGLE_SERVICES_PROJECT.projectNumber,
+          measurementId: ""
+        };
+      }
+    }
+    return getApps().length === 0 ? initializeApp(activeConfig) : getApp();
   } catch (err) {
     console.warn('[Firebase App] Initialization failed:', err);
     return null as any;
@@ -51,7 +68,9 @@ export const app = (() => {
 
 export const db = (() => {
   if (!app) return null;
-  const dbId = (firebaseConfig as any).firestoreDatabaseId || undefined;
+  const isCustomDomain = typeof window !== 'undefined' && 
+    (window.location.hostname.toLowerCase().includes('etlearn') || window.location.hostname.toLowerCase().includes('vercel.app'));
+  const dbId = isCustomDomain ? undefined : ((firebaseConfig as any).firestoreDatabaseId || undefined);
   try {
     if (dbId) {
       try {
