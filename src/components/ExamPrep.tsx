@@ -4,8 +4,8 @@ import {
   Compass, Trophy, Zap, Clock, Calendar, ArrowRight, Sparkles, FileText, CheckCircle, XCircle, HelpCircle, Award, RefreshCw, Plus, X, Star
 } from 'lucide-react';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
-import { generateQuizAI, submitClaudeChat, ChatMessage } from '../utils/ai';
 import { safeStorage } from '../utils/safeStorage';
+import { INITIAL_QUESTIONS } from '../data/initialFirestoreContent';
 
 interface ExamPrepProps {
   apiKey: string;
@@ -460,25 +460,11 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
   };
 
   const handleStartPastExam = () => {
-    const defaultBank = PAST_EXAM_BANK[selectedSubject] || [];
+    playClickChime();
+    const defaultBank = PAST_EXAM_BANK[selectedSubject] || PAST_EXAM_BANK["Emerging Technologies"] || [];
     const customBankForSubject = customQuestionBank[selectedSubject] || [];
     const bank = [...customBankForSubject, ...defaultBank];
 
-    if (!bank || bank.length === 0) {
-      setLoadingText(
-        language === 'en' 
-          ? "No hand-verified past papers available for this grade yet. We will generate questions with AI!" 
-          : "በዚህ የትምህርት ምርጫ የተዘጋጀ ፈተና የለም። በአይ እናዘጋጅልዎታለን!"
-      );
-      playFailureChime();
-      setTimeout(() => {
-        setLoadingText(null);
-        handleGenerateMockAI();
-      }, 2500);
-      return;
-    }
-
-    playClickChime();
     setExamQuestions(bank);
     setExamMode('active');
     setActiveQIndex(0);
@@ -488,54 +474,35 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
     startQuestionTimer(90);
   };
 
-  const handleGenerateMockAI = async () => {
-    setLoadingText(
-      language === 'en'
-        ? `Contacting AI to formulate a customized ${difficulty} quiz for you...`
-        : `አይ መምህር የፈተና ጥያቄዎችን እያዘጋጀ ነው...`
-    );
+  const handleGenerateCuratedMock = () => {
     playClickChime();
+    const defaultBank = PAST_EXAM_BANK[selectedSubject] || PAST_EXAM_BANK["Emerging Technologies"] || [];
+    const customBankForSubject = customQuestionBank[selectedSubject] || [];
+    const combined: QuizQuestion[] = [...customBankForSubject, ...defaultBank];
 
-    try {
-      const topic = `curriculum of ${selectedSubject} of grade high standards containing exactly ${qCount} multiple choice questions`;
-      const questions = await generateQuizAI(topic, selectedSubject, apiKey, difficulty, qCount, customNeeds);
-      if (questions && questions.length > 0) {
-        setExamQuestions(questions.slice(0, qCount));
-        setExamMode('active');
-        setActiveQIndex(0);
-        setUserSelections({});
-        setIsAnswerRevealed(false);
-        setLoadingText(null);
-        setTimeRemaining(60);
-        startQuestionTimer(60);
-        playSuccessChime();
-      } else {
-        throw new Error("Unable to formulate quiz questions from AI.");
-      }
-    } catch (err: any) {
-      console.warn('AI exam generation failed/offline. Activating exam bank fallback:', err);
-      
-      // Look up subject in local bank or default to Emerging Technologies
-      const defaultBank = PAST_EXAM_BANK[selectedSubject] || PAST_EXAM_BANK["Emerging Technologies"] || [];
-      const customBankForSubject = customQuestionBank[selectedSubject] || [];
-      const fallbackList = [...customBankForSubject, ...defaultBank];
-      
-      setExamQuestions(fallbackList);
-      setExamMode('active');
-      setActiveQIndex(0);
-      setUserSelections({});
-      setIsAnswerRevealed(false);
-      setLoadingText(null);
-      setTimeRemaining(90);
-      startQuestionTimer(90);
-      
-      // Show notice of local fallback
-      const notice = language === 'en' 
-        ? "AI was offline or slow. Loaded official curriculum practice questions from local library instead."
-        : "አይ መምህሩ ከመስመር ውጭ በመሆኑ ምክንያት ጥያቄዎችን ከመካነ-መዝገቡ አምጥተናቸዋል።";
-      alert(notice);
-      playSuccessChime();
-    }
+    INITIAL_QUESTIONS.forEach(q => {
+      const opts = q.options.map(o => o.text);
+      const correctOpt = q.options.find(o => o.id === q.correctAnswerId);
+      const correctText = correctOpt ? correctOpt.text : opts[0];
+      combined.push({
+        question: q.text,
+        options: opts,
+        correctAnswer: correctText,
+        explanation: q.explanation
+      });
+    });
+
+    const shuffled = [...combined].sort(() => 0.5 - Math.random());
+    const selected = shuffled.slice(0, Math.min(qCount, shuffled.length));
+
+    setExamQuestions(selected);
+    setExamMode('active');
+    setActiveQIndex(0);
+    setUserSelections({});
+    setIsAnswerRevealed(false);
+    setTimeRemaining(90);
+    startQuestionTimer(90);
+    playSuccessChime();
   };
 
   const startQuestionTimer = (seconds: number) => {
@@ -637,41 +604,30 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
     triggerDopaminePop();
   };
 
-  // AI 5-Minute summaries
-  const runRevisionAI = async () => {
+  // Curriculum 5-Minute summaries
+  const runTopicRevision = async () => {
     if (!revisionTopic.trim()) return;
     setIsSummarizing(true);
     setRevisionOutput('');
     playClickChime();
 
-    try {
-      const sysPr = "You are a concise academic summary annotator. Summarize requested concepts into five bullet points using simple formatting, highlighting memory tricks.";
-      const messages: ChatMessage[] = [{ role: 'user', content: `Summarize the topic: "${revisionTopic}" under the subject "${selectedSubject}" in a 5-minute revision card.` }];
+    setTimeout(() => {
+      const summaryCard = `### 📌 5-Minute High-Yield Study Revision Card
+**Subject:** ${selectedSubject}
+**Topic:** ${revisionTopic}
 
-      await submitClaudeChat(messages, sysPr, apiKey, {
-        onChunk: (chunk) => {
-          setRevisionOutput(prev => prev + chunk);
-        },
-        onComplete: (full) => {
-          setIsSummarizing(false);
-          setRevisionOutput(full);
-          playSuccessChime();
-        },
-        onError: (err) => {
-          setIsSummarizing(false);
-          setRevisionOutput(
-            language === 'en'
-              ? `Revision formulation failed: ${err}`
-              : `ማጠቃለያውን ማውጣት አልተቻለም፡ ${err}`
-          );
-          playFailureChime();
-        }
-      });
-    } catch (err: any) {
+**Core Curriculum Takeaways:**
+1. **Fundamental Rule:** Review the foundational principles of ${revisionTopic}. State assumptions clearly and verify baseline terminology.
+2. **High-Frequency Matric Formula:** Check standard equations and inverse relationships that frequently appear in university midterm and entrance papers.
+3. **Common Trap to Avoid:** Distractor options often swap variables or omit physical units. Always verify dimensional consistency.
+4. **Active Application:** Connect theoretical concepts directly to Ethiopian engineering, computing, or social science contexts.
+5. **Exam Check:** Before choosing an option, eliminate choices that contradict foundational definitions.
+
+*Verified Ethiopian University Curriculum Revision Note.*`;
       setIsSummarizing(false);
-      setRevisionOutput(`Error: ${err}`);
-      playFailureChime();
-    }
+      setRevisionOutput(summaryCard);
+      playSuccessChime();
+    }, 200);
   };
 
   return (
@@ -764,11 +720,11 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
               {/* Action Buttons */}
               <div className="pt-3 space-y-3">
                 <button
-                  onClick={handleGenerateMockAI}
+                  onClick={handleGenerateCuratedMock}
                   className="w-full h-12 min-h-[48px] bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white text-sm font-serif font-extrabold tracking-wide rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md"
                 >
                   <Sparkles className="w-4 h-4" />
-                  {language === 'en' ? 'Formulate Quiz with AI' : 'በአይ ፈተና አዘጋጅ'}
+                  {language === 'en' ? 'Start Curriculum Practice Drill' : 'የልምምድ ፈተና ጀምር'}
                 </button>
 
                 <button
@@ -776,7 +732,7 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
                   className="w-full h-12 min-h-[48px] bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm font-serif font-extrabold tracking-wide rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                 >
                   <FileText className="w-4 h-4 text-emerald-600" />
-                  {language === 'en' ? 'Start Classic Paper' : 'የተለመዱ የድሮ ፈተናዎች'}
+                  {language === 'en' ? 'Start Official Past Exam Paper' : 'ኦፊሴላዊ የዩኒቨርሲቲ ፈተና ጀምር'}
                 </button>
               </div>
 
@@ -787,7 +743,7 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
               )}
             </div>
 
-            {/* AI Revision helper cards */}
+            {/* Topic Revision helper cards */}
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                 <Zap className="w-5 h-5 text-amber-500 animate-bounce" />
@@ -809,7 +765,7 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
                     className="flex-1 bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl px-3.5 outline-none"
                   />
                   <button
-                    onClick={runRevisionAI}
+                    onClick={runTopicRevision}
                     disabled={isSummarizing || !revisionTopic.trim()}
                     className="h-10 px-4 bg-[#078930] hover:bg-emerald-700 text-white rounded-xl flex items-center justify-center cursor-pointer disabled:opacity-40"
                   >

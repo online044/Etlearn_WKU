@@ -475,42 +475,13 @@ export default function SplashOnboarding({ onComplete, initialProfile }: SplashO
     setOnboardingChatMessages(updated);
     setOnboardingIsTyping(true);
     
-    let finished = false;
-    const fallbackTimeout = setTimeout(() => {
-      if (!finished) {
-        const fbResponse = getOnboardingFallbackResponse(query, preferredLanguage);
-        setOnboardingChatMessages([...updated, { role: 'assistant', content: fbResponse }]);
-        setOnboardingIsTyping(false);
-        setOnboardingAiResponded(true);
-        playSuccessChime();
-        finished = true;
-      }
-    }, 2000);
-
-    try {
-      const { submitClaudeChat } = await import('../utils/ai');
-      await submitClaudeChat(
-        updated as any,
-        "You are AI Teacher, a friendly bilingual study partner robot for Ethiopian university students. Keep your response brief, encouraging, and exactly 2-3 sentences. Always relate back to helping them in their academic courses. Response can be in Amharic or English.",
-        claudeApiKey || "no-key",
-        {
-          onChunk: () => {},
-          onComplete: (fullText) => {
-            if (!finished) {
-              clearTimeout(fallbackTimeout);
-              setOnboardingChatMessages([...updated, { role: 'assistant', content: fullText }]);
-              setOnboardingIsTyping(false);
-              setOnboardingAiResponded(true);
-              playSuccessChime();
-              finished = true;
-            }
-          },
-          onError: () => {}
-        }
-      );
-    } catch (e) {
-      console.error(e);
-    }
+    setTimeout(() => {
+      const fbResponse = getOnboardingFallbackResponse(query, preferredLanguage);
+      setOnboardingChatMessages([...updated, { role: 'assistant', content: fbResponse }]);
+      setOnboardingIsTyping(false);
+      setOnboardingAiResponded(true);
+      playSuccessChime();
+    }, 400);
   };
   
   // Registration and Authentication inputs

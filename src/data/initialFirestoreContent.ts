@@ -5,7 +5,7 @@
  * Complete collections of Books, Chapters, Exams, and Questions for Ethiopian Universities & Grade 12.
  */
 
-import { FirestoreBook, FirestoreChapter, FirestoreExam, FirestoreQuestion, Promotion } from '../types';
+import { FirestoreBook, FirestoreChapter, FirestoreExam, FirestoreQuestion, FirestoreStudyNote, Promotion } from '../types';
 
 export const INITIAL_BOOKS: FirestoreBook[] = [
   {
@@ -537,3 +537,146 @@ export const INITIAL_QUESTIONS: FirestoreQuestion[] = [
     createdAt: '2026-01-15T00:00:00.000Z'
   }
 ];
+
+export const INITIAL_NOTES: FirestoreStudyNote[] = [
+  {
+    id: 'note_freshman_emte_ch1',
+    title: 'Emerging Technologies: Chapter 1 & 2 - Industry 4.0, Artificial Intelligence & Big Data',
+    description: 'Comprehensive university lecture note covering 4IR drivers, cyber-physical systems, AI paradigms (Supervised, Unsupervised, Reinforcement), and Big Data 5Vs.',
+    university: 'Wolkite University',
+    department: 'Freshman Common Courses',
+    academicYear: 'Year 1 (Freshman)',
+    course: 'EmTe 1012',
+    subject: 'Emerging Technologies',
+    unit: 'Units 1 & 2',
+    content: `# Chapter 1: Introduction to Emerging Technologies (EmTe 1012)
+## 1.1 The Evolution of Industrial Revolutions
+* **1IR (First Industrial Revolution - ~1780s)**: Steam engine, mechanization, textile manufacturing, water power.
+* **2IR (Second Industrial Revolution - ~1870s)**: Electrical power, assembly lines, mass manufacturing, combustion engines.
+* **3IR (Third Industrial Revolution - ~1960s)**: Mainframe computers, electronics, telecommunications, Internet, automation.
+* **4IR (Fourth Industrial Revolution - Today)**: Fusion of digital, biological, and physical systems through Cyber-Physical Systems (CPS), Artificial Intelligence, IoT, Cloud Computing, and Big Data.
+
+## 1.2 Core Drivers of 4IR
+1. Exponential computing power (Moore's law extension).
+2. Pervasive sensor networks and low-cost IoT hardware.
+3. High-bandwidth communication networks (5G, satellite constellations).
+4. Abundance of massive datasets (Big Data).
+5. Advances in Machine Learning, Deep Neural Networks, and algorithmic modeling.
+
+---
+
+# Chapter 2: Artificial Intelligence & Big Data Foundations
+## 2.1 Definitions & Types of AI
+* **Artificial Narrow Intelligence (ANI)**: Dedicated to specialized tasks (e.g., medical diagnostics, chess engines, translation).
+* **Artificial General Intelligence (AGI)**: Human-equivalent cognitive ability across diverse domains (theoretical/emerging).
+* **Artificial Super Intelligence (ASI)**: Cognitive capabilities far surpassing human intellect.
+
+## 2.2 Core Machine Learning Paradigms
+1. **Supervised Learning**: Model learns from labeled input-output pairs. Examples: Linear Regression, Support Vector Machines (SVM), Decision Trees.
+2. **Unsupervised Learning**: Model discovers hidden patterns or clusters in unlabeled data. Examples: K-Means Clustering, Principal Component Analysis (PCA).
+3. **Reinforcement Learning (RL)**: Autonomous agent optimizes decision policies through trial, error, reward feedback, and environmental observation. Examples: Autonomous robotics, AlphaGo.
+
+## 2.3 The "5 Vs" of Big Data
+* **Volume**: Enormous scale of generated data (Terabytes to Zettabytes).
+* **Velocity**: Blistering speed at which real-time sensor streams and user logs arrive.
+* **Variety**: Heterogeneous data modalities (structured SQL tables, semi-structured JSON, unstructured video/audio).
+* **Veracity**: Trustworthiness, noise ratio, bias, and accuracy of data feeds.
+* **Value**: Extractable actionable intelligence that drives institutional and societal decisions.`,
+    accessLevel: 'free',
+    allowDownload: true,
+    status: 'published',
+    author: 'Wolkite University Academic Board',
+    createdAt: '2026-01-15T00:00:00.000Z',
+    updatedAt: '2026-01-15T00:00:00.000Z'
+  },
+  {
+    id: 'note_freshman_math_logic',
+    title: 'Freshman Mathematics: Module 1 - Propositional Logic, Truth Tables & Quantifiers',
+    description: 'Detailed study summary covering atomic propositions, truth tables, conditional statements, contrapositives, and quantifiers.',
+    university: 'Wolkite University',
+    department: 'Freshman Common Courses',
+    academicYear: 'Year 1 (Freshman)',
+    course: 'Math 1011',
+    subject: 'Mathematics',
+    unit: 'Module 1',
+    content: `# Module 1: Propositional Logic & Quantifiers (Math 1011)
+
+## 1.1 Propositions & Logical Connectives
+A **proposition** is a declarative statement that is either definitively True (T) or False (F), but never both simultaneously.
+
+### Logical Connectives:
+1. **Negation (~p)**: Reverses the truth value of p.
+2. **Conjunction (p ∧ q)**: True if and only if **both** p and q are True.
+3. **Disjunction (p ∨ q)**: False if and only if **both** p and q are False.
+4. **Conditional / Implication (p → q)**: 
+   * **Crucial Rule**: False in only ONE condition: when hypothesis p is TRUE, but conclusion q is FALSE.
+   * In all other 3 truth assignments, (p → q) is True!
+5. **Biconditional (p ↔ q)**: True when p and q share the identical truth value (both T or both F).
+
+## 1.2 Variants of Implication (p → q)
+* **Converse**: q → p
+* **Inverse**: ~p → ~q
+* **Contrapositive**: ~q → ~p
+
+**Golden Theorem**: An implication (p → q) and its contrapositive (~q → ~p) are **logically equivalent** under every truth interpretation:
+\`\`\`
+(p → q) ≡ (~q → ~p)
+\`\`\`
+
+## 1.3 Quantifiers & Predicates
+* **Universal Quantifier (∀x P(x))**: Asserts that property P holds for *every* element x in domain D.
+* **Existential Quantifier (∃x P(x))**: Asserts that property P holds for *at least one* element x in domain D.
+* **De Morgan's Laws for Quantifiers**:
+  * ~[∀x P(x)] ≡ ∃x [~P(x)]
+  * ~[∃x P(x)] ≡ ∀x [~P(x)]`,
+    accessLevel: 'free',
+    allowDownload: true,
+    status: 'published',
+    author: 'Wolkite University Department of Mathematics',
+    createdAt: '2026-01-15T00:00:00.000Z',
+    updatedAt: '2026-01-15T00:00:00.000Z'
+  },
+  {
+    id: 'note_freshman_physics_mechanics',
+    title: 'General Physics: Chapter 1 & 2 - Vectors, Kinematics & Newton\'s Laws of Motion',
+    description: 'Essential revision notes and key formulas for University Physics: 1D/2D motion, projectile trajectories, vector dot/cross products, and friction.',
+    university: 'Wolkite University',
+    department: 'Physics',
+    academicYear: 'Year 1 (Freshman)',
+    course: 'Phys 1011',
+    subject: 'Physics',
+    unit: 'Units 1 - 3',
+    content: `# General Physics (Phys 1011) - Mechanics Master Summary
+
+## 1. Vectors & Coordinate Systems
+* Vector components: \`A_x = A cos(θ)\`, \`A_y = A sin(θ)\`
+* Dot Product (Scalar): \`A · B = |A||B| cos(θ) = A_x B_x + A_y B_y + A_z B_z\`
+* Cross Product (Vector): \`|A × B| = |A||B| sin(θ)\`
+
+## 2. Kinematics in One and Two Dimensions
+For constant acceleration \`a\`:
+1. \`v = v_0 + a t\`
+2. \`x = x_0 + v_0 t + 0.5 a t^2\`
+3. \`v^2 = v_0^2 + 2 a (x - x_0)\`
+4. \`x - x_0 = ((v_0 + v) / 2) t\`
+
+### Projectile Motion (negligible air drag):
+* Horizontal velocity: \`v_x = v_0 cos(θ)\` (constant, \`a_x = 0\`)
+* Vertical velocity: \`v_y = v_0 sin(θ) - g t\`
+* Maximum Height: \`H = (v_0^2 sin^2(θ)) / (2g)\`
+* Horizontal Range: \`R = (v_0^2 sin(2θ)) / g\`
+
+## 3. Newton's Laws & Dynamics
+* **First Law (Inertia)**: An object remains at rest or constant velocity unless acted upon by a net external force: \`ΣF = 0\`.
+* **Second Law**: Net force equals time rate of change of momentum: \`ΣF = m a\`.
+* **Third Law**: Forces occur in reciprocal pairs: \`F_{AB} = -F_{BA}\`.
+* **Friction**: Static \`f_s ≤ μ_s N\`, Kinetic \`f_k = μ_k N\`.`,
+    accessLevel: 'pro',
+    allowDownload: true,
+    status: 'published',
+    author: 'Wolkite University Department of Physics',
+    createdAt: '2026-01-15T00:00:00.000Z',
+    updatedAt: '2026-01-15T00:00:00.000Z'
+  }
+];
+

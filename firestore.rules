@@ -108,6 +108,19 @@ service cloud.firestore {
         && data.isActive is bool;
     }
 
+    // 8. Study Notes Schema Validation
+    function isValidNote(data) {
+      return data.keys().hasAll(['id', 'title', 'university', 'department', 'course', 'subject', 'status', 'accessLevel'])
+        && data.id is string && data.id.size() <= 128
+        && data.title is string && data.title.size() <= 300
+        && data.university is string && data.university.size() <= 200
+        && data.department is string && data.department.size() <= 200
+        && data.course is string && data.course.size() <= 200
+        && data.subject is string && data.subject.size() <= 200
+        && (data.accessLevel == 'free' || data.accessLevel == 'pro')
+        && (data.status == 'draft' || data.status == 'published' || data.status == 'archived');
+    }
+
     // ================= COLLECTIONS =================
 
     // 1. Users Collection
@@ -160,7 +173,15 @@ service cloud.firestore {
       allow delete: if isOwner(resource.data.userId) || isAdmin();
     }
 
-    // 7. Promotions Collection
+    // 7. Study Notes Collection (Published by Admin)
+    match /notes/{noteId} {
+      allow get, list: if resource.data.status == 'published' || isAdmin();
+      allow create: if isAdmin() && isValidId(noteId) && isValidNote(request.resource.data);
+      allow update: if isAdmin() && isValidId(noteId) && isValidNote(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // 8. Promotions Collection
     match /promotions/{promoId} {
       allow get, list: if true;
       allow create, update: if isAdmin() && isValidPromotion(request.resource.data);

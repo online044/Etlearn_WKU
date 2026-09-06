@@ -164,7 +164,11 @@ export default function AdminExamsSection({ exams, onRefresh, isAmharic }: Admin
         examYear: formYear.trim() || '2016 E.C.',
         accessLevel: formAccessLevel,
         allowDownload: formAllowDownload,
-        status: formStatus
+        status: formStatus,
+        pdfUrl: editingExam?.pdfUrl,
+        pdfStoragePath: (editingExam as any)?.pdfStoragePath,
+        fileSize: editingExam?.fileSize,
+        pageCount: editingExam?.pageCount
       };
 
       const res = await saveAdminExam(payload, formPdfFile);

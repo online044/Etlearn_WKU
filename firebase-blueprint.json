@@ -155,6 +155,31 @@
         "description": { "type": "string" }
       },
       "required": ["code", "discountPercentage", "isActive"]
+    },
+    "study_note": {
+      "title": "StudyNote",
+      "description": "Authentic university department study note, chapter summary, and lecture guide.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "university": { "type": "string" },
+        "department": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "course": { "type": "string" },
+        "subject": { "type": "string" },
+        "unit": { "type": "string" },
+        "content": { "type": "string" },
+        "accessLevel": { "type": "string", "enum": ["free", "pro"] },
+        "allowDownload": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["draft", "published", "archived"] },
+        "pdfUrl": { "type": "string" },
+        "author": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "title", "university", "department", "course", "subject", "status", "accessLevel"]
     }
   },
   "firestore": {
@@ -181,6 +206,10 @@
     "/results/{resultId}": {
       "schema": "result",
       "description": "Collection of student exam submission results, scores, and answer histories."
+    },
+    "/notes/{noteId}": {
+      "schema": "study_note",
+      "description": "Collection of authentic university curriculum study notes, chapter summaries, and lecture notes published by the educator."
     },
     "/promotions/{promoId}": {
       "schema": "promotion",

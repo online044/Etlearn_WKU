@@ -5,8 +5,9 @@
  * Direct integration with Firebase Firestore
  */
 
-import { BookRecord, ExamSheetRecord, StudentProfile, FirestoreBook, FirestoreExam } from '../types';
+import { BookRecord, ExamSheetRecord, StudentProfile, FirestoreBook, FirestoreExam, NoteRecord, FirestoreStudyNote, NoteFilters } from '../types';
 import { getSessionToken } from './supabaseClient';
+import { compressImageToBase64 } from './imageCompressor';
 import { 
   fetchBooksFromFirestore, 
   fetchExamsFromFirestore, 
@@ -15,7 +16,12 @@ import {
   togglePublishBookInFirestore,
   saveExamToFirestore,
   deleteExamFromFirestore,
-  togglePublishExamInFirestore
+  togglePublishExamInFirestore,
+  fetchPublishedNotesFromFirestore,
+  fetchAdminNotesFromFirestore,
+  saveAdminNoteToFirestore,
+  deleteAdminNoteFromFirestore,
+  togglePublishAdminNoteInFirestore
 } from './firebaseStore';
 
 function getAuthHeaders(): HeadersInit {
@@ -163,7 +169,8 @@ export async function fetchAdminBooks(): Promise<BookRecord[]> {
 }
 
 /**
- * Create or update a book record directly in Firestore
+ * Create or update a book record directly in Firestore with automatic
+ * cover image compression (<50KB) and secure server vault PDF upload.
  */
 export async function saveAdminBook(
   bookData: Partial<BookRecord>,
@@ -171,13 +178,107 @@ export async function saveAdminBook(
   coverFile?: File | null
 ): Promise<{ success: boolean; book?: BookRecord; error?: string }> {
   try {
+    const bookId = bookData.id || `book_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     let coverUrl = bookData.coverUrl || '';
+    let coverStoragePath = bookData.coverStoragePath || '';
+    let pdfUrl = bookData.pdfUrl || '';
+    let pdfStoragePath = bookData.pdfStoragePath || '';
+    let fileSize = bookData.fileSize || 0;
+
+    // 1. Handle Cover Image (Compress to <50KB thumbnail + optional server upload)
     if (coverFile) {
-      coverUrl = await fileToBase64(coverFile);
+      // Always compress client-side to prevent Firestore 1MB document size violations
+      const compressedCover = await compressImageToBase64(coverFile, {
+        maxWidth: 360,
+        maxHeight: 520,
+        quality: 0.72
+      });
+      coverUrl = compressedCover;
+
+      // Try uploading to server public covers storage if online
+      try {
+        const token = getSessionToken();
+        const uploadRes = await fetch('/api/admin/books/upload-cover', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            bookId,
+            fileBase64: compressedCover,
+            mimeType: 'image/jpeg'
+          })
+        });
+
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          if (uploadData.coverUrl) {
+            coverUrl = uploadData.coverUrl;
+          }
+          if (uploadData.coverStoragePath) {
+            coverStoragePath = uploadData.coverStoragePath;
+          }
+        }
+      } catch (covErr) {
+        console.warn('[ContentStore] Server cover upload skipped, using optimized thumbnail:', covErr);
+      }
+    } else if (coverUrl && coverUrl.startsWith('data:image/') && coverUrl.length > 80 * 1024) {
+      // Compress legacy or large data URL
+      coverUrl = await compressImageToBase64(coverUrl, {
+        maxWidth: 360,
+        maxHeight: 520,
+        quality: 0.72
+      });
     }
+
+    // 2. Handle PDF Document (Upload to server storage vault, NEVER raw in Firestore)
+    if (pdfFile) {
+      fileSize = pdfFile.size;
+      try {
+        const token = getSessionToken();
+        const pdfBase64 = await fileToBase64(pdfFile);
+        const uploadRes = await fetch('/api/admin/books/upload-pdf', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            bookId,
+            fileName: pdfFile.name,
+            fileBase64: pdfBase64,
+            fileSize: pdfFile.size
+          })
+        });
+
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          if (uploadData.pdfStoragePath) {
+            pdfStoragePath = uploadData.pdfStoragePath;
+          }
+          if (uploadData.pdfUrl) {
+            pdfUrl = uploadData.pdfUrl;
+          }
+        }
+      } catch (pdfErr) {
+        console.warn('[ContentStore] PDF server upload notice:', pdfErr);
+      }
+    }
+
+    // Never allow a huge data URL to be saved as pdfUrl in Firestore
+    if (pdfUrl.startsWith('data:') && pdfUrl.length > 50 * 1024) {
+      pdfUrl = '';
+    }
+
     const res = await saveBookToFirestore({
       ...bookData,
-      coverUrl: coverUrl || bookData.coverUrl
+      id: bookId,
+      coverUrl,
+      coverStoragePath,
+      pdfUrl,
+      pdfStoragePath,
+      fileSize
     });
     return res;
   } catch (e: any) {
@@ -237,14 +338,64 @@ export async function fetchAdminExams(): Promise<ExamSheetRecord[]> {
 }
 
 /**
- * Create or update an exam sheet directly in Firestore
+ * Create or update an exam sheet directly in Firestore with server PDF vault upload.
  */
 export async function saveAdminExam(
   examData: Partial<ExamSheetRecord>,
   pdfFile?: File | null
 ): Promise<{ success: boolean; exam?: ExamSheetRecord; error?: string }> {
   try {
-    const res = await saveExamToFirestore(examData);
+    const examId = examData.id || `exam_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    let pdfUrl = examData.pdfUrl || '';
+    let pdfStoragePath = (examData as any).pdfStoragePath || '';
+    let fileSize = examData.fileSize || 0;
+
+    // Handle PDF Upload to server storage vault (NEVER raw in Firestore)
+    if (pdfFile) {
+      fileSize = pdfFile.size;
+      try {
+        const token = getSessionToken();
+        const pdfBase64 = await fileToBase64(pdfFile);
+        const uploadRes = await fetch('/api/admin/exams/upload-pdf', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            examId,
+            fileName: pdfFile.name,
+            fileBase64: pdfBase64,
+            fileSize: pdfFile.size
+          })
+        });
+
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          if (uploadData.pdfStoragePath || uploadData.storagePath) {
+            pdfStoragePath = uploadData.pdfStoragePath || uploadData.storagePath;
+          }
+          if (uploadData.pdfUrl || uploadData.supabaseUrl) {
+            pdfUrl = uploadData.pdfUrl || uploadData.supabaseUrl;
+          }
+        }
+      } catch (pdfErr) {
+        console.warn('[ContentStore] Exam PDF server upload notice:', pdfErr);
+      }
+    }
+
+    // Never allow a huge data URL to be saved as pdfUrl in Firestore
+    if (pdfUrl.startsWith('data:') && pdfUrl.length > 50 * 1024) {
+      pdfUrl = '';
+    }
+
+    const res = await saveExamToFirestore({
+      ...examData,
+      id: examId,
+      pdfUrl,
+      pdfStoragePath,
+      fileSize
+    });
     if (res.success && res.exam) {
       const mapped: ExamSheetRecord = {
         id: res.exam.id,
@@ -261,6 +412,7 @@ export async function saveAdminExam(
         allowDownload: res.exam.allowDownload,
         status: res.exam.status,
         pdfUrl: res.exam.pdfUrl || '',
+        pdfStoragePath: (res.exam as any).pdfStoragePath || pdfStoragePath,
         fileSize: res.exam.fileSize,
         pageCount: res.exam.pageCount,
         createdAt: res.exam.createdAt,
@@ -292,3 +444,121 @@ export async function togglePublishAdminExam(
   const res = await togglePublishExamInFirestore(id, status);
   return { success: res.success, error: res.error };
 }
+
+/**
+ * Fetch published study notes from Firestore for students
+ */
+export async function fetchPublishedNotes(filters?: NoteFilters): Promise<NoteRecord[]> {
+  try {
+    return await fetchPublishedNotesFromFirestore(filters);
+  } catch (err) {
+    console.warn('[ContentStore] Error fetching published notes:', err);
+    return [];
+  }
+}
+
+/**
+ * Fetch all notes (drafts and published) for admin management
+ */
+export async function fetchAdminNotes(): Promise<NoteRecord[]> {
+  try {
+    return await fetchAdminNotesFromFirestore();
+  } catch (err) {
+    console.warn('[ContentStore] Error fetching admin notes:', err);
+    return [];
+  }
+}
+
+/**
+ * Save or publish a Study Note in Firestore
+ */
+export async function saveAdminNote(
+  noteData: Partial<NoteRecord>,
+  pdfFile?: File | null
+): Promise<{ success: boolean; note?: NoteRecord; error?: string }> {
+  try {
+    const noteId = noteData.id || `note_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    let pdfUrl = noteData.pdfUrl || '';
+    let pdfStoragePath = noteData.pdfStoragePath || '';
+    let fileSize = noteData.fileSize || 0;
+
+    // Optional PDF attachment upload
+    if (pdfFile) {
+      fileSize = pdfFile.size;
+      try {
+        const token = getSessionToken();
+        const pdfBase64 = await fileToBase64(pdfFile);
+        const uploadRes = await fetch('/api/admin/exams/upload-pdf', { // re-use secure storage vault
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            examId: noteId,
+            fileName: pdfFile.name,
+            fileBase64: pdfBase64,
+            fileSize: pdfFile.size
+          })
+        });
+
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          if (uploadData.pdfUrl) {
+            pdfUrl = uploadData.pdfUrl;
+          }
+          if (uploadData.storagePath) {
+            pdfStoragePath = uploadData.storagePath;
+          }
+        }
+      } catch (pdfErr) {
+        console.warn('[ContentStore] Server PDF upload skipped:', pdfErr);
+      }
+    }
+
+    if (pdfUrl.startsWith('data:') && pdfUrl.length > 50 * 1024) {
+      pdfUrl = '';
+    }
+
+    const saved = await saveAdminNoteToFirestore({
+      ...noteData,
+      id: noteId,
+      pdfUrl,
+      pdfStoragePath,
+      fileSize
+    });
+
+    return { success: true, note: saved };
+  } catch (e: any) {
+    console.error('[ContentStore] saveAdminNote error:', e);
+    return { success: false, error: e.message || 'Error saving study note.' };
+  }
+}
+
+/**
+ * Delete a Study Note
+ */
+export async function deleteAdminNote(id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const ok = await deleteAdminNoteFromFirestore(id);
+    return { success: ok };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Toggle Study Note published status
+ */
+export async function togglePublishAdminNote(
+  id: string,
+  currentStatus: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const ok = await togglePublishAdminNoteInFirestore(id, currentStatus);
+    return { success: ok };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+

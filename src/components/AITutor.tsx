@@ -6,13 +6,12 @@ import {
   Lightbulb, HelpCircle as QuestionIcon, ArrowRight, Menu, Plus, ChevronDown, Award, 
   Share2, Trash2, Pin, Download, Flame, Search
 } from 'lucide-react';
-import { ChatMessage, submitClaudeChat, generateQuizAI, generateFlashcardsFromContextAI } from '../utils/ai';
+import { ChatMessage, submitClaudeChat } from '../utils/ai';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
 import AITutorLogo from './AITutorLogo';
 import { StudentProfile, Flashcard, AITeacherContext, SavedChatSession } from '../types';
 import { safeStorage } from '../utils/safeStorage';
 import PaywallModal from './PaywallModal';
-import AIStudyToolsModal from './AIStudyToolsModal';
 import SavedChatsDrawer from './SavedChatsDrawer';
 import { getDailyAIUsageCount, incrementDailyAIUsage, checkSubscriptionStatus, FREE_DAILY_AI_LIMIT } from '../utils/monetization';
 
@@ -276,7 +275,6 @@ export default function AITutor({
   );
   const [activeMode, setActiveMode] = useState<AIMode>(context?.mode || 'teaching');
   const [isPaywallOpen, setIsPaywallOpen] = useState(false);
-  const [isStudyToolsOpen, setIsStudyToolsOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSubjectModalOpen, setIsSubjectModalOpen] = useState(false);
   
@@ -803,37 +801,37 @@ ${contextDetails}`;
     recognition.start();
   };
 
-  const triggerQuizGeneration = async () => {
+  const triggerQuizGeneration = () => {
     setGeneratingQuiz(true);
     setCurrentQuiz(null);
     setQuizAnswers({});
     setQuizScore(null);
     playClickChime();
 
-    try {
-      const topic = activeChips[0] || selectedSubject;
-      const quiz = await generateQuizAI(topic, selectedSubject, apiKey);
-      if (quiz && quiz.length > 0) {
-        setCurrentQuiz(quiz);
-        setGeneratingQuiz(false);
-        playSuccessChime();
-      } else {
-        throw new Error("Empty quiz response from AI");
-      }
-    } catch (err: any) {
-      console.warn("Using offline fallback quiz:", err);
+    setTimeout(() => {
       const fallbackList = LOCAL_FALLBACK_QUIZ[selectedSubject] || LOCAL_FALLBACK_QUIZ["Emerging Technologies"];
       setCurrentQuiz(fallbackList);
       setGeneratingQuiz(false);
       playSuccessChime();
-    }
+    }, 200);
   };
 
-  const handleCreateFlashcardsFromAnswer = async (answerText: string) => {
+  const handleCreateFlashcardsFromAnswer = (answerText: string) => {
     playClickChime();
     try {
-      const cards = await generateFlashcardsFromContextAI(answerText, selectedSubject, apiKey);
-      if (cards && cards.length > 0 && onSaveDecksState) {
+      const sentences = answerText.split('\n').map(s => s.trim()).filter(s => s.length > 15);
+      const cards: Flashcard[] = (sentences.length > 0 ? sentences.slice(0, 3) : [answerText]).map((text, idx) => ({
+        id: `card_tutor_${Date.now()}_${idx}`,
+        question: `Key concept from ${selectedSubject}: Point #${idx + 1}`,
+        answer: text.replace(/^[#*-\d.\s]+/, ''),
+        explanation: `Curriculum study note extracted from Asgobnyi Tutor.`,
+        interval: 0,
+        repetition: 0,
+        easeFactor: 2.5,
+        dueDate: new Date().toISOString()
+      }));
+
+      if (cards.length > 0 && onSaveDecksState) {
         const deckId = `deck_${selectedSubject.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
         const existing = decksState?.[deckId] || [];
         onSaveDecksState(deckId, [...existing, ...cards]);
@@ -952,14 +950,14 @@ ${contextDetails}`;
             <span className="hidden md:inline">{highThinking ? 'Pro Reasoning' : 'Reasoning'}</span>
           </button>
 
-          {/* Study Tools Suite */}
+          {/* Quick Curriculum Practice Quiz */}
           <button
-            onClick={() => { playClickChime(); setIsStudyToolsOpen(true); }}
+            onClick={() => { playClickChime(); triggerQuizGeneration(); }}
             className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-[11px] flex items-center gap-1 shadow-sm transition-all cursor-pointer active:scale-95"
-            title="AI Study Tools (Quiz & Summaries)"
+            title="Curriculum Practice Quiz"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{isAmharic ? 'መሳሪያዎች' : 'Tools'}</span>
+            <span className="hidden sm:inline">{isAmharic ? 'የፈተና ልምምድ' : 'Practice Quiz'}</span>
           </button>
 
           {/* Quick New Chat Button */}
@@ -1483,15 +1481,6 @@ ${contextDetails}`;
         language={language}
         questionsUsed={dailyUsed}
         maxQuestions={FREE_DAILY_AI_LIMIT}
-      />
-
-      {/* ─── 9. AI STUDY TOOLS SUITE MODAL ─── */}
-      <AIStudyToolsModal
-        isOpen={isStudyToolsOpen}
-        onClose={() => setIsStudyToolsOpen(false)}
-        language={language}
-        userApiKey={apiKey}
-        enrolledSubjects={subjectsList}
       />
     </div>
   );

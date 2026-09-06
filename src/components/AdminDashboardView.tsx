@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { 
   StudentProfile, CouponCode, PlatformAnnouncement, CourseRecord, LessonRecord, 
-  AdminDashboardStats, CourseStatus, BookRecord, ExamSheetRecord 
+  AdminDashboardStats, CourseStatus, BookRecord, ExamSheetRecord, NoteRecord 
 } from '../types';
 import { isAdministratorEmail, ADMIN_EMAIL } from '../utils/adminAuth';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
@@ -18,9 +18,10 @@ import {
   fetchCoupons, createCoupon, deleteCoupon, fetchAnnouncements, createAnnouncement, 
   deleteAnnouncement 
 } from '../utils/supabaseCourses';
-import { fetchAdminBooks, fetchAdminExams } from '../utils/contentStore';
+import { fetchAdminBooks, fetchAdminExams, fetchAdminNotes } from '../utils/contentStore';
 import AdminBooksSection from './admin/AdminBooksSection';
 import AdminExamsSection from './admin/AdminExamsSection';
+import AdminNotesSection from './admin/AdminNotesSection';
 import { testSupabaseConnection, ETHIOLEARN_SUPABASE_SQL_SCRIPT, getSupabase, getAuthHeaders } from '../utils/supabaseClient';
 import { safeStorage } from '../utils/safeStorage';
 
@@ -38,13 +39,14 @@ export default function AdminDashboardView({
   onUpdateProfile
 }: AdminDashboardViewProps) {
   const isAmharic = language === 'am';
-  const [activeTab, setActiveTab] = useState<'overview' | 'courses' | 'books' | 'exams' | 'users' | 'payments' | 'coupons' | 'announcements' | 'database'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'courses' | 'books' | 'exams' | 'notes' | 'users' | 'payments' | 'coupons' | 'announcements' | 'database'>('overview');
 
   // Loading & Sync States
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [books, setBooks] = useState<BookRecord[]>([]);
   const [exams, setExams] = useState<ExamSheetRecord[]>([]);
+  const [notes, setNotes] = useState<NoteRecord[]>([]);
   const [stats, setStats] = useState<AdminDashboardStats>({
     totalStudents: 0,
     publishedCourses: 0,
@@ -159,7 +161,8 @@ export default function AdminDashboardView({
         livePayments, 
         liveStudents,
         liveBooks,
-        liveExams
+        liveExams,
+        liveNotes
       ] = await Promise.all([
         fetchAdminDashboardStats(),
         fetchAdminCourses(),
@@ -168,7 +171,8 @@ export default function AdminDashboardView({
         fetchAdminPayments(),
         fetchAdminStudents(userSearch),
         fetchAdminBooks(),
-        fetchAdminExams()
+        fetchAdminExams(),
+        fetchAdminNotes()
       ]);
 
       setStats(liveStats);
@@ -179,6 +183,7 @@ export default function AdminDashboardView({
       setStudents(liveStudents);
       setBooks(liveBooks);
       setExams(liveExams);
+      setNotes(liveNotes);
     } catch (err) {
       console.error('Error fetching admin data:', err);
     } finally {
@@ -948,6 +953,23 @@ export default function AdminDashboardView({
           </button>
 
           <button
+            onClick={() => { playClickChime(); setActiveTab('notes'); }}
+            className={`px-3.5 py-3 rounded-t-xl text-xs font-bold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === 'notes'
+                ? 'border-amber-400 text-amber-400 bg-slate-900/60'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <BookOpen className="w-4 h-4" />
+            <span>Study Notes ({notes.length})</span>
+            {notes.filter(n => n.status === 'draft').length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-mono">
+                {notes.filter(n => n.status === 'draft').length} draft
+              </span>
+            )}
+          </button>
+
+          <button
             onClick={() => { playClickChime(); setActiveTab('users'); }}
             className={`px-3.5 py-3 rounded-t-xl text-xs font-bold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap cursor-pointer ${
               activeTab === 'users'
@@ -1306,6 +1328,17 @@ export default function AdminDashboardView({
           {activeTab === 'exams' && (
             <AdminExamsSection
               exams={exams}
+              onRefresh={() => loadAllAdminData(true)}
+              isAmharic={isAmharic}
+            />
+          )}
+
+          {/* ================================================================ */}
+          {/* TAB 2D: STUDY NOTES & LECTURE SUMMARIES (Database Driven CMS)    */}
+          {/* ================================================================ */}
+          {activeTab === 'notes' && (
+            <AdminNotesSection
+              notes={notes}
               onRefresh={() => loadAllAdminData(true)}
               isAmharic={isAmharic}
             />

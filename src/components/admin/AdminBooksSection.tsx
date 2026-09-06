@@ -157,7 +157,13 @@ export default function AdminBooksSection({ books, onRefresh, isAmharic }: Admin
         unit: formUnit.trim() || 'Full Curriculum',
         accessLevel: formAccessLevel,
         allowDownload: formAllowDownload,
-        status: formStatus
+        status: formStatus,
+        coverUrl: editingBook?.coverUrl,
+        coverStoragePath: editingBook?.coverStoragePath,
+        pdfUrl: editingBook?.pdfUrl,
+        pdfStoragePath: editingBook?.pdfStoragePath,
+        fileSize: editingBook?.fileSize,
+        pageCount: editingBook?.pageCount
       };
 
       const res = await saveAdminBook(payload, formPdfFile, formCoverFile);

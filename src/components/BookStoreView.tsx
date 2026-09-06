@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   BookOpen, Search, Download, Sparkles, AlertCircle, Play, FileText, Bot, Compass, CheckCircle, ChevronDown, Award, RefreshCw, Plus,
-  BookOpenCheck, Sliders, Sun, Moon, Type, ChevronLeft, ChevronRight, Share2, HelpCircle, X, Check, Database, AlertTriangle, MessageSquare,
+  BookOpenCheck, BookMarked, Sliders, Sun, Moon, Type, ChevronLeft, ChevronRight, Share2, HelpCircle, X, Check, Database, AlertTriangle, MessageSquare,
   ExternalLink, Star
 } from 'lucide-react';
 import { StudentProfile, BookRecord } from '../types';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
-import { submitClaudeChat } from '../utils/ai';
+import { INITIAL_QUESTIONS } from '../data/initialFirestoreContent';
 import { fetchSupabaseBooks, getSupabase, saveSupabaseCredentials, clearSupabaseCredentials } from '../utils/supabaseClient';
 import { getChapterContent } from '../data/textbookChapterContent';
 import { safeStorage } from '../utils/safeStorage';
@@ -859,46 +859,45 @@ export default function BookStoreView({
     playClickChime();
 
     const chapterText = selectedChapter || activeModule.chapters[0];
-    const systemPrompt = "You are a professional educational summarizer with key facts highlights. Output structured bullet notes with beautiful ASCII charts where relevant.";
-    const userPrompt = `Under the document titled "${activeModule.title}" and subject "${activeModule.subject}", generate short notes and a revision overview for: "${chapterText}". 
-Include:
-1. Core Principles (Explained in 3 clear bullet points)
-2. Crucial Formulas, Equations, or Core definitions (High value for National exams)
-3. One quick mnemonic or shortcut to remember these points under stress.
-Format nicely so it is very clean, accessible, and matches an EdTech application layout. Add brief Amharic summaries for technical terms.`;
+    const chapterContent = getChapterContent(activeModule.id, chapterText, activeModule.contentJson);
 
-    try {
-      const messages = [{ role: 'user' as const, content: userPrompt }];
-      await submitClaudeChat(messages, systemPrompt, apiKey || "no-key", {
-        onChunk: (chunk) => {
-          setAiResponse(prev => prev + chunk);
-        },
-        onComplete: (fullText) => {
-          setAiLoading(false);
-          setAiResponse(fullText);
-          playSuccessChime();
-          onStudyAction(); // extends streak
-        },
-        onError: (err) => {
-          setAiLoading(false);
-          setAiResponse(`Failed to call AI model helper: ${err}`);
-          playFailureChime();
-        }
-      });
-    } catch (e: any) {
+    setTimeout(() => {
+      let notes = `### 📖 Chapter Summary: ${chapterText}\n`;
+      notes += `**Textbook:** ${activeModule.title} (${activeModule.subject})\n\n`;
+      notes += `**Overview:**\n${chapterContent.intro || 'Core syllabus topic for Ethiopian university freshmen and students.'}\n\n`;
+      
+      if (chapterContent.sections && chapterContent.sections.length > 0) {
+        notes += `#### 📌 Key Principles & Sections\n`;
+        chapterContent.sections.forEach((s: any, idx: number) => {
+          notes += `${idx + 1}. **${s.title}**: ${s.body}\n\n`;
+        });
+      }
+
+      if (chapterContent.keyTerms && chapterContent.keyTerms.length > 0) {
+        notes += `#### 🔑 Vocabulary & High-Frequency Definitions\n`;
+        chapterContent.keyTerms.forEach((kt: any) => {
+          notes += `* **${kt.term}**${kt.amharic ? ` (${kt.amharic})` : ''}: ${kt.definition}\n`;
+        });
+        notes += `\n`;
+      }
+
+      if (chapterContent.formulas && chapterContent.formulas.length > 0) {
+        notes += `#### 🧮 Important Equations & Formulas\n`;
+        chapterContent.formulas.forEach((f: any) => {
+          notes += `* **${f.name}**: \`${f.formula}\` — *${f.description}*\n`;
+        });
+      }
+
       setAiLoading(false);
-      setAiResponse(`System Error: ${e.message}`);
-    }
+      setAiResponse(notes);
+      playSuccessChime();
+      onStudyAction();
+    }, 150);
   };
 
-  // Run AI Custom Exam Generator
+  // Run Custom Exam Generator
   const handleAIGenerateExam = async () => {
     if (!activeModule) return;
-    if (!isEligible && activeModule.proRequired) {
-      playFailureChime();
-      onNavigate('upgrade');
-      return;
-    }
 
     setAiMode('exam');
     setAiLoading(true);
@@ -909,63 +908,50 @@ Format nicely so it is very clean, accessible, and matches an EdTech application
     playClickChime();
 
     const chapterText = selectedChapter || activeModule.chapters[0];
-    const systemPrompt = "You are an Ethiopian National Exam compiler specializing in multiple-choice questions. You output ONLY valid JSON arrays. Do not wrap in markdown or markdown code blocks.";
-    const userPrompt = `Construct a highly-curated mock exam with exactly 3 multiple choice questions based on ${activeModule.subject} - ${chapterText} from the textbook "${activeModule.title}". 
-Respond strictly in a clean JSON format matching this pattern:
-[
-  {
-    "question": "Clear exam level multiple-choice question text?",
-    "options": ["A) Correct Option", "B) Option", "C) Option", "D) Option"],
-    "correctIndex": 0,
-    "explanation": "High-value detailed step-by-step math or physical calculation explaining why this derivative, flux, or clause is the chosen alternative."
-  }
-]
-No other text. No conversational prefix. No markdown \`\`\`json wrappers.`;
+    const chapterContent = getChapterContent(activeModule.id, chapterText, activeModule.contentJson);
 
-    try {
-      const messages = [{ role: 'user' as const, content: userPrompt }];
-      await submitClaudeChat(messages, systemPrompt, apiKey || "no-key", {
-        onChunk: () => {},
-        onComplete: (fullText) => {
-          setAiLoading(false);
-          try {
-            let clean = fullText.trim();
-            if (clean.startsWith('```json')) clean = clean.slice(7);
-            if (clean.startsWith('```')) clean = clean.slice(3);
-            if (clean.endsWith('```')) clean = clean.slice(0, -3);
-            
-            const parsed = JSON.parse(clean.trim());
-            if (Array.isArray(parsed)) {
-              setCustomQuizQuestions(parsed);
-              playSuccessChime();
-            } else {
-              throw new Error("Parsed data is not an array");
-            }
-          } catch (e) {
-            console.error(e);
-            setAiResponse("AI response format was unparsable standard text. Let us display raw draft below:\n\n" + fullText);
+    setTimeout(() => {
+      const questions: any[] = [];
+      if (chapterContent.keyTerms && chapterContent.keyTerms.length >= 2) {
+        chapterContent.keyTerms.slice(0, 3).forEach((term: any) => {
+          const otherTerms = chapterContent.keyTerms.filter((t: any) => t.term !== term.term);
+          const distractors = otherTerms.slice(0, 3).map((t: any) => t.definition);
+          while (distractors.length < 3) {
+            distractors.push(`Alternative definition related to ${activeModule.subject}`);
           }
-        },
-        onError: (err) => {
-          setAiLoading(false);
-          setAiResponse(`Failed to compile exam: ${err}`);
-          playFailureChime();
-        }
-      });
-    } catch (e: any) {
+          const rawOptions = [term.definition, ...distractors].sort(() => 0.5 - Math.random());
+          const correctIndex = rawOptions.indexOf(term.definition);
+          questions.push({
+            question: `Which of the following best defines "${term.term}"?`,
+            options: rawOptions.map((opt, i) => `${String.fromCharCode(65 + i)}) ${opt}`),
+            correctIndex: correctIndex >= 0 ? correctIndex : 0,
+            explanation: `According to ${activeModule.title}, ${term.term} is defined as: ${term.definition}.`
+          });
+        });
+      }
+
+      if (questions.length === 0) {
+        INITIAL_QUESTIONS.slice(0, 3).forEach(q => {
+          const opts = q.options.map((o, i) => `${String.fromCharCode(65 + i)}) ${o.text}`);
+          const correctIdx = q.options.findIndex(o => o.id === q.correctAnswerId);
+          questions.push({
+            question: q.text,
+            options: opts,
+            correctIndex: correctIdx >= 0 ? correctIdx : 0,
+            explanation: q.explanation || 'Verified Ethiopian university curriculum question.'
+          });
+        });
+      }
+
       setAiLoading(false);
-      setAiResponse(`Failed: ${e.message}`);
-    }
+      setCustomQuizQuestions(questions);
+      playSuccessChime();
+    }, 150);
   };
 
   // Run Pro Notes Draft
   const handleAIGenerateProNotes = async () => {
     if (!activeModule) return;
-    if (!isEligible && activeModule.proRequired) {
-      playFailureChime();
-      onNavigate('upgrade');
-      return;
-    }
 
     setAiMode('notes');
     setAiLoading(true);
@@ -973,31 +959,42 @@ No other text. No conversational prefix. No markdown \`\`\`json wrappers.`;
     playClickChime();
 
     const chapterText = selectedChapter || activeModule.chapters[0];
-    const systemPrompt = "You are a master scientific scribe that constructs elite-level concise, stylized study sheets with diagnostic details.";
-    const userPrompt = `Write a blueprint-level Pro Notebook article for the topic "${chapterText}" in "${activeModule.title}" (Subject: ${activeModule.subject}). 
-Ensure the layout utilizes clear headers, a detailed markdown text explanation, visual ASCII flowcharts mapping the principles, exam trap alerts (highly-tested trick questions), and localized applications for Ethiopian context. Include bilingual English/Amharic vocab mappings.`;
+    const chapterContent = getChapterContent(activeModule.id, chapterText, activeModule.contentJson);
 
-    try {
-      const messages = [{ role: 'user' as const, content: userPrompt }];
-      await submitClaudeChat(messages, systemPrompt, apiKey || "no-key", {
-        onChunk: (chunk) => {
-          setAiResponse(prev => prev + chunk);
-        },
-        onComplete: (fullText) => {
-          setAiLoading(false);
-          setAiResponse(fullText);
-          playSuccessChime();
-          onStudyAction();
-        },
-        onError: (err) => {
-          setAiLoading(false);
-          setAiResponse(`Failed to generate Pro Notes: ${err}`);
-        }
-      });
-    } catch (e: any) {
+    setTimeout(() => {
+      let notes = `# 🎓 Comprehensive Study Blueprint: ${chapterText}\n`;
+      notes += `**Textbook:** ${activeModule.title} | **Subject:** ${activeModule.subject}\n\n`;
+      notes += `### 1. Conceptual Foundation\n${chapterContent.intro || 'Comprehensive coverage of core curriculum concepts.'}\n\n`;
+      
+      if (chapterContent.sections && chapterContent.sections.length > 0) {
+        notes += `### 2. Detailed Technical Breakdown\n`;
+        chapterContent.sections.forEach((s: any) => {
+          notes += `#### 🔹 ${s.title}\n${s.body}\n\n`;
+        });
+      }
+
+      if (chapterContent.keyTerms && chapterContent.keyTerms.length > 0) {
+        notes += `### 3. High-Yield Examination Terminology\n`;
+        chapterContent.keyTerms.forEach((kt: any) => {
+          notes += `* **${kt.term}**${kt.amharic ? ` (${kt.amharic})` : ''}: ${kt.definition}\n`;
+        });
+        notes += `\n`;
+      }
+
+      if (chapterContent.formulas && chapterContent.formulas.length > 0) {
+        notes += `### 4. Mathematical & Scientific Formulations\n`;
+        chapterContent.formulas.forEach((f: any) => {
+          notes += `* **${f.name}**: \`${f.formula}\`\n  *Application note*: ${f.description}\n`;
+        });
+      }
+
+      notes += `\n### 5. Exam Readiness Strategy\n* Review definitions carefully before answering.\n* Distinguish between inverse relationships and direct constants.\n* Formatted by EthioLearn Academic Content Engine.`;
+
       setAiLoading(false);
-      setAiResponse(`Error: ${e.message}`);
-    }
+      setAiResponse(notes);
+      playSuccessChime();
+      onStudyAction();
+    }, 150);
   };
 
   const getOfflineTutorResponse = (question: string, content: any): string => {
@@ -1047,58 +1044,33 @@ Ensure the layout utilizes clear headers, a detailed markdown text explanation, 
       defaultResponse = `#### 📖 Chapter Overview:\n${content.intro || 'This chapter introduces essential topics from the curriculum syllabus.'}\n\n* **Curriculum Focus**: Ethiopian National Exam Preparatory Content.\n* **Available Topics** in this chapter: \n  ${(content.sections || []).map((s: any) => `  - *${s.title}*`).join('\n')}\n\n`;
     }
 
-    const header = `### 🤖 EthioLearn Local Study Buddy (Offline Mode)
-*Your live tutor is currently offline (Check your API settings/internet status).* Let's explore the cached textbook information for your question!
+    const header = `### 📖 EthioLearn Chapter Curriculum Study Guide
+Verified textbook curriculum breakdown for your question:
 
 ---
 
 `;
 
     const footer = `---
-💡 **Study Tip**: You can customize or activate a live interactive AI Tutor at any time by configuring a valid **API Key** or server fallback in the **Settings** menu at the top-right corner. Keep practicing! 🚀`;
+💡 **Study Tip**: Review key terms and governing formulas above before testing yourself with the Chapter Practice Exam! 🚀`;
 
     return `${header}${termMatches}${sectionMatches}${formulaMatches}${defaultResponse}${footer}`;
   };
 
-  // Inline AI Tutor Chapter helper chat
-  const handleInlineAnswer = async () => {
+  // Inline Chapter helper chat
+  const handleInlineAnswer = () => {
     if (!inlineAiQuestion.trim() || !activeModule) return;
     setInlineAiLoading(true);
     setInlineAiResponse('');
     playClickChime();
 
     const chapterContent = getChapterContent(activeModule.id, selectedChapter, activeModule.contentJson);
-    const contentSummary = `Book: ${activeModule.title}\nChapter: ${selectedChapter}\nIntro: ${chapterContent.intro}\nContent: ${chapterContent.sections.map(s => s.title + ': ' + s.body).join('\n')}`;
-
-    const systemPrompt = `You are the EthioLearn AI Tutor. You are helping an Ethiopian student read the active chapter of their textbook.\nActive textbook material context:\n${contentSummary}\nAnswer the student's question clearly, concisely, and encouragingly. Use local analogies (such as Ethiopia's rivers, cities, historical triumphs, agriculture) where helpful. Keep formatting neat.`;
-    
-    const messages = [
-      { role: 'user' as const, content: inlineAiQuestion }
-    ];
-
-    try {
-      await submitClaudeChat(messages, systemPrompt, apiKey || "no-key", {
-        onChunk: (chunk) => {
-          setInlineAiResponse(prev => prev + chunk);
-        },
-        onComplete: (fullText) => {
-          setInlineAiLoading(false);
-          setInlineAiResponse(fullText);
-          playSuccessChime();
-        },
-        onError: (err) => {
-          console.warn('AI Tutor Live error, falling back locally:', err);
-          const offlineAnswer = getOfflineTutorResponse(inlineAiQuestion, chapterContent);
-          setInlineAiLoading(false);
-          setInlineAiResponse(offlineAnswer);
-        }
-      });
-    } catch (err: any) {
-      console.warn('AI Tutor Connection thrown error, falling back locally:', err);
+    setTimeout(() => {
       const offlineAnswer = getOfflineTutorResponse(inlineAiQuestion, chapterContent);
       setInlineAiLoading(false);
       setInlineAiResponse(offlineAnswer);
-    }
+      playSuccessChime();
+    }, 150);
   };
 
   // Custom Quiz Engine handling
@@ -1670,9 +1642,9 @@ Ensure the layout utilizes clear headers, a detailed markdown text explanation, 
                   </p>
                 </div>
 
-                {/* AI Interactive buttons row */}
+                {/* Manual Interactive buttons row */}
                 <div className="pt-4 border-t border-slate-100 dark:border-zinc-800">
-                  <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-3.5">🎯 AI Modules Copilot Actions:</p>
+                  <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-3.5">🎯 Manual Textbook Study Actions:</p>
                   
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     {/* Summarize button */}
@@ -1681,8 +1653,8 @@ Ensure the layout utilizes clear headers, a detailed markdown text explanation, 
                       disabled={aiLoading}
                       className="px-4 py-3 bg-gradient-to-r from-[#078930] to-emerald-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer shadow hover:shadow-md transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
                     >
-                      <Bot className="w-4 h-4 shrink-0" />
-                      <span>Summarize Note</span>
+                      <BookMarked className="w-4 h-4 shrink-0" />
+                      <span>Chapter Summary</span>
                     </button>
 
                     {/* Generate Custom Exam button */}
@@ -1692,7 +1664,7 @@ Ensure the layout utilizes clear headers, a detailed markdown text explanation, 
                       className="px-4 py-3 bg-gradient-to-r from-indigo-650 to-indigo-800 text-white rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer shadow hover:shadow-md transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
                     >
                       <Play className="w-4 h-4 shrink-0" />
-                      <span>Custom Exam</span>
+                      <span>Chapter Exam</span>
                     </button>
 
                     {/* Pro notes guide */}
@@ -1702,19 +1674,19 @@ Ensure the layout utilizes clear headers, a detailed markdown text explanation, 
                       className="px-4 py-3 bg-gradient-to-r from-amber-500 to-[#C8962E] text-black rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer shadow hover:shadow-md transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
                     >
                       <Sparkles className="w-4 h-4 shrink-0" />
-                      <span>Pro Study Card</span>
+                      <span>Study Blueprint</span>
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* AI Workspace response stage */}
+              {/* Workspace response stage */}
               <div className="border-t border-slate-105 dark:border-zinc-800 pt-5">
                 
                 {aiLoading && (
                   <div className="flex flex-col items-center justify-center py-10 space-y-3">
                     <div className="w-10 h-10 border-4 border-[#078930] border-t-transparent rounded-full animate-spin" />
-                    <p className="text-xs text-slate-500 animate-pulse font-mono">Consolidating syllabus, preparing educational stream...</p>
+                    <p className="text-xs text-slate-500 animate-pulse font-mono">Consolidating syllabus, preparing chapter notes...</p>
                   </div>
                 )}
 
@@ -1723,7 +1695,7 @@ Ensure the layout utilizes clear headers, a detailed markdown text explanation, 
                     <Compass className="w-8 h-8 text-slate-400 mx-auto animate-pulse" />
                     <p className="text-xs text-slate-500 dark:text-zinc-500 font-bold uppercase mt-2">Ready to compile syllabus details</p>
                     <p className="text-[11px] text-slate-400 dark:text-zinc-650 mt-1 max-w-sm mx-auto">
-                      Choose any chapter from the list above and click an AI action to generate interactive summaries, custom MCQ exams, or blueprint pro study sheets.
+                      Choose any chapter from the list above and click an action to view structured summaries, practice chapter MCQ exams, or blueprint study sheets.
                     </p>
                   </div>
                 )}

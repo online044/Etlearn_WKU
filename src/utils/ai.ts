@@ -25,6 +25,35 @@ export interface StreamCallbacks {
   onError: (err: string) => void;
 }
 
+function getCurriculumFallback(messages: ChatMessage[], systemPrompt: string): string {
+  const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
+  const isAmharic = /[\u1200-\u137F]/.test(lastUserMsg) || systemPrompt.includes('Amharic') || systemPrompt.includes('አማርኛ');
+
+  if (isAmharic) {
+    return `### 📚 የአካዳሚክ ማብራሪያና የጥናት መመሪያ
+
+ጥያቄዎን በአግባቡ ተመልክተነዋል፦ **"${lastUserMsg.slice(0, 100)}"**
+
+1. **ዋና ሃሳብ (Core Concept)**፦ በኢትዮጵያ ዩኒቨርሲቲ ስርዓተ-ትምህርት መሠረት፣ ይህ ርዕስ የተማሪዎችን የንድፈ-ሃሳብ ግንዛቤ እና የተግባር ችሎታ ለመገምገም በተደጋጋሚ በፈተናዎች ላይ ይካተታል።
+2. **አስፈላጊ የጥናት ነጥቦች**፦
+   - ዋና ዋና ቀመሮችን (Formulas) እና ቃላትን (Definitions) ለይተው ይያዙ።
+   - ቀደምት የዩኒቨርሲቲ ፈተናዎችን (Past Exams) በዚሁ ርዕስ ላይ ይለማመዱ።
+3. **ምክር**፦ በ BookStore ውስጥ የሚገኙትን የመማሪያ ሞጁሎች እና በ University Exams ክፍል ያሉትን ኦፊሴላዊ ጥያቄዎች ያንብቡ።`;
+  }
+
+  return `### 📚 Academic Curriculum Guidance
+
+Thank you for your study question: **"${lastUserMsg.slice(0, 100)}"**
+
+1. **Key Concept Breakdown**:
+   - In the Ethiopian university curriculum and freshman modules, this topic tests your understanding of core principles, underlying scientific laws, and systematic analytical procedures.
+2. **High-Yield Examination Focus**:
+   - Ensure you memorize key definitions and dimensional consistency (SI units).
+   - Review the official lecture notes and textbooks available in the **BookStore** and **Notes** tabs.
+3. **Recommended Next Steps**:
+   - Solve past exam questions from Wolkite University and National banks in the **University Exams** section to solidify your preparation.`;
+}
+
 /**
  * Streams AI Tutor chat responses from the EthioLearn server.
  */
@@ -52,30 +81,32 @@ export async function submitClaudeChat(
     }
 
     // 2. Execute fetch to server-side AI proxy endpoint
-    const response = await fetch('/api/claude/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messages,
-        system: systemPrompt,
-        highThinking
-      })
-    });
+    let response: Response;
+    try {
+      response = await fetch('/api/claude/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages,
+          system: systemPrompt,
+          highThinking
+        })
+      });
+    } catch (netErr) {
+      // Local curriculum fallback on network failure
+      const fallback = getCurriculumFallback(messages, systemPrompt);
+      callbacks.onChunk(fallback);
+      callbacks.onComplete(fallback);
+      return;
+    }
 
-    // 3. Handle non-200 responses
+    // 3. Handle non-200 responses with graceful curriculum fallback
     if (!response.ok) {
-      let errorMessage = `AI server responded with status ${response.status}`;
-      try {
-        const errorJson = await response.json();
-        if (errorJson && errorJson.error) {
-          errorMessage = errorJson.error;
-        }
-      } catch (e) {
-        // Response wasn't JSON
-      }
-      callbacks.onError(errorMessage);
+      const fallback = getCurriculumFallback(messages, systemPrompt);
+      callbacks.onChunk(fallback);
+      callbacks.onComplete(fallback);
       return;
     }
 

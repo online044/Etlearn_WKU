@@ -28,7 +28,7 @@ import InAppViewerModal from './components/InAppViewerModal';
 import AdminDashboardView from './components/AdminDashboardView';
 import CourseExperienceView from './components/CourseExperienceView';
 import ExamEngineView from './components/ExamEngineView';
-import GoogleAdBanner from './components/GoogleAdBanner';
+import EthioLearnAppPromoBanner from './components/EthioLearnAppPromoBanner';
 
 import { 
   testFirestoreConnection, 
@@ -1247,12 +1247,14 @@ export default function App() {
           </motion.div>
         </AnimatePresence>
 
-        {/* Free Tier Google AdSense Banner (Only displayed for students who have not upgraded to Pro) */}
-        {currentPage !== 'upgrade' && !profile.isPro && (
-          <GoogleAdBanner 
+        {/* EthioLearn Native In-App Showcase & Official Promo Banner */}
+        {currentPage !== 'upgrade' && (
+          <EthioLearnAppPromoBanner 
             profile={profile}
             language={language}
             onUpgradeClick={() => setCurrentPage('upgrade')}
+            onNavigate={(page) => setCurrentPage(page as any)}
+            onInstallClick={triggerPWAInstall}
             positionContext={`app-${currentPage}-footer`}
           />
         )}

@@ -5,6 +5,7 @@
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
+import { getAnalytics, isSupported, Analytics } from 'firebase/analytics';
 import { 
   getFirestore, 
   initializeFirestore,
@@ -12,6 +13,7 @@ import {
   getDoc, 
   setDoc, 
   deleteDoc, 
+  updateDoc,
   collection, 
   getDocs, 
   query,
@@ -31,14 +33,18 @@ import {
   FirestoreExam,
   FirestoreQuestion,
   FirestoreResult,
-  FirestoreUser
+  FirestoreUser,
+  FirestoreStudyNote,
+  NoteFilters
 } from '../types';
 import { 
   INITIAL_BOOKS, 
   INITIAL_CHAPTERS, 
   INITIAL_EXAMS, 
-  INITIAL_QUESTIONS 
+  INITIAL_QUESTIONS,
+  INITIAL_NOTES
 } from '../data/initialFirestoreContent';
+import { compressImageToBase64 } from './imageCompressor';
 
 // Safe initialization to prevent "duplicate default app" warnings and missing service crashes
 export const app = (() => {
@@ -103,6 +109,19 @@ export const auth = (() => {
     return null;
   }
 })();
+
+export let analytics: Analytics | null = null;
+if (typeof window !== 'undefined' && app) {
+  isSupported().then((supported) => {
+    if (supported) {
+      try {
+        analytics = getAnalytics(app);
+      } catch (e) {
+        console.warn('[Firebase Analytics] Initialization skipped:', e);
+      }
+    }
+  }).catch(() => {});
+}
 
 export function getDb() {
   return db;
@@ -689,6 +708,30 @@ export async function saveBookToFirestore(book: Partial<FirestoreBook>): Promise
   const now = new Date().toISOString();
   const path = `books/${id}`;
 
+  let coverUrl = book.coverUrl || '';
+  // Safeguard: If coverUrl is an uncompressed or oversized base64 data URL, compress it down
+  if (coverUrl.startsWith('data:image/') && coverUrl.length > 80 * 1024) {
+    if (typeof window !== 'undefined') {
+      try {
+        coverUrl = await compressImageToBase64(coverUrl, { maxWidth: 360, maxHeight: 520, quality: 0.72 });
+      } catch (covErr) {
+        console.warn('[Firestore] Failed to compress oversized coverUrl, pruning to protect document size limit:', covErr);
+        if (coverUrl.length > 200 * 1024) {
+          coverUrl = '';
+        }
+      }
+    } else if (coverUrl.length > 200 * 1024) {
+      coverUrl = '';
+    }
+  }
+
+  // Safeguard: Never allow huge raw binary data URLs in pdfUrl in Firestore
+  let pdfUrl = book.pdfUrl || '';
+  if (pdfUrl.startsWith('data:') && pdfUrl.length > 50 * 1024) {
+    console.warn('[Firestore] Stripping oversized binary data URL from pdfUrl field to protect 1MB Firestore limit.');
+    pdfUrl = '';
+  }
+
   const cleanBook: FirestoreBook = {
     id,
     title: book.title?.trim() || 'Untitled Textbook',
@@ -702,13 +745,27 @@ export async function saveBookToFirestore(book: Partial<FirestoreBook>): Promise
     accessLevel: book.accessLevel || 'free',
     allowDownload: book.allowDownload !== undefined ? book.allowDownload : true,
     status: book.status || 'published',
-    pdfUrl: book.pdfUrl || '',
-    coverUrl: book.coverUrl || '',
+    pdfUrl,
+    pdfStoragePath: (book as any).pdfStoragePath || '',
+    coverUrl,
+    coverStoragePath: (book as any).coverStoragePath || '',
     fileSize: Number(book.fileSize || 0),
     pageCount: Number(book.pageCount || 0),
     createdAt: book.createdAt || now,
     updatedAt: now
   };
+
+  // Defensive check: ensure total document size does not exceed Firestore's 1MB limit
+  const estimatedBytes = new TextEncoder().encode(JSON.stringify(cleanBook)).length;
+  if (estimatedBytes > 850 * 1024) {
+    console.warn(`[Firestore] Book document size (${estimatedBytes} bytes) near 1MB ceiling. Pruning oversized fields.`);
+    if (cleanBook.coverUrl && cleanBook.coverUrl.startsWith('data:')) {
+      cleanBook.coverUrl = '';
+    }
+    if (cleanBook.description && cleanBook.description.length > 20000) {
+      cleanBook.description = cleanBook.description.slice(0, 20000);
+    }
+  }
 
   try {
     await setDoc(doc(currentDb, 'books', id), cleanBook);
@@ -931,6 +988,12 @@ export async function saveExamToFirestore(exam: Partial<FirestoreExam>): Promise
   const now = new Date().toISOString();
   const path = `exams/${id}`;
 
+  let pdfUrl = exam.pdfUrl || '';
+  if (pdfUrl.startsWith('data:') && pdfUrl.length > 50 * 1024) {
+    console.warn('[Firestore] Stripping oversized binary data URL from exam pdfUrl field to protect 1MB Firestore limit.');
+    pdfUrl = '';
+  }
+
   const cleanExam: FirestoreExam = {
     id,
     title: exam.title?.trim() || 'Untitled Examination',
@@ -949,12 +1012,24 @@ export async function saveExamToFirestore(exam: Partial<FirestoreExam>): Promise
     accessLevel: exam.accessLevel || 'free',
     allowDownload: exam.allowDownload !== undefined ? exam.allowDownload : true,
     status: exam.status || 'published',
-    pdfUrl: exam.pdfUrl || '',
+    pdfUrl,
+    pdfStoragePath: (exam as any).pdfStoragePath || '',
     fileSize: Number(exam.fileSize || 0),
     pageCount: Number(exam.pageCount || 0),
     createdAt: exam.createdAt || now,
     updatedAt: now
   };
+
+  const estimatedBytes = new TextEncoder().encode(JSON.stringify(cleanExam)).length;
+  if (estimatedBytes > 850 * 1024) {
+    console.warn(`[Firestore] Exam document estimated size (${estimatedBytes} bytes) near 1MB ceiling. Pruning oversized fields.`);
+    if (cleanExam.pdfUrl && cleanExam.pdfUrl.startsWith('data:')) {
+      cleanExam.pdfUrl = '';
+    }
+    if (cleanExam.description && cleanExam.description.length > 20000) {
+      cleanExam.description = cleanExam.description.slice(0, 20000);
+    }
+  }
 
   try {
     await setDoc(doc(currentDb, 'exams', id), cleanExam);
@@ -1236,6 +1311,15 @@ export async function seedInitialFirestoreData(): Promise<void> {
       }
     }
 
+    // 6. Seed Notes
+    for (const n of INITIAL_NOTES) {
+      const nDoc = doc(currentDb, 'notes', n.id);
+      const snap = await getDoc(nDoc);
+      if (!snap.exists()) {
+        await setDoc(nDoc, n);
+      }
+    }
+
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(seededFlagKey, 'true');
     }
@@ -1244,4 +1328,155 @@ export async function seedInitialFirestoreData(): Promise<void> {
     console.info('[Firestore] Seeding notice (cached mode active):', err);
   }
 }
+
+/**
+ * Fetch published study notes from Firestore with local fallback
+ */
+export async function fetchPublishedNotesFromFirestore(filters: NoteFilters = {}): Promise<FirestoreStudyNote[]> {
+  const currentDb = getDb();
+  let dbNotes: FirestoreStudyNote[] = [];
+
+  if (currentDb) {
+    try {
+      const snap = await getDocs(collection(currentDb, 'notes'));
+      snap.forEach(docSnap => {
+        const item = docSnap.data() as FirestoreStudyNote;
+        dbNotes.push({ ...item, id: docSnap.id });
+      });
+    } catch (e) {
+      console.warn('[Firestore Notes] Notice, using initial/cached dataset:', e);
+    }
+  }
+
+  // Combine with initial authentic notes
+  const noteMap = new Map<string, FirestoreStudyNote>();
+  INITIAL_NOTES.forEach(n => noteMap.set(n.id, n));
+  dbNotes.forEach(n => noteMap.set(n.id, n));
+
+  let results = Array.from(noteMap.values());
+
+  if (filters.status && filters.status !== 'all') {
+    results = results.filter(n => n.status === filters.status);
+  } else if (!filters.status) {
+    results = results.filter(n => n.status === 'published' || !n.status);
+  }
+
+  if (filters.university && filters.university !== 'all') {
+    results = results.filter(n => n.university?.toLowerCase().includes(filters.university!.toLowerCase()));
+  }
+  if (filters.department && filters.department !== 'all') {
+    results = results.filter(n => n.department?.toLowerCase().includes(filters.department!.toLowerCase()));
+  }
+  if (filters.academicYear && filters.academicYear !== 'all') {
+    results = results.filter(n => n.academicYear === filters.academicYear || n.academicYear?.includes(filters.academicYear!));
+  }
+  if (filters.course && filters.course !== 'all') {
+    results = results.filter(n => n.course?.toLowerCase().includes(filters.course!.toLowerCase()));
+  }
+  if (filters.subject && filters.subject !== 'all') {
+    results = results.filter(n => n.subject?.toLowerCase().includes(filters.subject!.toLowerCase()));
+  }
+  if (filters.accessLevel && filters.accessLevel !== 'all') {
+    results = results.filter(n => n.accessLevel === filters.accessLevel);
+  }
+  if (filters.search && filters.search.trim()) {
+    const s = filters.search.trim().toLowerCase();
+    results = results.filter(n => 
+      n.title.toLowerCase().includes(s) || 
+      (n.description && n.description.toLowerCase().includes(s)) ||
+      (n.content && n.content.toLowerCase().includes(s)) ||
+      n.subject.toLowerCase().includes(s) ||
+      n.course.toLowerCase().includes(s)
+    );
+  }
+
+  return results.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+}
+
+/**
+ * Fetch all notes (including drafts) for Admin
+ */
+export async function fetchAdminNotesFromFirestore(): Promise<FirestoreStudyNote[]> {
+  return fetchPublishedNotesFromFirestore({ status: 'all' });
+}
+
+/**
+ * Save or update a study note in Firestore
+ */
+export async function saveAdminNoteToFirestore(noteData: Partial<FirestoreStudyNote>): Promise<FirestoreStudyNote> {
+  const currentDb = getDb();
+  const id = noteData.id || `note_${Date.now()}`;
+  const now = new Date().toISOString();
+
+  const fullNote: FirestoreStudyNote = {
+    id,
+    title: noteData.title || 'Untitled Note',
+    description: noteData.description || '',
+    university: noteData.university || 'Wolkite University',
+    department: noteData.department || 'Freshman Common Courses',
+    academicYear: noteData.academicYear || 'Year 1 (Freshman)',
+    course: noteData.course || 'General',
+    subject: noteData.subject || 'General',
+    unit: noteData.unit || 'Unit 1',
+    content: noteData.content || '',
+    accessLevel: noteData.accessLevel || 'free',
+    allowDownload: noteData.allowDownload !== undefined ? noteData.allowDownload : true,
+    status: noteData.status || 'published',
+    pdfUrl: noteData.pdfUrl,
+    pdfStoragePath: noteData.pdfStoragePath,
+    fileSize: noteData.fileSize,
+    tags: noteData.tags || [],
+    author: noteData.author || 'Educator',
+    createdAt: noteData.createdAt || now,
+    updatedAt: now
+  };
+
+  if (currentDb) {
+    try {
+      const noteDoc = doc(currentDb, 'notes', id);
+      await setDoc(noteDoc, fullNote, { merge: true });
+    } catch (err) {
+      console.warn('[Firestore] Error saving admin note:', err);
+    }
+  }
+
+  return fullNote;
+}
+
+/**
+ * Delete a study note from Firestore
+ */
+export async function deleteAdminNoteFromFirestore(noteId: string): Promise<boolean> {
+  const currentDb = getDb();
+  if (currentDb) {
+    try {
+      await deleteDoc(doc(currentDb, 'notes', noteId));
+      return true;
+    } catch (err) {
+      console.warn('[Firestore] Error deleting admin note:', err);
+    }
+  }
+  return false;
+}
+
+/**
+ * Toggle published status of a study note
+ */
+export async function togglePublishAdminNoteInFirestore(noteId: string, currentStatus: string): Promise<boolean> {
+  const newStatus = currentStatus === 'published' ? 'draft' : 'published';
+  const currentDb = getDb();
+  if (currentDb) {
+    try {
+      await updateDoc(doc(currentDb, 'notes', noteId), {
+        status: newStatus,
+        updatedAt: new Date().toISOString()
+      });
+      return true;
+    } catch (err) {
+      console.warn('[Firestore] Error toggling note status:', err);
+    }
+  }
+  return false;
+}
+
 

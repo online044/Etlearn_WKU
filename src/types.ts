@@ -383,6 +383,7 @@ export interface FirestoreExam {
   allowDownload: boolean;
   status: ContentStatus;
   pdfUrl?: string;
+  pdfStoragePath?: string;
   fileSize?: number;
   pageCount?: number;
   createdAt: string;
@@ -475,6 +476,45 @@ export interface ExamSheetRecord {
   updatedAt: string;
 }
 
+export interface NoteRecord {
+  id: string;
+  title: string;
+  description: string;
+  university: string;
+  department: string;
+  academicYear: string;
+  course: string;
+  subject: string;
+  unit: string;
+  content: string;
+  accessLevel: ContentAccessLevel;
+  allowDownload: boolean;
+  status: ContentStatus;
+  pdfUrl?: string;
+  pdfStoragePath?: string;
+  fileSize?: number;
+  tags?: string[];
+  author?: string;
+  downloadsCount?: number;
+  viewsCount?: number;
+  publishedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type FirestoreStudyNote = NoteRecord;
+
+export interface NoteFilters {
+  university?: string;
+  department?: string;
+  academicYear?: string;
+  course?: string;
+  subject?: string;
+  accessLevel?: string;
+  search?: string;
+  status?: string;
+}
+
 export interface Flashcard {
   id: string;
   question: string;
@@ -500,9 +540,10 @@ export interface CustomNote {
   title: string;
   content: string;
   subject: string;
-  tags: string[];
+  tags?: string[];
   color: string; // Tailwind bg color class
-  createdAt: string;
+  createdAt?: string;
+  date?: string;
 }
 
 export interface ExamSession {

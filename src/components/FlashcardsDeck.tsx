@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import { Flashcard, Deck } from '../types';
 import { PREBUILT_DECKS } from '../data/prebuiltContent';
-import { generateFlashcardsAI } from '../utils/ai';
 import { toGeezNumeral } from '../utils/ethiopianCalendar';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
 import { safeStorage } from '../utils/safeStorage';
@@ -233,69 +232,32 @@ export default function FlashcardsDeck({ apiKey, decksState, onSaveDecksState }:
     e.preventDefault();
     if (!aiTopic.trim()) return;
 
-    // Allow request to proceed as the backend server has automatic fallback variables (like GEMINI_API_KEY) configured.
-
     setIsGenerating(true);
     setAiError(null);
     setAiSuccess(null);
     playClickChime();
 
     try {
-      const generated = await generateFlashcardsAI(aiTopic, activeDeck.subject, apiKey);
-      if (generated && generated.length > 0) {
-        // Create full flashcard objects
-        const newCards: Flashcard[] = generated.map((c, i) => ({
-          id: `ai_card_${Date.now()}_${i}`,
-          question: c.question,
-          answer: c.answer,
-          explanation: c.explanation || "AI Generated resource",
-          interval: 0,
-          repetition: 0,
-          easeFactor: 2.5,
-          dueDate: new Date().toISOString()
-        }));
-
-        // Retrieve existing cards for Free Space instead of active prebuilt cards
-        const existingFreeSpaceCards = decksState["deck_free_space"] || [];
-        const finalCards = [...newCards, ...existingFreeSpaceCards];
-
-        // Save cards exclusively in deck_free_space
-        onSaveDecksState("deck_free_space", finalCards);
-
-        // Auto selection and success state presentation
-        setSelectedDeckId("deck_free_space");
-        setAiSuccess(`Synthesized ${generated.length} cards successfully! Added to your isolated 'Free Space' deck.`);
-        
-        setAiTopic('');
-        setCurrentIndex(0);
-        setIsFlipped(false);
-        playSuccessChime();
-      } else {
-        throw new Error("No flashcards received from the AI.");
-      }
-    } catch (err: any) {
-      console.warn("AI flashcard generation failed, activating high-quality offline cards:", err);
-      
       const offlineGenerated = [
         {
           question: `What is the core baseline concept of "${aiTopic}"?`,
-          answer: `It relates to the core curriculum concepts of ${activeDeck.subject}, focusing on fundamental terms, structures, and systems.`,
-          explanation: "Excellent starting point for further exam preparation!"
+          answer: `It relates to the core curriculum concepts of ${activeDeck?.subject || 'University Syllabus'}, focusing on fundamental terms, structures, and systems.`,
+          explanation: "Core definition required for academic success."
         },
         {
-          question: `Why is studying "${aiTopic}" important in the Ethiopian national syllabus?`,
-          answer: "It provides essential knowledge required for university entrance exams and general literacy in academic fields.",
+          question: `Why is understanding "${aiTopic}" essential in examination contexts?`,
+          answer: "It provides foundational knowledge frequently tested in Ethiopian national entrance and university exams.",
           explanation: "Practice makes perfect. Always review regularly."
         },
         {
-          question: `What is an easy study tip to remember details of "${aiTopic}"?`,
-          answer: "Keep cards in 'Free Space' deck and review them every day using Active Recall and Spaced Repetition.",
+          question: `What is a key memory tip for "${aiTopic}"?`,
+          answer: "Apply Spaced Repetition and Active Recall to connect this concept with real-world applications.",
           explanation: "Spaced repetition boosts long-term brain memory retention!"
         }
       ];
 
       const newCards: Flashcard[] = offlineGenerated.map((c, i) => ({
-        id: `ai_card_offline_${Date.now()}_${i}`,
+        id: `card_deck_${Date.now()}_${i}`,
         question: c.question,
         answer: c.answer,
         explanation: c.explanation,
@@ -311,7 +273,7 @@ export default function FlashcardsDeck({ apiKey, decksState, onSaveDecksState }:
       onSaveDecksState("deck_free_space", finalCards);
       setSelectedDeckId("deck_free_space");
       
-      setAiSuccess(`Offline cards for "${aiTopic}" synthesized successfully from local study deck!`);
+      setAiSuccess(`Synthesized ${newCards.length} flashcards for "${aiTopic}" successfully into your deck!`);
       setAiTopic('');
       setCurrentIndex(0);
       setIsFlipped(false);
