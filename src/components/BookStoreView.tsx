@@ -55,7 +55,7 @@ const PREBUILT_MODULES: ModuleResource[] = [
     pages: 142,
     description: 'Comprehensive Ministry Exam prep module covering differential calculus, limits, sequence notation, and solid geometry calculations with Amharic translations.',
     languageSupport: 'Bilingual',
-    proRequired: true,
+    proRequired: false,
     pdfUrl: 'https://fetena.net/books/grade-12/mathematics'
   },
   {
@@ -79,7 +79,7 @@ const PREBUILT_MODULES: ModuleResource[] = [
     pages: 120,
     description: 'Advanced matric revision guide summarizing magnetic flux equations, transformers, line spectra, photoelectric effect, and radioactive half-lives.',
     languageSupport: 'Bilingual',
-    proRequired: true,
+    proRequired: false,
     pdfUrl: 'https://fetena.net/books/grade-12/physics'
   },
   {
@@ -91,7 +91,7 @@ const PREBUILT_MODULES: ModuleResource[] = [
     pages: 135,
     description: 'Detailed study on buffer actions, pH indicators, Lewis theories, galvanic cells, and standard IUPAC nomenclature schemes.',
     languageSupport: 'Bilingual',
-    proRequired: true,
+    proRequired: false,
     pdfUrl: 'https://fetena.net/books/grade-12/chemistry'
   },
   {
@@ -127,7 +127,7 @@ const PREBUILT_MODULES: ModuleResource[] = [
     pages: 160,
     description: 'Specially curated reasoning builder focusing on typical math aptitude patterns, visual sequences, and critical thinking matrices for entrance exams.',
     languageSupport: 'Bilingual',
-    proRequired: true
+    proRequired: false
   },
 
   // --- UNIVERSITY ---
@@ -140,7 +140,7 @@ const PREBUILT_MODULES: ModuleResource[] = [
     pages: 195,
     description: 'Standard textbook helper matching Ethiopian public universities curriculum. Includes truth tables, complex algebra, and functions conversion guidelines with AI step solver.',
     languageSupport: 'English Only',
-    proRequired: true
+    proRequired: false
   },
   {
     id: 'uni_applied_math',
@@ -151,7 +151,7 @@ const PREBUILT_MODULES: ModuleResource[] = [
     pages: 240,
     description: 'Advanced applied engineering mathematical formulas. Features trigonometric substitutions, Taylor series, and volume calculations via double integrals.',
     languageSupport: 'English Only',
-    proRequired: true
+    proRequired: false
   },
   {
     id: 'uni_english',
@@ -173,7 +173,7 @@ const PREBUILT_MODULES: ModuleResource[] = [
     pages: 110,
     description: 'Focuses on peer essays editing, bibliography formatting, and writing logical, structured reports as a university scholar.',
     languageSupport: 'English Only',
-    proRequired: true
+    proRequired: false
   },
   {
     id: 'uni_physics',
@@ -184,7 +184,7 @@ const PREBUILT_MODULES: ModuleResource[] = [
     pages: 215,
     description: 'Rigorous freshman guide centered on physical concepts: work-kinetic calculations, harmonic pendulum frequencies, and ray tracing.',
     languageSupport: 'English Only',
-    proRequired: true
+    proRequired: false
   },
   {
     id: 'uni_chemistry',
@@ -195,7 +195,7 @@ const PREBUILT_MODULES: ModuleResource[] = [
     pages: 220,
     description: 'University level molecular orbital theory, orbital hybridization, boiling point elevations, and activation energy calculations with AI solver tutorials.',
     languageSupport: 'English Only',
-    proRequired: true
+    proRequired: false
   },
   {
     id: 'uni_biology',
@@ -228,7 +228,7 @@ const PREBUILT_MODULES: ModuleResource[] = [
     pages: 145,
     description: 'Unlock argumentative rigor. Learn to outline deductive logic structures, identify cognitive traps, and construct formal proofs with AI reasoning explanations.',
     languageSupport: 'English Only',
-    proRequired: true
+    proRequired: false
   },
   {
     id: 'uni_psychology',
@@ -272,7 +272,7 @@ const PREBUILT_MODULES: ModuleResource[] = [
     pages: 175,
     description: 'Hands-on programming guide. Master logical arrays, sequential flows, parameter passing, and syntax structures with custom AI code-review solver tools.',
     languageSupport: 'English Only',
-    proRequired: true
+    proRequired: false
   },
   {
     id: 'g12_civics',
@@ -306,7 +306,7 @@ const PREBUILT_MODULES: ModuleResource[] = [
     pages: 130,
     description: 'Core concepts of entrepreneurship, financial accounting ledgers, ethical trade structures, and management frameworks in Ethiopia.',
     languageSupport: 'Bilingual',
-    proRequired: true,
+    proRequired: false,
     pdfUrl: 'https://fetena.net/books/grade-12/general-business'
   },
   {
@@ -342,7 +342,7 @@ const PREBUILT_MODULES: ModuleResource[] = [
     pages: 210,
     description: 'New curriculum history resource mapping prehistoric sites like Hadar, early civilizations, Battle of Adwa victory details, and constitutional updates.',
     languageSupport: 'Bilingual',
-    proRequired: true,
+    proRequired: false,
     pdfUrl: 'https://fetena.net/books/grade-12/history'
   },
   {
@@ -354,7 +354,7 @@ const PREBUILT_MODULES: ModuleResource[] = [
     pages: 154,
     description: 'Official guide covering relational database schemas, web authoring elements, and logical block scripting paradigms for high schoolers.',
     languageSupport: 'Bilingual',
-    proRequired: true,
+    proRequired: false,
     pdfUrl: 'https://fetena.net/books/grade-12/ict'
   },
   {
@@ -388,7 +388,7 @@ const PREBUILT_MODULES: ModuleResource[] = [
     pages: 145,
     description: 'Covers the 4th industrial revolution (4IR) technologies: smart actuators, deep neural networks, cryptographic ledgers, and secure cloud orchestration.',
     languageSupport: 'English Only',
-    proRequired: true
+    proRequired: false
   },
   {
     id: 'uni_economics',
@@ -552,8 +552,8 @@ export default function BookStoreView({
   });
 
   // Selected resource for detailed preview / AI interactions
-  const [activeModule, setActiveModule] = useState<ModuleResource | null>(null);
-  const [selectedChapter, setSelectedChapter] = useState<string>('');
+  const [activeModule, setActiveModule] = useState<ModuleResource | null>(() => PREBUILT_MODULES[0] || null);
+  const [selectedChapter, setSelectedChapter] = useState<string>(() => PREBUILT_MODULES[0]?.chapters[0] || '');
   
   // AI activity state
   const [aiMode, setAiMode] = useState<'none' | 'summary' | 'exam' | 'notes'>('none');
@@ -591,7 +591,7 @@ export default function BookStoreView({
           pages: b.pageCount || (b.fileSize ? Math.max(10, Math.round(b.fileSize / 50000)) : 120),
           description: b.description || `${b.course || ''} - ${b.department || ''} (${b.university || 'Wolkite University'})`,
           languageSupport: 'Bilingual',
-          proRequired: b.accessLevel === 'pro',
+          proRequired: false,
           pdfUrl: b.pdfUrl || `/api/content/stream?token=auto&itemId=${b.id}`,
           isServerRecord: true,
           fileSize: b.fileSize,
@@ -648,14 +648,8 @@ export default function BookStoreView({
             return;
           }
         } else if (tokenRes.error) {
-          if (tokenRes.code === 'PRO_REQUIRED') {
-            playFailureChime();
-            alert(language === 'en' 
-              ? 'This textbook requires EthioLearn Pro. Please upgrade to access full PDF reader.' 
-              : 'ይህ መጽሐፍ የፕሮ አባልነት ይጠይቃል። እባክዎ አካውንትዎን ያሻሽሉ።');
-            onNavigate('upgrade');
-            return;
-          }
+          // If server stream token is not available, proceed to in-app reader
+          console.info('Using in-app reader fallback');
         }
       } catch (e) {
         console.warn('PDF stream request failed, fallback to direct:', e);
@@ -844,14 +838,6 @@ export default function BookStoreView({
   // Run AI summaries
   const handleAISummarize = async () => {
     if (!activeModule) return;
-    if (!isEligible && activeModule.proRequired) {
-      playFailureChime();
-      alert(language === 'en' 
-        ? "This module requires premium upgrade! Your 3-day trial is up. Please upgrade to Pro for 200 BIRR per semester." 
-        : "ይህ ሞጁል የአባልነት ክፍያ ይጠይቃል። እባክዎ በአንድ ሴሚስተር 200 ብር ብቻ ከፍለው መዳረሻ ያግኙ።");
-      onNavigate('upgrade');
-      return;
-    }
 
     setAiMode('summary');
     setAiLoading(true);
@@ -1385,17 +1371,9 @@ Verified textbook curriculum breakdown for your question:
                                         <Database className="w-2 h-2 text-[#078930] dark:text-emerald-400" /> Online Library
                                       </span>
                                     )}
-                                    {hasPremiumBadge && (
-                                      isEligible ? (
-                                        <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-md">
-                                          ⭐ PRO Access
-                                        </span>
-                                      ) : (
-                                        <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/20 rounded-md animate-pulse">
-                                          🔒 PRO Limit
-                                        </span>
-                                      )
-                                    )}
+                                    <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-md flex items-center gap-0.5">
+                                      <CheckCircle className="w-2.5 h-2.5 text-emerald-500" /> Free
+                                    </span>
                                     <span className="text-[9px] text-zinc-400 dark:text-zinc-500 font-mono">
                                       {mod.pages} p.
                                     </span>
@@ -1423,11 +1401,20 @@ Verified textbook curriculum breakdown for your question:
                                   {mod.description}
                                 </p>
                                 
-                                <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 pt-0.5">
-                                  <span>📚 {mod.subject}</span>
-                                  <span className="text-indigo-600 dark:text-indigo-400 font-bold flex items-center gap-0.5">
-                                    Open &rarr;
-                                  </span>
+                                <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 pt-1">
+                                  <span className="truncate max-w-[110px]">📚 {mod.subject}</span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSelectModule(mod);
+                                      handleOpenPdfReader(mod);
+                                    }}
+                                    className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-sans font-bold text-[9.5px] uppercase tracking-wider flex items-center gap-1 shadow-xs transition-all cursor-pointer shrink-0"
+                                  >
+                                    <BookOpen className="w-3 h-3" />
+                                    <span>{language === 'en' ? 'Read' : 'አንብብ'}</span>
+                                  </button>
                                 </div>
                               </div>
                             </div>
@@ -1478,11 +1465,10 @@ Verified textbook curriculum breakdown for your question:
                       ? (language === 'en' ? 'Favorited' : 'ተመርጧል')
                       : (language === 'en' ? 'Favorite' : 'ወደ ምርጥ')}
                   </button>
-                  {!isEligible && activeModule.proRequired && (
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-700 dark:text-amber-400 text-xs font-bold leading-none shrink-0 cursor-pointer" onClick={() => onNavigate('upgrade')}>
-                      <span>🔒 Trial Ended Upgrade</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-600 dark:text-emerald-400 text-xs font-bold leading-none shrink-0">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>{language === 'en' ? 'Open Access' : 'ክፍት መዳረሻ'}</span>
+                  </div>
                 </div>
               </div>
 

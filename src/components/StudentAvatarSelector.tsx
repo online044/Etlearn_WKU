@@ -1,10 +1,5 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { useRef, useState } from 'react';
-import { Camera, Image as ImageIcon, Check } from 'lucide-react';
+import { Camera, Image as ImageIcon, Check, Sparkles } from 'lucide-react';
 import StudentAvatar, { AVATAR_PRESETS } from './StudentAvatar';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
 
@@ -41,11 +36,11 @@ export default function StudentAvatarSelector({ currentAvatar, name, onChange }:
     reader.onload = (event) => {
       const img = new Image();
       img.onload = () => {
-        // Offscreen Canvas to scale to exact square 120x120px with high compression
+        // Offscreen Canvas to scale to exact square 140x140px with high quality
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
-        const targetWidth = 120;
-        const targetHeight = 120;
+        const targetWidth = 140;
+        const targetHeight = 140;
         canvas.width = targetWidth;
         canvas.height = targetHeight;
 
@@ -58,7 +53,7 @@ export default function StudentAvatarSelector({ currentAvatar, name, onChange }:
           ctx.drawImage(img, sx, sy, minD, minD, 0, 0, targetWidth, targetHeight);
           
           // Export compact base64 jpeg
-          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.82);
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
           onChange(compressedBase64);
           playSuccessChime();
         } else {
@@ -83,39 +78,51 @@ export default function StudentAvatarSelector({ currentAvatar, name, onChange }:
   };
 
   return (
-    <div className="space-y-4 p-4.5 bg-[#0D0D0D] rounded-xl border border-[#2A2A2A]">
-      <div className="flex flex-col sm:flex-row items-center gap-4">
+    <div className="space-y-4 p-5 bg-[#0F172A] rounded-2xl border border-slate-800 shadow-md">
+      <div className="flex flex-col sm:flex-row items-center gap-5">
         {/* Main interactive preview */}
-        <div className="relative group cursor-pointer" onClick={triggerUpload} title="Click to upload custom photo">
+        <div 
+          className="relative group cursor-pointer shrink-0" 
+          onClick={triggerUpload} 
+          title="Click to upload custom photo"
+        >
           <StudentAvatar 
             avatar={currentAvatar} 
             name={name} 
-            size={74} 
-            className="border-2 border-[#C8962E] hover:scale-105 duration-300" 
+            size={80} 
+            className="border-2 border-amber-400 shadow-lg shadow-amber-500/20 group-hover:scale-105 transition-transform duration-200" 
           />
-          <div className="absolute inset-0 bg-[#000]/60 opacity-0 group-hover:opacity-100 flex items-center justify-center rounded-full transition-opacity">
+          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center rounded-full transition-opacity">
             <Camera className="w-5 h-5 text-white" />
+          </div>
+          <div className="absolute -bottom-1 -right-1 bg-amber-500 text-slate-950 rounded-full p-1 border-2 border-slate-900 shadow">
+            <Sparkles className="w-3 h-3" />
           </div>
         </div>
 
         {/* Dynamic uploads & options panel */}
         <div className="flex-1 text-center sm:text-left space-y-2">
-          <label className="text-xs font-bold text-zinc-300 uppercase tracking-wide">
-            Student Photo Identity
-          </label>
-          <p className="text-[11px] text-zinc-500 leading-normal">
-            Personalize your EthioLearn Pro profile card with native cultural illustration vectors or your school photo.
+          <div className="flex items-center justify-center sm:justify-start gap-2">
+            <label className="text-xs font-bold text-white uppercase tracking-wider">
+              Profile Icon & Identity
+            </label>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 font-semibold">
+              Customizable
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Select an Ethiopian scholarly crest icon below, or upload your own student portrait photo.
           </p>
           
-          <div className="flex justify-center sm:justify-start gap-2">
+          <div className="flex justify-center sm:justify-start gap-2 pt-1">
             <button
               type="button"
               onClick={triggerUpload}
               disabled={isProcessing}
-              className="px-3 py-1.5 bg-[#151515] hover:bg-[#202020] border border-[#2A2A2A] hover:border-[#3A3A3A] hover:text-zinc-200 text-zinc-400 text-[10px] uppercase font-mono font-bold tracking-widest rounded transition-all cursor-pointer flex items-center gap-1.5"
+              className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-amber-500/40 text-slate-200 text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-2 active:scale-98"
             >
-              <ImageIcon className="w-3.5 h-3.5 text-[#C8962E]" />
-              {isProcessing ? "Processing..." : "Upload school photo"}
+              <ImageIcon className="w-4 h-4 text-amber-400" />
+              <span>{isProcessing ? "Processing..." : "Upload Custom Photo"}</span>
             </button>
             <input 
               type="file" 
@@ -125,16 +132,16 @@ export default function StudentAvatarSelector({ currentAvatar, name, onChange }:
               className="hidden"
             />
           </div>
-          {errorText && <p className="text-[10px] text-rose-500">{errorText}</p>}
+          {errorText && <p className="text-xs text-red-400 font-medium">{errorText}</p>}
         </div>
       </div>
 
       {/* Preset selection circles */}
-      <div className="space-y-1.5 pt-2 border-t border-[#1C1C1C]">
-        <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest block">
-          Preset Campus Characters:
+      <div className="space-y-2.5 pt-3 border-t border-slate-800">
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
+          Choose Academic & Cultural Crest:
         </span>
-        <div className="flex flex-wrap gap-2.5">
+        <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
           {AVATAR_PRESETS.map((preset) => {
             const isSelected = currentAvatar === preset.id;
             return (
@@ -142,15 +149,17 @@ export default function StudentAvatarSelector({ currentAvatar, name, onChange }:
                 key={preset.id}
                 type="button"
                 onClick={() => handlePresetSelect(preset.id)}
-                className={`relative p-0.5 rounded-full border cursor-pointer hover:scale-110 duration-200 ${
-                  isSelected ? 'border-[#C8962E] bg-[#C8962E]/10' : 'border-zinc-800 hover:border-zinc-700 bg-transparent'
+                className={`relative p-1 rounded-xl border flex flex-col items-center justify-center cursor-pointer transition-all ${
+                  isSelected 
+                    ? 'border-amber-400 bg-amber-500/20 scale-105 shadow-md shadow-amber-500/20' 
+                    : 'border-slate-800 hover:border-slate-700 bg-slate-900/60 hover:bg-slate-900'
                 }`}
                 title={preset.name}
               >
-                <StudentAvatar avatar={preset.id} name={name} size={36} className="border-0" />
+                <StudentAvatar avatar={preset.id} name={name} size={38} className="border-0 shadow-none" />
                 {isSelected && (
-                  <div className="absolute -bottom-1 -right-1 bg-emerald-500 text-white rounded-full p-0.5 border border-[#0D0D0D]">
-                    <Check className="w-2.5 h-2.5 stroke-[4px]" />
+                  <div className="absolute -top-1 -right-1 bg-amber-500 text-slate-950 rounded-full p-0.5 border border-slate-900">
+                    <Check className="w-2.5 h-2.5 stroke-[3px]" />
                   </div>
                 )}
               </button>

@@ -1,9 +1,9 @@
 {
-  "id": "com.ethiolearn.pwa",
-  "name": "EthioLearn Pro Campus",
+  "id": "/",
+  "name": "EthioLearn Pro",
   "short_name": "EthioLearn",
-  "description": "Premium AI Learning Platform featuring personalized study assistants, active recall flashcards, and high-fidelity soundscapes modeled for school &amp; university students.",
-  "lang": "en-US",
+  "description": "Premium AI digital learning platform with university courses, national exams prep, and student progress analytics.",
+  "lang": "en",
   "dir": "ltr",
   "categories": [
     "education",
@@ -11,79 +11,102 @@
     "utilities",
     "books"
   ],
-  "start_url": "/?source=pwa",
+  "start_url": "/",
   "scope": "/",
   "theme_color": "#0a1128",
   "background_color": "#0a1128",
   "display": "standalone",
   "display_override": [
-    "standalone"
+    "standalone",
+    "minimal-ui",
+    "window-controls-overlay"
   ],
-  "orientation": "portrait",
+  "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/ethiolearn_icon.jpg",
+      "src": "/icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/jpeg",
+      "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/ethiolearn_icon.jpg",
+      "src": "/icons/icon-192-maskable.png",
       "sizes": "192x192",
-      "type": "image/jpeg",
+      "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/ethiolearn_icon.jpg",
+      "src": "/icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/jpeg",
+      "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/ethiolearn_icon.jpg",
+      "src": "/icons/icon-512-maskable.png",
       "sizes": "512x512",
-      "type": "image/jpeg",
+      "type": "image/png",
       "purpose": "maskable"
+    },
+    {
+      "src": "/icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
     }
   ],
   "screenshots": [
     {
-      "src": "/ethiolearn_icon.jpg",
-      "sizes": "512x512",
-      "type": "image/jpeg",
+      "src": "/icons/screenshot-desktop.png",
+      "sizes": "1280x720",
+      "type": "image/png",
       "form_factor": "wide",
       "label": "EthioLearn Pro Portal - Study Desktop Dashboard"
     },
     {
-      "src": "/ethiolearn_icon.jpg",
-      "sizes": "192x192",
-      "type": "image/jpeg",
+      "src": "/icons/screenshot-mobile.png",
+      "sizes": "720x1280",
+      "type": "image/png",
       "form_factor": "narrow",
       "label": "EthioLearn Pro Mobile Suite"
     }
   ],
   "shortcuts": [
     {
-      "name": "AI Campus Assistant",
-      "short_name": "Tutor",
-      "description": "Open your premium AI study companion chat",
-      "url": "/?shortcut=tutor",
+      "name": "Study Dashboard",
+      "short_name": "Dashboard",
+      "description": "Open your personalized student dashboard",
+      "url": "/?shortcut=dashboard",
       "icons": [
         {
-          "src": "/ethiolearn_icon.jpg",
-          "sizes": "192x192"
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
         }
       ]
     },
     {
-      "name": "Mind Relax Soundscapes",
-      "short_name": "SoundSpace",
-      "description": "Calming spatial binaural ambient synthesis",
-      "url": "/?shortcut=mindlax",
+      "name": "Exams & Prep",
+      "short_name": "Exams",
+      "description": "National exam questions and past papers",
+      "url": "/?shortcut=exams",
       "icons": [
         {
-          "src": "/ethiolearn_icon.jpg",
-          "sizes": "192x192"
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Digital Bookstore",
+      "short_name": "Books",
+      "description": "Browse textbooks and curriculum modules",
+      "url": "/?shortcut=books",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
         }
       ]
     }
@@ -94,63 +117,5 @@
   "edge_side_panel": {
     "preferred_width": 440
   },
-  "note_taking": {
-    "new_note_url": "/?shortcut=notes"
-  },
-  "prefer_related_applications": false,
-  "file_handlers": [
-    {
-      "action": "/?action=open-file",
-      "accept": {
-        "text/plain": [
-          ".txt",
-          ".md"
-        ],
-        "application/json": [
-          ".json"
-        ]
-      }
-    }
-  ],
-  "protocol_handlers": [
-    {
-      "protocol": "web+ethiolearn",
-      "url": "/?uri=%s"
-    }
-  ],
-  "share_target": {
-    "action": "/?action=share-to-campus",
-    "method": "GET",
-    "enctype": "application/x-www-form-urlencoded",
-    "params": {
-      "title": "title",
-      "text": "text",
-      "url": "url"
-    }
-  },
-  "widgets": [
-    {
-      "name": "Study Streak Tracker",
-      "short_name": "Streak",
-      "description": "See your active memory study cycle metrics.",
-      "tag": "streak-widget",
-      "ms_ac_template": "",
-      "icons": [
-        {
-          "src": "/ethiolearn_icon.jpg",
-          "sizes": "192x192",
-          "type": "image/jpeg"
-        }
-      ],
-      "screenshots": [
-        {
-          "src": "/ethiolearn_icon.jpg",
-          "sizes": "512x512",
-          "type": "image/jpeg",
-          "label": "Streak Widget Monitor View"
-        }
-      ]
-    }
-  ],
-  "iarc_rating_id": "e830fbf0-ffbe-4d43-91ee-e6d234a413d7"
+  "prefer_related_applications": false
 }

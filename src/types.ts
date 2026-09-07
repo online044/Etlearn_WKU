@@ -84,6 +84,10 @@ export interface StudentProfile {
   agreedToTermsDate?: string;
   telegramId?: string;
   telegramUsername?: string;
+  department?: string;
+  targetGpa?: string;
+  bio?: string;
+  idCardTheme?: 'gold' | 'emerald' | 'navy' | 'purple';
   referralCode?: string;
   referredBy?: string;
   userRole?: 'student' | 'instructor' | 'admin' | 'super_admin';

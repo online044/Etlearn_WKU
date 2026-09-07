@@ -1,83 +1,156 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ * EthioLearn Pro - Production Service Worker
  */
 
-const CACHE_NAME = 'ethiolearn-pro-v3';
+const CACHE_NAME = 'ethiolearn-pwa-v4';
+const OFFLINE_URL = '/offline.html';
+
 const PRECACHE_ASSETS = [
   '/',
   '/manifest.json',
-  '/ethiolearn_icon.jpg'
+  '/offline.html',
+  '/favicon.svg',
+  '/favicon.png',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/icon-192-maskable.png',
+  '/icons/icon-512-maskable.png',
+  '/icons/apple-touch-icon.png'
 ];
 
-// Install Event: Precache crucial shell assets
+// Install: Cache critical app shell and offline page
 self.addEventListener('install', (event) => {
-  self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(PRECACHE_ASSETS).catch((err) => {
+        console.warn('[SW] Some precache assets failed to load:', err);
+      });
+    }).then(() => self.skipWaiting())
+  );
 });
 
-// Activate Event: Clean up all legacy and stale caches immediately
+// Activate: Delete outdated caches and claim clients
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cache) => {
-          console.log('[Service Worker] Flushing stale cache:', cache);
-          return caches.delete(cache);
+          if (cache !== CACHE_NAME) {
+            return caches.delete(cache);
+          }
         })
       );
     }).then(() => self.clients.claim())
   );
 });
 
-// Fetch Event: Bypass dev scripts and dynamic modules
+// Fetch: Secure caching strategy
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Never intercept non-GET requests or WebSockets
-  if (request.method !== 'GET' || url.protocol === 'ws:' || url.protocol === 'wss:') {
+  // 1. Only handle GET requests
+  if (request.method !== 'GET') {
     return;
   }
 
-  // Never intercept dev server files, source code, node_modules, or API endpoints
+  // 2. SECURITY: NEVER cache or intercept API routes, authentication, or payment calls
   if (
     url.pathname.startsWith('/api/') ||
-    url.pathname.startsWith('/src/') ||
-    url.pathname.startsWith('/node_modules/') ||
-    url.pathname.startsWith('/@') ||
-    url.pathname.endsWith('.ts') ||
-    url.pathname.endsWith('.tsx') ||
-    url.searchParams.has('v') ||
-    url.searchParams.has('t') ||
-    url.hostname === 'localhost' ||
-    url.hostname === '127.0.0.1' ||
-    url.hostname.includes('run.app')
+    url.pathname.startsWith('/auth/') ||
+    url.pathname.includes('supabase.co') ||
+    url.searchParams.has('x-telegram-init-data') ||
+    url.protocol === 'ws:' ||
+    url.protocol === 'wss:'
   ) {
-    return; // Direct browser network fetch
+    return; // Pass through to network directly
   }
 
-  // SPA navigation handling when offline
+  // 3. SPA Navigation Requests (mode: 'navigate')
+  // Try network first to get the latest app shell; fallback to cache or offline.html
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).catch(() => {
-        return caches.match('/index.html') || fetch(request);
+      fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const copy = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
+          return networkResponse;
+        })
+        .catch(async () => {
+          const cachedResponse = await caches.match(request);
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          const rootCached = await caches.match('/');
+          if (rootCached) {
+            return rootCached;
+          }
+          return caches.match(OFFLINE_URL);
+        })
+    );
+    return;
+  }
+
+  // 4. Static Assets (Scripts, Styles, Images, Fonts)
+  // Stale-While-Revalidate or Cache-First for precached icons/styles
+  if (
+    url.origin === self.location.origin &&
+    (url.pathname.startsWith('/icons/') ||
+     url.pathname.endsWith('.png') ||
+     url.pathname.endsWith('.svg') ||
+     url.pathname.endsWith('.jpg') ||
+     url.pathname.endsWith('.ico') ||
+     url.pathname.endsWith('.css') ||
+     url.pathname.endsWith('.js') ||
+     url.pathname.startsWith('/assets/'))
+  ) {
+    event.respondWith(
+      caches.match(request).then((cachedResponse) => {
+        const fetchPromise = fetch(request)
+          .then((networkResponse) => {
+            if (networkResponse && networkResponse.status === 200) {
+              const copy = networkResponse.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+            }
+            return networkResponse;
+          })
+          .catch(() => cachedResponse);
+
+        return cachedResponse || fetchPromise;
       })
     );
     return;
   }
 
-  // Static assets with network-first strategy
-  event.respondWith(
-    fetch(request)
-      .then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200 && request.url.startsWith('http')) {
-          const cacheCopy = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, cacheCopy);
-          });
-        }
-        return networkResponse;
+  // 5. External static CDNs (Fonts, Icons)
+  if (
+    url.hostname.includes('fonts.googleapis.com') ||
+    url.hostname.includes('fonts.gstatic.com') ||
+    url.hostname.includes('cdn.jsdelivr.net')
+  ) {
+    event.respondWith(
+      caches.match(request).then((cachedResponse) => {
+        return (
+          cachedResponse ||
+          fetch(request).then((networkResponse) => {
+            if (networkResponse && networkResponse.status === 200) {
+              const copy = networkResponse.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+            }
+            return networkResponse;
+          }).catch(() => cachedResponse)
+        );
       })
-      .catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  // Default network fetch
+  event.respondWith(
+    fetch(request).catch(() => caches.match(request))
   );
 });

@@ -9,6 +9,7 @@ import { getAnalytics, isSupported, Analytics } from 'firebase/analytics';
 import { 
   getFirestore, 
   initializeFirestore,
+  setLogLevel,
   doc, 
   getDoc, 
   setDoc, 
@@ -78,17 +79,26 @@ export const db = (() => {
     (window.location.hostname.toLowerCase().includes('etlearn') || window.location.hostname.toLowerCase().includes('vercel.app'));
   const dbId = isCustomDomain ? undefined : ((firebaseConfig as any).firestoreDatabaseId || undefined);
   try {
+    // Avoid verbose warnings when operating offline or on sandboxed proxies
+    try {
+      setLogLevel('error');
+    } catch {
+      // Ignore if setLogLevel is not permitted in current environment
+    }
+
     if (dbId) {
       try {
         return initializeFirestore(app, {
-          experimentalAutoDetectLongPolling: true,
+          experimentalForceLongPolling: true,
+          ignoreUndefinedProperties: true,
         }, dbId);
       } catch {
         return getFirestore(app, dbId);
       }
     }
     return initializeFirestore(app, {
-      experimentalAutoDetectLongPolling: true,
+      experimentalForceLongPolling: true,
+      ignoreUndefinedProperties: true,
     });
   } catch (err) {
     try {
@@ -192,8 +202,14 @@ export async function testFirestoreConnection() {
     return;
   }
   try {
-    const snap = await getDoc(doc(currentDb, 'test', 'connection'));
-    if (snap.exists()) {
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Connection check timeout')), 3000)
+    );
+    const snap = await Promise.race([
+      getDoc(doc(currentDb, 'test', 'connection')),
+      timeoutPromise
+    ]) as any;
+    if (snap && snap.exists && snap.exists()) {
       console.log('[Firestore Service] Firestore connection active.');
     }
   } catch (error: any) {

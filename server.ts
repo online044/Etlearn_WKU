@@ -117,6 +117,36 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
+// PWA Specific Routes & Cache Control
+app.get('/sw.js', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Service-Worker-Allowed', '/');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  const swPath = path.join(process.cwd(), 'public', 'sw.js');
+  if (fs.existsSync(swPath)) {
+    return res.sendFile(swPath);
+  }
+  return res.status(404).send('Service worker not found');
+});
+
+app.get(['/manifest.json', '/manifest.webmanifest'], (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  const manifestPath = path.join(process.cwd(), 'public', 'manifest.json');
+  if (fs.existsSync(manifestPath)) {
+    return res.sendFile(manifestPath);
+  }
+  return res.status(404).send('Manifest not found');
+});
+
+app.use('/icons', express.static(path.join(process.cwd(), 'public', 'icons'), {
+  maxAge: '1d'
+}));
+
+app.use(express.static(path.join(process.cwd(), 'public'), {
+  maxAge: '1d'
+}));
+
 // ============================================================================
 // 2. RATE LIMITERS
 // ============================================================================

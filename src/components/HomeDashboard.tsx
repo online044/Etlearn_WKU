@@ -4,7 +4,7 @@ import {
   Flame, Calendar, Target, CheckSquare, Square, TrendingUp, ArrowRight, 
   ShieldCheck, X, ChevronRight, Bookmark, Award, Plus, Trash2, RefreshCw,
   AlertCircle, Sparkles, BookCheck, HelpCircle, Layers, CheckCircle, BarChart3,
-  ExternalLink, Compass, Lightbulb, BrainCircuit, ArrowUpRight
+  ExternalLink, Compass, Lightbulb, BrainCircuit, ArrowUpRight, Trophy
 } from 'lucide-react';
 import { 
   StudentProfile, CourseRecord, PlatformAnnouncement, StudyTask, ExamAttemptRecord, 
@@ -330,23 +330,18 @@ export default function HomeDashboard({
   const completedTasksCount = tasks.filter(t => t.isCompleted).length;
   const goalProgressPercentage = Math.min(100, Math.round((studyHoursCount / targetHours) * 100));
 
-  // AI Teacher prompt helpers
-  const handleOpenAIWithPrompt = (promptType: 'explain' | 'quiz' | 'summarize' | 'flashcards' | 'difficult') => {
+  // Curriculum practice navigation helper
+  const handleOpenStudyTool = (toolType: 'quiz' | 'exam' | 'notes' | 'uni') => {
     playClickChime();
-    const activeSubject = mostRecentCourse?.subject || profile.subjects?.[0] || 'General';
-    const activeTitle = mostRecentCourse?.title || 'Academic Coursework';
-
-    let promptContext: AITeacherContext = {
-      mode: 'teaching',
-      courseTitle: activeTitle,
-      subject: activeSubject
-    };
-
-    if (promptType === 'quiz') {
-      promptContext.mode = 'quiz';
+    if (toolType === 'quiz') {
+      onNavigate('quiz');
+    } else if (toolType === 'exam') {
+      onNavigate('examengine');
+    } else if (toolType === 'notes') {
+      onNavigate('notes');
+    } else {
+      onNavigate('university');
     }
-
-    onNavigate('tutor', promptContext);
   };
 
   // --------------------------------------------------------------------------
@@ -577,36 +572,28 @@ export default function HomeDashboard({
             </div>
           </div>
 
-          {/* Primary Action Buttons */}
+          {/* Primary Action Buttons - Instant Direct Access to Books and Exams */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
             <button
               onClick={() => {
                 playClickChime();
-                if (mostRecentCourse && onSelectCourse) {
-                  onSelectCourse(mostRecentCourse.id);
-                } else {
-                  onNavigate('courses');
-                }
+                onNavigate('bookstore');
               }}
               className="px-5 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm transition-all cursor-pointer flex items-center justify-center gap-2 shadow-sm shadow-amber-500/20 active:scale-[0.98]"
             >
               <BookOpen className="w-4 h-4 text-slate-950" />
-              <span>{isAmharic ? 'ትምህርት ቀጥል' : 'Continue Learning'}</span>
+              <span>{isAmharic ? 'መጻሕፍት እና ሞጁሎች' : 'Explore Books & Modules'}</span>
             </button>
 
             <button
               onClick={() => {
                 playClickChime();
-                onNavigate('tutor', {
-                  mode: 'teaching',
-                  courseTitle: mostRecentCourse?.title,
-                  subject: mostRecentCourse?.subject
-                });
+                onNavigate('university');
               }}
               className="px-5 py-3 rounded-xl bg-[#0F172A] hover:bg-slate-800 border border-slate-700 text-slate-200 font-semibold text-sm transition-all cursor-pointer flex items-center justify-center gap-2 hover:border-amber-500/40 active:scale-[0.98]"
             >
-              <Bot className="w-4 h-4 text-amber-400" />
-              <span>{isAmharic ? 'መምህሩን ጠይቅ' : 'Ask Teacher'}</span>
+              <GraduationCap className="w-4 h-4 text-amber-400" />
+              <span>{isAmharic ? 'ያለፉ ፈተናዎች እና መልሶች' : 'Past Exams & Solutions'}</span>
             </button>
           </div>
         </div>
@@ -634,82 +621,40 @@ export default function HomeDashboard({
               <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform">
                 <GraduationCap className="w-4 h-4" />
               </div>
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
-                {isAmharic ? 'ወልቂጤ/አዲስ' : 'WKU/AAU'}
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-mono">
+                {isAmharic ? 'ዩኒቨርሲቲ' : 'Uni Exams'}
               </span>
             </div>
             <div>
               <span className="block text-xs font-bold text-slate-100 group-hover:text-amber-400 transition-colors">
-                {isAmharic ? 'የዩኒቨርሲቲ ፈተናዎች' : 'University Hub'}
+                {isAmharic ? 'የዩኒቨርሲቲ ፈተናዎች' : 'University Exams'}
               </span>
-              <span className="block text-[10px] text-slate-400 truncate">Mid & Final Papers</span>
+              <span className="block text-[10px] text-slate-400 truncate">WKU & AAU Papers</span>
             </div>
           </button>
 
-          {/* 2. Ask Teacher */}
+          {/* 2. Digital Bookstore */}
           <button
-            onClick={() => { playClickChime(); onNavigate('tutor'); }}
-            className="p-4 rounded-xl bg-[#111C35] border border-slate-800 hover:border-amber-500/50 transition-all cursor-pointer text-left group flex flex-col justify-between h-28 shadow-xs"
-          >
-            <div className="flex items-center justify-between">
-              <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform">
-                <Bot className="w-4 h-4" />
-              </div>
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono">
-                AI Active
-              </span>
-            </div>
-            <div>
-              <span className="block text-xs font-bold text-slate-100 group-hover:text-amber-400 transition-colors">
-                {isAmharic ? 'መምህሩን ጠይቅ' : 'Ask Teacher'}
-              </span>
-              <span className="block text-[10px] text-slate-400 truncate">Step-by-step Q&A</span>
-            </div>
-          </button>
-
-          {/* 3. Exam Engine / Practice */}
-          <button
-            onClick={() => { playClickChime(); onNavigate('examengine'); }}
+            onClick={() => { playClickChime(); onNavigate('bookstore'); }}
             className="p-4 rounded-xl bg-[#111C35] border border-slate-800 hover:border-emerald-500/50 transition-all cursor-pointer text-left group flex flex-col justify-between h-28 shadow-xs"
           >
             <div className="flex items-center justify-between">
               <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
-                <Play className="w-4 h-4 fill-emerald-400/20" />
+                <BookOpen className="w-4 h-4" />
               </div>
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
-                Timed
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono">
+                {isAmharic ? 'መጻሕፍት' : 'Books'}
               </span>
             </div>
             <div>
               <span className="block text-xs font-bold text-slate-100 group-hover:text-emerald-400 transition-colors">
-                {isAmharic ? 'የፈተና ሞተር' : 'Exam Engine'}
+                {isAmharic ? 'መጻሕፍት ቤት' : 'Digital Books'}
               </span>
-              <span className="block text-[10px] text-slate-400 truncate">Interactive Mock Tests</span>
+              <span className="block text-[10px] text-slate-400 truncate">Textbooks & PDFs</span>
             </div>
           </button>
 
-          {/* 4. Study Notes */}
-          <button
-            onClick={() => { playClickChime(); onNavigate('notes'); }}
-            className="p-4 rounded-xl bg-[#111C35] border border-slate-800 hover:border-sky-500/50 transition-all cursor-pointer text-left group flex flex-col justify-between h-28 shadow-xs"
-          >
-            <div className="flex items-center justify-between">
-              <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 group-hover:scale-105 transition-transform">
-                <FileText className="w-4 h-4" />
-              </div>
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
-                Summaries
-              </span>
-            </div>
-            <div>
-              <span className="block text-xs font-bold text-slate-100 group-hover:text-sky-400 transition-colors">
-                {isAmharic ? 'የጥናት ማስታወሻ' : 'Study Notes'}
-              </span>
-              <span className="block text-[10px] text-slate-400 truncate">High-Yield Summaries</span>
-            </div>
-          </button>
-
-          {/* 5. National Exam Prep */}
+          {/* 3. National Matric Exam Prep */}
           <button
             onClick={() => { playClickChime(); onNavigate('examprep'); }}
             className="p-4 rounded-xl bg-[#111C35] border border-slate-800 hover:border-purple-500/50 transition-all cursor-pointer text-left group flex flex-col justify-between h-28 shadow-xs"
@@ -724,30 +669,72 @@ export default function HomeDashboard({
             </div>
             <div>
               <span className="block text-xs font-bold text-slate-100 group-hover:text-purple-400 transition-colors">
-                {isAmharic ? 'ብሔራዊ ፈተና' : 'National Exam'}
+                {isAmharic ? 'ብሔራዊ ፈተና' : 'National Matric'}
               </span>
-              <span className="block text-[10px] text-slate-400 truncate">Blueprint Models</span>
+              <span className="block text-[10px] text-slate-400 truncate">EUEE Blueprint</span>
             </div>
           </button>
 
-          {/* 6. Digital Bookstore */}
+          {/* 4. Exam Engine / Timed Quizzes */}
           <button
-            onClick={() => { playClickChime(); onNavigate('bookstore'); }}
+            onClick={() => { playClickChime(); onNavigate('examengine'); }}
             className="p-4 rounded-xl bg-[#111C35] border border-slate-800 hover:border-amber-500/50 transition-all cursor-pointer text-left group flex flex-col justify-between h-28 shadow-xs"
           >
             <div className="flex items-center justify-between">
               <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform">
-                <BookOpen className="w-4 h-4" />
+                <Play className="w-4 h-4 fill-amber-400/20" />
               </div>
               <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
-                Library
+                Timed
               </span>
             </div>
             <div>
               <span className="block text-xs font-bold text-slate-100 group-hover:text-amber-400 transition-colors">
-                {isAmharic ? 'መጻሕፍት ቤት' : 'Book Store'}
+                {isAmharic ? 'የፈተና ሞተር' : 'Exam Engine'}
               </span>
-              <span className="block text-[10px] text-slate-400 truncate">Digital Textbooks</span>
+              <span className="block text-[10px] text-slate-400 truncate">Speed Drills & Timer</span>
+            </div>
+          </button>
+
+          {/* 5. Study Notes & Summaries */}
+          <button
+            onClick={() => { playClickChime(); onNavigate('notes'); }}
+            className="p-4 rounded-xl bg-[#111C35] border border-slate-800 hover:border-sky-500/50 transition-all cursor-pointer text-left group flex flex-col justify-between h-28 shadow-xs"
+          >
+            <div className="flex items-center justify-between">
+              <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 group-hover:scale-105 transition-transform">
+                <FileText className="w-4 h-4" />
+              </div>
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400 font-mono">
+                {isAmharic ? 'ማስታወሻ' : 'Notes'}
+              </span>
+            </div>
+            <div>
+              <span className="block text-xs font-bold text-slate-100 group-hover:text-sky-400 transition-colors">
+                {isAmharic ? 'የጥናት ማስታወሻ' : 'Study Notes'}
+              </span>
+              <span className="block text-[10px] text-slate-400 truncate">High-Yield Summaries</span>
+            </div>
+          </button>
+
+          {/* 6. Flashcards Deck */}
+          <button
+            onClick={() => { playClickChime(); onNavigate('notes'); }}
+            className="p-4 rounded-xl bg-[#111C35] border border-slate-800 hover:border-rose-500/50 transition-all cursor-pointer text-left group flex flex-col justify-between h-28 shadow-xs"
+          >
+            <div className="flex items-center justify-between">
+              <div className="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 group-hover:scale-105 transition-transform">
+                <Layers className="w-4 h-4" />
+              </div>
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 font-mono">
+                Cards
+              </span>
+            </div>
+            <div>
+              <span className="block text-xs font-bold text-slate-100 group-hover:text-rose-400 transition-colors">
+                {isAmharic ? 'ፍላሽ ካርዶች' : 'Flashcards'}
+              </span>
+              <span className="block text-[10px] text-slate-400 truncate">Active Recall Decks</span>
             </div>
           </button>
         </div>
@@ -1128,77 +1115,74 @@ export default function HomeDashboard({
           <section className="p-5 sm:p-6 rounded-2xl bg-[#111C35] border border-slate-800/90 space-y-4 shadow-sm">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2">
-                <Bot className="w-4 h-4 text-amber-400" />
+                <Sparkles className="w-4 h-4 text-amber-400" />
                 <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                  {isAmharic ? 'መምህሩን ጠይቅ - ፈጣን ጥያቄዎች' : 'Ask Teacher Study Prompts'}
+                  {isAmharic ? 'የጥናትና የፈተና ልምምዶች' : 'Curriculum Practice Drills'}
                 </h3>
               </div>
 
-              <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono">
-                Active
+              <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 font-mono">
+                Manual Prep
               </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <button
-                onClick={() => handleOpenAIWithPrompt('explain')}
+                onClick={() => handleOpenStudyTool('quiz')}
                 className="p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-500/40 text-left transition-all cursor-pointer group flex items-start gap-2.5"
               >
-                <Lightbulb className="w-4 h-4 text-amber-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
+                <BookCheck className="w-4 h-4 text-amber-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
                 <div>
                   <span className="text-xs font-bold text-slate-200 group-hover:text-amber-400 transition-colors block">
-                    {isAmharic ? 'ርዕስ አብራራልኝ' : 'Explain a Topic'}
+                    {isAmharic ? 'የምዕራፍ ምርጫ ጥያቄዎች' : 'Chapter Practice MCQs'}
                   </span>
                   <span className="text-[10px] text-slate-400 leading-tight block mt-0.5">
-                    Clear conceptual breakdown
+                    Curriculum questions with faculty steps
                   </span>
                 </div>
               </button>
 
               <button
-                onClick={() => handleOpenAIWithPrompt('quiz')}
-                className="p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-500/40 text-left transition-all cursor-pointer group flex items-start gap-2.5"
+                onClick={() => handleOpenStudyTool('exam')}
+                className="p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-emerald-500/40 text-left transition-all cursor-pointer group flex items-start gap-2.5"
               >
-                <BookCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
+                <Trophy className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
                 <div>
                   <span className="text-xs font-bold text-slate-200 group-hover:text-emerald-400 transition-colors block">
-                    {isAmharic ? 'የልምምድ ጥያቄዎች' : 'Generate MCQs'}
+                    {isAmharic ? 'የሞዴል ፈተና ማስጀመሪያ' : 'Timed Model Exam'}
                   </span>
                   <span className="text-[10px] text-slate-400 leading-tight block mt-0.5">
-                    With full step answers
+                    Exam engine with score grading
                   </span>
                 </div>
               </button>
 
               <button
-                onClick={() => {
-                  playClickChime();
-                  onNavigate('notes');
-                }}
+                onClick={() => handleOpenStudyTool('notes')}
                 className="p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-sky-500/40 text-left transition-all cursor-pointer group flex items-start gap-2.5"
               >
                 <FileText className="w-4 h-4 text-sky-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
                 <div>
                   <span className="text-xs font-bold text-slate-200 group-hover:text-sky-400 transition-colors block">
-                    {isAmharic ? 'ማስታወሻ አጠቃልል' : 'Summarize Notes'}
+                    {isAmharic ? 'ማስታወሻዎችና ፍላሽ ካርዶች' : 'High-Yield Study Notes'}
                   </span>
                   <span className="text-[10px] text-slate-400 leading-tight block mt-0.5">
-                    High-yield cheat sheets
+                    Comprehensive cheat sheets & cards
                   </span>
                 </div>
               </button>
 
               <button
-                onClick={() => handleOpenAIWithPrompt('difficult')}
+                onClick={() => handleOpenStudyTool('uni')}
                 className="p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-purple-500/40 text-left transition-all cursor-pointer group flex items-start gap-2.5"
               >
-                <BrainCircuit className="w-4 h-4 text-purple-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
+                <GraduationCap className="w-4 h-4 text-purple-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
                 <div>
                   <span className="text-xs font-bold text-slate-200 group-hover:text-purple-400 transition-colors block">
-                    {isAmharic ? 'ከባድ ጥያቄ ፍታ' : 'Solve Hard Problem'}
+                    {isAmharic ? 'የዩኒቨርሲቲ ያለፉ ፈተናዎች' : 'University Past Papers'}
                   </span>
                   <span className="text-[10px] text-slate-400 leading-tight block mt-0.5">
-                    Mathematical reasoning
+                    WKU, AAU, ASTU Mid & Final exams
                   </span>
                 </div>
               </button>
@@ -1210,10 +1194,13 @@ export default function HomeDashboard({
               </span>
 
               <button
-                onClick={() => onNavigate('tutor')}
+                onClick={() => {
+                  playClickChime();
+                  onNavigate('quiz');
+                }}
                 className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-colors cursor-pointer inline-flex items-center gap-1 shadow-xs"
               >
-                <span>{isAmharic ? 'ክፈት' : 'Open AI Studio'}</span>
+                <span>{isAmharic ? 'ወደ ፈተናዎች ሂድ' : 'Open Quizzes'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>

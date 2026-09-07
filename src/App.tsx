@@ -7,13 +7,12 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Home as HomeIcon, Bot, Trophy, Award, Sparkles, Calendar, Sun, Moon, User as UserIcon, BookOpen, CheckCircle,
-  Share, X, ShieldCheck
+  Share, X, ShieldCheck, Download, WifiOff, GraduationCap, FileText
 } from 'lucide-react';
 
 import { StudentProfile, CustomNote, Flashcard, AITeacherContext } from './types';
 import SplashOnboarding from './components/SplashOnboarding';
 import PWADownloadAssistant from './components/PWADownloadAssistant';
-import AITutor from './components/AITutor';
 import ExamPrep from './components/ExamPrep';
 import StudyNotesView from './components/StudyNotesView';
 import HomeDashboard from './components/HomeDashboard';
@@ -1001,15 +1000,73 @@ export default function App() {
             </div>
 
             {isOffline && (
-              <span className="hidden sm:inline-flex items-center gap-1 px-2.1 py-1 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-600 dark:text-amber-405 text-[10px] font-bold uppercase tracking-wider animate-pulse">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                {language === 'en' ? 'Offline' : 'ከዓለም አቀፍ መረብ ውጭ'}
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-500 text-[10px] font-bold uppercase tracking-wider animate-pulse">
+                <WifiOff className="w-3 h-3" />
+                <span className="hidden xs:inline">{language === 'en' ? 'Offline' : 'ከመስመር ውጭ'}</span>
               </span>
             )}
           </div>
 
+          {/* Direct Desktop Navigation Bar for Easy Access to Books & Exams */}
+          <nav className="hidden lg:flex items-center gap-1 bg-slate-100 dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-800 p-1 rounded-xl">
+            <button
+              onClick={() => { playClickChime(); setCurrentPage('home'); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                currentPage === 'home'
+                  ? 'bg-amber-500 text-slate-950 shadow-xs'
+                  : 'text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              {language === 'en' ? 'Home' : 'ዋና ገጽ'}
+            </button>
+            <button
+              onClick={() => { playClickChime(); setCurrentPage('bookstore'); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                currentPage === 'bookstore'
+                  ? 'bg-amber-500 text-slate-950 shadow-xs'
+                  : 'text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>{language === 'en' ? 'Books' : 'መጻሕፍት'}</span>
+            </button>
+            <button
+              onClick={() => { playClickChime(); setCurrentPage('university'); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                currentPage === 'university'
+                  ? 'bg-amber-500 text-slate-950 shadow-xs'
+                  : 'text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <GraduationCap className="w-3.5 h-3.5" />
+              <span>{language === 'en' ? 'University Exams' : 'የዩኒቨርሲቲ ፈተናዎች'}</span>
+            </button>
+            <button
+              onClick={() => { playClickChime(); setCurrentPage('quiz'); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                currentPage === 'quiz'
+                  ? 'bg-amber-500 text-slate-950 shadow-xs'
+                  : 'text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Trophy className="w-3.5 h-3.5" />
+              <span>{language === 'en' ? 'Quizzes' : 'ፈተናዎች'}</span>
+            </button>
+            <button
+              onClick={() => { playClickChime(); setCurrentPage('notes'); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                currentPage === 'notes'
+                  ? 'bg-amber-500 text-slate-950 shadow-xs'
+                  : 'text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>{language === 'en' ? 'Notes' : 'ማስታወሻ'}</span>
+            </button>
+          </nav>
+
           {/* Ethiopian Date Widget */}
-          <div className="hidden md:flex items-center gap-2 border border-slate-200 dark:border-zinc-850 px-3 py-1.5 bg-slate-50 dark:bg-zinc-900/60 rounded-xl">
+          <div className="hidden md:flex items-center gap-2 border border-slate-200 dark:border-zinc-800 px-3 py-1.5 bg-slate-50 dark:bg-zinc-900/60 rounded-xl">
             <span className="text-sm">📅</span>
             <div className="text-left select-none">
               <span className="block font-bold text-slate-700 dark:text-zinc-200 text-[11px] leading-tight font-serif">{ethDate.formatted}</span>
@@ -1018,6 +1075,18 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Quick Install Button if PWA prompt is ready */}
+            {isInstallable && (
+              <button
+                type="button"
+                onClick={() => { playClickChime(); triggerPWAInstall(); }}
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl text-xs shadow-sm cursor-pointer transition-all shrink-0"
+                title={language === 'en' ? 'Install EthioLearn App' : 'የኢትዮለርን አፕሊኬሽን ጫን'}
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>{language === 'en' ? 'Install App' : 'አፑን ጫን'}</span>
+              </button>
+            )}
             {/* Bilingual Quick Selector */}
             <div className="flex bg-slate-100 dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-805 rounded-xl p-0.5">
               <button
@@ -1141,26 +1210,11 @@ export default function App() {
                 apiKey={profile.claudeApiKey || ""}
                 language={language}
                 onNavigate={(page) => setCurrentPage(page as any)}
-                onOpenAITutorWithContext={(ctx) => {
-                  setAiContext(ctx);
-                  setCurrentPage('tutor');
+                onOpenAITutorWithContext={(_ctx) => {
+                  playClickChime();
+                  setCurrentPage('quiz');
                 }}
                 onStudyAction={handleRecordStudyAction}
-              />
-            )}
-
-            {currentPage === 'tutor' && (
-              <AITutor 
-                apiKey={profile.claudeApiKey || ""}
-                enrolledSubjects={profile.subjects}
-                decksState={decksState}
-                onSaveDecksState={handleSaveDecksState}
-                onStudyAction={handleRecordStudyAction}
-                profile={profile}
-                onUpdateProfile={handleUpdateProfile}
-                onOpenUpgrade={() => setCurrentPage('upgrade')}
-                context={aiContext}
-                onClearContext={() => setAiContext(null)}
               />
             )}
 
@@ -1260,46 +1314,32 @@ export default function App() {
         )}
       </main>
 
-      {/* PERSISTENT BOTTOM NAVIGATION TAB BAR (Requirement) */}
+      {/* PERSISTENT BOTTOM NAVIGATION TAB BAR (5-Section Bottom Nav) */}
       <nav 
-        className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#0c0d12]/95 border-t border-slate-200 dark:border-zinc-800/80 shadow-lg"
+        className="fixed bottom-0 left-0 right-0 z-40 bg-[#0A1128]/95 backdrop-blur-md border-t border-slate-800 shadow-xl"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
         {/* Shifting active color bar indicator */}
-        <div className="grid grid-cols-6 max-w-2xl mx-auto h-[3px]">
-          <div className={currentPage === 'home' ? "bg-[#078930]" : "bg-transparent"} />
-          <div className={currentPage === 'tutor' ? "bg-[#078930]" : "bg-transparent"} />
-          <div className={currentPage === 'quiz' ? "bg-[#078930]" : "bg-transparent"} />
-          <div className={currentPage === 'bookstore' ? "bg-[#078930]" : "bg-transparent"} />
-          <div className={currentPage === 'university' ? "bg-[#078930]" : "bg-transparent"} />
-          <div className={currentPage === 'profile' ? "bg-[#078930]" : "bg-transparent"} />
+        <div className="grid grid-cols-5 max-w-xl mx-auto h-[2.5px]">
+          <div className={currentPage === 'home' ? "bg-amber-400 shadow-sm shadow-amber-400/50" : "bg-transparent"} />
+          <div className={currentPage === 'quiz' ? "bg-amber-400 shadow-sm shadow-amber-400/50" : "bg-transparent"} />
+          <div className={currentPage === 'bookstore' ? "bg-amber-400 shadow-sm shadow-amber-400/50" : "bg-transparent"} />
+          <div className={currentPage === 'university' ? "bg-amber-400 shadow-sm shadow-amber-400/50" : "bg-transparent"} />
+          <div className={currentPage === 'profile' ? "bg-amber-400 shadow-sm shadow-amber-400/50" : "bg-transparent"} />
         </div>
 
-        <div className="grid grid-cols-6 max-w-2xl mx-auto px-1 py-1 select-none h-16">
+        <div className="grid grid-cols-5 max-w-xl mx-auto px-2 py-1 select-none h-16">
           
           {/* Home Tab */}
           <button
             onClick={() => { playClickChime(); setCurrentPage('home'); }}
             className={`flex flex-col items-center justify-center w-full transition-all cursor-pointer rounded-xl ${
-              currentPage === 'home' ? 'text-[#078930] dark:text-emerald-400 font-extrabold scale-105' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300'
+              currentPage === 'home' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <HomeIcon className="w-5 h-5 shrink-0" />
-            <span className="text-[9px] font-semibold mt-1">
+            <span className="text-[10px] font-semibold mt-1">
               {language === 'en' ? 'Home' : 'ቤት'}
-            </span>
-          </button>
-
-          {/* Ask Teacher Tab */}
-          <button
-            onClick={() => { playClickChime(); setCurrentPage('tutor'); }}
-            className={`flex flex-col items-center justify-center w-full transition-all cursor-pointer rounded-xl ${
-              currentPage === 'tutor' ? 'text-[#078930] dark:text-emerald-400 font-extrabold scale-105' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300'
-            }`}
-          >
-            <Bot className="w-5 h-5 shrink-0" />
-            <span className="text-[9px] font-semibold mt-1">
-              {language === 'en' ? 'Ask Teacher' : 'መምህሩን ጠይቅ'}
             </span>
           </button>
 
@@ -1307,11 +1347,11 @@ export default function App() {
           <button
             onClick={() => { playClickChime(); setCurrentPage('quiz'); }}
             className={`flex flex-col items-center justify-center w-full transition-all cursor-pointer rounded-xl ${
-              currentPage === 'quiz' ? 'text-[#078930] dark:text-emerald-400 font-extrabold scale-105' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300'
+              currentPage === 'quiz' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <Trophy className="w-5 h-5 shrink-0" />
-            <span className="text-[9px] font-semibold mt-1">
+            <span className="text-[10px] font-semibold mt-1">
               {language === 'en' ? 'Quizzes' : 'ፈተናዎች'}
             </span>
           </button>
@@ -1320,12 +1360,12 @@ export default function App() {
           <button
             onClick={() => { playClickChime(); setCurrentPage('bookstore'); }}
             className={`flex flex-col items-center justify-center w-full transition-all cursor-pointer rounded-xl ${
-              currentPage === 'bookstore' ? 'text-[#078930] dark:text-emerald-400 font-extrabold scale-105' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300'
+              currentPage === 'bookstore' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
             }`}
-            title="Book Store MoDules"
+            title="Book Store Modules"
           >
             <BookOpen className="w-5 h-5 shrink-0" />
-            <span className="text-[9px] font-semibold mt-1">
+            <span className="text-[10px] font-semibold mt-1">
               {language === 'en' ? 'Books' : 'መጻሕፍት'}
             </span>
           </button>
@@ -1334,12 +1374,12 @@ export default function App() {
           <button
             onClick={() => { playClickChime(); setCurrentPage('university'); }}
             className={`flex flex-col items-center justify-center w-full transition-all cursor-pointer rounded-xl ${
-              currentPage === 'university' ? 'text-[#078930] dark:text-emerald-400 font-extrabold scale-105' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300'
+              currentPage === 'university' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
             }`}
             title="University Exams"
           >
             <Award className="w-5 h-5 shrink-0" />
-            <span className="text-[9px] font-semibold mt-1">
+            <span className="text-[10px] font-semibold mt-1">
               {language === 'en' ? 'Uni Exam' : 'ዩኒቨርሲቲ'}
             </span>
           </button>
@@ -1348,11 +1388,11 @@ export default function App() {
           <button
             onClick={() => { playClickChime(); setCurrentPage('profile'); }}
             className={`flex flex-col items-center justify-center w-full transition-all cursor-pointer rounded-xl ${
-              currentPage === 'profile' ? 'text-[#078930] dark:text-emerald-400 font-extrabold scale-105' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300'
+              currentPage === 'profile' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <UserIcon className="w-5 h-5 shrink-0" />
-            <span className="text-[9px] font-semibold mt-1">
+            <span className="text-[10px] font-semibold mt-1">
               {language === 'en' ? 'Profile' : 'መገለጫ'}
             </span>
           </button>

@@ -69,6 +69,10 @@ export default function StudentProfileView({
   // Form Field States
   const [formName, setFormName] = useState('');
   const [formUniversity, setFormUniversity] = useState('');
+  const [formDepartment, setFormDepartment] = useState('');
+  const [formTargetGpa, setFormTargetGpa] = useState('');
+  const [formBio, setFormBio] = useState('');
+  const [formIdCardTheme, setFormIdCardTheme] = useState<'classic-navy' | 'royal-gold' | 'emerald-scholar' | 'crimson-honor'>('classic-navy');
   const [formYear, setFormYear] = useState('');
   const [formSubjects, setFormSubjects] = useState<string[]>([]);
   const [formAvatar, setFormAvatar] = useState('');
@@ -147,6 +151,10 @@ export default function StudentProfileView({
     if (dbProfile) {
       setFormName(dbProfile.name || '');
       setFormUniversity(dbProfile.university || '');
+      setFormDepartment(dbProfile.department || '');
+      setFormTargetGpa(dbProfile.targetGpa || '');
+      setFormBio(dbProfile.bio || '');
+      setFormIdCardTheme(dbProfile.idCardTheme || 'classic-navy');
       setFormYear(dbProfile.year || 'Grade 12');
       setFormSubjects(dbProfile.subjects || []);
       setFormAvatar(dbProfile.avatar || 'star');
@@ -169,6 +177,10 @@ export default function StudentProfileView({
     if (dbProfile) {
       setFormName(dbProfile.name || '');
       setFormUniversity(dbProfile.university || '');
+      setFormDepartment(dbProfile.department || '');
+      setFormTargetGpa(dbProfile.targetGpa || '');
+      setFormBio(dbProfile.bio || '');
+      setFormIdCardTheme(dbProfile.idCardTheme || 'classic-navy');
       setFormYear(dbProfile.year || 'Grade 12');
       setFormSubjects(dbProfile.subjects || []);
       setFormAvatar(dbProfile.avatar || 'star');
@@ -203,6 +215,10 @@ export default function StudentProfileView({
       ...dbProfile,
       name: formName.trim(),
       university: formUniversity.trim(),
+      department: formDepartment.trim(),
+      targetGpa: formTargetGpa.trim(),
+      bio: formBio.trim(),
+      idCardTheme: formIdCardTheme,
       year: formYear,
       subjects: formSubjects,
       avatar: formAvatar
@@ -544,11 +560,33 @@ export default function StudentProfileView({
                   <GraduationCap className="w-4 h-4 text-amber-400 shrink-0" />
                   <span>{activeProfileData.university}</span>
                 </span>
+                {activeProfileData.department && (
+                  <>
+                    <span className="text-slate-600 hidden sm:inline">&bull;</span>
+                    <span className="text-amber-300 font-semibold">
+                      {activeProfileData.department}
+                    </span>
+                  </>
+                )}
                 <span className="text-slate-600 hidden sm:inline">&bull;</span>
                 <span className="text-slate-400 font-medium">
                   {activeProfileData.year}
                 </span>
+                {activeProfileData.targetGpa && (
+                  <>
+                    <span className="text-slate-600 hidden sm:inline">&bull;</span>
+                    <span className="text-emerald-400 font-bold font-mono">
+                      Target GPA: {activeProfileData.targetGpa}
+                    </span>
+                  </>
+                )}
               </div>
+
+              {activeProfileData.bio && (
+                <p className="text-xs text-slate-300 italic max-w-lg line-clamp-2 pt-0.5">
+                  "{activeProfileData.bio}"
+                </p>
+              )}
 
               <p className="text-xs font-mono text-slate-400 truncate max-w-sm">
                 {activeProfileData.email}
@@ -663,48 +701,106 @@ export default function StudentProfileView({
           
           {/* Digital Student ID Card */}
           <div className="lg:col-span-1 space-y-4">
-            <div className="relative bg-slate-950 rounded-2xl border-2 border-amber-500/40 p-5 shadow-2xl overflow-hidden">
-              <div className="flex justify-between items-center mb-5">
-                <div className="w-9 h-7 bg-amber-500/10 border border-amber-500/30 rounded-md flex flex-col justify-between p-1">
-                  <div className="h-0.5 w-full bg-amber-500/40" />
-                  <div className="h-0.5 w-3/4 bg-amber-500/40" />
-                  <div className="h-0.5 w-full bg-amber-500/40" />
-                </div>
-                <span className="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 font-mono text-[9px] font-bold uppercase tracking-widest">
-                  {activeProfileData.isPro ? "PRO CAMPUS" : "STANDARD"}
-                </span>
-              </div>
+            {(() => {
+              const currentTheme = isEditing ? formIdCardTheme : (activeProfileData.idCardTheme || 'classic-navy');
+              const themeStyles: Record<string, { card: string; accent: string; badge: string; border: string }> = {
+                'classic-navy': {
+                  card: 'bg-[#0B132B] border-amber-500/40 text-slate-100 shadow-slate-950/60',
+                  accent: 'text-amber-400',
+                  badge: 'bg-amber-500/10 border-amber-500/20 text-amber-400',
+                  border: 'border-slate-800'
+                },
+                'royal-gold': {
+                  card: 'bg-gradient-to-br from-[#241A06] via-[#151B2A] to-[#0A0E1A] border-amber-400 text-amber-100 shadow-amber-950/40',
+                  accent: 'text-amber-300',
+                  badge: 'bg-amber-400/20 border-amber-400/40 text-amber-300',
+                  border: 'border-amber-500/20'
+                },
+                'emerald-scholar': {
+                  card: 'bg-gradient-to-br from-[#062419] via-[#0E1B26] to-[#050C14] border-emerald-400 text-emerald-100 shadow-emerald-950/40',
+                  accent: 'text-emerald-300',
+                  badge: 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300',
+                  border: 'border-emerald-500/20'
+                },
+                'crimson-honor': {
+                  card: 'bg-gradient-to-br from-[#260A10] via-[#121624] to-[#0A0D18] border-rose-400 text-rose-100 shadow-rose-950/40',
+                  accent: 'text-rose-300',
+                  badge: 'bg-rose-500/20 border-rose-500/40 text-rose-300',
+                  border: 'border-rose-500/20'
+                }
+              };
+              const activeStyle = themeStyles[currentTheme] || themeStyles['classic-navy'];
 
-              <div className="flex flex-col items-center text-center space-y-2 pb-4">
-                <StudentAvatar 
-                  avatar={activeProfileData.avatar} 
-                  name={activeProfileData.name} 
-                  size={80} 
-                  className="border-2 border-amber-400"
-                />
-                <h3 className="text-base font-bold text-white truncate max-w-[200px]">
-                  {activeProfileData.name}
-                </h3>
-                <span className="font-mono text-[10px] text-slate-400 uppercase">
-                  {activeProfileData.year}
-                </span>
-              </div>
+              return (
+                <div className={`relative rounded-2xl border-2 p-5 shadow-2xl overflow-hidden transition-all duration-300 ${activeStyle.card}`}>
+                  {/* Decorative Header */}
+                  <div className="flex justify-between items-center mb-5">
+                    <div className="w-9 h-7 bg-amber-500/10 border border-amber-500/30 rounded-md flex flex-col justify-between p-1">
+                      <div className="h-0.5 w-full bg-amber-400/60" />
+                      <div className="h-0.5 w-3/4 bg-amber-400/60" />
+                      <div className="h-0.5 w-full bg-amber-400/60" />
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-full border font-mono text-[9px] font-bold uppercase tracking-widest ${activeStyle.badge}`}>
+                      {activeProfileData.isPro ? "PRO CAMPUS" : "ETHIOLEARN ID"}
+                    </span>
+                  </div>
 
-              <div className="border-t border-slate-800 pt-4 space-y-2.5 text-xs">
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500 text-[10px] uppercase font-mono">Institution</span>
-                  <span className="text-slate-200 font-medium truncate max-w-[150px] text-right">
-                    {activeProfileData.university}
-                  </span>
+                  <div className="flex flex-col items-center text-center space-y-2 pb-4">
+                    <StudentAvatar 
+                      avatar={isEditing ? formAvatar : activeProfileData.avatar} 
+                      name={isEditing ? formName : activeProfileData.name} 
+                      size={80} 
+                      className="border-2 border-amber-400 shadow-md"
+                    />
+                    <h3 className="text-base font-bold text-white truncate max-w-[200px]">
+                      {isEditing ? (formName || 'Student Name') : activeProfileData.name}
+                    </h3>
+                    <span className="font-mono text-[10px] text-slate-300 uppercase font-semibold">
+                      {isEditing ? formYear : activeProfileData.year}
+                    </span>
+
+                    {(isEditing ? formDepartment : activeProfileData.department) && (
+                      <span className="text-[11px] font-medium text-amber-300/90 truncate max-w-[200px]">
+                        {isEditing ? formDepartment : activeProfileData.department}
+                      </span>
+                    )}
+
+                    {(isEditing ? formTargetGpa : activeProfileData.targetGpa) && (
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-[10px] font-bold">
+                        Target GPA: {isEditing ? formTargetGpa : activeProfileData.targetGpa}
+                      </span>
+                    )}
+                  </div>
+
+                  {(isEditing ? formBio : activeProfileData.bio) && (
+                    <p className="text-[10px] text-slate-300 italic text-center px-2 py-1.5 bg-black/20 rounded-lg mb-3 line-clamp-2">
+                      "{isEditing ? formBio : activeProfileData.bio}"
+                    </p>
+                  )}
+
+                  <div className={`border-t pt-3.5 space-y-2 text-xs ${activeStyle.border}`}>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400 text-[10px] uppercase font-mono">Institution</span>
+                      <span className="text-slate-200 font-medium truncate max-w-[150px] text-right">
+                        {isEditing ? (formUniversity || 'University') : activeProfileData.university}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400 text-[10px] uppercase font-mono">Student ID</span>
+                      <span className={`font-mono text-[10px] select-all font-bold ${activeStyle.accent}`}>
+                        EL-{activeProfileData.email ? Math.abs(activeProfileData.email.split('').reduce((acc, char) => char.charCodeAt(0) + acc, 0)).toString().substring(0, 5) : '8327'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400 text-[10px] uppercase font-mono">Theme</span>
+                      <span className="text-slate-400 capitalize text-[10px] font-medium">
+                        {currentTheme.replace('-', ' ')}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500 text-[10px] uppercase font-mono">Student ID</span>
-                  <span className="text-amber-400 font-mono text-[10px] select-all">
-                    EL-{activeProfileData.email ? Math.abs(activeProfileData.email.split('').reduce((acc, char) => char.charCodeAt(0) + acc, 0)).toString().substring(0, 5) : '8327'}
-                  </span>
-                </div>
-              </div>
-            </div>
+              );
+            })()}
           </div>
 
           {/* Edit / View Academic Specifications */}
@@ -774,18 +870,99 @@ export default function StudentProfileView({
                   </div>
                 </div>
 
-                {/* University / School */}
-                <div className="space-y-1.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* University / School */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                      {language === 'en' ? "University or High School" : "ተቋም ወይም ትምህርት ቤት"}
+                    </label>
+                    <input
+                      type="text"
+                      value={formUniversity}
+                      onChange={(e) => setFormUniversity(e.target.value)}
+                      placeholder="e.g. Wolkite University"
+                      className="w-full bg-slate-950 border border-slate-800 text-white text-sm rounded-xl px-4 py-3 outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  {/* Department / Faculty */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                      {language === 'en' ? "Department / Field of Study" : "የትምህርት ክፍል / ዲፓርትመንት"}
+                    </label>
+                    <input
+                      type="text"
+                      value={formDepartment}
+                      onChange={(e) => setFormDepartment(e.target.value)}
+                      placeholder="e.g. Computer Science, Medicine, Accounting"
+                      className="w-full bg-slate-950 border border-slate-800 text-white text-sm rounded-xl px-4 py-3 outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Target GPA & Academic Motto */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-1.5 sm:col-span-1">
+                    <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                      {language === 'en' ? "Target GPA" : "የታለመ ውጤት (GPA)"}
+                    </label>
+                    <input
+                      type="text"
+                      value={formTargetGpa}
+                      onChange={(e) => setFormTargetGpa(e.target.value)}
+                      placeholder="e.g. 3.85 / 4.00"
+                      className="w-full bg-slate-950 border border-slate-800 text-emerald-400 font-mono text-sm rounded-xl px-4 py-3 outline-none focus:border-amber-500 font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                      {language === 'en' ? "Academic Bio / Goal Motto" : "የግል መሪ ቃል / አላማ"}
+                    </label>
+                    <input
+                      type="text"
+                      value={formBio}
+                      onChange={(e) => setFormBio(e.target.value)}
+                      placeholder="e.g. Aspiring Software Engineer | Dedicated to Excellence"
+                      className="w-full bg-slate-950 border border-slate-800 text-white text-sm rounded-xl px-4 py-3 outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+
+                {/* ID Card Customization Theme */}
+                <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
-                    {language === 'en' ? "University or High School" : "ተቋም ወይም ትምህርት ቤት"}
+                    {language === 'en' ? "Student ID Card Theme" : "የተማሪ መታወቂያ ካርድ ዲዛይን"}
                   </label>
-                  <input
-                    type="text"
-                    value={formUniversity}
-                    onChange={(e) => setFormUniversity(e.target.value)}
-                    placeholder="e.g. Wolkite University"
-                    className="w-full bg-slate-950 border border-slate-800 text-white text-sm rounded-xl px-4 py-3 outline-none focus:border-amber-500"
-                  />
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    {[
+                      { id: 'classic-navy', name: 'Classic Navy', bg: 'bg-[#0B132B]', ring: 'border-amber-500' },
+                      { id: 'royal-gold', name: 'Royal Gold', bg: 'bg-[#241A06]', ring: 'border-amber-400' },
+                      { id: 'emerald-scholar', name: 'Emerald Scholar', bg: 'bg-[#062419]', ring: 'border-emerald-400' },
+                      { id: 'crimson-honor', name: 'Crimson Honor', bg: 'bg-[#260A10]', ring: 'border-rose-400' }
+                    ].map((theme) => {
+                      const isSelected = formIdCardTheme === theme.id;
+                      return (
+                        <button
+                          key={theme.id}
+                          type="button"
+                          onClick={() => {
+                            playClickChime();
+                            setFormIdCardTheme(theme.id as any);
+                          }}
+                          className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${theme.bg} ${
+                            isSelected ? `${theme.ring} ring-2 ring-amber-400/40 border-amber-400` : 'border-slate-800 hover:border-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-bold text-white truncate">{theme.name}</span>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-amber-400" />}
+                          </div>
+                          <span className="text-[9px] text-slate-400 font-mono uppercase">ID Badge</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Enrolled Modules Selection */}
@@ -873,7 +1050,24 @@ export default function StudentProfileView({
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{language === 'en' ? "Institution" : "ተቋም / ትምህርት ቤት"}</span>
                     <p className="text-sm font-semibold text-amber-400">{activeProfileData.university}</p>
                   </div>
+
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{language === 'en' ? "Department / Field" : "የትምህርት ክፍል"}</span>
+                    <p className="text-sm font-semibold text-amber-300">{activeProfileData.department || (language === 'en' ? 'Not specified' : 'አልተገለጸም')}</p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{language === 'en' ? "Target GPA" : "የታለመ ውጤት (GPA)"}</span>
+                    <p className="text-sm font-mono font-bold text-emerald-400">{activeProfileData.targetGpa || (language === 'en' ? 'Not set' : 'አልተመዘገበም')}</p>
+                  </div>
                 </div>
+
+                {activeProfileData.bio && (
+                  <div className="space-y-1 p-3.5 bg-slate-950/80 rounded-xl border border-slate-800">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{language === 'en' ? "Academic Motto / Bio" : "የግል መሪ ቃል"}</span>
+                    <p className="text-xs italic text-slate-200">"{activeProfileData.bio}"</p>
+                  </div>
+                )}
 
                 <div className="space-y-2.5 pt-4 border-t border-slate-800">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">

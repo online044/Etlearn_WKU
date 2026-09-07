@@ -634,8 +634,8 @@ export default function UniversityExamsView({
     return Array.from(new Set(publishedExamSheets.map(s => s.subject))).sort();
   }, [publishedExamSheets]);
 
-  const [selectedSheet, setSelectedSheet] = useState<ExamPaperSheet | null>(null);
-  const [selectedQuestionIdx, setSelectedQuestionIdx] = useState<number>(-1);
+  const [selectedSheet, setSelectedSheet] = useState<ExamPaperSheet | null>(() => UNIVERSITY_SHEETS[0] || null);
+  const [selectedQuestionIdx, setSelectedQuestionIdx] = useState<number>(0);
   const [userSelectedChoice, setUserSelectedChoice] = useState<number | null>(null);
 
   // Customizable Calendar states
@@ -1209,15 +1209,19 @@ Focus on the governing laws of **${currentQ.subjectTopic || selectedSheet.subjec
           </p>
         </div>
 
-        {!isEligible && (
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-600 dark:text-emerald-400 text-xs font-bold shrink-0">
+            <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+            <span>{language === 'en' ? 'Verified Past Papers' : 'ትክክለኛ ያለፉ ፈተናዎች'}</span>
+          </div>
           <button
-            onClick={() => { playClickChime(); onNavigate('upgrade'); }}
-            className="px-4 py-2 bg-gradient-to-r from-amber-500 to-[#C8962E] hover:from-amber-600 hover:to-[#B28224] text-black font-bold text-xs rounded-xl shadow cursor-pointer uppercase tracking-wider flex items-center gap-1.5 shrink-0"
+            onClick={() => { playClickChime(); onNavigate('examengine'); }}
+            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-xs cursor-pointer uppercase tracking-wider flex items-center gap-1.5 shrink-0 transition-all"
           >
-            <Sparkles className="w-4 h-4 text-amber-950 animate-pulse" />
-            <span>Unlock Pro Access</span>
+            <Clock className="w-3.5 h-3.5" />
+            <span>{language === 'en' ? 'Timed Exam Engine' : 'የፈተና ሰዓት ቆጣሪ'}</span>
           </button>
-        )}
+        </div>
       </div>
 
       {/* EXAMS IDENTITY BOARD: CALENDAR & PROGRESS TRACKER */}
@@ -1493,35 +1497,36 @@ Focus on the governing laws of **${currentQ.subjectTopic || selectedSheet.subjec
       <div className="flex flex-wrap bg-slate-950 border border-slate-800 p-1 rounded-2xl max-w-2xl select-none font-sans gap-1">
         <button
           onClick={() => { playClickChime(); setActiveTab('practice'); }}
-          className={`flex-1 min-w-[120px] py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center ${
+          className={`flex-1 min-w-[130px] py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
             activeTab === 'practice'
               ? 'bg-amber-500 text-slate-950 font-black shadow-md'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          {language === 'en' ? 'Practice Sheets' : 'ተግባራዊ ፈተናዎች'}
-        </button>
-        <button
-          onClick={() => { playClickChime(); setActiveTab('ai-custom'); }}
-          className={`flex-1 min-w-[150px] py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
-            activeTab === 'ai-custom'
-              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <BookMarked className="w-3.5 h-3.5 text-slate-950" />
-          <span>{language === 'en' ? 'Board Exam Compiler' : 'የብሔራዊ ፈተና ማጠናከሪያ'}</span>
+          <span>🏛️</span>
+          <span>{language === 'en' ? 'University Papers' : 'የዩኒቨርሲቲ ፈተናዎች'}</span>
         </button>
         <button
           onClick={() => { playClickChime(); setActiveTab('external'); }}
-          className={`flex-1 min-w-[150px] py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
+          className={`flex-1 min-w-[140px] py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
             activeTab === 'external'
               ? 'bg-amber-500 text-slate-950 font-black shadow-md'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <span>🌐</span>
-          <span>{language === 'en' ? 'National Exams Hub' : 'የብሔራዊ ፈተናዎች'}</span>
+          <span>📜</span>
+          <span>{language === 'en' ? 'National Matric (EUEE)' : 'የብሔራዊ ፈተናዎች'}</span>
+        </button>
+        <button
+          onClick={() => { playClickChime(); setActiveTab('ai-custom'); }}
+          className={`flex-1 min-w-[130px] py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
+            activeTab === 'ai-custom'
+              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <BookMarked className="w-3.5 h-3.5" />
+          <span>{language === 'en' ? 'Exam Drill & Compiler' : 'የፈተና ሞተር'}</span>
         </button>
       </div>
 
