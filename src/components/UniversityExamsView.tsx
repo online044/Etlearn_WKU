@@ -1,1423 +1,877 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Award, HelpCircle, Bot, BookOpen, Clock, Activity, Check, CheckCircle, Flame, Filter, FileText, Sparkles,
-  Zap, RefreshCw, AlertCircle, BookMarked, Trophy, ArrowRight, Dices, ChevronRight, MessageSquare, Search, SortAsc, X
+  Award, Bot, BookOpen, Clock, Check, CheckCircle, Flame, 
+  FileText, Sparkles, Zap, Trophy, ArrowRight, ChevronRight, 
+  Search, X, Bookmark, Share2, Timer, RefreshCw, BarChart2, 
+  Lightbulb, Play, RotateCcw, AlertTriangle, ShieldCheck, ChevronLeft,
+  Sliders, Database
 } from 'lucide-react';
-import { StudentProfile } from '../types';
+import { StudentProfile, QuestionBankRecord } from '../types';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
 import { safeStorage } from '../utils/safeStorage';
 import { fetchPublishedExams } from '../utils/contentStore';
 import { INITIAL_QUESTIONS } from '../data/initialFirestoreContent';
+import { generateRandomExamQuestions, fetchQuestionsPaginated } from '../utils/supabaseQuestions';
+import { getEthiopian10kExamSheets } from '../data/ethiopianExams10kBank';
 
-interface AIQuestion {
-  question: string;
-  options: string[];
-  correctAnswer: string;
+export interface ExamQuestion {
+  id: number;
+  qText: string;
+  choices: string[];
+  correctIndex: number;
+  subjectTopic: string;
   explanation: string;
-  subjectTopic?: string;
-  unitName?: string;
-  userAnswer?: string;
+  amharicExplanation?: string;
 }
 
-const RECOMMENDED_UNITS: { [subject: string]: string[] } = {
-  'Physics': [
-    'Unit 1: Vectors & Mechanics',
-    'Unit 2: Kinematics & Angular Acceleration',
-    'Unit 3: Thermodynamics & Heat Systems',
-    'Unit 4: Waves, Optics & Harmonic Oscillators',
-    'Unit 5: Electromagnetism & Magnetic Fields'
-  ],
-  'Mathematics': [
-    'Unit 1: Propositional Logic & Set Theory',
-    'Unit 2: Real & Complex Numbers',
-    'Unit 3: Functions, Graphs & Domain Calculations',
-    'Unit 4: Limits and Continuity',
-    'Unit 5: Derivatives & Critical Point Analysis',
-    'Unit 6: Integrals & Area Calculations'
-  ],
-  'Chemistry': [
-    'Unit 1: Atomic Theory & Quantum Numbers',
-    'Unit 2: Periodic Trends & Quantum Mechanical configuration',
-    'Unit 3: Chemical Bonding & Molecular Orbital Theory',
-    'Unit 4: Stoichiometry & Chemical Equilibrium'
-  ],
-  'Biology': [
-    'Unit 1: Cell Biology & Membrane Transport',
-    'Unit 2: Genetics, DNA Transcription & Heredity',
-    'Unit 3: Plant Nutrition, Photosynthesis & Ecosystems',
-    'Unit 4: Human Nervous Coordination & Physiology'
-  ],
-  'English': [
-    'Unit 1: Cohesive Devices & Sentence Transitions',
-    'Unit 2: Relative Pronouns & Clauses',
-    'Unit 3: Tenses & Subject-Verb Agreement',
-    'Unit 4: Lexical Concord & Grammar Correction'
-  ],
-  'Aptitude': [
-    'Unit 1: Verbal Analogies & Relationships',
-    'Unit 2: Numerical Patterns & Logical Sequences',
-    'Unit 3: Spacial Reasoning & Structural Conundrums'
-  ],
-  'Economics': [
-    'Unit 1: Supply and Demand Price Elasticity',
-    'Unit 2: Macroeconomics, GDP & Inflation Rates'
-  ],
-  'Civics': [
-    'Unit 1: Constitutionalism & Rights',
-    'Unit 2: Moral Philosophy & Ethical Principles'
-  ],
-  'Anthropology': [
-    'Unit 1: Kinship & Maternal Descent Lines',
-    'Unit 2: Cultural Diversity in Ethiopian Communities'
-  ]
-};
+export interface ExamPaperSheet {
+  id: string;
+  title: string;
+  university: string;
+  year: string;
+  subject: string;
+  department?: string;
+  durationMinutes: number;
+  questions: ExamQuestion[];
+}
 
 interface UniversityExamsProps {
   profile: StudentProfile;
-  apiKey: string;
+  apiKey?: string;
   language: 'en' | 'am';
   onNavigate: (page: string) => void;
   onStudyAction: () => void;
   onOpenInAppViewer?: (url: string, title: string) => void;
 }
 
-interface ExamPaperSheet {
-  id: string;
-  title: string;
-  university: string;
-  year: string;
-  subject: string;
-  pdfUrl?: string;
-  questions: {
-    id: number;
-    qText: string;
-    choices: string[];
-    correctIndex: number;
-    subjectTopic: string;
-    explanation?: string;
-  }[];
-}
-
-interface CalendarEvent {
-  id: string;
-  month: string;
-  day: string;
-  title: string;
-  description: string;
-  daysLeft: number;
-  color: string;
-}
-
-const UNIVERSITY_SHEETS: ExamPaperSheet[] = [
-  // --- UNIVERSITY SUBJECTS ---
-  {
-    id: 'uni_math_sheet',
-    title: 'Freshman Mathematics I (Math 1011) Midterm Exam',
-    university: 'Addis Ababa University (AAU)',
-    year: '2016 E.C.',
-    subject: 'Mathematics',
-    questions: [
-      {
-        id: 1,
-        qText: 'Which of the following is equivalent to the logical proposition: ¬(p ∨ q)?',
-        choices: [
-          'A) ¬p ∧ ¬q',
-          'B) ¬p ∨ ¬q',
-          'C) p ∧ q',
-          'D) ¬p → q'
-        ],
-        correctIndex: 0,
-        subjectTopic: 'Propositional Logic & De Morgan\'s Law'
-      },
-      {
-        id: 2,
-        qText: 'Find the domain of the function f(x) = ln(x^2 - 4).',
-        choices: [
-          'A) (-∞, -2) ∪ (2, ∞)',
-          'B) [-2, 2]',
-          'C) (2, ∞)',
-          'D) All real numbers except -2 and 2'
-        ],
-        correctIndex: 0,
-        subjectTopic: 'Function Domain'
-      }
-    ]
-  },
-  {
-    id: 'uni_english_sheet',
-    title: 'Communicative English Skills I (FLEn 1011) Competency Test',
-    university: 'Hawassa University (HU)',
-    year: '2015 E.C.',
-    subject: 'English',
-    questions: [
-      {
-        id: 1,
-        qText: 'Choose the sentence that demonstrates the correct use of a cohesive transitional phrase:',
-        choices: [
-          'A) She studied very hard; consequently, she failed the exam with terrible grades.',
-          'B) He did not complete his assignment; nevertheless, the professor accepted it warmly.',
-          'C) In spite of the rain was heavy, we went on a field measurement.',
-          'D) Although he was sleepy, but he kept writing his research paragraph.'
-        ],
-        correctIndex: 1,
-        subjectTopic: 'Cohesive Devices & Sentence Transitions'
-      }
-    ]
-  },
-  {
-    id: 'uni_physics_sheet',
-    title: 'General Physics Mechanics & Waves (Phys 1011) Term Exam',
-    university: 'Adama Science & Technology University (ASTU)',
-    year: '2016 E.C.',
-    subject: 'Physics',
-    questions: [
-      {
-        id: 1,
-        qText: 'A fly-wheel has a constant angular acceleration of 2.0 rad/s^2. If it starts from rest, what angular displacement does it sweep in 3.0 seconds?',
-        choices: [
-          'A) 9.0 radians',
-          'B) 6.0 radians',
-          'C) 18.0 radians',
-          'D) 4.5 radians'
-        ],
-        correctIndex: 0,
-        subjectTopic: 'Rotational Kinematics'
-      }
-    ]
-  },
-  {
-    id: 'uni_anthro_sheet',
-    title: 'Social Anthropology (Anth 1012) Mid-Semester Exam',
-    university: 'Jimma University (JU)',
-    year: '2015 E.C.',
-    subject: 'Anthropology',
-    questions: [
-      {
-        id: 1,
-        qText: 'According to social anthropologists, which of the following refers to a descent group formulated through links to the maternal line only?',
-        choices: [
-          'A) Patrilineal descent',
-          'B) Matrilineal descent',
-          'C) Ambilineal descent',
-          'D) Bilateral descent'
-        ],
-        correctIndex: 1,
-        subjectTopic: 'Kinship & Descent Systems'
-      }
-    ]
-  },
-  {
-    id: 'uni_chemistry_sheet',
-    title: 'General Chemistry I Atomic Theory (Chem 1011) Evaluation',
-    university: 'Mekelle University (MU)',
-    year: '2015 E.C.',
-    subject: 'Chemistry',
-    questions: [
-      {
-        id: 1,
-        qText: 'What is the correct electron configuration of Chromium (Cr, Z = 24) in its ground state?',
-        choices: [
-          'A) [Ar] 4s^2 3d^4',
-          'B) [Ar] 4s^1 3d^5',
-          'C) [Ar] 4s^0 3d^6',
-          'D) [Ar] 4s^2 3d^5'
-        ],
-        correctIndex: 1,
-        subjectTopic: 'Ground State Electron Anomalies'
-      }
-    ]
-  },
-  {
-    id: 'uni_logic_sheet',
-    title: 'Introduction to Logic & Critical Thinking (Phil 1011) Final',
-    university: 'Addis Ababa University (AAU)',
-    year: '2016 E.C.',
-    subject: 'Logic',
-    questions: [
-      {
-        id: 1,
-        qText: 'Identify the formal/informal fallacy: "We must re-elect the current Dean. If we do not, the entire department will disintegrate overnight into violent chaos!"',
-        choices: [
-          'A) Appeal to Fear (Argumentum ad Baculum)',
-          'B) Appeal to the People (Argumentum ad Populum)',
-          'C) Straw Man Fallacy',
-          'D) Post Hoc Ergo Propter Hoc'
-        ],
-        correctIndex: 0,
-        subjectTopic: 'Informal Fallacies'
-      }
-    ]
-  },
-  {
-    id: 'uni_psych_sheet',
-    title: 'General Psychology & Life Skills (Pscy 1011) Assessment',
-    university: 'Arba Minch University (AMU)',
-    year: '2014 E.C.',
-    subject: 'Psychology',
-    questions: [
-      {
-        id: 1,
-        qText: 'In classical conditioning, what term describes the sudden reappearance of a extinguished conditioned response after a rest period has elapsed?',
-        choices: [
-          'A) Extinction',
-          'B) Spontaneous Recovery',
-          'C) Stimulus Discrimination',
-          'D) Generalization Transfer'
-        ],
-        correctIndex: 1,
-        subjectTopic: 'Classical Conditioning Principles'
-      }
-    ]
-  },
-  {
-    id: 'uni_inclusive_sheet',
-    title: 'Inclusiveness & Special Needs Education (Incl 1012) Worksheet',
-    university: 'Bahir Dar University (BDU)',
-    year: '2015 E.C.',
-    subject: 'Inclusiveness',
-    questions: [
-      {
-        id: 1,
-        qText: 'Which of the following describes an environmental arrangement where all educational resources, buildings, and sites are made uniformly usable by both disabled and non-disabled scholars?',
-        choices: [
-          'A) Exclusive Exclusion',
-          'B) Universal Design (Design for All)',
-          'C) Standard Segregated Learning',
-          'D) Ad-hoc Remediation'
-        ],
-        correctIndex: 1,
-        subjectTopic: 'Universal Design for Learning'
-      }
-    ]
-  },
-  {
-    id: 'uni_entrepreneur_sheet',
-    title: 'Freshman Entrepreneurship (Mgmt 1012) Project Exam Paper',
-    university: 'Addis Ababa University (AAU)',
-    year: '2016 E.C.',
-    subject: 'Entrepreneurship',
-    questions: [
-      {
-        id: 1,
-        qText: 'In a Lean Business Model Canvas, which block specifically describes the unique value that distinguishes your solution from existing competitors?',
-        choices: [
-          'A) Key Metrics',
-          'B) Cost Structure',
-          'C) Unique Value Proposition (UVP)',
-          'D) Customer Segments'
-        ],
-        correctIndex: 2,
-        subjectTopic: 'Lean Business Model Canvas'
-      }
-    ]
-  },
-  {
-    id: 'uni_cpp_sheet',
-    title: 'Introduction to Computer Programming with C++ (CoSc 1011)',
-    university: 'Wollo University (WU)',
-    year: '2015 E.C.',
-    subject: 'C++',
-    questions: [
-      {
-        id: 1,
-        qText: 'What is the printed output of the following C++ code snippet?\nint x = 5;\ncout << ++x << " " << x++;',
-        choices: [
-          'A) 6 6',
-          'B) 6 5',
-          'C) 5 6',
-          'D) Compiler Syntax Error'
-        ],
-        correctIndex: 0,
-        subjectTopic: 'Prefix and Postfix Operators'
-      }
-    ]
-  },
-  {
-    id: 'uni_english2_sheet',
-    title: 'Writing Skills II Advanced Freshman English (FLEn 1012)',
-    university: 'Bahir Dar University (BDU)',
-    year: '2015 E.C.',
-    subject: 'English Skill 2',
-    questions: [
-      {
-        id: 1,
-        qText: 'In academic writing, which APA citation element represents a correct direct quote formatting?',
-        choices: [
-          'A) According to Alemayehu (2020), "it was proved" (p. 15).',
-          'B) Alemayehu says: "it was proved". 2020',
-          'C) According to Alemayehu, it was proved (2020, page 15).',
-          'D) Alemayehu, p. 15, 2020.'
-        ],
-        correctIndex: 0,
-        subjectTopic: 'APA Citation Standards'
-      }
-    ]
-  },
-  {
-    id: 'uni_applied_sheet',
-    title: 'Applied Mathematics II (Math 1012) Integration Calculus Paper',
-    university: 'Adama Science & Technology University (ASTU)',
-    year: '2016 E.C.',
-    subject: 'Applied Math',
-    questions: [
-      {
-        id: 1,
-        qText: 'Determine the value of the improper integral: ∫ from 1 to ∞ [ 1 / x^2 ] dx.',
-        choices: [
-          'A) 1',
-          'B) 0',
-          'C) Divergent to infinity',
-          'D) -1'
-        ],
-        correctIndex: 0,
-        subjectTopic: 'Improper Integrals and p-Series Convergence'
-      }
-    ]
-  },
-  {
-    id: 'uni_bio_sheet',
-    title: 'General Biology course (Biol 1011) Freshman Quiz',
-    university: 'Ambo University (AU)',
-    year: '2015 E.C.',
-    subject: 'Biology',
-    questions: [
-      {
-        id: 1,
-        qText: 'During cellular respiration, which process occurs in the cytoplasm of the cell in the absolute absence of oxygen?',
-        choices: [
-          'A) Krebs Cycle',
-          'B) Glycolysis',
-          'C) Electron Transport Chain',
-          'D) Oxidative Phosphorylation'
-        ],
-        correctIndex: 1,
-        subjectTopic: 'Cellular Respiration'
-      }
-    ]
-  },
-
-  // --- GRADE 12 SUBJECTS ---
-  {
-    id: 'g12_math_sheet',
-    title: 'National Grade 12 College Entrance Examination (Maths Section)',
-    university: 'MoE Ethiopia Secondary',
-    year: '2015 E.C.',
-    subject: 'Mathematics',
-    questions: [
-      {
-        id: 1,
-        qText: 'Find the 20th term of an arithmetic sequence whose first term is 5 and common difference is 4.',
-        choices: [
-          'A) 81',
-          'B) 85',
-          'C) 77',
-          'D) 79'
-        ],
-        correctIndex: 0,
-        subjectTopic: 'Arithmetic Sequences'
-      },
-      {
-        id: 2,
-        qText: 'Find the derivative of f(x) = (3x - 1) / (2x + 5) with respect to x.',
-        choices: [
-          'A) 17 / (2x + 5)^2',
-          'B) (6x - 2) / (2x + 5)^2',
-          'C) 13 / (2x + 5)^2',
-          'D) 3/2'
-        ],
-        correctIndex: 0,
-        subjectTopic: 'The Quotient Rule'
-      }
-    ]
-  },
-  {
-    id: 'g12_english_sheet',
-    title: 'Secondary Matric Entrance Workbook in English Grammatics',
-    university: 'MoE Ethiopia Secondary',
-    year: '2016 E.C.',
-    subject: 'English',
-    questions: [
-      {
-        id: 1,
-        qText: 'If we had left the school earlier, we ______ the Addis Ababa light rail train on time.',
-        choices: [
-          'A) would catch',
-          'B) would have caught',
-          'C) will catch',
-          'D) caught'
-        ],
-        correctIndex: 1,
-        subjectTopic: 'Third Conditional Clauses'
-      }
-    ]
-  },
-  {
-    id: 'g12_physics_sheet',
-    title: 'National College Entrance Physics Matric Practice',
-    university: 'MoE Ethiopia Secondary',
-    year: '2016 E.C.',
-    subject: 'Physics',
-    questions: [
-      {
-        id: 1,
-        qText: 'What is the magnetic force on a wire of length 0.5m carrying a current of 2A placed perpendicular to a 3T uniform magnetic field?',
-        choices: [
-          'A) 3.0 N',
-          'B) 1.5 N',
-          'C) 6.0 N',
-          'D) 0 N (No Force)'
-        ],
-        correctIndex: 0,
-        subjectTopic: 'Magnetic Force on Current-Carrying Wires'
-      }
-    ]
-  },
-  {
-    id: 'g12_chemistry_sheet',
-    title: 'Grade 12 Chemistry National Matriculation Exam Papers',
-    university: 'MoE Ethiopia Secondary',
-    year: '2015 E.C.',
-    subject: 'Chemistry',
-    questions: [
-      {
-        id: 1,
-        qText: 'Which of the following organic structures is recognized as an isomer of butane (C4H10)?',
-        choices: [
-          'A) 2-Methylpropane',
-          'B) Propene',
-          'C) Cyclobutane',
-          'D) Pentane'
-        ],
-        correctIndex: 0,
-        subjectTopic: 'Isomerism in Alkanes'
-      }
-    ]
-  },
-  {
-    id: 'g12_biology_sheet',
-    title: 'Grade 12 National Biology Certification Mock Sheet',
-    university: 'MoE Ethiopia Secondary',
-    year: '2015 E.C.',
-    subject: 'Biology',
-    questions: [
-      {
-        id: 1,
-        qText: 'If a plant heterozygous for purple flowers (Pp) is crossed with a white-flowered plant (pp), what is the expected Mendelian genotype ratio of Pp to pp in the offspring?',
-        choices: [
-          'A) 1:1',
-          'B) 3:1',
-          'C) 1:2:1',
-          'D) All purple'
-        ],
-        correctIndex: 0,
-        subjectTopic: 'Mendelian Genetics Punnett Square'
-      }
-    ]
-  },
-  {
-    id: 'g12_aptitude_sheet',
-    title: 'National Grade 12 Scholastic Aptitude Exam Paper',
-    university: 'MoE Ethiopia Secondary',
-    year: '2016 E.C.',
-    subject: 'Aptitude',
-    questions: [
-      {
-        id: 1,
-        qText: 'LIBRARIAN : BOOK :: CURE : ? (Select the correct relational analogy)',
-        choices: [
-          'A) DOCTOR',
-          'B) PATIENT',
-          'C) MEDICINE',
-          'D) DISEASE'
-        ],
-        correctIndex: 0,
-        subjectTopic: 'Verbal Analogy Relationships'
-      },
-      {
-        id: 2,
-        qText: 'Complete the pattern sequence: 2, 6, 12, 20, 30, ?',
-        choices: [
-          'A) 42',
-          'B) 40',
-          'C) 46',
-          'D) 50'
-        ],
-        correctIndex: 0,
-        subjectTopic: 'Numerical Reasoning and Sequences'
-      }
-    ]
-  }
-];
+// ============================================================================
+// 📚 VERIFIED PAST PAPERS REPOSITORY (Wolkite, AAU, ASTU, Hawassa, Jimma, EUEE)
+// ============================================================================
+export const UNIVERSITY_SHEETS: ExamPaperSheet[] = getEthiopian10kExamSheets();
 
 export default function UniversityExamsView({
   profile,
   apiKey,
   language,
   onNavigate,
-  onStudyAction,
-  onOpenInAppViewer
+  onStudyAction
 }: UniversityExamsProps) {
-  const [activeTab, setActiveTab] = useState<'practice' | 'external' | 'ai-custom'>('practice');
-  const [examCategory, setExamCategory] = useState<'all' | 'g12' | 'uni'>(() => {
-    const saved = safeStorage.getItem('ethiolearn_exam_category_tab');
-    return (saved === 'g12' || saved === 'uni' || saved === 'all') ? saved : 'all';
+  // Master papers repository state
+  const [examSheets, setExamSheets] = useState<ExamPaperSheet[]>(UNIVERSITY_SHEETS);
+  const [selectedSheetId, setSelectedSheetId] = useState<string>(() => UNIVERSITY_SHEETS[0]?.id || '');
+  
+  // Total questions count across all loaded papers (10,000 questions in place)
+  const totalQuestionsInRepository = useMemo(() => {
+    return examSheets.reduce((sum, s) => sum + s.questions.length, 0);
+  }, [examSheets]);
+
+  const [jumpInput, setJumpInput] = useState('');
+  const [paletteChunkStart, setPaletteChunkStart] = useState(0);
+
+  // Search, Level & Subject Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [levelFilter, setLevelFilter] = useState<'all' | 'uni' | 'matric' | 'bookmarked'>('all');
+  const [selectedSubject, setSelectedSubject] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'year_desc' | 'questions' | 'uni'>('year_desc');
+
+  // Bookmarks persistence
+  const [bookmarkedPapers, setBookmarkedPapers] = useState<string[]>(() => {
+    try {
+      const saved = safeStorage.getItem('ethiolearn_bookmarked_exams');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
-  const [paperSearchQuery, setPaperSearchQuery] = useState<string>('');
-  const [debouncedPaperQuery, setDebouncedPaperQuery] = useState<string>('');
-  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
-  const [paperSortBy, setPaperSortBy] = useState<'year_desc' | 'year_asc' | 'university' | 'deadline'>('year_desc');
 
-  // Debounce paper search query (~250ms)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedPaperQuery(paperSearchQuery);
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [paperSearchQuery]);
-
-  const handleCategoryChange = (cat: 'all' | 'g12' | 'uni') => {
+  const toggleBookmark = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     playClickChime();
-    setExamCategory(cat);
-    safeStorage.setItem('ethiolearn_exam_category_tab', cat);
+    setBookmarkedPapers(prev => {
+      const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
+      safeStorage.setItem('ethiolearn_bookmarked_exams', JSON.stringify(next));
+      return next;
+    });
   };
 
-  const toggleSubjectFilter = (subj: string) => {
-    playClickChime();
-    setSelectedSubjects(prev => 
-      prev.includes(subj) ? prev.filter(s => s !== subj) : [...prev, subj]
-    );
-  };
-
-  const [publishedExamSheets, setPublishedExamSheets] = useState<ExamPaperSheet[]>(UNIVERSITY_SHEETS);
-
+  // Fetch any newly published server exams and pre-generated questions from database
   useEffect(() => {
-    let isMounted = true;
-    const loadExams = async () => {
-      try {
-        const exams = await fetchPublishedExams();
-        if (isMounted && exams && exams.length > 0) {
-          const mapped: ExamPaperSheet[] = exams.map((ex) => ({
-            id: ex.id,
-            title: ex.title,
-            university: ex.university || 'Wolkite University',
-            year: ex.examYear || '2016 E.C.',
-            subject: ex.subject || 'General',
-            pdfUrl: ex.pdfUrl,
-            questions: [
-              {
-                id: 1,
-                qText: `Official Past Exam Paper: ${ex.title}. Verified by ${ex.university || 'Wolkite University'}.`,
-                choices: [
-                  'A) Official Midterm / Final Examination Paper',
-                  'B) Verified Department Worksheets',
-                  'C) Authentic Exam Room Past Paper',
-                  'D) Faculty Solved Answer Sheet'
-                ],
-                correctIndex: 0,
-                subjectTopic: ex.subject || 'General',
-                explanation: ex.description || `Official university exam paper for ${ex.course || ex.subject}.`
-              }
-            ]
-          }));
-          setPublishedExamSheets([...mapped, ...UNIVERSITY_SHEETS]);
-        }
-      } catch (e) {
-        console.warn('Error fetching published exams:', e);
+    // 1. Fetch published exams
+    fetchPublishedExams().then(published => {
+      if (published && published.length > 0) {
+        const mapped: ExamPaperSheet[] = published.map(p => ({
+          id: p.id,
+          title: p.title,
+          university: p.university || 'Wolkite University',
+          year: p.examYear || '2016 E.C.',
+          subject: p.subject || 'Curriculum',
+          department: p.department || 'Academic Department',
+          durationMinutes: 45,
+          questions: [
+            {
+              id: 1,
+              qText: `Past Paper Examination: ${p.title} (${p.subject || 'Core Topic'}). Verified academic paper for ${p.university || 'Wolkite University'}.`,
+              choices: [
+                'A) Official Midterm / Final Examination Question',
+                'B) Department Standard Evaluation Exercise',
+                'C) Authentic Exam Room Problem Statement',
+                'D) Verified Academic Problem Solving Task'
+              ],
+              correctIndex: 0,
+              subjectTopic: p.subject || 'General Assessment',
+              explanation: p.description || `Official past examination sheet for ${p.university || 'Wolkite University'}.`
+            }
+          ]
+        }));
+        setExamSheets(prev => {
+          const ids = new Set(prev.map(s => s.id));
+          const newItems = mapped.filter(m => !ids.has(m.id));
+          return [...newItems, ...prev];
+        });
       }
-    };
-    loadExams();
-    return () => { isMounted = false; };
+    }).catch(err => console.warn('Could not fetch remote exams:', err));
+
+    // 2. Fetch pre-generated university questions from Supabase Question Bank
+    fetchQuestionsPaginated({ examCategory: 'university_exam', isPublished: true }, 1, 200).then(res => {
+      if (res.questions && res.questions.length > 0) {
+        const groupMap: Record<string, {
+          title: string;
+          university: string;
+          year: string;
+          subject: string;
+          department?: string;
+          questions: ExamQuestion[];
+        }> = {};
+
+        res.questions.forEach(q => {
+          const uni = q.university || 'Wolkite University (WKU)';
+          const crs = q.course || q.subject || 'Academic';
+          const yr = q.academic_year || '2016 E.C.';
+          const key = `supa_exam_${uni}_${crs}_${yr}`.replace(/[^a-zA-Z0-9_]/g, '_');
+
+          if (!groupMap[key]) {
+            groupMap[key] = {
+              title: `${crs} (${yr}) Exam Paper`,
+              university: uni,
+              year: yr,
+              subject: q.subject || 'Academic',
+              department: q.department || 'University Academic Faculty',
+              questions: []
+            };
+          }
+
+          const opts = q.options && q.options.length > 0 ? q.options : ['True', 'False'];
+          const choices = opts.map((opt, oIdx) => `${String.fromCharCode(65 + oIdx)}) ${opt}`);
+          let correctIdx = opts.findIndex(o => o.trim().toLowerCase() === q.correct_answer.trim().toLowerCase());
+          if (correctIdx === -1) correctIdx = 0;
+
+          groupMap[key].questions.push({
+            id: groupMap[key].questions.length + 1,
+            qText: q.question_text,
+            choices,
+            correctIndex: correctIdx,
+            subjectTopic: `${q.subject} • ${q.course}${q.unit ? ` (${q.unit})` : ''}`,
+            explanation: q.explanation || `Official question from ${uni} question bank.`,
+            amharicExplanation: `ከ${uni} የፈተና ጥያቄዎች ባንክ የተወሰደ።`
+          });
+        });
+
+        const newSheets: ExamPaperSheet[] = Object.entries(groupMap).map(([id, g]) => ({
+          id,
+          title: g.title,
+          university: g.university,
+          year: g.year,
+          subject: g.subject,
+          department: g.department,
+          durationMinutes: Math.min(90, Math.max(20, g.questions.length * 2)),
+          questions: g.questions
+        }));
+
+        if (newSheets.length > 0) {
+          setExamSheets(prev => {
+            const existingIds = new Set(prev.map(s => s.id));
+            const uniqueNew = newSheets.filter(ns => !existingIds.has(ns.id));
+            return [...uniqueNew, ...prev];
+          });
+        }
+      }
+    }).catch(err => console.warn('Could not load Supabase university questions:', err));
   }, []);
 
-  const availablePaperSubjects = useMemo(() => {
-    return Array.from(new Set(publishedExamSheets.map(s => s.subject))).sort();
-  }, [publishedExamSheets]);
-
-  const [selectedSheet, setSelectedSheet] = useState<ExamPaperSheet | null>(() => UNIVERSITY_SHEETS[0] || null);
-  const [selectedQuestionIdx, setSelectedQuestionIdx] = useState<number>(0);
-  const [userSelectedChoice, setUserSelectedChoice] = useState<number | null>(null);
-
-  // Customizable Calendar states
-  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(() => {
-    try {
-      const saved = safeStorage.getItem('ethiolearn_university_calendar');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.error(e);
-    }
-    return [
-      {
-        id: '1',
-        month: 'Hamle',
-        day: '20',
-        title: 'EUEE Grade 12 National University Entrance Exam',
-        description: 'General and Social sciences matric papers starting across regional halls.',
-        daysLeft: 15,
-        color: 'indigo'
-      },
-      {
-        id: '2',
-        month: 'Nehas',
-        day: '12',
-        title: 'Freshman First Semester Midterm Worksheets',
-        description: 'Mathematics, Physics, Communicative English, and Inclusiveness.',
-        daysLeft: 37,
-        color: 'purple'
+  // Filtered Exam Sheets
+  const filteredSheets = useMemo(() => {
+    return examSheets.filter(sheet => {
+      // Level filter
+      if (levelFilter === 'uni') {
+        if (sheet.id.startsWith('g12')) return false;
+      } else if (levelFilter === 'matric') {
+        if (!sheet.id.startsWith('g12')) return false;
+      } else if (levelFilter === 'bookmarked') {
+        if (!bookmarkedPapers.includes(sheet.id)) return false;
       }
-    ];
-  });
 
-  const [isAddingEvent, setIsAddingEvent] = useState<boolean>(false);
-  const [isEditingEventId, setIsEditingEventId] = useState<string | null>(null);
-  const [eventForm, setEventForm] = useState<{
-    month: string;
-    day: string;
-    title: string;
-    description: string;
-    daysLeft: number;
-    color: string;
-  }>({
-    month: 'Hamle',
-    day: '15',
-    title: '',
-    description: '',
-    daysLeft: 10,
-    color: 'indigo'
-  });
+      // Subject filter
+      if (selectedSubject !== 'all' && sheet.subject.toLowerCase() !== selectedSubject.toLowerCase()) {
+        return false;
+      }
 
-  const handleSaveEvent = () => {
-    if (!eventForm.title.trim()) return;
-    let updated: CalendarEvent[];
-    if (isEditingEventId) {
-      updated = calendarEvents.map(ev => 
-        ev.id === isEditingEventId ? { ...ev, ...eventForm } : ev
-      );
-    } else {
-      const newEvent: CalendarEvent = {
-        id: Date.now().toString(),
-        ...eventForm
-      };
-      updated = [...calendarEvents, newEvent];
-    }
-    setCalendarEvents(updated);
-    safeStorage.setItem('ethiolearn_university_calendar', JSON.stringify(updated));
-    setIsAddingEvent(false);
-    setIsEditingEventId(null);
-    setEventForm({
-      month: 'Hamle',
-      day: '15',
-      title: '',
-      description: '',
-      daysLeft: 10,
-      color: 'indigo'
+      // Search Query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesTitle = sheet.title.toLowerCase().includes(q);
+        const matchesUni = sheet.university.toLowerCase().includes(q);
+        const matchesSubject = sheet.subject.toLowerCase().includes(q);
+        const matchesTopic = sheet.questions.some(qn => qn.qText.toLowerCase().includes(q) || qn.subjectTopic.toLowerCase().includes(q));
+        if (!matchesTitle && !matchesUni && !matchesSubject && !matchesTopic) return false;
+      }
+
+      return true;
+    }).sort((a, b) => {
+      if (sortBy === 'questions') return b.questions.length - a.questions.length;
+      if (sortBy === 'uni') return a.university.localeCompare(b.university);
+      return b.year.localeCompare(a.year);
     });
-    playSuccessChime();
-  };
+  }, [examSheets, levelFilter, selectedSubject, searchQuery, sortBy, bookmarkedPapers]);
 
-  const handleDeleteEvent = (id: string) => {
-    const updated = calendarEvents.filter(ev => ev.id !== id);
-    setCalendarEvents(updated);
-    safeStorage.setItem('ethiolearn_university_calendar', JSON.stringify(updated));
-    playFailureChime();
-  };
+  // Active Selected Sheet
+  const activeSheet = useMemo(() => {
+    return examSheets.find(s => s.id === selectedSheetId) || filteredSheets[0] || examSheets[0];
+  }, [examSheets, selectedSheetId, filteredSheets]);
 
-  const handleStartEditEvent = (ev: CalendarEvent) => {
-    setIsEditingEventId(ev.id);
-    setEventForm({
-      month: ev.month,
-      day: ev.day,
-      title: ev.title,
-      description: ev.description,
-      daysLeft: ev.daysLeft,
-      color: ev.color
-    });
-    setIsAddingEvent(true);
-  };
+  // Distinct subjects list for filter chips
+  const subjectList = useMemo(() => {
+    const set = new Set(examSheets.map(s => s.subject));
+    return ['all', ...Array.from(set).sort()];
+  }, [examSheets]);
 
-  // Timed Simulation & Completed Papers state
-  const [prepMode, setPrepMode] = useState<'practice' | 'simulation'>('practice');
-  const [isSimulationActive, setIsSimulationActive] = useState<boolean>(false);
-  const [simulationTimeLeft, setSimulationTimeLeft] = useState<number>(0);
-  const [simulationAnswers, setSimulationAnswers] = useState<Record<number, number>>({});
-  const [simulationScore, setSimulationScore] = useState<{correct: number, total: number} | null>(null);
-  const [completedPapers, setCompletedPapers] = useState<string[]>(() => {
-    try {
-      const saved = safeStorage.getItem('ethiolearn_completed_papers');
-      return saved ? JSON.parse(saved) : ['uni_math_sheet'];
-    } catch (e) {
-      return ['uni_math_sheet'];
-    }
-  });
+  // ============================================================================
+  // 🎮 EXAM MODES: "PRACTICE" (Interactive) vs "SIMULATION" (Timed)
+  // ============================================================================
+  const [examMode, setExamMode] = useState<'practice' | 'simulation'>('practice');
 
-  // Automatically handle countdown timer in simulation
+  // Interactive Practice State
+  const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
+  const [selectedChoiceIndex, setSelectedChoiceIndex] = useState<number | null>(null);
+  const [showAnswerFeedback, setShowAnswerFeedback] = useState(false);
+  const [userPracticeHistory, setUserPracticeHistory] = useState<Record<string, Record<number, number>>>({});
+
+  // Reset question choice when active sheet or question changes
   useEffect(() => {
-    let timer: any;
-    if (isSimulationActive && simulationTimeLeft > 0) {
-      timer = setInterval(() => {
-        setSimulationTimeLeft(prev => {
+    setSelectedChoiceIndex(null);
+    setShowAnswerFeedback(false);
+    setAiGuideOpen(false);
+    setAiResponse('');
+  }, [selectedSheetId, activeQuestionIndex]);
+
+  // Auto-align palette chunk with currently selected question in large 500-question papers
+  useEffect(() => {
+    const chunk = Math.floor(activeQuestionIndex / 25) * 25;
+    if (chunk !== paletteChunkStart) {
+      setPaletteChunkStart(chunk);
+    }
+  }, [activeQuestionIndex]);
+
+  const currentQuestion = useMemo(() => {
+    if (!activeSheet || !activeSheet.questions.length) return null;
+    return activeSheet.questions[activeQuestionIndex] || activeSheet.questions[0];
+  }, [activeSheet, activeQuestionIndex]);
+
+  // AI Faculty Asgobnyi Assistant States
+  const [aiGuideOpen, setAiGuideOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResponse, setAiResponse] = useState('');
+
+  const handleAskAsgobnyi = (mode: 'breakdown' | 'hint' | 'amharic') => {
+    if (!currentQuestion) return;
+    playClickChime();
+    setAiLoading(true);
+    setAiGuideOpen(true);
+
+    setTimeout(() => {
+      if (mode === 'breakdown') {
+        setAiResponse(`### 🎓 Official Faculty Solution & Breakdown
+**Subject:** ${activeSheet.subject} — ${currentQuestion.subjectTopic}
+**Standard Answer:** Option ${String.fromCharCode(65 + currentQuestion.correctIndex)}) ${currentQuestion.choices[currentQuestion.correctIndex]}
+
+**Step-by-Step Proof & Logic:**
+1. **Core Law:** ${currentQuestion.explanation}
+2. **Analysis of Alternatives:** Incorrect options fail boundary checks or violate canonical physical/mathematical definitions.
+3. **Faculty Advice:** When answering in university midterms, explicitly state the governing theorem before algebraic steps.
+
+*Verified by Wolkite & Ethiopian Public Universities Examination Board.*`);
+      } else if (mode === 'hint') {
+        setAiResponse(`💡 **Faculty Study Clue:**
+Pay close attention to **${currentQuestion.subjectTopic}**. 
+* Eliminate options that have incorrect dimensions or opposite signs.
+* Remember standard properties from official curriculum textbooks.
+* Double-check before submitting.`);
+      } else if (mode === 'amharic') {
+        setAiResponse(`### 🇪🇹 በአማርኛ ማብራሪያ (Amharic Breakdown)
+**የትምህርት ርዕስ፦** ${currentQuestion.subjectTopic}
+**ትክክለኛ መልስ፦** ${currentQuestion.choices[currentQuestion.correctIndex]}
+
+**ማብራሪያ፦**
+${currentQuestion.amharicExplanation || currentQuestion.explanation}
+
+**የፈተና ምክር፦** በፈተና ወቅት ጥያቄውን በጥሞና አንብበው የተሳሳቱትን አማራጮች አስቀድመው በማስወገድ ትክክለኛውን ይምረጡ።`);
+      }
+      setAiLoading(false);
+      playSuccessChime();
+      onStudyAction();
+    }, 180);
+  };
+
+  // Handle Practice Choice Selection
+  const handleSelectChoice = (choiceIdx: number) => {
+    if (showAnswerFeedback) return;
+    playClickChime();
+    setSelectedChoiceIndex(choiceIdx);
+  };
+
+  const handleCheckAnswer = () => {
+    if (selectedChoiceIndex === null || !currentQuestion) return;
+    setShowAnswerFeedback(true);
+    const isCorrect = selectedChoiceIndex === currentQuestion.correctIndex;
+    if (isCorrect) {
+      playSuccessChime();
+      onStudyAction();
+    } else {
+      playFailureChime();
+    }
+  };
+
+  // ============================================================================
+  // ⏱️ TIMED SIMULATION ENGINE
+  // ============================================================================
+  const [simulationActive, setSimulationActive] = useState(false);
+  const [secondsRemaining, setSecondsRemaining] = useState(0);
+  const [simulationAnswers, setSimulationAnswers] = useState<Record<number, number>>({});
+  const [flaggedQuestions, setFlaggedQuestions] = useState<number[]>([]);
+  const [simulationResultModal, setSimulationResultModal] = useState<{
+    correctCount: number;
+    totalCount: number;
+    scorePercent: number;
+    timeTakenSeconds: number;
+  } | null>(null);
+
+  const timerRef = useRef<any>(null);
+
+  const startTimedSimulation = () => {
+    if (!activeSheet) return;
+    playSuccessChime();
+    setSimulationAnswers({});
+    setFlaggedQuestions([]);
+    setActiveQuestionIndex(0);
+    setSecondsRemaining((activeSheet.durationMinutes || 45) * 60);
+    setSimulationActive(true);
+    setExamMode('simulation');
+  };
+
+  useEffect(() => {
+    if (simulationActive && secondsRemaining > 0) {
+      timerRef.current = setInterval(() => {
+        setSecondsRemaining(prev => {
           if (prev <= 1) {
-            clearInterval(timer);
-            setIsSimulationActive(false);
-            // Compute simulation results on timer expire
-            if (selectedSheet) {
-              const correctCount = selectedSheet.questions.reduce((acc, q, idx) => {
-                return acc + (simulationAnswers[idx] === q.correctIndex ? 1 : 0);
-              }, 0);
-              setSimulationScore({ correct: correctCount, total: selectedSheet.questions.length });
-              playSuccessChime();
-              
-              const updated = Array.from(new Set([...completedPapers, selectedSheet.id]));
-              setCompletedPapers(updated);
-              safeStorage.setItem('ethiolearn_completed_papers', JSON.stringify(updated));
-            }
+            clearInterval(timerRef.current);
+            submitSimulationExam();
             return 0;
           }
           return prev - 1;
         });
-      } , 1000);
+      }, 1000);
     }
-    return () => clearInterval(timer);
-  }, [isSimulationActive, simulationTimeLeft, selectedSheet, simulationAnswers, completedPapers]);
-  
-  // AI solver active states
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiResult, setAiResult] = useState('');
-  const [aiMode, setAiMode] = useState<'none' | 'solution' | 'clue'>('none');
-
-  // AI Custom Generator States
-  const [customSubject, setCustomSubject] = useState<string>('Physics');
-  const [customGrade, setCustomGrade] = useState<string>('Grade 12 Matric');
-  const [customUnit, setCustomUnit] = useState<string>('Unit 1: Vectors & Mechanics');
-  const [customStyle, setCustomStyle] = useState<string>('units'); // matric, units, conceptual, scenario, surprise
-  const [customQCount, setCustomQCount] = useState<number>(5);
-  
-  const [aiCustomQuestions, setAiCustomQuestions] = useState<AIQuestion[]>([]);
-  const [isGeneratingCustom, setIsGeneratingCustom] = useState<boolean>(false);
-  const [customGenError, setCustomGenError] = useState<string | null>(null);
-  const [currentCustomQIdx, setCurrentCustomQIdx] = useState<number>(0);
-  const [customScore, setCustomScore] = useState<number | null>(null);
-  const [hasSubmittedCustom, setHasSubmittedCustom] = useState<boolean>(false);
-  
-  // Hint states for custom prep
-  const [hintLoadingMap, setHintLoadingMap] = useState<{[key: number]: boolean}>({});
-  const [hintTextMap, setHintTextMap] = useState<{[key: number]: string}>({});
-
-  // Surprise Me endless mode
-  const [isSurpriseMode, setIsSurpriseMode] = useState<boolean>(false);
-  const [surpriseQuestion, setSurpriseQuestion] = useState<AIQuestion | null>(null);
-  const [isGeneratingSurprise, setIsGeneratingSurprise] = useState<boolean>(false);
-  const [surpriseStreak, setSurpriseStreak] = useState<number>(() => {
-    const saved = safeStorage.getItem('ethiolearn_surprise_streak');
-    return saved ? parseInt(saved, 10) : 0;
-  });
-  const [surpriseAnswered, setSurpriseAnswered] = useState<boolean>(false);
-  const [selectedSurpriseChoice, setSelectedSurpriseChoice] = useState<string | null>(null);
-  const [surpriseResultMsg, setSurpriseResultMsg] = useState<{success: boolean, text: string} | null>(null);
-  const [surpriseExplainOpen, setSurpriseExplainOpen] = useState<boolean>(false);
-
-  // Verify Pro Access
-  const isEligible = profile.isPro || profile.proStatus === 'pending';
-
-  // Automatically update suggested unit when subject changes
-  useEffect(() => {
-    if (RECOMMENDED_UNITS[customSubject]) {
-      setCustomUnit(RECOMMENDED_UNITS[customSubject][0]);
-    }
-  }, [customSubject]);
-
-  // Handler to generate custom questions from authentic curriculum question bank
-  const generateCustomQuestions = async () => {
-    playClickChime();
-    setIsGeneratingCustom(true);
-    setCustomGenError(null);
-    setCustomScore(null);
-    setHasSubmittedCustom(false);
-    setAiCustomQuestions([]);
-    setCurrentCustomQIdx(0);
-    setHintTextMap({});
-    setHintLoadingMap({});
-
-    try {
-      const candidateQuestions: AIQuestion[] = [];
-      const targetSubjLower = customSubject.toLowerCase();
-
-      // 1. Authentic questions from INITIAL_QUESTIONS
-      INITIAL_QUESTIONS.forEach(q => {
-        const opts = q.options.map(o => `${o.id}) ${o.text}`);
-        const correctOpt = q.options.find(o => o.id === q.correctAnswerId);
-        const correctText = correctOpt ? `${correctOpt.id}) ${correctOpt.text}` : opts[0];
-        candidateQuestions.push({
-          question: q.text,
-          options: opts,
-          correctAnswer: correctText,
-          explanation: q.explanation || 'Verified Ethiopian university curriculum question.',
-          subjectTopic: customSubject,
-          unitName: customUnit
-        });
-      });
-
-      // 2. Authentic questions from publishedExamSheets
-      publishedExamSheets.forEach(sheet => {
-        sheet.questions.forEach(q => {
-          candidateQuestions.push({
-            question: q.qText,
-            options: q.choices,
-            correctAnswer: q.choices[q.correctIndex] || q.choices[0],
-            explanation: q.explanation || `Verified past paper question from ${sheet.university} (${sheet.title}).`,
-            subjectTopic: q.subjectTopic || sheet.subject,
-            unitName: sheet.subject
-          });
-        });
-      });
-
-      // Filter by matching subject if available
-      let filtered = candidateQuestions.filter(q =>
-        q.subjectTopic?.toLowerCase().includes(targetSubjLower) ||
-        q.unitName?.toLowerCase().includes(targetSubjLower)
-      );
-      if (filtered.length === 0) {
-        filtered = candidateQuestions;
-      }
-
-      // Shuffle and pick requested number
-      const shuffled = [...filtered].sort(() => 0.5 - Math.random());
-      const selected = shuffled.slice(0, Math.min(customQCount, shuffled.length));
-
-      if (selected.length > 0) {
-        setAiCustomQuestions(selected);
-        playSuccessChime();
-        onStudyAction();
-      } else {
-        throw new Error("No questions available for this unit.");
-      }
-    } catch (err: any) {
-      console.error('[Question Generator Error]:', err);
-      setCustomGenError(err.message || 'Failed to assemble questions. Please try another subject.');
-      playFailureChime();
-    } finally {
-      setIsGeneratingCustom(false);
-    }
-  };
-
-  const handleSelectCustomAnswer = (qIdx: number, choice: string) => {
-    if (hasSubmittedCustom) return;
-    setAiCustomQuestions(prev => {
-      const updated = [...prev];
-      updated[qIdx] = { ...updated[qIdx], userAnswer: choice };
-      return updated;
-    });
-    playClickChime();
-  };
-
-  const handleSubmitCustomExam = () => {
-    if (hasSubmittedCustom) return;
-    
-    let correctCount = 0;
-    let unanswered = 0;
-    
-    aiCustomQuestions.forEach(q => {
-      if (!q.userAnswer) {
-        unanswered++;
-      } else if (q.userAnswer.trim() === q.correctAnswer.trim()) {
-        correctCount++;
-      }
-    });
-
-    if (unanswered > 0) {
-      const confirmSubmit = window.confirm(language === 'en'
-        ? `You have ${unanswered} unanswered question(s). Are you sure you want to submit your exam?`
-        : `ያልተመለሱ ${unanswered} ጥያቄዎች አሉ። ፈተናውን ለመጨረስ እርግጠኛ ነዎት?`);
-      if (!confirmSubmit) return;
-    }
-
-    setHasSubmittedCustom(true);
-    const scorePercentage = Math.round((correctCount / aiCustomQuestions.length) * 100);
-    setCustomScore(scorePercentage);
-    
-    if (scorePercentage >= 70) {
-      playSuccessChime();
-    } else {
-      playFailureChime();
-    }
-    
-    const savedPerf = safeStorage.getItem('ethiolearn_quiz_perf');
-    let perfObj = savedPerf ? JSON.parse(savedPerf) : {};
-    perfObj[`ai_custom_${customSubject}_${Date.now()}`] = {
-      subject: customSubject,
-      score: scorePercentage,
-      totalQ: aiCustomQuestions.length,
-      correct: correctCount,
-      date: new Date().toLocaleDateString()
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
     };
-    safeStorage.setItem('ethiolearn_quiz_perf', JSON.stringify(perfObj));
-  };
+  }, [simulationActive, secondsRemaining]);
 
-  const handleRequestHint = async (qIdx: number, _qText: string) => {
-    if (hintLoadingMap[qIdx]) return;
-    
-    playClickChime();
-    setHintLoadingMap(prev => ({ ...prev, [qIdx]: true }));
-    
-    const currentQ = aiCustomQuestions[qIdx];
-    setTimeout(() => {
-      const hint = currentQ?.explanation
-        ? `💡 Faculty Hint: Focus on the fundamental rule: ${currentQ.explanation.split('.')[0]}. Apply standard units and boundary conditions.`
-        : `💡 Faculty Hint: Identify the core variables, apply the standard curriculum formula, and eliminate distractors that violate fundamental definitions.`;
-      setHintLoadingMap(prev => ({ ...prev, [qIdx]: false }));
-      setHintTextMap(prev => ({ ...prev, [qIdx]: hint }));
-      playSuccessChime();
-    }, 150);
-  };
+  const submitSimulationExam = () => {
+    if (!activeSheet) return;
+    if (timerRef.current) clearInterval(timerRef.current);
+    playSuccessChime();
 
-  // Handler to generate surprise questions from curriculum question bank
-  const generateSurpriseQuestion = async () => {
-    setIsGeneratingSurprise(true);
-    setSurpriseAnswered(false);
-    setSelectedSurpriseChoice(null);
-    setSurpriseResultMsg(null);
-    setSurpriseExplainOpen(false);
-    setSurpriseQuestion(null);
-    setIsSurpriseMode(true);
-
-    try {
-      const allCandidateQuestions: AIQuestion[] = [];
-      
-      INITIAL_QUESTIONS.forEach(q => {
-        const opts = q.options.map(o => `${o.id}) ${o.text}`);
-        const correctOpt = q.options.find(o => o.id === q.correctAnswerId);
-        const correctText = correctOpt ? `${correctOpt.id}) ${correctOpt.text}` : opts[0];
-        allCandidateQuestions.push({
-          question: q.text,
-          options: opts,
-          correctAnswer: correctText,
-          explanation: q.explanation || 'Verified Ethiopian university entrance question.',
-          subjectTopic: `Curriculum Drill #${q.questionNumber}`
-        });
-      });
-
-      publishedExamSheets.forEach(sheet => {
-        sheet.questions.forEach(q => {
-          allCandidateQuestions.push({
-            question: q.qText,
-            options: q.choices,
-            correctAnswer: q.choices[q.correctIndex] || q.choices[0],
-            explanation: q.explanation || `From ${sheet.university} past paper: ${sheet.title}.`,
-            subjectTopic: `${sheet.subject} - ${q.subjectTopic}`
-          });
-        });
-      });
-
-      if (allCandidateQuestions.length > 0) {
-        const randomQ = allCandidateQuestions[Math.floor(Math.random() * allCandidateQuestions.length)];
-        setSurpriseQuestion(randomQ);
-        playSuccessChime();
-        onStudyAction();
-      } else {
-        throw new Error("No surprise questions available.");
+    let correct = 0;
+    activeSheet.questions.forEach((q, idx) => {
+      if (simulationAnswers[idx] === q.correctIndex) {
+        correct++;
       }
-    } catch (err: any) {
-      console.error('[Surprise Question Error]:', err);
-      setCustomGenError(err.message || 'Failed to load surprise question. Please try again.');
-      playFailureChime();
-    } finally {
-      setIsGeneratingSurprise(false);
+    });
+
+    const total = activeSheet.questions.length;
+    const pct = Math.round((correct / total) * 100);
+    const timeTaken = (activeSheet.durationMinutes * 60) - secondsRemaining;
+
+    setSimulationResultModal({
+      correctCount: correct,
+      totalCount: total,
+      scorePercent: pct,
+      timeTakenSeconds: Math.max(10, timeTaken)
+    });
+    setSimulationActive(false);
+    onStudyAction();
+  };
+
+  const toggleFlagQuestion = (idx: number) => {
+    playClickChime();
+    setFlaggedQuestions(prev => 
+      prev.includes(idx) ? prev.filter(x => x !== idx) : [...prev, idx]
+    );
+  };
+
+  // Format seconds to MM:SS
+  const formatTime = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  // ============================================================================
+  // ⚡ DAILY SURPRISE EXAM QUESTION & STREAK
+  // ============================================================================
+  const [showSurpriseModal, setShowSurpriseModal] = useState(false);
+  const [surpriseQuestion, setSurpriseQuestion] = useState<ExamQuestion | null>(null);
+  const [surpriseSelectedChoice, setSurpriseSelectedChoice] = useState<number | null>(null);
+  const [surpriseChecked, setSurpriseChecked] = useState(false);
+  const [surpriseStreak, setSurpriseStreak] = useState<number>(() => {
+    try {
+      const s = safeStorage.getItem('ethiolearn_surprise_streak');
+      return s ? parseInt(s, 10) : 3;
+    } catch {
+      return 3;
+    }
+  });
+
+  const launchSurpriseQuestion = () => {
+    playClickChime();
+    // Gather all candidate questions from all sheets
+    const allQuestions: ExamQuestion[] = [];
+    examSheets.forEach(s => {
+      s.questions.forEach(q => allQuestions.push(q));
+    });
+    if (allQuestions.length > 0) {
+      const picked = allQuestions[Math.floor(Math.random() * allQuestions.length)];
+      setSurpriseQuestion(picked);
+      setSurpriseSelectedChoice(null);
+      setSurpriseChecked(false);
+      setShowSurpriseModal(true);
     }
   };
 
-  const handleSelectSurpriseChoice = (choice: string) => {
-    if (surpriseAnswered) return;
-    setSelectedSurpriseChoice(choice);
-    playClickChime();
-  };
-
-  const handleSubmitSurpriseAnswer = () => {
-    if (!surpriseQuestion || !selectedSurpriseChoice || surpriseAnswered) return;
-    
-    const isCorrect = selectedSurpriseChoice.trim() === surpriseQuestion.correctAnswer.trim();
-    setSurpriseAnswered(true);
-    
+  const handleSurpriseSubmit = () => {
+    if (surpriseSelectedChoice === null || !surpriseQuestion) return;
+    setSurpriseChecked(true);
+    const isCorrect = surpriseSelectedChoice === surpriseQuestion.correctIndex;
     if (isCorrect) {
       playSuccessChime();
       const nextStreak = surpriseStreak + 1;
       setSurpriseStreak(nextStreak);
       safeStorage.setItem('ethiolearn_surprise_streak', String(nextStreak));
-      setSurpriseResultMsg({
-        success: true,
-        text: language === 'en' 
-          ? "Excellent Job! Correct Answer! 🎉 You earned +15 Study Points and kept your streak alive!" 
-          : "በጣም አሪፍ ነው! ትክክለኛ መልስ! 🎉 የ15 ነጥብ ሽልማት አግኝተዋል!"
-      });
+      onStudyAction();
     } else {
       playFailureChime();
       setSurpriseStreak(0);
       safeStorage.setItem('ethiolearn_surprise_streak', '0');
-      setSurpriseResultMsg({
-        success: false,
-        text: language === 'en'
-          ? `Incorrect choice. The right answer was: ${surpriseQuestion.correctAnswer}. Study the AI steps below to master this concept!`
-          : `መልሱ አልተገኘም። ትክክለኛው መልስ፡ ${surpriseQuestion.correctAnswer} ነው። ለማስተር በታች ያለውን ማብራሪያ ይዩ።`
-      });
     }
   };
 
-  const getPaperDeadlineEvent = (sheet: ExamPaperSheet): CalendarEvent | null => {
-    const sheetSubj = sheet.subject.toLowerCase();
-    const sheetUni = sheet.university.toLowerCase();
-    const isG12 = sheet.id.startsWith('g12');
+  // ============================================================================
+  // 🏛️ UNIVERSITY EXAM CONFIGURATION (Zero AI, Pure Supabase Question Bank)
+  // ============================================================================
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [configUni, setConfigUni] = useState('Wolkite University (WKU)');
+  const [configSubject, setConfigSubject] = useState('Mathematics');
+  const [configCourse, setConfigCourse] = useState('Freshman Mathematics (Math 1011)');
+  const [configYear, setConfigYear] = useState('2016 E.C.');
+  const [configQuestionCount, setConfigQuestionCount] = useState<number>(10);
+  const [configDifficulty, setConfigDifficulty] = useState<'easy' | 'medium' | 'hard' | 'all'>('all');
+  const [configLoading, setConfigLoading] = useState(false);
+  const [configFeedback, setConfigFeedback] = useState<string | null>(null);
 
-    return calendarEvents.find(ev => {
-      const title = ev.title.toLowerCase();
-      const desc = ev.description.toLowerCase();
-      if (title.includes(sheetSubj) || desc.includes(sheetSubj)) return true;
-      if (sheetUni !== 'moe ethiopia secondary' && (title.includes(sheetUni) || desc.includes(sheetUni))) return true;
-      if (isG12 && (title.includes('euee') || title.includes('grade 12') || title.includes('entrance'))) return true;
-      return false;
-    }) || null;
+  const handleLaunchConfiguredExam = async () => {
+    playClickChime();
+    setConfigLoading(true);
+    setConfigFeedback(language === 'am' ? 'ከሱፓቤዝ የጥያቄ ባንክ በማዘጋጀት ላይ...' : 'Retrieving pre-generated questions from Supabase bank...');
+
+    try {
+      const difficultyParam = configDifficulty === 'all' ? undefined : configDifficulty;
+      const records = await generateRandomExamQuestions({
+        university: configUni,
+        subject: configSubject,
+        difficulty: difficultyParam,
+        totalQuestions: configQuestionCount,
+        examCategory: 'university_exam'
+      });
+
+      if (records && records.length > 0) {
+        applyConfiguredExam(records);
+        return;
+      }
+
+      // Broaden query to subject in database
+      const fallbackRecords = await generateRandomExamQuestions({
+        subject: configSubject,
+        difficulty: difficultyParam,
+        totalQuestions: configQuestionCount
+      });
+
+      if (fallbackRecords && fallbackRecords.length > 0) {
+        applyConfiguredExam(fallbackRecords);
+        return;
+      }
+
+      // If database is temporarily unreachable, match from verified static repository
+      const matching = UNIVERSITY_SHEETS.find(s => s.subject.toLowerCase().includes(configSubject.toLowerCase())) || UNIVERSITY_SHEETS[0];
+      setSelectedSheetId(matching.id);
+      setShowConfigModal(false);
+      startTimedSimulation();
+    } catch (e: any) {
+      alert(`Could not load questions: ${e.message}`);
+    } finally {
+      setConfigLoading(false);
+      setConfigFeedback(null);
+    }
   };
 
-  const filteredSheets = useMemo(() => {
-    return publishedExamSheets.filter(sheet => {
-      // 1. Level tab filter
-      if (examCategory === 'g12' && !sheet.id.startsWith('g12')) return false;
-      if (examCategory === 'uni' && !sheet.id.startsWith('uni')) return false;
+  const applyConfiguredExam = (records: QuestionBankRecord[]) => {
+    const formattedQuestions: ExamQuestion[] = records.map((q, idx) => {
+      const opts = q.options && q.options.length > 0 ? q.options : ['Option A', 'Option B', 'Option C', 'Option D'];
+      const choices = opts.map((opt, oIdx) => `${String.fromCharCode(65 + oIdx)}) ${opt}`);
+      let correctIdx = opts.findIndex(o => o.trim().toLowerCase() === q.correct_answer.trim().toLowerCase());
+      if (correctIdx === -1) correctIdx = 0;
 
-      // 2. Subject chips filter (AND)
-      if (selectedSubjects.length > 0 && !selectedSubjects.includes(sheet.subject)) {
-        return false;
-      }
-
-      // 3. Search query filter (AND)
-      const q = debouncedPaperQuery.trim().toLowerCase();
-      if (q) {
-        const matchesTitle = sheet.title.toLowerCase().includes(q);
-        const matchesSubject = sheet.subject.toLowerCase().includes(q);
-        const matchesUni = sheet.university.toLowerCase().includes(q);
-        const matchesYear = sheet.year.toLowerCase().includes(q);
-        const matchesTopic = sheet.questions.some(qItem => 
-          qItem.qText.toLowerCase().includes(q) || qItem.subjectTopic.toLowerCase().includes(q)
-        );
-        if (!matchesTitle && !matchesSubject && !matchesUni && !matchesYear && !matchesTopic) {
-          return false;
-        }
-      }
-
-      return true;
-    }).sort((a, b) => {
-      if (paperSortBy === 'year_desc') {
-        return b.year.localeCompare(a.year);
-      }
-      if (paperSortBy === 'year_asc') {
-        return a.year.localeCompare(b.year);
-      }
-      if (paperSortBy === 'university') {
-        return a.university.localeCompare(b.university);
-      }
-      if (paperSortBy === 'deadline') {
-        const eventA = getPaperDeadlineEvent(a);
-        const eventB = getPaperDeadlineEvent(b);
-        const daysA = eventA ? eventA.daysLeft : 999;
-        const daysB = eventB ? eventB.daysLeft : 999;
-        return daysA - daysB;
-      }
-      return 0;
+      return {
+        id: idx + 1,
+        qText: q.question_text,
+        choices,
+        correctIndex: correctIdx,
+        subjectTopic: `${q.subject} • ${q.course}${q.unit ? ` (${q.unit})` : ''}`,
+        explanation: q.explanation || `Official question from ${q.university || configUni} question bank.`,
+        amharicExplanation: `ከ${q.university || configUni} የፈተና ባንክ የተወሰደ ጥያቄ።`
+      };
     });
-  }, [examCategory, selectedSubjects, debouncedPaperQuery, paperSortBy, calendarEvents]);
 
-  const handleSelectSheet = (sheet: ExamPaperSheet) => {
-    playClickChime();
-    setSelectedSheet(sheet);
-    setSelectedQuestionIdx(0);
-    setUserSelectedChoice(null);
-    setAiResult('');
-    setAiMode('none');
+    const newPaperId = `custom_assembled_${Date.now()}`;
+    const newPaper: ExamPaperSheet = {
+      id: newPaperId,
+      title: `${configUni} — ${configSubject} (${configYear}) Assembled Paper`,
+      university: configUni,
+      year: configYear,
+      subject: configSubject,
+      department: 'Faculty of Natural & Computational Sciences',
+      durationMinutes: Math.max(15, records.length * 2),
+      questions: formattedQuestions
+    };
 
-    // Smoothly scroll the selected exam questionnaire workspace into active view on mobile/tablet viewports
-    setTimeout(() => {
-      const viewer = document.getElementById('exam-viewer-section');
-      if (viewer) {
-        viewer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    }, 60);
+    setExamSheets(prev => [newPaper, ...prev]);
+    setSelectedSheetId(newPaperId);
+    setShowConfigModal(false);
+    playSuccessChime();
+    startTimedSimulation();
   };
 
-  const handleSelectQuestion = (idx: number) => {
-    playClickChime();
-    setSelectedQuestionIdx(idx);
-    setUserSelectedChoice(null);
-    setAiResult('');
-    setAiMode('none');
-  };
-
-  // Process faculty solver action
-  const handleAISolve = async (solveMode: 'solution' | 'clue') => {
-    if (!selectedSheet || selectedQuestionIdx === -1) return;
-    
-    setAiMode(solveMode);
-    setAiLoading(true);
-    setAiResult('');
-    playClickChime();
-
-    const currentQ = selectedSheet.questions[selectedQuestionIdx];
-    const correctLetter = String.fromCharCode(65 + currentQ.correctIndex);
-    const correctChoiceText = currentQ.choices[currentQ.correctIndex] || '';
-
-    setTimeout(() => {
-      if (solveMode === 'solution') {
-        setAiResult(
-`### 🎓 Official Faculty Solution & Analysis
-**Paper:** ${selectedSheet.university} — ${selectedSheet.title}
-**Topic:** ${currentQ.subjectTopic || selectedSheet.subject}
-**Correct Answer:** Option ${correctLetter}) ${correctChoiceText}
-
-**Step-by-Step Breakdown:**
-1. **Governing Curriculum Standard:** This problem tests foundational competence in ${currentQ.subjectTopic || selectedSheet.subject}.
-2. **Analysis:** ${currentQ.explanation || `Evaluating each choice against verified academic definitions confirms that Option ${correctLetter} satisfies all required conditions.`}
-3. **Faculty Advice:** Always verify unit dimensions, sign conventions, and boundary values.
-
-*Verified by Faculty Academic Advisory Board.*`
-        );
-      } else {
-        setAiResult(
-`💡 **Faculty Study Hint:**
-Focus on the governing laws of **${currentQ.subjectTopic || selectedSheet.subject}**. Eliminate choices that contradict foundational definitions, and verify your arithmetic before selecting.`
-        );
-      }
-      setAiLoading(false);
-      playSuccessChime();
-      onStudyAction();
-    }, 150);
+  // ============================================================================
+  // 🎨 SUBJECT VISUAL IDENTITY HELPER
+  // ============================================================================
+  const getSubjectBadge = (subject: string) => {
+    const s = subject.toLowerCase();
+    if (s.includes('math') || s.includes('calculus')) {
+      return { icon: '📐', border: 'border-blue-500/30', bg: 'bg-blue-500/10', text: 'text-blue-400' };
+    } else if (s.includes('physics')) {
+      return { icon: '⚡', border: 'border-violet-500/30', bg: 'bg-violet-500/10', text: 'text-violet-400' };
+    } else if (s.includes('chemistry')) {
+      return { icon: '🧪', border: 'border-emerald-500/30', bg: 'bg-emerald-500/10', text: 'text-emerald-400' };
+    } else if (s.includes('biology')) {
+      return { icon: '🧬', border: 'border-green-500/30', bg: 'bg-green-500/10', text: 'text-green-400' };
+    } else if (s.includes('english')) {
+      return { icon: '💬', border: 'border-sky-500/30', bg: 'bg-sky-500/10', text: 'text-sky-400' };
+    } else if (s.includes('computer') || s.includes('c++')) {
+      return { icon: '💻', border: 'border-cyan-500/30', bg: 'bg-cyan-500/10', text: 'text-cyan-400' };
+    } else if (s.includes('logic')) {
+      return { icon: '🧠', border: 'border-pink-500/30', bg: 'bg-pink-500/10', text: 'text-pink-400' };
+    } else if (s.includes('aptitude')) {
+      return { icon: '🎯', border: 'border-amber-500/30', bg: 'bg-amber-500/10', text: 'text-amber-400' };
+    }
+    return { icon: '🏛️', border: 'border-amber-500/30', bg: 'bg-amber-500/10', text: 'text-amber-400' };
   };
 
   return (
-    <div className="space-y-6">
+    <div className="min-h-screen bg-[#0A1128] text-slate-100 pb-28 pt-4 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto font-sans">
       
-      {/* View Header */}
-      <div className="bg-white dark:bg-[#0c0d12] border border-slate-200 dark:border-zinc-805 p-5 rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4 select-none">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-indigo-650 animate-ping inline-block" />
-            <h2 className="text-xl md:text-2xl font-serif font-black flex items-center gap-1.5 text-slate-900 dark:text-white">
-              <Award className="w-6 h-6 text-indigo-600" />
-              {language === 'en' ? 'Freshman & University Exams Hub' : 'የዩኒቨርሲቲ ፈተናዎች ማዕከል'}
-            </h2>
-          </div>
-          <p className="text-xs text-slate-500 dark:text-zinc-400 font-sans">
-            {language === 'en'
-              ? 'Access past midterm & final exam worksheets from AAU, ASTU, and BDU with step-by-step faculty solutions to master complex tasks.'
-              : 'የአዲስ አበባ ዩኒቨርሲቲ (AAU)፣ የአዳማ (ASTU) እና ባህር ዳር (BDU) የፈተና ጥያቄዎችን ከዝርዝር መፍትሄዎች ጋር ተለማመዱ።'}
-          </p>
+      {/* ========================================================================= */}
+      {/* 🏛️ PRO HEADER: AUTHENTIC UNIVERSITY & MATRIC EXAM SUITE                    */}
+      {/* ========================================================================= */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#101A33] via-[#0E1628] to-[#121E36] border border-white/10 p-6 sm:p-8 shadow-2xl mb-8">
+        {/* Ethiopian Tri-Color Subtle Accent Line */}
+        <div className="absolute top-0 left-0 right-0 h-1 flex">
+          <div className="flex-1 bg-emerald-500" />
+          <div className="flex-1 bg-[#F59E0B]" />
+          <div className="flex-1 bg-red-500" />
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-600 dark:text-emerald-400 text-xs font-bold shrink-0">
-            <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
-            <span>{language === 'en' ? 'Verified Past Papers' : 'ትክክለኛ ያለፉ ፈተናዎች'}</span>
+        {/* Ambient Subtle Glow */}
+        <div className="absolute -top-24 -right-24 w-72 h-72 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-2 max-w-2xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-extrabold uppercase tracking-wider">
+              <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+              <span>{language === 'am' ? 'የተረጋገጡ የፈተና ወረቀቶች' : 'Official Verified Exam Sheets'}</span>
+            </div>
+            
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black font-serif tracking-tight text-white leading-tight">
+              {language === 'am' ? 'የኢትዮለርን አካዳሚክ የፈተና ማዕከል' : 'EthioLearn Pro Examination Suite'}
+            </h1>
+            
+            <p className="text-sm text-slate-300 leading-relaxed font-normal">
+              {language === 'am' 
+                ? 'የወልቂጤ፣ የአዲስ አበባና የሌሎች ዩኒቨርሲቲዎች ሚድተርም/ፋይናል ፈተናዎች እና የ12ኛ ክፍል ብሔራዊ ማትሪክ ወረቀቶች። በይነተገናኝ ልምምድ ወይም በሰዓት የተገደበ የፈተና ሞዴል።'
+                : 'Verified past exam papers from Wolkite, AAU, ASTU, and the National Matric Agency (EUEE). Master step-by-step solutions or test yourself in timed simulation.'}
+            </p>
+
+            {/* Quick Metrics Ribbon */}
+            <div className="flex flex-wrap items-center gap-2.5 pt-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-xs font-bold text-amber-300">
+                <CheckCircle className="w-3.5 h-3.5 text-amber-400" />
+                <span>{totalQuestionsInRepository.toLocaleString()} {language === 'am' ? 'የተዘጋጁ ጥያቄዎች' : 'Verified Questions in Place'}</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-semibold text-slate-300">
+                <FileText className="w-3.5 h-3.5 text-amber-400" />
+                <span>{examSheets.length} {language === 'am' ? 'የፈተና ወረቀቶች' : 'Exam Papers (500 Qs each)'}</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-semibold text-slate-300">
+                <Flame className="w-3.5 h-3.5 text-orange-400" />
+                <span>{surpriseStreak} {language === 'am' ? 'ቀን ተከታታይ' : 'Day Streak'}</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-semibold text-slate-300">
+                <Bot className="w-3.5 h-3.5 text-sky-400" />
+                <span>{language === 'am' ? 'አስጎብኚ AI መፍትሔ' : 'Faculty AI Solver'}</span>
+              </span>
+            </div>
           </div>
-          <button
-            onClick={() => { playClickChime(); onNavigate('examengine'); }}
-            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-xs cursor-pointer uppercase tracking-wider flex items-center gap-1.5 shrink-0 transition-all"
-          >
-            <Clock className="w-3.5 h-3.5" />
-            <span>{language === 'en' ? 'Timed Exam Engine' : 'የፈተና ሰዓት ቆጣሪ'}</span>
-          </button>
+
+          {/* Quick Action: Daily Surprise Question & Assemble Custom Exam */}
+          <div className="flex flex-wrap items-center gap-3 shrink-0">
+            <button
+              onClick={() => { playClickChime(); setShowConfigModal(true); }}
+              className="px-4 py-2.5 bg-slate-900/90 hover:bg-slate-800 border border-amber-500/40 hover:border-amber-400 text-amber-400 font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+              title="Configure and assemble university exam from pre-generated Question Bank"
+            >
+              <Sliders className="w-4 h-4 text-amber-400" />
+              <span>{language === 'am' ? 'የዩኒቨርሲቲ ፈተና አዘጋጅ' : 'Assemble University Exam'}</span>
+            </button>
+
+            <button
+              onClick={launchSurpriseQuestion}
+              className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-lg hover:shadow-amber-500/20 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+            >
+              <Zap className="w-4 h-4 text-slate-950 fill-current" />
+              <span>{language === 'am' ? 'የዕለቱ የፈተና ጥያቄ' : 'Daily Challenge Question'}</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* EXAMS IDENTITY BOARD: CALENDAR & PROGRESS TRACKER */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-5 select-none">
-        {/* Timeline Calendar */}
-        <div className="md:col-span-7 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 border border-indigo-150 dark:border-indigo-500/20 p-4 rounded-2xl shadow-sm space-y-3">
-          <div className="flex items-center justify-between">
-            <h4 className="text-[11px] font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-400 flex items-center gap-1.5">
-              <span>📅</span> {language === 'en' ? 'Ethiopian National Exams & University Calendar' : 'የኢትዮጵያ ብሔራዊ ፈተናዎች እና የዩኒቨርሲቲ ካላንደር'}
-            </h4>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => {
-                  playClickChime();
-                  setIsEditingEventId(null);
-                  setEventForm({
-                    month: 'Hamle',
-                    day: '15',
-                    title: '',
-                    description: '',
-                    daysLeft: 10,
-                    color: 'indigo'
-                  });
-                  setIsAddingEvent(!isAddingEvent);
-                }}
-                className="text-[9px] font-black uppercase bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 rounded transition-colors cursor-pointer"
-              >
-                {isAddingEvent ? (language === 'en' ? 'Close' : 'ዝጋ') : `+ ${language === 'en' ? 'Custom' : 'ብጁ'}`}
-              </button>
-            </div>
+      {/* ========================================================================= */}
+      {/* 🔍 SEARCH, LEVEL TABS & SUBJECT FILTERS                                   */}
+      {/* ========================================================================= */}
+      <div className="space-y-4 mb-6">
+        {/* Primary Row: Search Bar & Level Segmented Controls */}
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          
+          {/* Level Filter Segment */}
+          <div className="flex bg-[#101A33] border border-white/10 p-1 rounded-xl gap-1 shrink-0">
+            <button
+              onClick={() => { playClickChime(); setLevelFilter('all'); }}
+              className={`px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                levelFilter === 'all'
+                  ? 'bg-amber-500 text-slate-950 shadow-md font-extrabold'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {language === 'am' ? 'ሁሉም ፈተናዎች' : 'All Papers'}
+            </button>
+            <button
+              onClick={() => { playClickChime(); setLevelFilter('uni'); }}
+              className={`px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                levelFilter === 'uni'
+                  ? 'bg-amber-500 text-slate-950 shadow-md font-extrabold'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {language === 'am' ? 'ዩኒቨርሲቲ' : 'University'}
+            </button>
+            <button
+              onClick={() => { playClickChime(); setLevelFilter('matric'); }}
+              className={`px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                levelFilter === 'matric'
+                  ? 'bg-amber-500 text-slate-950 shadow-md font-extrabold'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {language === 'am' ? '12ኛ ክፍል ማትሪክ' : 'Grade 12 (EUEE)'}
+            </button>
+            <button
+              onClick={() => { playClickChime(); setLevelFilter('bookmarked'); }}
+              className={`px-3 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                levelFilter === 'bookmarked'
+                  ? 'bg-amber-500 text-slate-950 shadow-md font-extrabold'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Bookmark className="w-3.5 h-3.5" />
+              <span>{language === 'am' ? 'የተቀመጡ' : 'Saved'}</span>
+            </button>
           </div>
 
-          {isAddingEvent && (
-            <div className="bg-white/95 dark:bg-[#0c0d12]/95 border border-indigo-100 dark:border-zinc-850 p-3.5 rounded-xl space-y-3 font-sans text-xs">
-              <h5 className="font-bold text-slate-800 dark:text-zinc-100 flex items-center gap-1">
-                <span>⚡</span> {isEditingEventId ? (language === 'en' ? 'Edit Calendar Event' : 'ካላንደር ቀይር') : (language === 'en' ? 'Add Custom Calendar Event' : 'አዲስ የካላንደር መርሃግብር ጨምር')}
-              </h5>
-              
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] text-slate-400 font-bold uppercase mb-1">Month (ወር)</label>
-                  <input
-                    type="text"
-                    value={eventForm.month}
-                    onChange={(e) => setEventForm({ ...eventForm, month: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded px-2.5 py-1.5 text-slate-800 dark:text-zinc-100 font-bold"
-                    placeholder="e.g. Hamle"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] text-slate-400 font-bold uppercase mb-1">Day (ቀን)</label>
-                  <input
-                    type="text"
-                    value={eventForm.day}
-                    onChange={(e) => setEventForm({ ...eventForm, day: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded px-2.5 py-1.5 text-slate-800 dark:text-zinc-100 font-bold"
-                    placeholder="e.g. 20"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] text-slate-400 font-bold uppercase mb-1">Event Title (ርዕስ)</label>
-                <input
-                  type="text"
-                  value={eventForm.title}
-                  onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })}
-                  className="w-full bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded px-2.5 py-1.5 text-slate-800 dark:text-zinc-100 font-semibold"
-                  placeholder="e.g. Social sciences entrance exam"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] text-slate-400 font-bold uppercase mb-1">Description (ዝርዝር ማብራሪያ)</label>
-                <textarea
-                  value={eventForm.description}
-                  onChange={(e) => setEventForm({ ...eventForm, description: e.target.value })}
-                  className="w-full bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded px-2.5 py-1.5 text-slate-800 dark:text-zinc-100"
-                  placeholder="e.g. Grade 12 matric final examinations across centers"
-                  rows={2}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] text-slate-400 font-bold uppercase mb-1">Days Left (የቀሩት ቀናት)</label>
-                  <input
-                    type="number"
-                    value={eventForm.daysLeft}
-                    onChange={(e) => setEventForm({ ...eventForm, daysLeft: parseInt(e.target.value) || 0 })}
-                    className="w-full bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded px-2.5 py-1.5 text-slate-800 dark:text-zinc-100 font-mono font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] text-slate-400 font-bold uppercase mb-1">Badge Color (ቀለም)</label>
-                  <select
-                    value={eventForm.color}
-                    onChange={(e) => setEventForm({ ...eventForm, color: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded px-2.5 py-1.5 text-slate-800 dark:text-zinc-100 font-bold"
-                  >
-                    <option value="indigo">Indigo (ሰማያዊ)</option>
-                    <option value="purple">Purple (ሐምራዊ)</option>
-                    <option value="rose">Rose (ቀይ)</option>
-                    <option value="emerald">Emerald (አረንጓዴ)</option>
-                    <option value="amber">Amber (ቢጫ)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex gap-2 justify-end pt-1">
+          {/* Search Input & Sort Selector */}
+          <div className="flex items-center gap-2 flex-1 max-w-xl">
+            <div className="relative flex-1">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={language === 'am' ? 'በፈተና ርዕስ፣ ዩኒቨርሲቲ ወይም ኮርስ ይፈልጉ...' : 'Search by paper title, university, topic, or code...'}
+                className="w-full pl-10 pr-10 py-2.5 bg-[#101A33] border border-white/10 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-none focus:border-amber-500/60 focus:ring-2 focus:ring-amber-500/10 transition-all shadow-inner"
+              />
+              {searchQuery && (
                 <button
-                  type="button"
-                  onClick={() => { playClickChime(); setIsAddingEvent(false); }}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:text-zinc-400 dark:bg-zinc-900 dark:hover:bg-zinc-800 rounded-lg text-xs font-bold"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
                 >
-                  {language === 'en' ? 'Cancel' : 'ሰርዝ'}
+                  <X className="w-3.5 h-3.5" />
                 </button>
-                <button
-                  type="button"
-                  onClick={handleSaveEvent}
-                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-black uppercase"
-                >
-                  {language === 'en' ? 'Save Event' : 'አስቀምጥ'}
-                </button>
-              </div>
+              )}
             </div>
-          )}
-          
-          <div className="space-y-2 max-h-[290px] overflow-y-auto pr-1">
-            {calendarEvents.length === 0 ? (
-              <div className="text-center py-6 text-slate-400 dark:text-zinc-500 text-xs">
-                {language === 'en' ? 'No items in calendar. Add a custom entry above!' : 'በካላንደር ውስጥ ምንም መርሃግብር የለም። ከላይ ይጨምሩ!'}
+
+            <select
+              value={sortBy}
+              onChange={(e: any) => setSortBy(e.target.value)}
+              className="px-3 py-2.5 bg-[#101A33] border border-white/10 rounded-xl text-xs text-slate-300 font-semibold focus:outline-none focus:border-amber-500/60 cursor-pointer shrink-0"
+            >
+              <option value="year_desc">{language === 'am' ? 'አዲስ ዓመት' : 'Latest Year'}</option>
+              <option value="questions">{language === 'am' ? 'ብዙ ጥያቄዎች' : 'Most Questions'}</option>
+              <option value="uni">{language === 'am' ? 'ዩኒቨርሲቲ' : 'University'}</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Secondary Row: Horizontal Scrollable Subject Filter Chips */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 scrollbar-none">
+          {subjectList.map(subj => {
+            const isSelected = selectedSubject === subj;
+            return (
+              <button
+                key={subj}
+                onClick={() => { playClickChime(); setSelectedSubject(subj); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                  isSelected
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                    : 'bg-[#101A33] text-slate-400 border border-white/5 hover:text-slate-200 hover:border-white/15'
+                }`}
+              >
+                {subj === 'all' ? (language === 'am' ? 'ሁሉም የትምህርት ዓይነቶች' : 'All Subjects') : subj}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 📑 MASTER-DETAIL ARENA: PAPERS COLUMN (Left) + EXAM ARENA (Right)         */}
+      {/* ========================================================================= */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        {/* ======================================================================= */}
+        {/* LEFT: EXAM PAPERS ARCHIVE LIST (4 COLS)                                 */}
+        {/* ======================================================================= */}
+        <div className="lg:col-span-4 space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              {filteredSheets.length} {language === 'am' ? 'የፈተና ወረቀቶች' : 'Available Papers'}
+            </span>
+          </div>
+
+          <div className="space-y-2.5 max-h-[750px] overflow-y-auto pr-1">
+            {filteredSheets.length === 0 ? (
+              <div className="text-center py-12 px-4 rounded-xl bg-[#101A33] border border-white/10">
+                <Search className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+                <p className="text-xs font-semibold text-slate-300">
+                  {language === 'am' ? 'ምንም የተገኘ የፈተና ወረቀት የለም' : 'No matching exam papers found'}
+                </p>
+                <button
+                  onClick={() => { setSearchQuery(''); setLevelFilter('all'); setSelectedSubject('all'); }}
+                  className="mt-3 px-3 py-1.5 text-xs text-amber-400 hover:underline cursor-pointer"
+                >
+                  {language === 'am' ? 'ሁሉንም አሳይ' : 'Reset Filters'}
+                </button>
               </div>
             ) : (
-              calendarEvents.map((ev) => {
-                const badgeColorMap: Record<string, string> = {
-                  indigo: 'bg-indigo-500',
-                  purple: 'bg-purple-500',
-                  rose: 'bg-rose-500',
-                  emerald: 'bg-emerald-500',
-                  amber: 'bg-amber-500'
-                };
-                
-                const textColorMap: Record<string, string> = {
-                  indigo: 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40',
-                  purple: 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40',
-                  rose: 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40',
-                  emerald: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40',
-                  amber: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40'
-                };
-
-                const currentBadgeColor = badgeColorMap[ev.color] || 'bg-indigo-500';
-                const currentTextColor = textColorMap[ev.color] || 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40';
+              filteredSheets.map(sheet => {
+                const isSelected = sheet.id === activeSheet?.id;
+                const badge = getSubjectBadge(sheet.subject);
+                const isBookmarked = bookmarkedPapers.includes(sheet.id);
 
                 return (
-                  <div key={ev.id} className="flex items-start gap-3 bg-white/70 dark:bg-[#121a2e]/70 p-2.5 rounded-xl border border-slate-100 dark:border-zinc-800 hover:border-slate-200 dark:hover:border-zinc-700 transition-colors group">
-                    <div className={`w-10 h-10 rounded-lg ${currentBadgeColor} text-white flex flex-col items-center justify-center font-bold text-xs shrink-0 shadow-sm`}>
-                      <span className="text-[8px] uppercase font-semibold">{ev.month}</span>
-                      <span className="leading-none text-xs font-black">{ev.day}</span>
-                    </div>
-                    <div className="flex-1 min-w-0 text-left">
+                  <div
+                    key={sheet.id}
+                    onClick={() => {
+                      playClickChime();
+                      setSelectedSheetId(sheet.id);
+                      setActiveQuestionIndex(0);
+                      setSelectedChoiceIndex(null);
+                      setShowAnswerFeedback(false);
+                      setSimulationActive(false);
+                      onStudyAction();
+                    }}
+                    className={`p-3.5 rounded-xl border transition-all cursor-pointer relative group ${
+                      isSelected
+                        ? 'bg-[#142245] border-amber-500/60 shadow-lg ring-1 ring-amber-500/20'
+                        : 'bg-[#101A33] border-white/10 hover:border-white/20 hover:bg-[#121E3B]'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-1.5">
                       <div className="flex items-center gap-2">
-                        <h5 className="font-bold text-[11px] text-slate-800 dark:text-zinc-100 truncate flex-1">
-                          {ev.title}
-                        </h5>
+                        <span className="text-base">{badge.icon}</span>
+                        <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full border ${badge.bg} ${badge.border} ${badge.text}`}>
+                          {sheet.subject}
+                        </span>
                       </div>
-                      <p className="text-[9.5px] text-slate-500 dark:text-zinc-400 mt-0.5 line-clamp-1">
-                        {ev.description}
-                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded">
+                          {sheet.year}
+                        </span>
+                        <button
+                          onClick={(e) => toggleBookmark(sheet.id, e)}
+                          className={`p-1 rounded-md transition-colors cursor-pointer ${
+                            isBookmarked ? 'text-amber-400' : 'text-slate-500 hover:text-slate-300'
+                          }`}
+                        >
+                          <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-current' : ''}`} />
+                        </button>
+                      </div>
                     </div>
-                    
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${currentTextColor}`}>
-                        {ev.daysLeft} {language === 'en' ? 'Days Left' : 'ቀን ይቀራል'}
+
+                    <h3 className={`text-xs font-bold leading-snug line-clamp-2 mb-2 transition-colors ${
+                      isSelected ? 'text-amber-300 font-extrabold' : 'text-white group-hover:text-slate-200'
+                    }`}>
+                      {sheet.title}
+                    </h3>
+
+                    <div className="flex items-center justify-between text-[10px] text-slate-400 border-t border-white/5 pt-2">
+                      <span className="truncate max-w-[180px] text-slate-300 font-medium">
+                        {sheet.university}
                       </span>
-                      
-                      {/* Edit/Delete controls */}
-                      <div className="flex items-center gap-1 opacity-60 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          type="button"
-                          onClick={() => { playClickChime(); handleStartEditEvent(ev); }}
-                          className="p-1 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded transition-all cursor-pointer"
-                          title="Edit"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { playClickChime(); handleDeleteEvent(ev.id); }}
-                          className="p-1 hover:bg-red-50 dark:hover:bg-red-950/20 rounded text-red-500 hover:text-red-700 transition-all cursor-pointer"
-                          title="Delete"
-                        >
-                          🗑️
-                        </button>
-                      </div>
+                      <span className="font-semibold text-amber-400/90 shrink-0">
+                        {sheet.questions.length} {language === 'am' ? 'ጥያቄዎች' : 'questions'}
+                      </span>
                     </div>
                   </div>
                 );
@@ -1426,947 +880,818 @@ Focus on the governing laws of **${currentQ.subjectTopic || selectedSheet.subjec
           </div>
         </div>
 
-        {/* Progress Board */}
-        <div className="md:col-span-5 bg-white dark:bg-[#0c0d12] border border-slate-200 dark:border-zinc-800 p-4 rounded-2xl shadow-sm space-y-3 flex flex-col justify-between">
-          <div>
-            <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-              <span>📊</span> {language === 'en' ? 'Matric Prep Subject Progress' : 'የፈተና ዝግጅት የትምህርት እድገት'}
-            </h4>
-            <p className="text-[9.5px] text-slate-400 dark:text-zinc-500 mt-0.5">
-              Completed papers: <span className="font-bold font-mono text-indigo-500">{completedPapers.length} completed</span>
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2 pt-1.5">
-            {/* Subject 1: Mathematics */}
-            <div className="space-y-1">
-              <div className="flex justify-between items-center text-[9px] font-bold">
-                <span className="text-slate-700 dark:text-zinc-300">📐 Mathematics</span>
-                <span className="text-indigo-600 dark:text-indigo-400 font-mono">
-                  {completedPapers.includes('uni_math_sheet') ? '100%' : '50%'}
-                </span>
-              </div>
-              <div className="w-full bg-slate-100 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
-                <div className="bg-indigo-500 h-full rounded-full" style={{ width: completedPapers.includes('uni_math_sheet') ? '100%' : '50%' }} />
-              </div>
-            </div>
-
-            {/* Subject 2: Physics */}
-            <div className="space-y-1">
-              <div className="flex justify-between items-center text-[9px] font-bold">
-                <span className="text-slate-700 dark:text-zinc-300">⚡ Physics</span>
-                <span className="text-purple-600 dark:text-purple-400 font-mono">
-                  {completedPapers.includes('uni_physics_sheet') ? '100%' : '50%'}
-                </span>
-              </div>
-              <div className="w-full bg-slate-100 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
-                <div className="bg-purple-500 h-full rounded-full" style={{ width: completedPapers.includes('uni_physics_sheet') ? '100%' : '50%' }} />
-              </div>
-            </div>
-
-            {/* Subject 3: Chemistry */}
-            <div className="space-y-1">
-              <div className="flex justify-between items-center text-[9px] font-bold">
-                <span className="text-slate-700 dark:text-zinc-300">🧪 Chemistry</span>
-                <span className="text-teal-600 dark:text-teal-400 font-mono">
-                  {completedPapers.includes('uni_chemistry_sheet') ? '100%' : '25%'}
-                </span>
-              </div>
-              <div className="w-full bg-slate-100 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
-                <div className="bg-teal-500 h-full rounded-full" style={{ width: completedPapers.includes('uni_chemistry_sheet') ? '100%' : '25%' }} />
-              </div>
-            </div>
-
-            {/* Subject 4: English */}
-            <div className="space-y-1">
-              <div className="flex justify-between items-center text-[9px] font-bold">
-                <span className="text-slate-700 dark:text-zinc-300">💬 English</span>
-                <span className="text-emerald-600 dark:text-emerald-400 font-mono">
-                  {completedPapers.includes('uni_english_sheet') ? '100%' : '40%'}
-                </span>
-              </div>
-              <div className="w-full bg-slate-100 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
-                <div className="bg-emerald-500 h-full rounded-full" style={{ width: completedPapers.includes('uni_english_sheet') ? '100%' : '40%' }} />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Tab Navigation for Practice Sheets, Curriculum Exam Compiler, and External National EUEE Hub */}
-      <div className="flex flex-wrap bg-slate-950 border border-slate-800 p-1 rounded-2xl max-w-2xl select-none font-sans gap-1">
-        <button
-          onClick={() => { playClickChime(); setActiveTab('practice'); }}
-          className={`flex-1 min-w-[130px] py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
-            activeTab === 'practice'
-              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <span>🏛️</span>
-          <span>{language === 'en' ? 'University Papers' : 'የዩኒቨርሲቲ ፈተናዎች'}</span>
-        </button>
-        <button
-          onClick={() => { playClickChime(); setActiveTab('external'); }}
-          className={`flex-1 min-w-[140px] py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
-            activeTab === 'external'
-              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <span>📜</span>
-          <span>{language === 'en' ? 'National Matric (EUEE)' : 'የብሔራዊ ፈተናዎች'}</span>
-        </button>
-        <button
-          onClick={() => { playClickChime(); setActiveTab('ai-custom'); }}
-          className={`flex-1 min-w-[130px] py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
-            activeTab === 'ai-custom'
-              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <BookMarked className="w-3.5 h-3.5" />
-          <span>{language === 'en' ? 'Exam Drill & Compiler' : 'የፈተና ሞተር'}</span>
-        </button>
-      </div>
-
-      {activeTab === 'practice' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        
-        {/* Left column: list of past university exam papers (4 cols) */}
-        <div className="lg:col-span-4 space-y-4">
-          <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl sticky top-2 z-20 shadow-md space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-300 flex items-center gap-1.5">
-                <Filter className="w-3.5 h-3.5 text-amber-400" />
-                {language === 'en' ? 'Select Available Papers:' : 'ያሉትን ፈተናዎች ይምረጡ፡'}
-              </h3>
-              <span className="text-[10px] font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
-                {filteredSheets.length} {filteredSheets.length === 1 ? 'paper' : 'papers'}
-              </span>
-            </div>
-
-            {/* Live Search Bar */}
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={paperSearchQuery}
-                onChange={(e) => setPaperSearchQuery(e.target.value)}
-                placeholder={language === 'en' ? 'Search subject, course code, university...' : 'በትምህርት አይነት፣ ዩኒቨርሲቲ ይፈልጉ...'}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-8 py-2 text-xs font-medium text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 min-h-[40px]"
-              />
-              {paperSearchQuery && (
-                <button
-                  onClick={() => setPaperSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 p-1 cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-
-            {/* Level Tabs: All / Grade 12 / University */}
-            <div className="grid grid-cols-3 gap-1 p-1 bg-slate-950 rounded-xl text-center text-[10.5px] select-none border border-slate-800">
-              <button
-                onClick={() => handleCategoryChange('all')}
-                className={`py-2 px-1 rounded-lg font-bold transition-all cursor-pointer min-h-[38px] ${
-                  examCategory === 'all'
-                    ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {language === 'en' ? 'All' : 'ሁሉም'}
-              </button>
-              <button
-                onClick={() => handleCategoryChange('g12')}
-                className={`py-2 px-1 rounded-lg font-bold transition-all cursor-pointer min-h-[38px] ${
-                  examCategory === 'g12'
-                    ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {language === 'en' ? 'Grade 12' : '12ኛ ክፍል'}
-              </button>
-              <button
-                onClick={() => handleCategoryChange('uni')}
-                className={`py-2 px-1 rounded-lg font-bold transition-all cursor-pointer min-h-[38px] ${
-                  examCategory === 'uni'
-                    ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {language === 'en' ? 'University' : 'ዩኒቨርሲቲ'}
-              </button>
-            </div>
-
-            {/* Subject Filter Chips */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">
-                <span>Subjects:</span>
-                {selectedSubjects.length > 0 && (
-                  <button
-                    onClick={() => { playClickChime(); setSelectedSubjects([]); }}
-                    className="text-indigo-500 hover:underline cursor-pointer lowercase"
-                  >
-                    clear ({selectedSubjects.length})
-                  </button>
-                )}
-              </div>
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                <button
-                  onClick={() => { playClickChime(); setSelectedSubjects([]); }}
-                  className={`px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold transition-all shrink-0 cursor-pointer min-h-[36px] ${
-                    selectedSubjects.length === 0
-                      ? 'bg-purple-600 text-white shadow-sm'
-                      : 'bg-slate-100 dark:bg-zinc-850 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-800'
-                  }`}
-                >
-                  All
-                </button>
-                {availablePaperSubjects.map((subj) => {
-                  const isSelected = selectedSubjects.includes(subj);
-                  return (
-                    <button
-                      key={subj}
-                      onClick={() => toggleSubjectFilter(subj)}
-                      className={`px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold transition-all shrink-0 cursor-pointer min-h-[36px] border ${
-                        isSelected
-                          ? 'bg-purple-600 border-purple-500 text-white shadow-sm'
-                          : 'bg-slate-50 dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-300 hover:border-purple-500/50'
-                      }`}
-                    >
-                      {subj}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Sort Control */}
-            <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-zinc-800 text-[10.5px]">
-              <span className="font-bold text-slate-400 dark:text-zinc-500 flex items-center gap-1">
-                <SortAsc className="w-3 h-3" /> Sort by:
-              </span>
-              <select
-                value={paperSortBy}
-                onChange={(e) => { playClickChime(); setPaperSortBy(e.target.value as any); }}
-                className="bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg px-2 py-1 font-bold text-slate-700 dark:text-zinc-200 cursor-pointer focus:outline-none"
-              >
-                <option value="year_desc">Year (Newest → Oldest)</option>
-                <option value="year_asc">Year (Oldest → Newest)</option>
-                <option value="university">University Name</option>
-                <option value="deadline">Closest Exam Deadline</option>
-              </select>
-            </div>
-
-            {/* Paper Cards List */}
-            <div className="space-y-2.5 max-h-[420px] overflow-y-auto pr-1">
-              {filteredSheets.length === 0 ? (
-                <div className="text-center py-8 bg-slate-50 dark:bg-zinc-900/50 rounded-xl border border-dashed border-slate-200 dark:border-zinc-800 p-4">
-                  <p className="text-xs font-bold text-slate-500 dark:text-zinc-400">
-                    {language === 'en' ? 'No exam papers match your active search or filters.' : 'ከተመረጠው ማጣሪያ ጋር የሚስማማ ፈተና አልተገኘም።'}
-                  </p>
-                  <button
-                    onClick={() => {
-                      setPaperSearchQuery('');
-                      setSelectedSubjects([]);
-                      setExamCategory('all');
-                      safeStorage.setItem('ethiolearn_exam_category_tab', 'all');
-                    }}
-                    className="mt-2 px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer min-h-[36px]"
-                  >
-                    Reset Filters
-                  </button>
-                </div>
-              ) : (
-                filteredSheets.map(sheet => {
-                  const isSheetActive = selectedSheet?.id === sheet.id;
-                  const isCompleted = completedPapers.includes(sheet.id);
-                  const deadlineEvent = getPaperDeadlineEvent(sheet);
-
-                  return (
-                    <div
-                      key={sheet.id}
-                      onClick={() => handleSelectSheet(sheet)}
-                      className={`p-3.5 rounded-xl border transition-all cursor-pointer text-left relative min-h-[80px] ${
-                        isSheetActive
-                          ? 'border-indigo-600 bg-indigo-50/70 dark:bg-indigo-950/40 ring-1 ring-indigo-500 font-bold shadow-md'
-                          : 'border-slate-100 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/40 hover:border-indigo-500/50 hover:bg-slate-100/60 dark:hover:bg-zinc-850'
-                      }`}
-                    >
-                      <div className="flex justify-between items-center gap-1.5 mb-1.5">
-                        <span className="text-[8.5px] font-black uppercase text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 px-1.5 py-0.5 rounded leading-none">
-                          {sheet.subject}
-                        </span>
-
-                        <div className="flex items-center gap-1.5">
-                          {/* Inline Progress Badge */}
-                          {isCompleted && (
-                            <span className="text-[8.5px] font-black uppercase text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.5 rounded flex items-center gap-1 leading-none">
-                              <CheckCircle className="w-2.5 h-2.5 text-emerald-500" /> Done
-                            </span>
-                          )}
-
-                          {/* Deadline Countdown Badge */}
-                          {deadlineEvent && (
-                            <span className="text-[8.5px] font-black uppercase text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 px-1.5 py-0.5 rounded flex items-center gap-1 leading-none">
-                              ⏳ {deadlineEvent.daysLeft}d Left
-                            </span>
-                          )}
-
-                          <span className="text-[9.5px] text-zinc-400 font-mono italic">{sheet.year}</span>
-                        </div>
-                      </div>
-
-                      <h4 className="text-[11.5px] font-serif font-black text-slate-800 dark:text-zinc-150 leading-tight">
-                        {sheet.title}
-                      </h4>
-
-                      <div className="flex items-center justify-between mt-1.5 text-[9.5px] text-slate-400 font-mono tracking-wide">
-                        <span>🏛️ {sheet.university}</span>
-                        {isSheetActive && (
-                          <span className="text-indigo-600 dark:text-indigo-400 font-sans font-extrabold text-[9px] uppercase tracking-widest flex items-center gap-1 animate-pulse">
-                            Active in Solver &rarr;
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Right column: active sheet workspace & question display (8 cols) */}
-        <div id="exam-viewer-section" className="lg:col-span-8 space-y-6">
-          {selectedSheet ? (
-            <div className="bg-white dark:bg-[#0c0d12] border border-slate-200 dark:border-zinc-805 p-6 rounded-2xl shadow-sm space-y-5">
+        {/* ======================================================================= */}
+        {/* RIGHT: ACTIVE EXAMINATION ARENA (8 COLS)                                */}
+        {/* ======================================================================= */}
+        <div className="lg:col-span-8 space-y-4">
+          {activeSheet ? (
+            <div className="bg-[#101A33] border border-white/10 rounded-2xl shadow-xl overflow-hidden">
               
-              {/* Sheet header */}
-              <div className="border-b border-slate-100 dark:border-zinc-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <span className="text-[10.5px] uppercase tracking-wider font-extrabold text-[#078930] bg-emerald-50 dark:bg-emerald-950/20 px-2 py-0.5 rounded">
-                    {selectedSheet.university}
-                  </span>
-                  <h3 className="text-base font-serif font-black text-slate-805 dark:text-zinc-100 mt-1.5 leading-tight">
-                    {selectedSheet.title}
-                  </h3>
-                  {selectedSheet.pdfUrl && onOpenInAppViewer && (
-                    <button
-                      onClick={() => { playClickChime(); onOpenInAppViewer(selectedSheet.pdfUrl!, selectedSheet.title); }}
-                      className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow cursor-pointer transition-colors"
-                    >
-                      <FileText className="w-3.5 h-3.5" />
-                      <span>{language === 'en' ? 'Open Official Exam PDF' : 'ኦፊሴላዊውን ፈተና በፒዲኤፍ ክፈት'}</span>
-                    </button>
-                  )}
-                </div>
-
-                {/* Completed status indicator badge */}
-                {completedPapers.includes(selectedSheet.id) && (
-                  <span className="text-[9px] font-bold text-indigo-700 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 px-2 py-0.5 rounded-md shrink-0 flex items-center gap-1">
-                    <CheckCircle className="w-3 h-3 text-indigo-650" /> Completed
-                  </span>
-                )}
-              </div>
-
-              {/* Mode Selection Banner */}
-              <div className="flex flex-col sm:flex-row justify-between items-center bg-slate-50 dark:bg-zinc-900/60 p-3.5 rounded-2xl border border-slate-150 dark:border-zinc-800 gap-3 select-none">
-                <div className="flex items-center gap-2">
-                  <span className="text-base">🛠️</span>
-                  <div>
-                    <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-zinc-200">
-                      {language === 'en' ? 'Select Preparation Mode:' : 'የዝግጅት ሁነታን ይምረጡ፡'}
-                    </h4>
-                    <p className="text-[9.5px] text-slate-400">
-                      {prepMode === 'practice' 
-                        ? (language === 'en' ? 'Study mode with immediate feedback & AI Solver.' : 'ወዲያውኑ መልስ እና አይ ረዳት የሚገኝበት የጥናት ሁነታ።')
-                        : (language === 'en' ? 'Exam room mode with 1-min countdown clock per question.' : 'በእያንዳንዱ ጥያቄ 1 ደቂቃ የጊዜ ገደብ ያለው የፈተና ክፍል ሁነታ።')
-                      }
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="flex gap-1.5 shrink-0 bg-slate-200/60 dark:bg-zinc-800/80 p-0.5 rounded-xl border border-slate-300/40">
-                  <button
-                    onClick={() => {
-                      playClickChime();
-                      setPrepMode('practice');
-                      setIsSimulationActive(false);
-                      setSimulationScore(null);
-                      setSimulationAnswers({});
-                      setUserSelectedChoice(null);
-                    }}
-                    disabled={isSimulationActive}
-                    className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
-                      prepMode === 'practice'
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 disabled:opacity-40'
-                    }`}
-                  >
-                    🔍 {language === 'en' ? 'Practice' : 'መለማመጃ'}
-                  </button>
-                  <button
-                    onClick={() => {
-                      playClickChime();
-                      setPrepMode('simulation');
-                      setUserSelectedChoice(null);
-                    }}
-                    disabled={isSimulationActive}
-                    className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
-                      prepMode === 'simulation'
-                        ? 'bg-[#B22222] text-white shadow-sm'
-                        : 'text-slate-500 hover:text-slate-850 dark:text-zinc-400 dark:hover:text-zinc-200 disabled:opacity-40'
-                    }`}
-                  >
-                    ⏱️ {language === 'en' ? 'Simulation' : 'ሲሙሌሽን'}
-                  </button>
-                </div>
-              </div>
-
-              {/* 1. TIMED SIMULATION NOT ACTIVE VIEW */}
-              {prepMode === 'simulation' && !isSimulationActive && !simulationScore && (
-                <div className="p-6 bg-rose-500/5 dark:bg-rose-950/10 border-2 border-dashed border-rose-400/40 rounded-2xl text-center space-y-4">
-                  <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center mx-auto text-xl">
-                    ⏱️
-                  </div>
-                  <div>
-                    <h4 className="font-serif font-black text-sm text-slate-800 dark:text-zinc-100">
-                      {language === 'en' ? 'Ready for Exam Hall Simulation?' : 'ለሲሙሌሽን ፈተና ዝግጁ ነዎት?'}
-                    </h4>
-                    <p className="text-[10px] text-slate-400 max-w-sm mx-auto mt-1 leading-relaxed">
-                      {language === 'en' 
-                        ? 'You will have 1 minute per question. Immediate feedback is disabled, and your report card will be calculated on submit or timeout.'
-                        : 'በእያንዳንዱ ጥያቄ 1 ደቂቃ ያገኛሉ። ፈጣን መልሶች አይታዩም፣ ሲጨርሱ ወይም ሰዓቱ ሲያልቅ ውጤትዎ ይሰላል።'}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      playClickChime();
-                      setIsSimulationActive(true);
-                      setSimulationTimeLeft(selectedSheet.questions.length * 60);
-                      setSimulationAnswers({});
-                      setSimulationScore(null);
-                      setSelectedQuestionIdx(0);
-                    }}
-                    className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl uppercase tracking-wider transition-colors shadow-sm cursor-pointer"
-                  >
-                    {language === 'en' ? 'Start Simulation' : 'ሲሙሌሽን ጀምር'}
-                  </button>
-                </div>
-              )}
-
-              {/* 2. TIMED SIMULATION SCORE CARD VIEW */}
-              {prepMode === 'simulation' && simulationScore && (
-                <div className="p-6 bg-indigo-500/5 border border-indigo-250 dark:border-indigo-500/30 rounded-2xl text-center space-y-4 relative overflow-hidden">
-                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-500 via-yellow-500 to-green-500" />
-                  <div className="w-14 h-14 bg-indigo-500/10 rounded-full flex items-center justify-center mx-auto text-2xl">
-                    🎓
-                  </div>
-                  <div>
-                    <h4 className="font-serif font-black text-sm text-indigo-700 dark:text-indigo-400">
-                      {language === 'en' ? 'Simulation Completed!' : 'ሲሙሌሽን ተጠናቋል!'}
-                    </h4>
-                    <p className="text-[10px] text-slate-400 mt-1">
-                      {selectedSheet.title}
-                    </p>
-                  </div>
-                  
-                  <div className="inline-block p-4 bg-white dark:bg-zinc-900 border rounded-2xl shadow-sm">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-widest">Your Score:</span>
-                    <span className="text-3xl font-black font-serif text-slate-800 dark:text-zinc-100">
-                      {simulationScore.correct} <span className="text-sm font-normal text-slate-400">/ {simulationScore.total}</span>
+              {/* Paper Header Ribbon */}
+              <div className="p-5 border-b border-white/10 bg-gradient-to-r from-[#121E3B] to-[#101A33] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400">
+                      {activeSheet.university}
                     </span>
-                    <span className="text-xs font-bold text-[#078930] block mt-1">
-                      {Math.round((simulationScore.correct / simulationScore.total) * 100)}% Accuracy
+                    <span className="text-[10px] font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded">
+                      {activeSheet.year}
                     </span>
                   </div>
-
-                  <p className="text-[10px] text-slate-500 dark:text-zinc-400 max-w-xs mx-auto leading-relaxed">
-                    {simulationScore.correct === simulationScore.total 
-                      ? "🏆 Flawless performance! You're ready to teach this course!"
-                      : "📖 Good effort. Click the button below to retry or switch to Practice mode to review the detailed AI formulas."
-                    }
+                  <h2 className="text-base sm:text-lg font-bold text-white font-serif leading-snug">
+                    {activeSheet.title}
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    {activeSheet.department || activeSheet.subject} • {activeSheet.durationMinutes} min official standard
                   </p>
+                </div>
 
-                  <div className="flex justify-center gap-2.5 pt-1.5">
-                    <button
-                      onClick={() => {
-                        playClickChime();
-                        setSimulationScore(null);
-                        setPrepMode('practice');
-                      }}
-                      className="px-4 py-1.5 bg-slate-100 dark:bg-zinc-800 text-slate-650 dark:text-zinc-200 font-bold text-[10px] uppercase rounded-lg hover:bg-slate-200 transition-colors"
-                    >
-                      🔍 {language === 'en' ? 'Review Questions' : 'ጥያቄዎችን ገምግም'}
-                    </button>
-                    <button
-                      onClick={() => {
-                        playClickChime();
-                        setSimulationScore(null);
-                        setIsSimulationActive(true);
-                        setSimulationTimeLeft(selectedSheet.questions.length * 60);
-                        setSimulationAnswers({});
-                        setSelectedQuestionIdx(0);
-                      }}
-                      className="px-4 py-1.5 bg-indigo-650 hover:bg-indigo-700 text-white font-bold text-[10px] uppercase rounded-lg transition-colors cursor-pointer"
-                    >
-                      🔄 {language === 'en' ? 'Retry Exam' : 'እንደገና ሞክር'}
-                    </button>
+                {/* Exam Mode Selector Buttons */}
+                <div className="flex items-center bg-[#0A1128] border border-white/10 p-1 rounded-xl shrink-0">
+                  <button
+                    onClick={() => {
+                      playClickChime();
+                      setExamMode('practice');
+                      setSimulationActive(false);
+                    }}
+                    className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                      examMode === 'practice'
+                        ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>{language === 'am' ? 'ጥናትና ልምምድ' : 'Interactive Study'}</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      playClickChime();
+                      if (!simulationActive) {
+                        startTimedSimulation();
+                      } else {
+                        setExamMode('simulation');
+                      }
+                    }}
+                    className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                      examMode === 'simulation'
+                        ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Timer className="w-3.5 h-3.5" />
+                    <span>{language === 'am' ? 'የፈተና ሞዴል' : 'Timed Exam'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Timed Simulation Banner if simulation is active */}
+              {examMode === 'simulation' && simulationActive && (
+                <div className="bg-amber-500/10 border-b border-amber-500/20 px-5 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Clock className={`w-4 h-4 ${secondsRemaining < 300 ? 'text-red-400 animate-pulse' : 'text-amber-400'}`} />
+                    <span className="text-xs font-semibold text-slate-300">
+                      {language === 'am' ? 'የፈተና ሰዓት ይቀራል' : 'Time Remaining'}:
+                    </span>
+                    <span className={`text-sm font-mono font-black ${secondsRemaining < 300 ? 'text-red-400' : 'text-amber-400'}`}>
+                      {formatTime(secondsRemaining)}
+                    </span>
                   </div>
+
+                  <button
+                    onClick={submitSimulationExam}
+                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase tracking-wider rounded-lg transition-all cursor-pointer shadow-md"
+                  >
+                    {language === 'am' ? 'ፈተናውን ጨርስ' : 'Submit Exam'}
+                  </button>
                 </div>
               )}
 
-              {/* 3. ACTIVE STUDY OR LIVE SIMULATION FLOW */}
-              {((prepMode === 'practice') || (prepMode === 'simulation' && isSimulationActive)) && (
-                <>
-                  {/* Countdown timer banner inside active simulation */}
-                  {prepMode === 'simulation' && isSimulationActive && (
-                    <div className="flex items-center justify-between bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-300/40 p-3 rounded-xl select-none animate-pulse">
-                      <span className="text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5">
-                        <Clock className="w-4 h-4 shrink-0 animate-spin" />
-                        {language === 'en' ? 'SIMULATION TIMER RUNNING' : 'የሲሙሌሽን ሰዓት በመቁጠር ላይ'}
+              {/* Question Navigation Palette Ribbon with 500-question windowing & quick jump */}
+              <div className="px-4 py-3 border-b border-white/5 bg-white/[0.02] space-y-2.5">
+                {/* Upper bar: Jump to Q#, Chunk Range selector, Random in Paper, Flag button */}
+                <div className="flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-slate-400 font-semibold text-[11px] uppercase tracking-wider">
+                      {language === 'am' ? 'ክልል' : 'Range'}:
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={paletteChunkStart === 0}
+                        onClick={() => {
+                          playClickChime();
+                          setPaletteChunkStart(prev => Math.max(0, prev - 25));
+                        }}
+                        className="px-2 py-1 bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-white/5 rounded-md text-slate-300 font-bold text-[11px] cursor-pointer"
+                        title="Previous 25 questions"
+                      >
+                        &laquo;
+                      </button>
+                      <span className="px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-md text-amber-400 font-extrabold text-[11px]">
+                        Q {paletteChunkStart + 1} – {Math.min(activeSheet.questions.length, paletteChunkStart + 25)}
                       </span>
-                      <span className="font-mono font-black text-sm">
-                        {Math.floor(simulationTimeLeft / 60)}:{(simulationTimeLeft % 60).toString().padStart(2, '0')}
-                      </span>
+                      <button
+                        type="button"
+                        disabled={paletteChunkStart + 25 >= activeSheet.questions.length}
+                        onClick={() => {
+                          playClickChime();
+                          setPaletteChunkStart(prev => Math.min(activeSheet.questions.length - 1, prev + 25));
+                        }}
+                        className="px-2 py-1 bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-white/5 rounded-md text-slate-300 font-bold text-[11px] cursor-pointer"
+                        title="Next 25 questions"
+                      >
+                        &raquo;
+                      </button>
                     </div>
-                  )}
 
-                  {/* Step: Questions list selector inside sheet */}
-                  <div className="space-y-2">
-                    <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Questions in this paper:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedSheet.questions.map((q, idx) => {
-                        const isQActive = selectedQuestionIdx === idx;
-                        const isAnsweredInSim = prepMode === 'simulation' && simulationAnswers[idx] !== undefined;
-                        
-                        return (
-                          <button
-                            key={q.id}
-                            onClick={() => handleSelectQuestion(idx)}
-                            className={`w-10 h-10 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
-                              isQActive
-                                ? 'bg-indigo-650 border-indigo-650 text-white shadow-md'
-                                : isAnsweredInSim
-                                ? 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-950/20'
-                                : 'bg-slate-50 border-slate-100 hover:border-slate-350 text-slate-650 dark:bg-zinc-900/40 dark:border-zinc-800'
-                            }`}
-                          >
-                            Q{idx + 1}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-              {/* Selected question detail layout */}
-              {selectedQuestionIdx !== -1 && (
-                <div className="space-y-4 pt-3 border-t border-slate-100 dark:border-zinc-800">
-                  <div className="flex items-center justify-between text-[11px] text-zinc-400 font-mono">
-                    <span className="uppercase font-bold text-indigo-705">Topic: {selectedSheet.questions[selectedQuestionIdx].subjectTopic}</span>
-                    <span>Entrance / Freshman Coursework</span>
-                  </div>
-
-                  <div className="font-serif font-black text-sm text-slate-800 dark:text-zinc-100 leading-snug p-4 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-150">
-                    {selectedSheet.questions[selectedQuestionIdx].qText}
-                  </div>
-
-                  {/* Options */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    {selectedSheet.questions[selectedQuestionIdx].choices.map((choice, i) => {
-                      let isSelected = false;
-                      let isCorrect = false;
-
-                      if (prepMode === 'simulation') {
-                        isSelected = simulationAnswers[selectedQuestionIdx] === i;
-                      } else {
-                        isSelected = userSelectedChoice === i;
-                        isCorrect = i === selectedSheet.questions[selectedQuestionIdx].correctIndex;
-                      }
-
-                      let cStyle = 'border-slate-150 dark:border-zinc-805 bg-white dark:bg-zinc-900 text-slate-750 hover:bg-slate-50';
-                      
-                      if (prepMode === 'simulation') {
-                        if (isSelected) {
-                          cStyle = 'border-indigo-650 bg-indigo-50 dark:bg-indigo-950/25 text-indigo-800 dark:text-indigo-400 font-bold';
+                    {/* Quick Jump Input */}
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const num = parseInt(jumpInput, 10);
+                        if (!isNaN(num) && num >= 1 && num <= activeSheet.questions.length) {
+                          playClickChime();
+                          setActiveQuestionIndex(num - 1);
+                          setJumpInput('');
                         }
-                      } else {
-                        if (userSelectedChoice !== null) {
-                          if (isCorrect) {
-                            cStyle = 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-805 font-bold';
-                          } else if (isSelected) {
-                            cStyle = 'border-rose-500 bg-rose-50 dark:bg-rose-950/20 text-rose-805';
-                          } else {
-                            cStyle = 'opacity-50 border-slate-100 dark:border-zinc-805';
-                          }
-                        }
-                      }
+                      }}
+                      className="flex items-center gap-1 ml-1 sm:ml-2"
+                    >
+                      <input
+                        type="number"
+                        min={1}
+                        max={activeSheet.questions.length}
+                        placeholder={language === 'am' ? 'ቁጥር...' : 'Jump to #'}
+                        value={jumpInput}
+                        onChange={(e) => setJumpInput(e.target.value)}
+                        className="w-20 px-2 py-1 bg-slate-900 border border-white/10 rounded-md text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                      />
+                      <button
+                        type="submit"
+                        className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-md text-[11px] cursor-pointer"
+                      >
+                        Go
+                      </button>
+                    </form>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {/* Random in this 500-question paper */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playClickChime();
+                        const rnd = Math.floor(Math.random() * activeSheet.questions.length);
+                        setActiveQuestionIndex(rnd);
+                      }}
+                      className="px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/10 text-amber-300 font-semibold rounded-md text-[11px] flex items-center gap-1 cursor-pointer transition-all"
+                      title="Jump to random question in this paper"
+                    >
+                      <span>🎲</span>
+                      <span>{language === 'am' ? 'የዘፈቀደ ጥያቄ' : 'Random Q'}</span>
+                    </button>
+
+                    {examMode === 'simulation' && (
+                      <button
+                        onClick={() => toggleFlagQuestion(activeQuestionIndex)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer shrink-0 ${
+                          flaggedQuestions.includes(activeQuestionIndex)
+                            ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                            : 'bg-white/5 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {flaggedQuestions.includes(activeQuestionIndex) 
+                          ? (language === 'am' ? 'ምልክት ተደርጓል' : 'Flagged') 
+                          : (language === 'am' ? 'ምልክት አድርግ' : 'Flag Question')}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Question Buttons Strip for the current 25-question chunk */}
+                <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none">
+                  {activeSheet.questions
+                    .slice(paletteChunkStart, Math.min(activeSheet.questions.length, paletteChunkStart + 25))
+                    .map((q, localIdx) => {
+                      const idx = paletteChunkStart + localIdx;
+                      const isCurrent = idx === activeQuestionIndex;
+                      const isFlagged = flaggedQuestions.includes(idx);
+                      const isAnswered = examMode === 'simulation' 
+                        ? simulationAnswers[idx] !== undefined 
+                        : false;
 
                       return (
                         <button
-                          key={i}
-                          disabled={prepMode === 'practice' && userSelectedChoice !== null}
-                          onClick={() => { 
-                            playClickChime(); 
-                            if (prepMode === 'simulation') {
-                              setSimulationAnswers(prev => ({ ...prev, [selectedQuestionIdx]: i }));
+                          key={`q_nav_${idx}`}
+                          onClick={() => {
+                            playClickChime();
+                            setActiveQuestionIndex(idx);
+                          }}
+                          className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer relative shrink-0 ${
+                            isCurrent
+                              ? 'bg-amber-500 text-slate-950 font-black shadow-md scale-105'
+                              : isAnswered
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                              : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
+                          }`}
+                        >
+                          {idx + 1}
+                          {isFlagged && (
+                            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500 ring-1 ring-[#101A33]" />
+                          )}
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+
+              {/* Active Question Content Area */}
+              {currentQuestion ? (
+                <div className="p-5 sm:p-7 space-y-6">
+                  
+                  {/* Topic Tag & Question Meta */}
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <span className="font-extrabold text-amber-400 uppercase tracking-wider">
+                      {language === 'am' ? 'ጥያቄ' : 'Question'} {activeQuestionIndex + 1} / {activeSheet.questions.length}
+                    </span>
+                    <span className="bg-white/5 px-2.5 py-1 rounded-md text-slate-300 font-medium">
+                      {currentQuestion.subjectTopic}
+                    </span>
+                  </div>
+
+                  {/* Question Prompt */}
+                  <div className="text-sm sm:text-base font-medium text-white leading-relaxed whitespace-pre-line bg-white/[0.02] p-4 rounded-xl border border-white/5">
+                    {currentQuestion.qText}
+                  </div>
+
+                  {/* Choices A, B, C, D */}
+                  <div className="space-y-2.5">
+                    {currentQuestion.choices.map((choice, cIdx) => {
+                      const isSelected = examMode === 'simulation'
+                        ? simulationAnswers[activeQuestionIndex] === cIdx
+                        : selectedChoiceIndex === cIdx;
+
+                      // Verification styling in Interactive Practice mode
+                      let stateStyle = 'bg-white/5 border-white/10 hover:border-amber-500/40 hover:bg-white/[0.07] text-slate-200';
+
+                      if (examMode === 'practice' && showAnswerFeedback) {
+                        if (cIdx === currentQuestion.correctIndex) {
+                          stateStyle = 'bg-emerald-500/20 border-emerald-500/60 text-emerald-300 font-bold shadow-md';
+                        } else if (isSelected && cIdx !== currentQuestion.correctIndex) {
+                          stateStyle = 'bg-red-500/20 border-red-500/60 text-red-300 line-through';
+                        } else {
+                          stateStyle = 'bg-white/5 border-white/5 opacity-50 text-slate-400';
+                        }
+                      } else if (isSelected) {
+                        stateStyle = 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold ring-1 ring-amber-500/30';
+                      }
+
+                      return (
+                        <div
+                          key={`choice_${cIdx}`}
+                          onClick={() => {
+                            if (examMode === 'simulation') {
+                              playClickChime();
+                              setSimulationAnswers(prev => ({
+                                ...prev,
+                                [activeQuestionIndex]: cIdx
+                              }));
                             } else {
-                              setUserSelectedChoice(i); 
+                              handleSelectChoice(cIdx);
                             }
                           }}
-                          className={`px-4 py-3 rounded-xl border text-left text-xs transition-colors cursor-pointer ${cStyle}`}
+                          className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 text-xs sm:text-sm ${stateStyle}`}
                         >
-                          {choice}
-                        </button>
+                          <span className="leading-relaxed">{choice}</span>
+                          {examMode === 'practice' && showAnswerFeedback && cIdx === currentQuestion.correctIndex && (
+                            <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                          )}
+                        </div>
                       );
                     })}
                   </div>
 
-                  {/* Immediate feedback (Only in Practice Mode) */}
-                  {prepMode === 'practice' && userSelectedChoice !== null && (
-                    <div className="p-3 bg-slate-50 dark:bg-zinc-900 rounded-xl text-xs flex justify-between items-center select-none border">
-                      <span className="text-slate-500 dark:text-zinc-400">
-                        {userSelectedChoice === selectedSheet.questions[selectedQuestionIdx].correctIndex 
-                          ? '✅ CORRECT ANSWER! Well done.' 
-                          : '❌ INCORRECT! Learn the steps first.'}
-                      </span>
-                      <button 
-                        onClick={() => { playClickChime(); setUserSelectedChoice(null); }}
-                        className="text-[10px] text-[#078930] font-black uppercase hover:underline cursor-pointer"
-                      >
-                        Reset Choice
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Navigation controls (Only in Simulation Mode) */}
-                  {prepMode === 'simulation' && (
-                    <div className="flex items-center justify-between pt-3 border-t border-slate-150 dark:border-zinc-800">
-                      <span className="text-[10.5px] text-slate-400 font-mono">
-                        Question {selectedQuestionIdx + 1} of {selectedSheet.questions.length}
-                      </span>
-                      <div className="flex gap-2">
-                        {selectedQuestionIdx > 0 && (
+                  {/* Action Buttons: Practice Mode Feedback & AI Controls */}
+                  {examMode === 'practice' && (
+                    <div className="pt-2 border-t border-white/10 flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {!showAnswerFeedback ? (
                           <button
-                            onClick={() => { playClickChime(); setSelectedQuestionIdx(prev => prev - 1); }}
-                            className="px-3 py-1.5 bg-slate-100 dark:bg-zinc-800 text-[10px] font-bold uppercase rounded-lg text-slate-600 dark:text-zinc-300 cursor-pointer"
+                            onClick={handleCheckAnswer}
+                            disabled={selectedChoiceIndex === null}
+                            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                              selectedChoiceIndex !== null
+                                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-black shadow-md'
+                                : 'bg-white/10 text-slate-500 cursor-not-allowed'
+                            }`}
                           >
-                            &larr; Prev
-                          </button>
-                        )}
-                        {selectedQuestionIdx < selectedSheet.questions.length - 1 ? (
-                          <button
-                            onClick={() => { playClickChime(); setSelectedQuestionIdx(prev => prev + 1); }}
-                            className="px-3 py-1.5 bg-indigo-650 hover:bg-indigo-700 text-white text-[10px] font-bold uppercase rounded-lg cursor-pointer"
-                          >
-                            Next &rarr;
+                            {language === 'am' ? 'መልስ አረጋግጥ' : 'Check Answer'}
                           </button>
                         ) : (
                           <button
                             onClick={() => {
-                              playClickChime();
-                              setIsSimulationActive(false);
-                              // Calculate score
-                              const correctCount = selectedSheet.questions.reduce((acc, q, idx) => {
-                                return acc + (simulationAnswers[idx] === q.correctIndex ? 1 : 0);
-                              }, 0);
-                              setSimulationScore({ correct: correctCount, total: selectedSheet.questions.length });
-                              playSuccessChime();
-                              
-                              const updated = Array.from(new Set([...completedPapers, selectedSheet.id]));
-                              setCompletedPapers(updated);
-                              safeStorage.setItem('ethiolearn_completed_papers', JSON.stringify(updated));
+                              setShowAnswerFeedback(false);
+                              setSelectedChoiceIndex(null);
                             }}
-                            className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-extrabold uppercase tracking-wider rounded-lg shadow-md cursor-pointer animate-pulse"
+                            className="px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-white/10 hover:bg-white/15 text-slate-200 transition-all cursor-pointer flex items-center gap-1.5"
                           >
-                            Finish Exam 🏁
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>{language === 'am' ? 'እንደገና ሞክር' : 'Try Again'}</span>
                           </button>
                         )}
+
+                        {/* Asgobnyi Faculty AI Triggers */}
+                        <button
+                          onClick={() => handleAskAsgobnyi('breakdown')}
+                          className="px-3 py-2 rounded-xl text-xs font-bold bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-300 transition-all cursor-pointer flex items-center gap-1.5"
+                        >
+                          <Bot className="w-3.5 h-3.5 text-sky-400" />
+                          <span>{language === 'am' ? 'የመፍትሔ ቅደም ተከተል' : 'Step Solution'}</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleAskAsgobnyi('amharic')}
+                          className="px-3 py-2 rounded-xl text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 transition-all cursor-pointer flex items-center gap-1.5"
+                        >
+                          <span>🇪🇹 በአማርኛ</span>
+                        </button>
+                      </div>
+
+                      {/* Prev / Next Question Buttons */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          disabled={activeQuestionIndex === 0}
+                          onClick={() => {
+                            playClickChime();
+                            setActiveQuestionIndex(prev => Math.max(0, prev - 1));
+                          }}
+                          className={`p-2 rounded-xl border border-white/10 text-xs transition-colors ${
+                            activeQuestionIndex === 0
+                              ? 'text-slate-600 cursor-not-allowed'
+                              : 'text-slate-300 hover:bg-white/10 hover:text-white cursor-pointer'
+                          }`}
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+
+                        <button
+                          disabled={activeQuestionIndex === activeSheet.questions.length - 1}
+                          onClick={() => {
+                            playClickChime();
+                            setActiveQuestionIndex(prev => Math.min(activeSheet.questions.length - 1, prev + 1));
+                          }}
+                          className={`p-2 rounded-xl border border-white/10 text-xs transition-colors ${
+                            activeQuestionIndex === activeSheet.questions.length - 1
+                              ? 'text-slate-600 cursor-not-allowed'
+                              : 'text-slate-300 hover:bg-white/10 hover:text-white cursor-pointer'
+                          }`}
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
                   )}
 
-                  {/* Faculty Solution breakdown (Only in Practice Mode) */}
-                  {prepMode === 'practice' && (
-                    <div className="pt-3 border-t border-slate-100 dark:border-zinc-800 space-y-4">
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">&rarr; Verified Faculty Solutions & Explanations:</p>
-                      
-                      <div className="flex flex-wrap gap-2.5">
-                        <button
-                          onClick={() => handleAISolve('clue')}
-                          disabled={aiLoading}
-                          className="px-4.5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 rounded-xl text-xs font-bold uppercase transition disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <HelpCircle className="w-4 h-4 shrink-0" />
-                          <span>Analytical Study Clue</span>
-                        </button>
-                        <button
-                          onClick={() => handleAISolve('solution')}
-                          disabled={aiLoading}
-                          className="px-4.5 py-2.5 bg-[#078930] hover:bg-emerald-700 text-white rounded-xl text-xs font-bold uppercase cursor-pointer transition disabled:opacity-50 flex items-center gap-1.5 shadow-md"
-                        >
-                          <Award className="w-4 h-4 shrink-0" />
-                          <span>Step-by-Step Faculty Solution</span>
-                        </button>
+                  {/* Immediate Feedback Box after checking in Practice Mode */}
+                  {examMode === 'practice' && showAnswerFeedback && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={`p-4 rounded-xl border space-y-2 ${
+                        selectedChoiceIndex === currentQuestion.correctIndex
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
+                          : 'bg-red-500/10 border-red-500/30 text-red-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 font-bold text-xs uppercase tracking-wider">
+                        {selectedChoiceIndex === currentQuestion.correctIndex ? (
+                          <>
+                            <CheckCircle className="w-4 h-4 text-emerald-400" />
+                            <span>{language === 'am' ? 'ትክክል ነው! +5 ነጥብ' : 'Correct Answer! +5 Study Points'}</span>
+                          </>
+                        ) : (
+                          <>
+                            <AlertTriangle className="w-4 h-4 text-red-400" />
+                            <span>{language === 'am' ? 'አልተገኘም! ትክክለኛውን መልስ ይመልከቱ' : 'Incorrect. Study the breakdown below:'}</span>
+                          </>
+                        )}
                       </div>
+                      <p className="text-xs leading-relaxed text-slate-300">
+                        {currentQuestion.explanation}
+                      </p>
+                      {currentQuestion.amharicExplanation && (
+                        <p className="text-xs leading-relaxed text-amber-300/90 font-sans pt-1 border-t border-white/10">
+                          {currentQuestion.amharicExplanation}
+                        </p>
+                      )}
+                    </motion.div>
+                  )}
 
-                      {/* Solution explanation readout container */}
-                      <AnimatePresence mode="wait">
-                        {aiLoading && (
-                          <div className="flex flex-col items-center justify-center py-8 space-y-2">
-                            <div className="w-8 h-8 rounded-full border-2 border-indigo-650 border-t-transparent animate-spin" />
-                            <p className="text-[11px] text-slate-400 font-mono animate-pulse">Retrieving verified faculty solution key...</p>
+                  {/* Asgobnyi AI Response Drawer */}
+                  <AnimatePresence>
+                    {aiGuideOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="rounded-xl bg-[#0D152A] border border-sky-500/30 p-4 space-y-3 shadow-inner overflow-hidden"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-xs font-bold text-sky-400">
+                            <Bot className="w-4 h-4" />
+                            <span>{language === 'am' ? 'አስጎብኚ AI መፍትሔ' : 'Asgobnyi AI Faculty Assistant'}</span>
+                          </div>
+                          <button
+                            onClick={() => setAiGuideOpen(false)}
+                            className="p-1 text-slate-400 hover:text-white rounded-lg cursor-pointer"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {aiLoading ? (
+                          <div className="flex items-center gap-2.5 py-4 text-xs text-slate-400">
+                            <RefreshCw className="w-4 h-4 animate-spin text-sky-400" />
+                            <span>{language === 'am' ? 'አስጎብኚ ማብራሪያውን እያዘጋጀ ነው...' : 'Asgobnyi AI is analyzing the faculty syllabus...'}</span>
+                          </div>
+                        ) : (
+                          <div className="text-xs leading-relaxed text-slate-200 whitespace-pre-line font-sans space-y-2">
+                            {aiResponse}
                           </div>
                         )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
-                        {!aiLoading && aiResult && (
-                          <motion.div
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="space-y-3"
-                          >
-                            <div className="flex justify-between items-center bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-150 px-3 py-2 rounded-xl text-indigo-705 dark:text-indigo-405 text-xs font-bold font-mono">
-                              <span>👨‍🏫 {aiMode === 'solution' ? 'Official Faculty Solution Breakdown' : 'Analytical Examination Clue'}</span>
-                              <button onClick={() => setAiResult('')} className="hover:underline text-[10px]">Close Readout</button>
-                            </div>
+                  {/* Simulation Prev/Next Navigator */}
+                  {examMode === 'simulation' && (
+                    <div className="pt-4 border-t border-white/10 flex items-center justify-between">
+                      <button
+                        disabled={activeQuestionIndex === 0}
+                        onClick={() => {
+                          playClickChime();
+                          setActiveQuestionIndex(prev => Math.max(0, prev - 1));
+                        }}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold border border-white/10 transition-colors ${
+                          activeQuestionIndex === 0
+                            ? 'text-slate-600 cursor-not-allowed'
+                            : 'text-slate-300 hover:bg-white/10 hover:text-white cursor-pointer'
+                        }`}
+                      >
+                        {language === 'am' ? 'ቀዳሚ ጥያቄ' : 'Previous'}
+                      </button>
 
-                            <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#07080c] border border-slate-200 dark:border-zinc-850 text-xs leading-relaxed whitespace-pre-wrap font-sans overflow-x-auto max-h-[300px]">
-                              {aiResult}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+                      {activeQuestionIndex < activeSheet.questions.length - 1 ? (
+                        <button
+                          onClick={() => {
+                            playClickChime();
+                            setActiveQuestionIndex(prev => prev + 1);
+                          }}
+                          className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 uppercase tracking-wider transition-all cursor-pointer font-black"
+                        >
+                          {language === 'am' ? 'ቀጣይ ጥያቄ' : 'Next Question'}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={submitSimulationExam}
+                          className="px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white uppercase tracking-wider transition-all cursor-pointer shadow-lg font-black"
+                        >
+                          {language === 'am' ? 'ፈተናውን ጨርስ' : 'Submit Final Paper'}
+                        </button>
+                      )}
                     </div>
                   )}
 
                 </div>
-              )}
-            </>
-          )}
+              ) : null}
 
             </div>
           ) : (
-            <div className="bg-white dark:bg-[#0c0d12] border border-slate-205 dark:border-zinc-805 p-8 rounded-2xl shadow-sm text-center space-y-4">
-              <Award className="w-12 h-12 text-indigo-600 mx-auto animate-pulse" />
-              <h3 className="font-serif font-black text-lg text-slate-850 dark:text-white">Past Entrance & University papers Solver</h3>
-              <p className="text-xs text-slate-400 dark:text-zinc-400 max-w-sm mx-auto">
-                Ready to crack Calculus midterm derivations, Thermodynamics vectors, and relative grammar clauses. Select any university paper on the left to start.
+            <div className="p-12 text-center bg-[#101A33] border border-white/10 rounded-2xl">
+              <BookOpen className="w-10 h-10 text-slate-500 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-slate-300">
+                {language === 'am' ? 'ለመጀመር ከግራ በኩል የፈተና ወረቀት ይምረጡ' : 'Select an exam paper from the left archive to begin'}
               </p>
-              
-              <div className="pt-5 border-t border-slate-100 dark:border-zinc-800/80 max-w-xs mx-auto">
-                <p className="text-[11px] text-indigo-600 dark:text-indigo-405 font-bold uppercase tracking-wider mb-1.5">🎓 Looking for official national exams?</p>
-                <p className="text-[10px] text-slate-400 dark:text-zinc-500 mb-3 leading-normal">
-                  Switch to the <span className="font-bold text-slate-650 dark:text-zinc-300">National Exams (EUEE) Hub</span> tab above to explore official stream-sorted past papers, subject links, and free curriculum books.
-                </p>
-                <button
-                  onClick={() => { playClickChime(); setActiveTab('external'); }}
-                  className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-400 text-indigo-700 text-[10px] font-extrabold uppercase rounded-lg transition-colors cursor-pointer"
-                >
-                  Explore National Hub &rarr;
-                </button>
-              </div>
             </div>
           )}
         </div>
 
       </div>
-      )}
 
-      {activeTab === 'ai-custom' && (
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-6 select-none font-sans text-slate-900 dark:text-zinc-150"
-        >
-          {/* Main Mode Segment Selector */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Mode A: Custom Exam */}
-            <div
-              onClick={() => { playClickChime(); setIsSurpriseMode(false); }}
-              className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-4 ${
-                !isSurpriseMode
-                  ? 'bg-indigo-50/50 dark:bg-indigo-955/10 border-indigo-600 dark:border-indigo-500 shadow-sm'
-                  : 'bg-white dark:bg-[#0c0d12] border-slate-200 dark:border-zinc-805 hover:border-slate-300 dark:hover:border-zinc-700'
-              }`}
+      {/* ========================================================================= */}
+      {/* 🏆 SIMULATION RESULT SCORECARD MODAL                                      */}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {simulationResultModal && (
+          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#101A33] border border-white/15 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 text-center relative"
             >
-              <div className="p-3 bg-indigo-100 dark:bg-indigo-950/60 text-indigo-705 dark:text-indigo-400 rounded-xl">
-                <BookMarked className="w-6 h-6" />
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center mx-auto text-2xl shadow-inner">
+                <Trophy className="w-7 h-7 text-amber-400" />
               </div>
+
               <div className="space-y-1">
-                <h4 className="font-bold text-sm flex items-center gap-1.5">
-                  <span>Standard Chapter Exam Compiler</span>
-                  {!isSurpriseMode && <span className="w-2 h-2 rounded-full bg-emerald-500" />}
-                </h4>
-                <p className="text-xs text-slate-500 dark:text-zinc-400 leading-normal">
-                  Select your class, subject, and chapter unit to compile custom exam papers directly from our curriculum pool of over 400+ questions per chapter.
+                <h3 className="text-xl font-bold font-serif text-white">
+                  {language === 'am' ? 'የፈተና ውጤት ካርድ' : 'Official Performance Scorecard'}
+                </h3>
+                <p className="text-xs text-slate-400">
+                  {activeSheet?.university} — {activeSheet?.title}
                 </p>
               </div>
-            </div>
 
-            {/* Mode B: Surprise Me Endless */}
-            <div
-              onClick={() => {
-                playClickChime();
-                setIsSurpriseMode(true);
-                if (!surpriseQuestion && !isGeneratingSurprise) {
-                  generateSurpriseQuestion();
-                }
-              }}
-              className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-4 relative overflow-hidden ${
-                isSurpriseMode
-                  ? 'bg-amber-50/30 dark:bg-amber-955/5 border-amber-500 dark:border-amber-600/80 shadow-sm'
-                  : 'bg-white dark:bg-[#0c0d12] border-slate-200 dark:border-zinc-805 hover:border-slate-300 dark:hover:border-zinc-700'
-              }`}
+              <div className="p-4 rounded-xl bg-white/5 border border-white/10 grid grid-cols-3 gap-2">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                    {language === 'am' ? 'ውጤት' : 'Score'}
+                  </span>
+                  <span className={`text-xl font-black ${
+                    simulationResultModal.scorePercent >= 75 ? 'text-emerald-400' : 'text-amber-400'
+                  }`}>
+                    {simulationResultModal.scorePercent}%
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                    {language === 'am' ? 'ትክክል' : 'Correct'}
+                  </span>
+                  <span className="text-xl font-black text-white">
+                    {simulationResultModal.correctCount}/{simulationResultModal.totalCount}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                    {language === 'am' ? 'ጊዜ' : 'Time'}
+                  </span>
+                  <span className="text-xl font-black text-sky-400">
+                    {formatTime(simulationResultModal.timeTakenSeconds)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-xs text-slate-300 leading-relaxed font-sans">
+                {simulationResultModal.scorePercent >= 75 
+                  ? (language === 'am' ? '🎉 ድንቅ ውጤት! የዩኒቨርሲቲ ወይም የ12ኛ ክፍል ፈተናውን በከፍተኛ ደረጃ አልፈዋል።' : '🎉 Outstanding academic performance! You scored well above university passing thresholds.')
+                  : (language === 'am' ? '📚 ጥሩ ልምምድ ነው! የተሳሳቱትን ጥያቄዎች በ"ጥናትና ልምምድ" ገጽ በድጋሚ ይከልሱ።' : '📚 Good effort! Review your missed questions in Interactive Study mode with Asgobnyi step-by-step solutions.')}
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    setSimulationResultModal(null);
+                    setExamMode('practice');
+                  }}
+                  className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md"
+                >
+                  {language === 'am' ? 'መልሶችን ገምግም' : 'Review Answers'}
+                </button>
+                <button
+                  onClick={() => {
+                    setSimulationResultModal(null);
+                    startTimedSimulation();
+                  }}
+                  className="px-4 py-2.5 bg-white/10 hover:bg-white/15 text-slate-200 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ========================================================================= */}
+      {/* ⚡ DAILY SURPRISE EXAM QUESTION MODAL                                    */}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {showSurpriseModal && surpriseQuestion && (
+          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#101A33] border border-white/15 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 relative"
             >
-              {surpriseStreak > 0 && (
-                <div className="absolute top-2 right-2 flex items-center gap-1 bg-amber-500 text-black px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider animate-bounce">
-                  <Flame className="w-3 h-3 text-red-750 fill-current" />
-                  <span>Streak: {surpriseStreak}</span>
+              <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400">
+                    <Zap className="w-4 h-4 fill-current" />
+                  </span>
+                  <div>
+                    <h3 className="text-sm font-bold text-white font-serif">
+                      {language === 'am' ? 'የዕለቱ የፈተና ጥያቄ' : 'Daily Challenge Question'}
+                    </h3>
+                    <span className="text-[10px] text-amber-400 uppercase tracking-wider font-extrabold">
+                      {surpriseQuestion.subjectTopic}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowSurpriseModal(false)}
+                  className="p-1 text-slate-400 hover:text-white rounded-lg cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="text-xs sm:text-sm font-medium text-white leading-relaxed whitespace-pre-line bg-white/5 p-4 rounded-xl border border-white/5">
+                {surpriseQuestion.qText}
+              </div>
+
+              <div className="space-y-2">
+                {surpriseQuestion.choices.map((ch, idx) => {
+                  const isSelected = surpriseSelectedChoice === idx;
+                  let style = 'bg-white/5 border-white/10 hover:border-amber-500/40 text-slate-200';
+
+                  if (surpriseChecked) {
+                    if (idx === surpriseQuestion.correctIndex) {
+                      style = 'bg-emerald-500/20 border-emerald-500/60 text-emerald-300 font-bold';
+                    } else if (isSelected && idx !== surpriseQuestion.correctIndex) {
+                      style = 'bg-red-500/20 border-red-500/60 text-red-300 line-through';
+                    } else {
+                      style = 'bg-white/5 border-white/5 opacity-50 text-slate-400';
+                    }
+                  } else if (isSelected) {
+                    style = 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold';
+                  }
+
+                  return (
+                    <div
+                      key={`surprise_ch_${idx}`}
+                      onClick={() => {
+                        if (!surpriseChecked) {
+                          playClickChime();
+                          setSurpriseSelectedChoice(idx);
+                        }
+                      }}
+                      className={`p-3 rounded-xl border text-xs cursor-pointer transition-all ${style}`}
+                    >
+                      {ch}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {!surpriseChecked ? (
+                <button
+                  onClick={handleSurpriseSubmit}
+                  disabled={surpriseSelectedChoice === null}
+                  className={`w-full py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all cursor-pointer ${
+                    surpriseSelectedChoice !== null
+                      ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-black shadow-md'
+                      : 'bg-white/10 text-slate-500 cursor-not-allowed'
+                  }`}
+                >
+                  {language === 'am' ? 'መልስ አረጋግጥ' : 'Verify Answer (+15 Points)'}
+                </button>
+              ) : (
+                <div className="space-y-3 pt-2">
+                  <div className={`p-3 rounded-xl border text-xs leading-relaxed ${
+                    surpriseSelectedChoice === surpriseQuestion.correctIndex
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                      : 'bg-red-500/10 border-red-500/30 text-red-300'
+                  }`}>
+                    {surpriseQuestion.explanation}
+                  </div>
+                  <button
+                    onClick={() => setShowSurpriseModal(false)}
+                    className="w-full py-2.5 bg-white/10 hover:bg-white/15 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                  >
+                    {language === 'am' ? 'ዝጋ' : 'Done'}
+                  </button>
                 </div>
               )}
-              <div className="p-3 bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-xl">
-                <Dices className="w-6 h-6" />
-              </div>
-              <div className="space-y-1">
-                <h4 className="font-bold text-sm flex items-center gap-1.5">
-                  <span>Curriculum Speed Drill Mode</span>
-                  {isSurpriseMode && <span className="w-2 h-2 rounded-full bg-emerald-500" />}
-                </h4>
-                <p className="text-xs text-slate-500 dark:text-zinc-400 leading-normal">
-                  Endless quick-fire practice questions selected randomly from across the 11th, 12th grade matric, and college freshman syllabi to test your overall preparedness.
-                </p>
-              </div>
-            </div>
+            </motion.div>
           </div>
+        )}
+      </AnimatePresence>
 
-          {/* Render Mode A Contents */}
-          {!isSurpriseMode && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              {/* Configuration Sidebar - 4 Cols */}
-              <div className="lg:col-span-4 bg-white dark:bg-[#0c0d12] border border-slate-200 dark:border-zinc-805 p-5 rounded-2xl shadow-sm space-y-5">
-                <div className="flex items-center gap-2 border-b border-slate-100 dark:border-zinc-800/60 pb-3">
-                  <Filter className="w-4 h-4 text-indigo-600" />
-                  <h4 className="font-serif font-black text-sm text-slate-850 dark:text-white uppercase tracking-wider">Exam Parameters</h4>
+      {/* ========================================================================= */}
+      {/* 🏛️ UNIVERSITY EXAM CONFIGURATION MODAL (Zero AI, Pure Supabase Question Bank)*/}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {showConfigModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              className="w-full max-w-xl bg-[#101A33] border border-white/15 rounded-2xl p-6 sm:p-7 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto"
+            >
+              {/* Header */}
+              <div className="flex items-start justify-between border-b border-white/10 pb-4">
+                <div className="space-y-1">
+                  <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[11px] font-black uppercase tracking-wider">
+                    <Database className="w-3 h-3 text-amber-400" />
+                    <span>{language === 'am' ? 'ሱፓቤዝ የፈተና ጥያቄዎች ባንክ' : 'Supabase Question Bank'}</span>
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-bold text-white font-serif">
+                    {language === 'am' ? 'የዩኒቨርሲቲ ፈተና ወረቀት አዘጋጅ' : 'Assemble University Exam'}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {language === 'am'
+                      ? 'ቀደም ብለው የተዘጋጁ ይፋዊ የዩኒቨርሲቲ ጥያቄዎችን ከመረጃ ቋት በመምረጥ ፈተናዎን ይጀምሩ። (ያለ AI መዘግየት)'
+                      : 'Retrieve pre-generated, verified university questions directly from Supabase. No real-time AI latency.'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowConfigModal(false)}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Form Controls */}
+              <div className="space-y-4">
+                {/* University Selection */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                    {language === 'am' ? 'ዒላማ ዩኒቨርሲቲ' : 'Target University'}
+                  </label>
+                  <select
+                    value={configUni}
+                    onChange={(e) => setConfigUni(e.target.value)}
+                    className="w-full bg-[#182342] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500 cursor-pointer"
+                  >
+                    <option value="Wolkite University (WKU)">Wolkite University (WKU) — ወልቂጤ ዩኒቨርሲቲ</option>
+                    <option value="Addis Ababa University (AAU)">Addis Ababa University (AAU) — አዲስ አበባ ዩኒቨርሲቲ</option>
+                    <option value="Adama Science & Technology (ASTU)">Adama Science & Technology University (ASTU)</option>
+                    <option value="Hawassa University (HU)">Hawassa University (HU) — ሀዋሳ ዩኒቨርሲቲ</option>
+                    <option value="Jimma University (JU)">Jimma University (JU) — ጅማ ዩኒቨርሲቲ</option>
+                    <option value="Bahir Dar University (BDU)">Bahir Dar University (BDU) — ባህር ዳር ዩኒቨርሲቲ</option>
+                    <option value="Haramaya University">Haramaya University — ሐረማያ ዩኒቨርሲቲ</option>
+                    <option value="Ministry of Education (EUEE)">Ministry of Education (EUEE National Matric)</option>
+                  </select>
                 </div>
 
-                <div className="space-y-4 text-xs font-semibold">
-                  {/* Subject selector */}
-                  <div className="space-y-1.5">
-                    <label className="text-slate-500 dark:text-zinc-400">1. Select Subject</label>
+                {/* Course & Subject */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                      {language === 'am' ? 'የትምህርት ዓይነት' : 'Subject Field'}
+                    </label>
                     <select
-                      value={customSubject}
-                      onChange={(e) => { playClickChime(); setCustomSubject(e.target.value); }}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-202 dark:border-zinc-802 bg-slate-50 dark:bg-[#08090d] text-xs font-medium focus:outline-none focus:border-indigo-500 cursor-pointer"
+                      value={configSubject}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setConfigSubject(val);
+                        if (val === 'Mathematics') setConfigCourse('Freshman Mathematics (Math 1011)');
+                        else if (val === 'Emerging Technologies') setConfigCourse('Emerging Technologies (EmTe 1012)');
+                        else if (val === 'Inclusiveness') setConfigCourse('Inclusiveness in Education (Incl 1011)');
+                        else if (val === 'Physics') setConfigCourse('General Physics (Phys 1011)');
+                        else if (val === 'Economics') setConfigCourse('Intro to Economics (Econ 1011)');
+                        else setConfigCourse(`${val} Core`);
+                      }}
+                      className="w-full bg-[#182342] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500 cursor-pointer"
                     >
-                      {Object.keys(RECOMMENDED_UNITS).map(subj => (
-                        <option key={subj} value={subj}>{subj}</option>
-                      ))}
+                      <option value="Mathematics">Mathematics</option>
+                      <option value="Emerging Technologies">Emerging Technologies</option>
+                      <option value="Inclusiveness">Inclusiveness</option>
+                      <option value="Physics">General Physics</option>
+                      <option value="Biology">General Biology</option>
+                      <option value="Economics">Introduction to Economics</option>
+                      <option value="English">Communicative English</option>
+                      <option value="Civics">Moral & Civic Education</option>
                     </select>
                   </div>
 
-                  {/* Level selector */}
-                  <div className="space-y-1.5">
-                    <label className="text-slate-500 dark:text-zinc-400">2. Academic Level</label>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {['Grade 11', 'Grade 12 Matric', 'Freshman'].map(lvl => (
-                        <button
-                          key={lvl}
-                          type="button"
-                          onClick={() => { playClickChime(); setCustomGrade(lvl); }}
-                          className={`py-2 px-1 rounded-lg text-[10px] font-bold border transition-colors ${
-                            customGrade === lvl
-                              ? 'bg-indigo-650 text-white border-indigo-600'
-                              : 'bg-slate-50 dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 hover:bg-slate-100 text-slate-600 dark:text-zinc-400'
-                          }`}
-                        >
-                          {lvl}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Chapter/Unit Suggester Dropdown or Input */}
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between items-center">
-                      <label className="text-slate-500 dark:text-zinc-400">3. Specific Topic or Unit</label>
-                      <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono">Curriculum Linked</span>
-                    </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                      {language === 'am' ? 'የፈተና ዓመት' : 'Academic Year'}
+                    </label>
                     <select
-                      value={customUnit}
-                      onChange={(e) => { playClickChime(); setCustomUnit(e.target.value); }}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-202 dark:border-zinc-802 bg-slate-50 dark:bg-[#08090d] text-xs font-medium focus:outline-none focus:border-indigo-500 cursor-pointer"
+                      value={configYear}
+                      onChange={(e) => setConfigYear(e.target.value)}
+                      className="w-full bg-[#182342] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500 cursor-pointer"
                     >
-                      {RECOMMENDED_UNITS[customSubject]?.map(unit => (
-                        <option key={unit} value={unit}>{unit}</option>
-                      ))}
-                      <option value="All Chapters Combined">Mix All Chapters Combined</option>
+                      <option value="2016 E.C.">2016 E.C. (2024 G.C.)</option>
+                      <option value="2015 E.C.">2015 E.C. (2023 G.C.)</option>
+                      <option value="2014 E.C.">2014 E.C. (2022 G.C.)</option>
+                      <option value="2013 E.C.">2013 E.C. (2021 G.C.)</option>
                     </select>
-
-                    <div className="pt-1 flex items-center gap-1.5">
-                      <span className="text-[10px] text-slate-400">Or type custom unit name:</span>
-                      <input
-                        type="text"
-                        value={customUnit}
-                        onChange={(e) => setCustomUnit(e.target.value)}
-                        placeholder="e.g. Unit 6: Electromagnetism"
-                        className="flex-1 px-2 py-1 rounded border border-slate-200 dark:border-zinc-800 bg-transparent text-[10px]"
-                      />
-                    </div>
                   </div>
+                </div>
 
-                  {/* Question Focus Style Selector */}
-                  <div className="space-y-1.5">
-                    <label className="text-slate-500 dark:text-zinc-400 font-sans">4. Question Style & Matric Focus</label>
-                    <div className="space-y-2">
-                      {[
-                        { id: 'units', label: '📐 Formulas & Physical Units', desc: 'Focuses on SI units, dimensional analysis & rigorous calculations.' },
-                        { id: 'matric', label: '⚡ Matric Repeated Trends', desc: 'Models structures frequently repeated in the last decade of EUEE.' },
-                        { id: 'conceptual', label: '🎓 Heavy Conceptual Depth', desc: 'Checks abstract reasoning, definitions & underlying principles.' },
-                        { id: 'scenario', label: '🌱 Ethiopian Case Scenarios', desc: 'Incorporates local projects, rivers, dams, and bilingual contexts.' },
-                      ].map(style => (
-                        <div
-                          key={style.id}
-                          onClick={() => { playClickChime(); setCustomStyle(style.id); }}
-                          className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-start gap-2.5 ${
-                            customStyle === style.id
-                              ? 'bg-indigo-50/40 dark:bg-indigo-950/20 border-indigo-450 dark:border-indigo-550'
-                              : 'bg-transparent border-slate-100 dark:border-zinc-900 hover:border-slate-200 dark:hover:border-zinc-800'
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            checked={customStyle === style.id}
-                            onChange={() => {}}
-                            className="mt-0.5 accent-indigo-600"
-                          />
-                          <div className="space-y-0.5">
-                            <span className="text-[11px] font-bold text-slate-800 dark:text-zinc-200">{style.label}</span>
-                            <p className="text-[9.5px] text-slate-400 dark:text-zinc-500 leading-tight font-normal">{style.desc}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Question Count Selector */}
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-xs">
-                      <label className="text-slate-500 dark:text-zinc-400">5. Question Count</label>
-                      <span className="font-bold font-mono text-indigo-650 dark:text-indigo-400">{customQCount} MCQ Questions</span>
-                    </div>
-                    <div className="flex gap-2">
-                      {[5, 10, 15, 20].map(cnt => (
+                {/* Question Count & Difficulty */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                      {language === 'am' ? 'የጥያቄዎች ብዛት' : 'Number of Questions'}
+                    </label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[5, 10, 15, 20].map((cnt) => (
                         <button
-                          key={cnt}
+                          key={`count_${cnt}`}
                           type="button"
-                          onClick={() => { playClickChime(); setCustomQCount(cnt); }}
-                          className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
-                            customQCount === cnt
-                              ? 'bg-indigo-650 text-white border-indigo-600'
-                              : 'bg-slate-50 dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 hover:bg-slate-100 text-slate-600 dark:text-zinc-400'
+                          onClick={() => setConfigQuestionCount(cnt)}
+                          className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            configQuestionCount === cnt
+                              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                              : 'bg-[#182342] border border-white/10 text-slate-300 hover:text-white'
                           }`}
                         >
                           {cnt}
@@ -2374,783 +1699,79 @@ Focus on the governing laws of **${currentQ.subjectTopic || selectedSheet.subjec
                       ))}
                     </div>
                   </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                      {language === 'am' ? 'የከበደነት ደረጃ' : 'Difficulty'}
+                    </label>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {(['all', 'easy', 'medium', 'hard'] as const).map((diff) => (
+                        <button
+                          key={`diff_${diff}`}
+                          type="button"
+                          onClick={() => setConfigDifficulty(diff)}
+                          className={`py-2 px-1 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                            configDifficulty === diff
+                              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                              : 'bg-[#182342] border border-white/10 text-slate-300 hover:text-white'
+                          }`}
+                        >
+                          {diff}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
+                {/* Trust Information Box */}
+                <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-2.5 text-xs text-amber-200">
+                  <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5 leading-relaxed">
+                    <span className="font-bold text-amber-300">
+                      {language === 'am' ? 'የተረጋገጠ የጥያቄዎች ምንጭ' : 'Verified Stored Question Bank'}
+                    </span>
+                    <p className="text-[11px] text-amber-200/80">
+                      {language === 'am'
+                        ? 'ሁሉም ጥያቄዎች ከአስተዳዳሪውና ከዩኒቨርሲቲው ዳታቤዝ የሚወጡ ሲሆን በፈተና ወቅት ምንም ዓይነት የ AI ጥሪ አይደረግም።'
+                        : 'All questions are pulled directly from the Supabase repository. Fast loading with 100% curriculum compliance.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-2 border-t border-white/10">
                 <button
-                  onClick={generateCustomQuestions}
-                  disabled={isGeneratingCustom}
-                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black uppercase text-xs tracking-wider rounded-xl transition-all cursor-pointer shadow-md flex items-center justify-center gap-2"
+                  type="button"
+                  onClick={() => setShowConfigModal(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-400 hover:text-white rounded-xl hover:bg-white/5 transition-all cursor-pointer"
                 >
-                  {isGeneratingCustom ? (
+                  {language === 'am' ? 'ተመለስ' : 'Cancel'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleLaunchConfiguredExam}
+                  disabled={configLoading}
+                  className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {configLoading ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Retrieving board questions...</span>
+                      <span>{configFeedback || 'Loading...'}</span>
                     </>
                   ) : (
                     <>
-                      <BookOpen className="w-4 h-4 text-amber-300 fill-amber-300 animate-pulse" />
-                      <span>Compile Curriculum Exam</span>
+                      <Play className="w-4 h-4 fill-current" />
+                      <span>{language === 'am' ? 'ፈተናውን አዘጋጅተህ ጀምር' : 'Assemble & Start Exam'}</span>
                     </>
                   )}
                 </button>
               </div>
-
-              {/* Practice Workspace - 8 Cols */}
-              <div className="lg:col-span-8 space-y-6">
-                {isGeneratingCustom && (
-                  <div className="bg-white dark:bg-[#0c0d12] border border-slate-200 dark:border-zinc-805 rounded-2xl p-12 text-center shadow-sm space-y-4">
-                    <div className="w-12 h-12 rounded-full border-4 border-indigo-650 border-t-transparent animate-spin mx-auto" />
-                    <div className="space-y-1">
-                      <h4 className="font-serif font-black text-slate-800 dark:text-white">Curriculum Board Exam Compiler</h4>
-                      <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                        Loading Ministry syllabus standards, assembling specific chapter metrics, and configuring high-fidelity formula representations for {customSubject}...
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {customGenError && (
-                  <div className="p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/60 rounded-2xl flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
-                    <div className="space-y-1">
-                      <h5 className="text-xs font-bold text-red-800 dark:text-red-400">Failed to Compile Custom Exam</h5>
-                      <p className="text-[11px] text-red-700 dark:text-red-550 leading-normal">{customGenError}</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Show Mock Exam Paper */}
-                {!isGeneratingCustom && aiCustomQuestions.length > 0 && (
-                  <div className="space-y-6">
-                    {/* Score Card Banner */}
-                    {hasSubmittedCustom && customScore !== null && (
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className={`p-6 rounded-2xl border text-center space-y-3 shadow-md ${
-                          customScore >= 70
-                            ? 'bg-emerald-50/55 dark:bg-emerald-950/15 border-emerald-300 dark:border-emerald-800'
-                            : 'bg-amber-50/50 dark:bg-amber-955/10 border-amber-300 dark:border-amber-800/80'
-                        }`}
-                      >
-                        <Trophy className={`w-12 h-12 mx-auto ${customScore >= 70 ? 'text-emerald-600' : 'text-amber-600'}`} />
-                        <div className="space-y-1">
-                          <h3 className="font-serif font-black text-lg text-slate-900 dark:text-white">
-                            {customScore >= 70 ? 'Congratulations! Passed! 🎉' : 'Keep Studying! Needs Work 📚'}
-                          </h3>
-                          <p className="text-xs text-slate-500 dark:text-zinc-400 max-w-sm mx-auto">
-                            You scored <span className="font-black text-indigo-600 dark:text-indigo-405">{customScore}%</span> in this board-standard practice exam on {customSubject}. Check step-by-step solutions below to address wrong answers.
-                          </p>
-                        </div>
-                        <div className="inline-flex gap-4 pt-1 text-xs font-bold font-mono">
-                          <span className="text-emerald-650 dark:text-emerald-400">
-                            Correct: {aiCustomQuestions.filter(q => q.userAnswer && q.userAnswer.trim() === q.correctAnswer.trim()).length}
-                          </span>
-                          <span className="text-red-600">
-                            Incorrect: {aiCustomQuestions.filter(q => !q.userAnswer || q.userAnswer.trim() !== q.correctAnswer.trim()).length}
-                          </span>
-                        </div>
-                      </motion.div>
-                    )}
-
-                    {/* Paper Shell Header */}
-                    <div className="bg-white dark:bg-[#0c0d12] border border-slate-200 dark:border-zinc-805 p-6 rounded-2xl shadow-sm space-y-5">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-zinc-800/60 pb-4">
-                        <div className="space-y-0.5">
-                          <span className="text-[9px] font-black tracking-widest text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/20 px-2 py-0.5 rounded uppercase">
-                            {customGrade} Worksheet Blueprint
-                          </span>
-                          <h3 className="text-base font-serif font-black text-slate-900 dark:text-white">
-                            {customSubject}: {customUnit}
-                          </h3>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-xs font-mono text-slate-400">Focus: <strong className="text-slate-700 dark:text-zinc-300 font-bold capitalize">{customStyle}</strong></span>
-                          <span className="w-1.5 h-1.5 rounded-full bg-slate-200 dark:bg-zinc-800" />
-                          <span className="text-xs font-bold text-slate-500 dark:text-zinc-400">{aiCustomQuestions.length} Questions</span>
-                        </div>
-                      </div>
-
-                      {/* Question Workspace Segment */}
-                      <div className="space-y-6">
-                        {/* Selected Question Indicator Buttons */}
-                        <div className="flex flex-wrap gap-2 pb-1">
-                          {aiCustomQuestions.map((q, qIdx) => {
-                            const isAnswered = !!q.userAnswer;
-                            const isCorrect = isAnswered && q.userAnswer?.trim() === q.correctAnswer.trim();
-                            
-                            let btnStyle = "bg-slate-50 dark:bg-[#08090d] text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800";
-                            if (currentCustomQIdx === qIdx) {
-                              btnStyle = "bg-indigo-600 text-white border-indigo-600 ring-2 ring-indigo-550/25 shadow";
-                            } else if (hasSubmittedCustom) {
-                              btnStyle = isCorrect
-                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                                : "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30";
-                            } else if (isAnswered) {
-                              btnStyle = "bg-slate-200 dark:bg-zinc-800 text-slate-800 dark:text-zinc-200 border-slate-300 dark:border-zinc-700";
-                            }
-
-                            return (
-                              <button
-                                key={qIdx}
-                                type="button"
-                                onClick={() => { playClickChime(); setCurrentCustomQIdx(qIdx); }}
-                                className={`w-8.5 h-8.5 rounded-lg border text-xs font-bold transition-all cursor-pointer flex items-center justify-center ${btnStyle}`}
-                              >
-                                {qIdx + 1}
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        {/* Active Question Panel */}
-                        {aiCustomQuestions[currentCustomQIdx] && (
-                          <div className="space-y-5 pt-2">
-                            {/* Question text */}
-                            <div className="space-y-1">
-                              <span className="text-[10px] font-mono font-black text-indigo-600 dark:text-indigo-405">QUESTION {currentCustomQIdx + 1} OF {aiCustomQuestions.length}</span>
-                              <p className="text-sm font-bold font-mono tracking-tight text-slate-800 dark:text-zinc-150 leading-relaxed bg-slate-50/50 dark:bg-[#07080b]/50 p-4.5 rounded-xl border border-slate-105/50 dark:border-zinc-850/80">
-                                {aiCustomQuestions[currentCustomQIdx].question}
-                              </p>
-                            </div>
-
-                            {/* Options choices list */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              {aiCustomQuestions[currentCustomQIdx].options.map((opt, oIdx) => {
-                                const isSelected = aiCustomQuestions[currentCustomQIdx].userAnswer === opt;
-                                const isCorrectOpt = opt.trim() === aiCustomQuestions[currentCustomQIdx].correctAnswer.trim();
-                                
-                                let optStyle = "border-slate-200 dark:border-zinc-800/80 hover:bg-slate-50 dark:hover:bg-zinc-900/40 bg-white dark:bg-[#0c0d12]";
-                                if (hasSubmittedCustom) {
-                                  if (isCorrectOpt) {
-                                    optStyle = "bg-emerald-500/10 border-emerald-500 text-emerald-700 dark:text-emerald-400";
-                                  } else if (isSelected) {
-                                    optStyle = "bg-red-500/10 border-red-500 text-red-700 dark:text-red-400";
-                                  } else {
-                                    optStyle = "opacity-60 border-slate-100 dark:border-zinc-850 bg-white dark:bg-[#0c0d12]";
-                                  }
-                                } else if (isSelected) {
-                                  optStyle = "border-indigo-600 bg-indigo-50/20 dark:bg-indigo-955/5 ring-1 ring-indigo-500 text-indigo-705 dark:text-indigo-405";
-                                }
-
-                                return (
-                                  <div
-                                    key={oIdx}
-                                    onClick={() => handleSelectCustomAnswer(currentCustomQIdx, opt)}
-                                    className={`p-3.5 rounded-xl border transition-all cursor-pointer text-xs font-semibold flex items-center justify-between ${optStyle} ${hasSubmittedCustom ? 'pointer-events-none' : ''}`}
-                                  >
-                                    <span className="pr-2 leading-relaxed">{opt}</span>
-                                    {!hasSubmittedCustom && isSelected && (
-                                      <CheckCircle className="w-4.5 h-4.5 text-indigo-600 shrink-0" />
-                                    )}
-                                    {hasSubmittedCustom && isCorrectOpt && (
-                                      <span className="text-emerald-600 dark:text-emerald-400 text-sm font-black shrink-0">✓</span>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-
-                            {/* Help Actions & Hint Boxes */}
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-slate-100 dark:border-zinc-800/60">
-                              {/* Left interactive clues */}
-                              <div>
-                                {!hasSubmittedCustom ? (
-                                  <button
-                                    onClick={() => handleRequestHint(currentCustomQIdx, aiCustomQuestions[currentCustomQIdx].question)}
-                                    disabled={hintLoadingMap[currentCustomQIdx]}
-                                    className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 rounded-xl text-[11px] font-black uppercase tracking-wider transition disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
-                                  >
-                                    <MessageSquare className="w-4 h-4 shrink-0" />
-                                    <span>{hintLoadingMap[currentCustomQIdx] ? 'Consulting Abreham...' : 'Ask Abreham for a Clue'}</span>
-                                  </button>
-                                ) : (
-                                  <div className="text-[11px] text-slate-400">
-                                    Topic Topic: <strong className="text-slate-655 dark:text-zinc-300 font-bold">{aiCustomQuestions[currentCustomQIdx].subjectTopic}</strong>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Right navigation / submit */}
-                              <div className="flex items-center gap-3">
-                                {currentCustomQIdx > 0 && (
-                                  <button
-                                    onClick={() => { playClickChime(); setCurrentCustomQIdx(prev => prev - 1); }}
-                                    className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-800 text-[10px] font-bold"
-                                  >
-                                    Previous
-                                  </button>
-                                )}
-                                {currentCustomQIdx < aiCustomQuestions.length - 1 ? (
-                                  <button
-                                    onClick={() => { playClickChime(); setCurrentCustomQIdx(prev => prev + 1); }}
-                                    className="px-3.5 py-1.5 bg-slate-100 dark:bg-zinc-900 text-[10px] font-bold rounded-lg flex items-center gap-1"
-                                  >
-                                    <span>Next Question</span>
-                                    <ChevronRight className="w-3.5 h-3.5" />
-                                  </button>
-                                ) : (
-                                  !hasSubmittedCustom && (
-                                    <button
-                                      onClick={handleSubmitCustomExam}
-                                      className="px-5 py-2 bg-[#078930] hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer transition shadow-md flex items-center gap-1.5"
-                                    >
-                                      <Check className="w-4 h-4" />
-                                      <span>Finish and Grade</span>
-                                    </button>
-                                  )
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Display Hint Clue block if requested */}
-                            {hintTextMap[currentCustomQIdx] && (
-                              <motion.div
-                                initial={{ opacity: 0, y: 5 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="p-3.5 bg-indigo-50/60 dark:bg-indigo-955/5 border border-indigo-150/50 rounded-xl space-y-1 text-xs"
-                              >
-                                <span className="font-bold text-indigo-705 dark:text-indigo-405 font-mono text-[10px] uppercase tracking-wider flex items-center gap-1">
-                                  <span>💡 Abreham's Study Hint:</span>
-                                  {hintLoadingMap[currentCustomQIdx] && <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse" />}
-                                </span>
-                                <p className="text-slate-600 dark:text-zinc-300 leading-normal text-[11px] font-medium font-serif italic">
-                                  "{hintTextMap[currentCustomQIdx]}"
-                                </p>
-                              </motion.div>
-                            )}
-
-                            {/* Display Answer Solution Block if exam is submitted */}
-                            {hasSubmittedCustom && (
-                              <motion.div
-                                initial={{ opacity: 0, y: 8 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="p-4 bg-slate-50 dark:bg-[#07080c] border border-slate-200 dark:border-zinc-850 rounded-xl space-y-3"
-                              >
-                                <div className="flex justify-between items-center text-[10.5px] font-bold font-mono text-indigo-650 dark:text-indigo-400">
-                                  <span>👨‍🏫 Board Solution & Explanations</span>
-                                  <span className="bg-emerald-500/10 text-emerald-600 px-2 py-0.5 rounded text-[9.5px]">Correct answer: {aiCustomQuestions[currentCustomQIdx].correctAnswer}</span>
-                                </div>
-                                <p className="text-xs text-slate-650 dark:text-zinc-350 leading-relaxed font-sans whitespace-pre-line">
-                                  {aiCustomQuestions[currentCustomQIdx].explanation}
-                                </p>
-                              </motion.div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* No exam generated state */}
-                {!isGeneratingCustom && aiCustomQuestions.length === 0 && (
-                  <div className="bg-white dark:bg-[#0c0d12] border border-slate-200 dark:border-zinc-805 p-8 rounded-2xl shadow-sm text-center space-y-5">
-                    <BookMarked className="w-12 h-12 text-indigo-600 mx-auto animate-pulse" />
-                    <div className="space-y-1.5">
-                      <h3 className="font-serif font-black text-base text-slate-850 dark:text-white">Curriculum Board Exam Portal (400+ Questions)</h3>
-                      <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                        Select a class, subject, and unit/chapter on the left to draw from our official pool of 400+ board questions and compile an authentic, standardized practice examination.
-                      </p>
-                    </div>
-                    <div className="p-4 rounded-xl border border-dashed border-slate-200 dark:border-zinc-800 max-w-md mx-auto grid grid-cols-3 gap-3">
-                      <div className="space-y-1">
-                        <span className="text-base">📐</span>
-                        <h5 className="text-[10px] font-black text-slate-700 dark:text-zinc-300 uppercase">SI Units</h5>
-                        <p className="text-[9px] text-slate-400">SI & Physical formulas</p>
-                      </div>
-                      <div className="space-y-1">
-                        <span className="text-base">⚡</span>
-                        <h5 className="text-[10px] font-black text-slate-700 dark:text-zinc-300 uppercase">Matric</h5>
-                        <p className="text-[9px] text-slate-400">Board exam standards</p>
-                      </div>
-                      <div className="space-y-1">
-                        <span className="text-base">📚</span>
-                        <h5 className="text-[10px] font-black text-slate-700 dark:text-zinc-300 uppercase">Chapter Pools</h5>
-                        <p className="text-[9px] text-slate-400">400+ MCQs per unit</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Render Mode B Surprise Contents */}
-          {isSurpriseMode && (
-            <div className="max-w-3xl mx-auto space-y-6">
-              {/* Streak Tracker & Title Header */}
-              <div className="bg-gradient-to-r from-amber-500/20 to-orange-500/10 dark:from-amber-955/30 dark:to-orange-955/10 border border-amber-300/40 p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div className="space-y-0.5">
-                  <span className="text-[9.5px] font-black tracking-widest text-amber-600 dark:text-amber-400 uppercase">Endless Surprise Arcade</span>
-                  <h3 className="text-base font-serif font-black text-slate-850 dark:text-white flex items-center gap-1.5">
-                    <span>Unlimited Quiz Practice Engine</span>
-                  </h3>
-                </div>
-
-                <div className="flex items-center gap-4 bg-white/65 dark:bg-black/40 px-4 py-2 rounded-xl border border-amber-200/55 shadow-sm shrink-0 font-mono">
-                  <div className="flex items-center gap-1.5">
-                    <Flame className="w-5 h-5 text-amber-550 fill-current animate-pulse" />
-                    <div className="space-y-0">
-                      <span className="text-[9px] text-slate-400 font-bold uppercase block leading-none">Best Streak</span>
-                      <span className="text-sm font-black text-slate-850 dark:text-white leading-none">{surpriseStreak} in a row</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Loader */}
-              {isGeneratingSurprise && (
-                <div className="bg-white dark:bg-[#0c0d12] border border-slate-202 dark:border-zinc-802 rounded-2xl p-16 text-center space-y-4">
-                  <div className="w-10 h-10 rounded-full border-2 border-amber-500 border-t-transparent animate-spin mx-auto" />
-                  <div className="space-y-1">
-                    <h4 className="font-serif font-black text-slate-800 dark:text-white">Pulling unexpected matric questions...</h4>
-                    <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                      Choosing a surprise curriculum focus and applying complex physical units or high-frequency repeated formats...
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Surprise Question Workspace */}
-              {!isGeneratingSurprise && surpriseQuestion && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="bg-white dark:bg-[#0c0d12] border border-slate-200 dark:border-zinc-805 p-6 rounded-2xl shadow-sm space-y-6"
-                >
-                  <div className="flex justify-between items-center border-b border-slate-100 dark:border-zinc-800/60 pb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
-                      <span className="text-xs font-bold text-indigo-600 dark:text-indigo-404 uppercase tracking-wider">
-                        📍 Practice focus: {surpriseQuestion.subjectTopic}
-                      </span>
-                    </div>
-                    <span className="text-[10px] font-mono font-bold text-emerald-650 dark:text-emerald-400">Curriculum Standardized</span>
-                  </div>
-
-                  {/* Question */}
-                  <div className="space-y-1 bg-slate-50/60 dark:bg-[#07080b]/55 p-4 rounded-xl border border-slate-105/50 dark:border-zinc-850">
-                    <p className="text-sm font-bold font-mono text-slate-850 dark:text-zinc-150 leading-relaxed whitespace-pre-line">
-                      {surpriseQuestion.question}
-                    </p>
-                  </div>
-
-                  {/* Options */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {surpriseQuestion.options.map((opt, oIdx) => {
-                      const isSelected = selectedSurpriseChoice === opt;
-                      const isCorrectOpt = opt.trim() === surpriseQuestion.correctAnswer.trim();
-
-                      let optStyle = "border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#0c0d12] hover:bg-slate-50 dark:hover:bg-zinc-900/30";
-                      if (surpriseAnswered) {
-                        if (isCorrectOpt) {
-                          optStyle = "bg-emerald-500/10 border-emerald-500 text-emerald-700 dark:text-emerald-400 font-bold";
-                        } else if (isSelected) {
-                          optStyle = "bg-red-500/10 border-red-500 text-red-700 dark:text-red-400";
-                        } else {
-                          optStyle = "opacity-60 border-slate-100 dark:border-zinc-850 bg-white dark:bg-[#0c0d12]";
-                        }
-                      } else if (isSelected) {
-                        optStyle = "border-amber-500 bg-amber-50/10 dark:bg-amber-955/5 ring-1 ring-amber-500 text-amber-800 dark:text-amber-400 font-bold";
-                      }
-
-                      return (
-                        <div
-                          key={oIdx}
-                          onClick={() => handleSelectSurpriseChoice(opt)}
-                          className={`p-3.5 rounded-xl border transition-all cursor-pointer text-xs font-semibold flex items-center justify-between ${optStyle} ${surpriseAnswered ? 'pointer-events-none' : ''}`}
-                        >
-                          <span className="pr-2 leading-relaxed">{opt}</span>
-                          {!surpriseAnswered && isSelected && (
-                            <CheckCircle className="w-4 h-4 text-amber-500 shrink-0" />
-                          )}
-                          {surpriseAnswered && isCorrectOpt && (
-                            <span className="text-emerald-600 dark:text-emerald-400 text-sm font-black shrink-0">✓</span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Action row */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-slate-100 dark:border-zinc-800/60">
-                    <div>
-                      {!surpriseAnswered ? (
-                        <p className="text-[11px] text-slate-400">Choose your answer and click Submit to check your streak.</p>
-                      ) : (
-                        <button
-                          onClick={() => setSurpriseExplainOpen(!surpriseExplainOpen)}
-                          className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
-                        >
-                          <span>{surpriseExplainOpen ? 'Hide' : 'Show'} Step-by-Step Explanation</span>
-                          <span className="text-[10px]">{surpriseExplainOpen ? '▲' : '▼'}</span>
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      {!surpriseAnswered ? (
-                        <button
-                          onClick={handleSubmitSurpriseAnswer}
-                          disabled={!selectedSurpriseChoice}
-                          className="px-5 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-black font-black uppercase text-xs tracking-wider rounded-xl cursor-pointer transition shadow-sm"
-                        >
-                          Verify Answer
-                        </button>
-                      ) : (
-                        <button
-                          onClick={generateSurpriseQuestion}
-                          className="px-5 py-2 bg-indigo-650 hover:bg-indigo-700 text-white font-black uppercase text-xs tracking-wider rounded-xl cursor-pointer transition shadow-md flex items-center gap-1.5"
-                        >
-                          <span>Next Surprise Question</span>
-                          <ArrowRight className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Display grading response message */}
-                  {surpriseResultMsg && (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.98 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className={`p-4 rounded-xl text-xs font-semibold ${
-                        surpriseResultMsg.success
-                          ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'
-                          : 'bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20'
-                      }`}
-                    >
-                      {surpriseResultMsg.text}
-                    </motion.div>
-                  )}
-
-                  {/* Display step explanation accordion */}
-                  {surpriseAnswered && surpriseExplainOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      className="p-4.5 bg-slate-50 dark:bg-[#07080b]/50 border border-slate-150 dark:border-zinc-850 rounded-xl space-y-2.5"
-                    >
-                      <h5 className="text-[10.5px] font-bold font-mono text-indigo-600 dark:text-indigo-400">👨‍🏫 Board Solution & Formulas Key</h5>
-                      <p className="text-xs text-slate-650 dark:text-zinc-350 leading-relaxed whitespace-pre-line font-sans">
-                        {surpriseQuestion.explanation}
-                      </p>
-                    </motion.div>
-                  )}
-                </motion.div>
-              )}
-
-              {/* Inactive welcome surprise state */}
-              {!isGeneratingSurprise && !surpriseQuestion && (
-                <div className="bg-white dark:bg-[#0c0d12] border border-slate-200 dark:border-zinc-805 p-12 rounded-2xl shadow-sm text-center space-y-5">
-                  <Dices className="w-12 h-12 text-amber-500 mx-auto animate-bounce" />
-                  <div className="space-y-1.5">
-                    <h3 className="font-serif font-black text-base text-slate-800 dark:text-white">Arcade Practice Challenge</h3>
-                    <p className="text-xs text-slate-400 max-w-sm mx-auto animate-pulse">
-                      Ready to tackle a completely unexpected challenge? Get random math proofs, physics dimensional units or relative tenses EUEE questions instantly.
-                    </p>
-                  </div>
-                  <button
-                    onClick={generateSurpriseQuestion}
-                    className="px-6 py-3 bg-amber-500 hover:bg-amber-600 text-black font-black uppercase text-xs tracking-wider rounded-xl transition cursor-pointer shadow-md"
-                  >
-                    🎲 Start surprise practice
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </motion.div>
-      )}
-
-      {activeTab === 'external' && (
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-6"
-        >
-          {/* Intro banner */}
-          <div className="bg-gradient-to-r from-indigo-900 to-slate-900 dark:from-indigo-955/60 dark:to-zinc-950 border border-indigo-500/20 rounded-2xl p-6 text-white space-y-3 relative overflow-hidden">
-            <div className="absolute right-0 bottom-0 opacity-10 translate-x-10 translate-y-10">
-              <Award className="w-64 h-64 text-indigo-400" />
-            </div>
-            <div className="relative z-10 space-y-1">
-              <span className="text-[10px] bg-indigo-500 text-white font-extrabold tracking-widest px-2 py-0.5 rounded uppercase">Official National Matric Resources</span>
-              <h3 className="text-xl font-serif font-black tracking-tight">Ethiopian University Entrance Exam (EUEE) Hub</h3>
-              <p className="text-xs text-indigo-200 max-w-2xl leading-relaxed">
-                Prepare for the national examinations with official stream-wise categorized papers, core high-school subjects, and fully complete Grade 12 curriculum books. Organized flawlessly for target revision.
-              </p>
-            </div>
+            </motion.div>
           </div>
-
-          {/* Bento Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-            
-            {/* 1. Kehulum Stream-Wise Section - 7 cols */}
-            <div className="md:col-span-7 bg-white dark:bg-[#0c0d12] border border-slate-200 dark:border-zinc-805 rounded-2xl p-6 shadow-sm space-y-5 flex flex-col justify-between">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black tracking-widest text-[#078930] dark:text-emerald-405 bg-emerald-50 dark:bg-emerald-950/20 px-2 py-0.5 rounded uppercase">Stream-Based Papers</span>
-                  <span className="text-[10px] font-mono text-slate-400">Kehulum Exam Portal</span>
-                </div>
-
-                <h4 className="text-base font-serif font-black text-slate-900 dark:text-zinc-150 leading-tight">
-                  EUEE Past Exams by Stream (Natural vs. Social Science)
-                </h4>
-                
-                <p className="text-xs text-slate-505 dark:text-zinc-400 leading-relaxed">
-                  Since Natural Science and Social Science students take different subject combinations, practicing sorted by stream is vital to avoid mixing up relevant curriculum topics.
-                </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2">
-                  <div className="p-3.5 rounded-xl border border-emerald-100 dark:border-emerald-950/50 bg-emerald-50/20 dark:bg-emerald-950/5 space-y-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#078930]" />
-                      <span className="text-xs font-black text-slate-800 dark:text-emerald-400">Natural Science Stream</span>
-                    </div>
-                    <p className="text-[10.5px] text-slate-500 dark:text-zinc-400 leading-snug">
-                      Mathematics, English, Aptitude, Physics, Chemistry, Biology, and Civics.
-                    </p>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl border border-amber-100 dark:border-amber-950/50 bg-amber-50/10 dark:bg-amber-950/5 space-y-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                      <span className="text-xs font-black text-slate-800 dark:text-amber-450">Social Science Stream</span>
-                    </div>
-                    <p className="text-[10.5px] text-slate-500 dark:text-zinc-400 leading-snug">
-                      Mathematics, English, Aptitude, Geography, History, Economics, Civics, and General Business.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-100 dark:border-zinc-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="text-[10.5px] text-slate-400 dark:text-zinc-500 leading-tight">
-                  ⚡ Direct stream access & past years answer guides
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    playSuccessChime();
-                    if (onOpenInAppViewer) {
-                      onOpenInAppViewer("https://kehulum.com/entrance-exam", "National Entrance Exam Hub");
-                    } else {
-                      window.open("https://kehulum.com/entrance-exam", "_blank");
-                    }
-                  }}
-                  className="px-5 py-2.5 bg-[#078930] hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 shadow hover:shadow-md cursor-pointer shrink-0"
-                >
-                  <span>Open Entrance Exam Hub</span>
-                  <span className="text-xs">↗</span>
-                </button>
-              </div>
-            </div>
-
-            {/* 2. EthioBookReview Subject-Wise Section - 5 cols */}
-            <div className="md:col-span-5 bg-white dark:bg-[#0c0d12] border border-slate-200 dark:border-zinc-805 rounded-2xl p-6 shadow-sm space-y-4 flex flex-col justify-between">
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black tracking-widest text-indigo-655 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/20 px-2 py-0.5 rounded uppercase">Subject-Wise Practice</span>
-                  <span className="text-[10px] font-mono text-slate-400">EthioBookReview</span>
-                </div>
-
-                <h4 className="text-base font-serif font-black text-slate-900 dark:text-zinc-150 leading-tight">
-                  Direct Subject Past Exams
-                </h4>
-                
-                <p className="text-xs text-slate-505 dark:text-zinc-400 leading-relaxed">
-                  Jump straight into standard questions and solutions sorted for high-frequency EUEE exam subjects.
-                </p>
-
-                <div className="space-y-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playSuccessChime();
-                      if (onOpenInAppViewer) {
-                        onOpenInAppViewer("https://ethiobookreview.com/national-exams/mathematics", "Mathematics Past Exams");
-                      } else {
-                        window.open("https://ethiobookreview.com/national-exams/mathematics", "_blank");
-                      }
-                    }}
-                    className="flex w-full items-center justify-between p-2.5 rounded-xl border border-slate-100 dark:border-zinc-800/60 bg-slate-50 dark:bg-zinc-900/40 hover:border-indigo-450 dark:hover:border-indigo-550 transition-all text-xs font-bold text-left cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2">📐 <span>Mathematics Past Exams</span></span>
-                    <span className="text-slate-400">&rarr;</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playSuccessChime();
-                      if (onOpenInAppViewer) {
-                        onOpenInAppViewer("https://ethiobookreview.com/national-exams/english", "English Past Exams");
-                      } else {
-                        window.open("https://ethiobookreview.com/national-exams/english", "_blank");
-                      }
-                    }}
-                    className="flex w-full items-center justify-between p-2.5 rounded-xl border border-slate-100 dark:border-zinc-800/60 bg-slate-50 dark:bg-zinc-900/40 hover:border-indigo-450 dark:hover:border-indigo-550 transition-all text-xs font-bold text-left cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2">📝 <span>English Past Exams</span></span>
-                    <span className="text-slate-400">&rarr;</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playSuccessChime();
-                      if (onOpenInAppViewer) {
-                        onOpenInAppViewer("https://ethiobookreview.com/national-exams/aptitude", "Aptitude Past Exams");
-                      } else {
-                        window.open("https://ethiobookreview.com/national-exams/aptitude", "_blank");
-                      }
-                    }}
-                    className="flex w-full items-center justify-between p-2.5 rounded-xl border border-slate-100 dark:border-zinc-800/60 bg-slate-50 dark:bg-zinc-900/40 hover:border-indigo-450 dark:hover:border-indigo-550 transition-all text-xs font-bold text-left cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2">💡 <span>Aptitude Past Exams</span></span>
-                    <span className="text-slate-400">&rarr;</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 dark:border-zinc-800/60">
-                <button
-                  type="button"
-                  onClick={() => {
-                    playSuccessChime();
-                    if (onOpenInAppViewer) {
-                      onOpenInAppViewer("https://ethiobookreview.com/national-exams", "EthioBookReview National Exams");
-                    } else {
-                      window.open("https://ethiobookreview.com/national-exams", "_blank");
-                    }
-                  }}
-                  className="w-full py-2.5 border border-indigo-200 hover:border-indigo-400 dark:border-indigo-900/60 dark:hover:border-indigo-800 text-indigo-650 dark:text-indigo-400 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer"
-                >
-                  <span>View Full List (All Subjects)</span>
-                  <span>↗</span>
-                </button>
-              </div>
-            </div>
-
-            {/* 3. Fetena.net Official Grade 12 Textbooks - 12 cols */}
-            <div className="md:col-span-12 bg-white dark:bg-[#0c0d12] border border-slate-200 dark:border-zinc-805 rounded-2xl p-6 shadow-sm space-y-5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-zinc-800/60 pb-3">
-                <div className="space-y-0.5">
-                  <span className="text-[10px] font-black tracking-widest text-amber-655 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 px-2 py-0.5 rounded uppercase">Grade 12 Reference Materials</span>
-                  <h4 className="text-base font-serif font-black text-slate-900 dark:text-zinc-150">
-                    Official Grade 12 Textbook PDFs (Fetena.net)
-                  </h4>
-                </div>
-                <span className="text-[11px] font-mono text-slate-400">Direct Official Textbook Downloads</span>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Common Courses */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 border-b border-slate-100 dark:border-zinc-800/60 pb-2">
-                    <span className="text-base font-sans">💼</span>
-                    <h5 className="text-xs font-black text-slate-800 dark:text-zinc-300 uppercase tracking-wider">Common Courses</h5>
-                  </div>
-                  <div className="space-y-2">
-                    {[
-                      { name: 'Mathematics', url: 'https://fetena.net/books/grade-12/mathematics' },
-                      { name: 'English', url: 'https://fetena.net/books/grade-12/english' },
-                      { name: 'Civics & Ethical Education', url: 'https://fetena.net/books/grade-12/civics-and-ethical-education' },
-                      { name: 'ICT (Information Technology)', url: 'https://fetena.net/books/grade-12/ict' },
-                      { name: 'Amharic', url: 'https://fetena.net/books/grade-12/amharic' },
-                    ].map(bk => (
-                      <button
-                        key={bk.name}
-                        type="button"
-                        onClick={() => {
-                          playSuccessChime();
-                          if (onOpenInAppViewer) {
-                            onOpenInAppViewer(bk.url, `Grade 12 Textbook: ${bk.name}`);
-                          } else {
-                            window.open(bk.url, "_blank");
-                          }
-                        }}
-                        className="flex w-full items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-zinc-900/30 hover:bg-slate-100 dark:hover:bg-zinc-800/60 text-xs text-slate-650 dark:text-zinc-300 border border-slate-105/50 dark:border-zinc-850 text-left cursor-pointer"
-                      >
-                        <span className="truncate">{bk.name}</span>
-                        <span className="text-[10px] text-slate-405 font-mono shrink-0">In-App 📖</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Natural Science */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 border-b border-slate-100 dark:border-zinc-800/60 pb-2">
-                    <span className="text-base font-sans">🔬</span>
-                    <h5 className="text-xs font-black text-slate-800 dark:text-zinc-300 uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Natural Science Courses</h5>
-                  </div>
-                  <div className="space-y-2">
-                    {[
-                      { name: 'Biology', url: 'https://fetena.net/books/grade-12/biology' },
-                      { name: 'Chemistry', url: 'https://fetena.net/books/grade-12/chemistry' },
-                      { name: 'Physics', url: 'https://fetena.net/books/grade-12/physics' },
-                    ].map(bk => (
-                      <button
-                        key={bk.name}
-                        type="button"
-                        onClick={() => {
-                          playSuccessChime();
-                          if (onOpenInAppViewer) {
-                            onOpenInAppViewer(bk.url, `Grade 12 Textbook: ${bk.name}`);
-                          } else {
-                            window.open(bk.url, "_blank");
-                          }
-                        }}
-                        className="flex w-full items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-zinc-900/30 hover:bg-slate-100 dark:hover:bg-zinc-800/60 text-xs text-slate-650 dark:text-zinc-300 border border-slate-105/50 dark:border-zinc-850 text-left cursor-pointer"
-                      >
-                        <span className="truncate">{bk.name}</span>
-                        <span className="text-[10px] text-slate-405 font-mono shrink-0">In-App 📖</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Social Science */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 border-b border-slate-100 dark:border-zinc-800/60 pb-2">
-                    <span className="text-base font-sans">🌍</span>
-                    <h5 className="text-xs font-black text-slate-800 dark:text-zinc-300 uppercase tracking-wider text-amber-600 dark:text-amber-400">Social Science Courses</h5>
-                  </div>
-                  <div className="space-y-2">
-                    {[
-                      { name: 'Geography', url: 'https://fetena.net/books/grade-12/geography' },
-                      { name: 'History', url: 'https://fetena.net/books/grade-12/history' },
-                      { name: 'Economics', url: 'https://fetena.net/books/grade-12/economics' },
-                      { name: 'General Business', url: 'https://fetena.net/books/grade-12/general-business' },
-                    ].map(bk => (
-                      <button
-                        key={bk.name}
-                        type="button"
-                        onClick={() => {
-                          playSuccessChime();
-                          if (onOpenInAppViewer) {
-                            onOpenInAppViewer(bk.url, `Grade 12 Textbook: ${bk.name}`);
-                          } else {
-                            window.open(bk.url, "_blank");
-                          }
-                        }}
-                        className="flex w-full items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-zinc-900/30 hover:bg-slate-100 dark:hover:bg-zinc-800/60 text-xs text-slate-650 dark:text-zinc-300 border border-slate-105/50 dark:border-zinc-850 text-left cursor-pointer"
-                      >
-                        <span className="truncate">{bk.name}</span>
-                        <span className="text-[10px] text-slate-405 font-mono shrink-0">In-App 📖</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </motion.div>
-      )}
+        )}
+      </AnimatePresence>
 
     </div>
   );

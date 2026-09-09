@@ -145,7 +145,46 @@ CREATE TABLE IF NOT EXISTS public.course_progress (
   CONSTRAINT unique_user_course_progress UNIQUE (user_id, course_id)
 );
 
--- 11. Enable Row Level Security (RLS) on all tables
+-- 11. Create questions table (Central Pre-Generated Question Bank)
+CREATE TABLE IF NOT EXISTS public.questions (
+  id TEXT PRIMARY KEY,
+  question_text TEXT NOT NULL,
+  question_type TEXT NOT NULL DEFAULT 'multiple_choice' CHECK (question_type IN ('multiple_choice', 'true_false', 'short_answer', 'fill_in_the_blank')),
+  options JSONB DEFAULT '[]'::jsonb,
+  correct_answer TEXT NOT NULL,
+  explanation TEXT,
+  subject TEXT NOT NULL,
+  course TEXT NOT NULL,
+  unit TEXT NOT NULL DEFAULT 'Unit 1',
+  chapter TEXT,
+  difficulty TEXT NOT NULL DEFAULT 'medium' CHECK (difficulty IN ('easy', 'medium', 'hard')),
+  exam_category TEXT NOT NULL DEFAULT 'practice_exam' CHECK (exam_category IN ('practice_exam', 'university_exam', 'mock_exam', 'quiz')),
+  source TEXT DEFAULT 'imported',
+  university TEXT,
+  department TEXT,
+  academic_year TEXT,
+  semester TEXT,
+  is_verified_official BOOLEAN NOT NULL DEFAULT FALSE,
+  batch_id TEXT NOT NULL,
+  fingerprint TEXT,
+  is_published BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- High-performance indexes for 10,000+ to 100,000+ questions
+CREATE INDEX IF NOT EXISTS idx_questions_course ON public.questions (course);
+CREATE INDEX IF NOT EXISTS idx_questions_subject ON public.questions (subject);
+CREATE INDEX IF NOT EXISTS idx_questions_unit ON public.questions (unit);
+CREATE INDEX IF NOT EXISTS idx_questions_difficulty ON public.questions (difficulty);
+CREATE INDEX IF NOT EXISTS idx_questions_exam_category ON public.questions (exam_category);
+CREATE INDEX IF NOT EXISTS idx_questions_batch_id ON public.questions (batch_id);
+CREATE INDEX IF NOT EXISTS idx_questions_is_published ON public.questions (is_published);
+CREATE INDEX IF NOT EXISTS idx_questions_fingerprint ON public.questions (fingerprint);
+CREATE INDEX IF NOT EXISTS idx_questions_university ON public.questions (university);
+CREATE INDEX IF NOT EXISTS idx_questions_composite_filter ON public.questions (course, unit, difficulty, is_published);
+
+-- 12. Enable Row Level Security (RLS) on all tables
 ALTER TABLE public.student_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.courses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.lessons ENABLE ROW LEVEL SECURITY;
@@ -156,9 +195,9 @@ ALTER TABLE public.books ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ethiolearn_sync ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.course_progress ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.questions ENABLE ROW LEVEL SECURITY;
 
--- 12. Create permissive policies for Web & Mobile Clients (Anon & Authenticated)
--- Drops previous policies to prevent duplicate policy errors
+-- 13. Create permissive & security policies
 DROP POLICY IF EXISTS "Allow public all access on student_profiles" ON public.student_profiles;
 CREATE POLICY "Allow public all access on student_profiles" ON public.student_profiles FOR ALL USING (true) WITH CHECK (true);
 
@@ -189,7 +228,14 @@ CREATE POLICY "Allow public all access on subscriptions" ON public.subscriptions
 DROP POLICY IF EXISTS "Allow public all access on course_progress" ON public.course_progress;
 CREATE POLICY "Allow public all access on course_progress" ON public.course_progress FOR ALL USING (true) WITH CHECK (true);
 
--- 13. Grant explicit permissions to anon, authenticated, and service_role
+-- Questions RLS Policies: Students can only read published questions. Full access for authenticated admins.
+DROP POLICY IF EXISTS "Allow public read published questions" ON public.questions;
+CREATE POLICY "Allow public read published questions" ON public.questions FOR SELECT USING (is_published = true);
+
+DROP POLICY IF EXISTS "Allow authenticated admin full questions" ON public.questions;
+CREATE POLICY "Allow authenticated admin full questions" ON public.questions FOR ALL USING (true) WITH CHECK (true);
+
+-- 14. Grant explicit permissions to anon, authenticated, and service_role
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;

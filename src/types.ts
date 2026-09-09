@@ -602,3 +602,93 @@ export interface AppState {
   flashcardLogs: FlashcardReviewLog[];
   decksState: { [deckId: string]: Flashcard[] }; // Overrides / stores review state of cards in a deck
 }
+
+// ============================================================================
+// QUESTION BANK SYSTEM TYPES (Supabase Pre-Generated & Central Question Storage)
+// ============================================================================
+
+export type BankQuestionType = 'multiple_choice' | 'true_false' | 'short_answer' | 'fill_in_the_blank';
+export type BankDifficulty = 'easy' | 'medium' | 'hard';
+export type BankExamCategory = 'practice_exam' | 'university_exam' | 'mock_exam' | 'quiz';
+export type BankQuestionSource = 'imported' | 'verified_past_paper' | 'faculty_authored' | 'sample_test';
+
+export interface QuestionBankRecord {
+  id: string;
+  question_text: string;
+  question_type: BankQuestionType;
+  options: string[];
+  correct_answer: string;
+  explanation?: string;
+  subject: string;
+  course: string;
+  unit: string;
+  chapter?: string;
+  difficulty: BankDifficulty;
+  exam_category: BankExamCategory;
+  source?: string;
+  university?: string;
+  department?: string;
+  academic_year?: string;
+  semester?: string;
+  is_verified_official?: boolean;
+  batch_id: string;
+  fingerprint?: string;
+  is_published: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface QuestionValidationIssue {
+  index: number;
+  question_text?: string;
+  issue: string;
+  severity: 'error' | 'warning';
+}
+
+export interface QuestionValidationSummary {
+  total: number;
+  valid: number;
+  invalid: number;
+  duplicates: number;
+  readyToImport: QuestionBankRecord[];
+  invalidDetails: QuestionValidationIssue[];
+  duplicateDetails: Array<{ index: number; question_text: string; reason: string }>;
+}
+
+export interface QuestionBankStats {
+  totalQuestions: number;
+  publishedQuestions: number;
+  unpublishedQuestions: number;
+  batchCount: number;
+  byCourse: { [course: string]: number };
+  bySubject?: { [subject: string]: number };
+  byUnit: { [unit: string]: number };
+  byDifficulty: { easy: number; medium: number; hard: number };
+  byType: {
+    multiple_choice: number;
+    true_false: number;
+    short_answer: number;
+    fill_in_the_blank: number;
+  };
+  byExamCategory: {
+    practice_exam: number;
+    university_exam: number;
+    mock_exam: number;
+    quiz: number;
+  };
+  byUniversity?: { [uni: string]: number };
+}
+
+export interface QuestionBankFilter {
+  course?: string;
+  subject?: string;
+  unit?: string;
+  difficulty?: string;
+  questionType?: string;
+  examCategory?: string;
+  isPublished?: boolean | 'all';
+  batchId?: string;
+  isVerifiedOfficial?: boolean | 'all';
+  search?: string;
+  university?: string;
+}

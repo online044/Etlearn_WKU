@@ -6,6 +6,7 @@ import {
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
 import { safeStorage } from '../utils/safeStorage';
 import { INITIAL_QUESTIONS } from '../data/initialFirestoreContent';
+import { generateRandomExamQuestions } from '../utils/supabaseQuestions';
 
 interface ExamPrepProps {
   apiKey: string;
@@ -459,50 +460,102 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
     setTimeout(() => setParticles([]), 2200);
   };
 
-  const handleStartPastExam = () => {
+  const handleStartPastExam = async () => {
     playClickChime();
-    const defaultBank = PAST_EXAM_BANK[selectedSubject] || PAST_EXAM_BANK["Emerging Technologies"] || [];
-    const customBankForSubject = customQuestionBank[selectedSubject] || [];
-    const bank = [...customBankForSubject, ...defaultBank];
+    setLoadingText(language === 'en' ? 'Retrieving official questions from Supabase...' : 'ጥያቄዎችን ከሱፓቤዝ ዳታቤዝ በማውጣት ላይ...');
 
-    setExamQuestions(bank);
-    setExamMode('active');
-    setActiveQIndex(0);
-    setUserSelections({});
-    setIsAnswerRevealed(false);
-    setTimeRemaining(90);
-    startQuestionTimer(90);
+    try {
+      const dbQuestions = await generateRandomExamQuestions({
+        subject: selectedSubject,
+        totalQuestions: 10,
+        examCategory: 'practice_exam'
+      });
+
+      if (dbQuestions && dbQuestions.length > 0) {
+        const mapped: QuizQuestion[] = dbQuestions.map(q => ({
+          question: q.question_text,
+          options: q.options,
+          correctAnswer: q.correct_answer,
+          explanation: q.explanation || `${q.course} (${q.unit})`
+        }));
+        setExamQuestions(mapped);
+      } else {
+        const defaultBank = PAST_EXAM_BANK[selectedSubject] || PAST_EXAM_BANK["Emerging Technologies"] || [];
+        const customBankForSubject = customQuestionBank[selectedSubject] || [];
+        const bank = [...customBankForSubject, ...defaultBank];
+        setExamQuestions(bank);
+      }
+    } catch {
+      const defaultBank = PAST_EXAM_BANK[selectedSubject] || PAST_EXAM_BANK["Emerging Technologies"] || [];
+      const customBankForSubject = customQuestionBank[selectedSubject] || [];
+      const bank = [...customBankForSubject, ...defaultBank];
+      setExamQuestions(bank);
+    } finally {
+      setLoadingText(null);
+      setExamMode('active');
+      setActiveQIndex(0);
+      setUserSelections({});
+      setIsAnswerRevealed(false);
+      setTimeRemaining(90);
+      startQuestionTimer(90);
+    }
   };
 
-  const handleGenerateCuratedMock = () => {
+  const handleGenerateCuratedMock = async () => {
     playClickChime();
-    const defaultBank = PAST_EXAM_BANK[selectedSubject] || PAST_EXAM_BANK["Emerging Technologies"] || [];
-    const customBankForSubject = customQuestionBank[selectedSubject] || [];
-    const combined: QuizQuestion[] = [...customBankForSubject, ...defaultBank];
+    setLoadingText(language === 'en' ? 'Querying pre-generated question bank...' : 'ቀደም ብለው የተዘጋጁ የፈተና ጥያቄዎችን በማሰባሰብ ላይ...');
 
-    INITIAL_QUESTIONS.forEach(q => {
-      const opts = q.options.map(o => o.text);
-      const correctOpt = q.options.find(o => o.id === q.correctAnswerId);
-      const correctText = correctOpt ? correctOpt.text : opts[0];
-      combined.push({
-        question: q.text,
-        options: opts,
-        correctAnswer: correctText,
-        explanation: q.explanation
+    try {
+      const dbQuestions = await generateRandomExamQuestions({
+        subject: selectedSubject,
+        totalQuestions: qCount,
+        difficulty: difficulty
       });
-    });
 
-    const shuffled = [...combined].sort(() => 0.5 - Math.random());
-    const selected = shuffled.slice(0, Math.min(qCount, shuffled.length));
+      if (dbQuestions && dbQuestions.length > 0) {
+        const mapped: QuizQuestion[] = dbQuestions.map(q => ({
+          question: q.question_text,
+          options: q.options,
+          correctAnswer: q.correct_answer,
+          explanation: q.explanation || `${q.subject} - ${q.course}`
+        }));
+        setExamQuestions(mapped);
+      } else {
+        const defaultBank = PAST_EXAM_BANK[selectedSubject] || PAST_EXAM_BANK["Emerging Technologies"] || [];
+        const customBankForSubject = customQuestionBank[selectedSubject] || [];
+        const combined: QuizQuestion[] = [...customBankForSubject, ...defaultBank];
 
-    setExamQuestions(selected);
-    setExamMode('active');
-    setActiveQIndex(0);
-    setUserSelections({});
-    setIsAnswerRevealed(false);
-    setTimeRemaining(90);
-    startQuestionTimer(90);
-    playSuccessChime();
+        INITIAL_QUESTIONS.forEach(q => {
+          const opts = q.options.map(o => o.text);
+          const correctOpt = q.options.find(o => o.id === q.correctAnswerId);
+          const correctText = correctOpt ? correctOpt.text : opts[0];
+          combined.push({
+            question: q.text,
+            options: opts,
+            correctAnswer: correctText,
+            explanation: q.explanation
+          });
+        });
+
+        const shuffled = [...combined].sort(() => 0.5 - Math.random());
+        const selected = shuffled.slice(0, Math.min(qCount, shuffled.length));
+        setExamQuestions(selected);
+      }
+    } catch {
+      const defaultBank = PAST_EXAM_BANK[selectedSubject] || PAST_EXAM_BANK["Emerging Technologies"] || [];
+      const customBankForSubject = customQuestionBank[selectedSubject] || [];
+      const bank = [...customBankForSubject, ...defaultBank];
+      setExamQuestions(bank);
+    } finally {
+      setLoadingText(null);
+      setExamMode('active');
+      setActiveQIndex(0);
+      setUserSelections({});
+      setIsAnswerRevealed(false);
+      setTimeRemaining(90);
+      startQuestionTimer(90);
+      playSuccessChime();
+    }
   };
 
   const startQuestionTimer = (seconds: number) => {

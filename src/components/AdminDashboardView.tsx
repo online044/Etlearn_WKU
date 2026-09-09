@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Users, ShieldCheck, CreditCard, Tag, Bell, BookOpen, BarChart3, Search, CheckCircle, 
   XCircle, Plus, Trash2, Award, ArrowUpRight, Lock, Key, RefreshCw, AlertCircle, Sparkles, 
-  Send, Edit3, Eye, Archive, Check, Database, Copy, ExternalLink, Clock, Layers, FileText
+  Send, Edit3, Eye, Archive, Check, Database, Copy, ExternalLink, Clock, Layers, FileText,
+  HelpCircle
 } from 'lucide-react';
 import { 
   StudentProfile, CouponCode, PlatformAnnouncement, CourseRecord, LessonRecord, 
@@ -22,6 +23,7 @@ import { fetchAdminBooks, fetchAdminExams, fetchAdminNotes } from '../utils/cont
 import AdminBooksSection from './admin/AdminBooksSection';
 import AdminExamsSection from './admin/AdminExamsSection';
 import AdminNotesSection from './admin/AdminNotesSection';
+import { AdminQuestionBankSection } from './AdminQuestionBankSection';
 import { testSupabaseConnection, ETHIOLEARN_SUPABASE_SQL_SCRIPT, getSupabase, getAuthHeaders } from '../utils/supabaseClient';
 import { safeStorage } from '../utils/safeStorage';
 
@@ -39,7 +41,7 @@ export default function AdminDashboardView({
   onUpdateProfile
 }: AdminDashboardViewProps) {
   const isAmharic = language === 'am';
-  const [activeTab, setActiveTab] = useState<'overview' | 'courses' | 'books' | 'exams' | 'notes' | 'users' | 'payments' | 'coupons' | 'announcements' | 'database'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'courses' | 'books' | 'exams' | 'notes' | 'users' | 'payments' | 'coupons' | 'announcements' | 'database' | 'questions'>('overview');
 
   // Loading & Sync States
   const [isLoading, setIsLoading] = useState(true);
@@ -950,6 +952,18 @@ export default function AdminDashboardView({
                 {exams.filter(e => e.status === 'draft').length} draft
               </span>
             )}
+          </button>
+
+          <button
+            onClick={() => { playClickChime(); setActiveTab('questions'); }}
+            className={`px-3.5 py-3 rounded-t-xl text-xs font-bold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === 'questions'
+                ? 'border-amber-400 text-amber-400 bg-slate-900/60'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <HelpCircle className="w-4 h-4 text-amber-400" />
+            <span>Question Bank (Supabase)</span>
           </button>
 
           <button
@@ -1976,6 +1990,16 @@ export default function AdminDashboardView({
                 </div>
               </div>
             </div>
+          )}
+
+          {/* ================================================================ */}
+          {/* TAB: QUESTION BANK (SUPABASE PRE-GENERATED REPOSITORY)          */}
+          {/* ================================================================ */}
+          {activeTab === 'questions' && (
+            <AdminQuestionBankSection
+              isAmharic={isAmharic}
+              onRefreshStats={() => loadAllAdminData(true)}
+            />
           )}
         </div>
       </motion.div>

@@ -1268,7 +1268,6 @@ export default function App() {
                 onNavigate={(p) => setCurrentPage(p as any)}
                 onStudyAction={handleRecordStudyAction}
                 supabaseBooks={supabaseBooks}
-                onOpenInAppViewer={(url, title) => { setInAppViewerUrl(url); setInAppViewerTitle(title); }}
               />
             )}
 
@@ -1302,7 +1301,7 @@ export default function App() {
         </AnimatePresence>
 
         {/* EthioLearn Native In-App Showcase & Official Promo Banner */}
-        {currentPage !== 'upgrade' && (
+        {currentPage !== 'upgrade' && currentPage !== 'bookstore' && currentPage !== 'university' && (
           <EthioLearnAppPromoBanner 
             profile={profile}
             language={language}
