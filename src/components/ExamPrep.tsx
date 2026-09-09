@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Compass, Trophy, Zap, Clock, Calendar, ArrowRight, Sparkles, FileText, CheckCircle, XCircle, HelpCircle, Award, RefreshCw, Plus, X, Star
+  Compass, Trophy, Zap, Clock, Calendar, ArrowRight, Layers, FileText, CheckCircle, XCircle, HelpCircle, Award, RefreshCw, Plus, X, Star
 } from 'lucide-react';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
 import { safeStorage } from '../utils/safeStorage';
@@ -776,7 +776,7 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
                   onClick={handleGenerateCuratedMock}
                   className="w-full h-12 min-h-[48px] bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white text-sm font-serif font-extrabold tracking-wide rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md"
                 >
-                  <Sparkles className="w-4 h-4" />
+                  <Layers className="w-4 h-4" />
                   {language === 'en' ? 'Start Curriculum Practice Drill' : 'የልምምድ ፈተና ጀምር'}
                 </button>
 
@@ -1009,9 +1009,15 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
               >
                 <div className="flex items-center gap-1.5 font-extrabold text-slate-800 uppercase tracking-wide">
                   {userSelections[activeQIndex] === examQuestions[activeQIndex].correctAnswer ? (
-                    <span className="text-[#078930] flex items-center gap-1">🌟 {language === 'en' ? 'Excellent! Correct' : 'በጣም ጎበዝ! መልስዎ ትክክል ነው'}</span>
+                    <span className="text-[#078930] flex items-center gap-1">
+                      <CheckCircle className="w-4 h-4 text-[#078930]" />
+                      <span>{language === 'en' ? 'Excellent! Correct' : 'በጣም ጎበዝ! መልስዎ ትክክል ነው'}</span>
+                    </span>
                   ) : (
-                    <span className="text-red-600 flex items-center gap-1">✨ {language === 'en' ? 'Incorrect' : 'ትክክለኛው መልስ አልነበረም'}</span>
+                    <span className="text-red-600 flex items-center gap-1">
+                      <XCircle className="w-4 h-4 text-red-600" />
+                      <span>{language === 'en' ? 'Incorrect' : 'ትክክለኛው መልስ አልነበረም'}</span>
+                    </span>
                   )}
                 </div>
                 <p className="font-sans leading-normal font-medium italic">
@@ -1078,7 +1084,7 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
                 ) : Math.round((examScore / examQuestions.length) * 100) >= 50 ? (
                   <span>በጣም ጥሩ! በርታ/በርቺ 💪 <span className="block text-xs font-sans text-slate-400 mt-1">Great job! Keep trying and advancing!</span></span>
                 ) : (
-                  <span>ተስፋ አትቁረጥ! ይቻላል ✨ <span className="block text-xs font-sans text-slate-400 mt-1">Never give up under hard steps!</span></span>
+                  <span>ተስፋ አትቁረጥ! ይቻላል 🎯 <span className="block text-xs font-sans text-slate-400 mt-1">Never give up under hard steps!</span></span>
                 )}
               </p>
             </div>

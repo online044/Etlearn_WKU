@@ -1021,13 +1021,18 @@ export default function App() {
             </button>
             <button
               onClick={() => { playClickChime(); setCurrentPage('bookstore'); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 relative group ${
                 currentPage === 'bookstore'
                   ? 'bg-amber-500 text-slate-950 shadow-xs'
                   : 'text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <BookOpen className="w-3.5 h-3.5" />
+              <div className="relative flex items-center">
+                <BookOpen className="w-3.5 h-3.5" />
+                <span className="absolute -top-2.5 -right-3 px-1 py-0.2 rounded-full text-[8px] font-black bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 uppercase tracking-tight shadow-xs">
+                  {language === 'en' ? 'Soon' : 'በቅርቡ'}
+                </span>
+              </div>
               <span>{language === 'en' ? 'Books' : 'መጻሕፍት'}</span>
             </button>
             <button
@@ -1363,7 +1368,12 @@ export default function App() {
             }`}
             title="Book Store Modules"
           >
-            <BookOpen className="w-5 h-5 shrink-0" />
+            <div className="relative">
+              <BookOpen className="w-5 h-5 shrink-0" />
+              <span className="absolute -top-1.5 -right-3 px-1 py-0.2 rounded-full text-[8px] font-black bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 uppercase tracking-tight shadow-xs">
+                {language === 'en' ? 'Soon' : 'በቅርቡ'}
+              </span>
+            </div>
             <span className="text-[10px] font-semibold mt-1">
               {language === 'en' ? 'Books' : 'መጻሕፍት'}
             </span>

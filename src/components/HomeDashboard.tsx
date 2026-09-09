@@ -639,8 +639,11 @@ export default function HomeDashboard({
             className="p-4 rounded-xl bg-[#111C35] border border-slate-800 hover:border-emerald-500/50 transition-all cursor-pointer text-left group flex flex-col justify-between h-28 shadow-xs"
           >
             <div className="flex items-center justify-between">
-              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
+              <div className="relative w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
                 <BookOpen className="w-4 h-4" />
+                <span className="absolute -top-2 -right-2 px-1 py-0.2 rounded-full text-[8px] font-black bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 uppercase tracking-tight shadow-xs">
+                  {isAmharic ? 'በቅርቡ' : 'Soon'}
+                </span>
               </div>
               <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono">
                 {isAmharic ? 'መጻሕፍት' : 'Books'}

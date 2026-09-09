@@ -1004,36 +1004,52 @@ export default function BookStoreView({
         <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-extrabold uppercase tracking-wider">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>{language === 'am' ? 'ክፍት የትምህርት መጻሕፍት' : '100% Free Open Access Curriculum'}</span>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 max-w-3xl">
+            {/* Primary Book Icon with Coming Soon Banner */}
+            <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-amber-500/20 via-amber-600/10 to-transparent border border-amber-500/30 flex items-center justify-center shrink-0 shadow-xl group">
+              <BookOpen className="w-8 h-8 sm:w-10 sm:h-10 text-amber-400 group-hover:scale-110 transition-transform" />
+              {/* Coming Soon Banner overlay directly on the Book icon */}
+              <div className="absolute -top-2.5 -right-3 px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black text-[9px] uppercase tracking-wider shadow-lg border border-amber-300/60 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-950 animate-pulse" />
+                <span>{language === 'am' ? 'በቅርቡ' : 'Coming Soon'}</span>
+              </div>
             </div>
-            
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black font-serif tracking-tight text-white leading-tight">
-              {language === 'am' ? 'የኢትዮለርን አካዳሚክ ቤተ-መጽሐፍት' : 'EthioLearn Pro Academic Library'}
-            </h1>
-            
-            <p className="text-sm text-slate-300 leading-relaxed font-normal">
-              {language === 'am' 
-                ? 'የዩኒቨርሲቲ ሞጁሎችና የ12ኛ ክፍል ማትሪክ መማሪያ መጻሕፍት። ማናቸውንም መጽሐፍ ያለምንም ገደብ ወዲያውኑ ይክፈቱ፣ ያንብቡና ይማሩ።'
-                : 'Access official Ethiopian University course modules and Grade 12 national matric textbooks. Open whatever book you need instantly with zero restrictions.'}
-            </p>
 
-            {/* Quick Metrics Ribbon */}
-            <div className="flex flex-wrap items-center gap-2.5 pt-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-semibold text-slate-300">
-                <BookOpen className="w-3.5 h-3.5 text-amber-400" />
-                <span>{catalog.length} {language === 'am' ? 'መጻሕፍት' : 'Textbooks'}</span>
-              </span>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-semibold text-slate-300">
-                <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                <span>{language === 'am' ? 'ክፍት መዳረሻ' : 'All Free & Unlocked'}</span>
-              </span>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-semibold text-slate-300">
-                <Bot className="w-3.5 h-3.5 text-sky-400" />
-                <span>{language === 'am' ? 'አስጎብኚ AI ያለው' : 'AI Asgobnyi Powered'}</span>
-              </span>
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-extrabold uppercase tracking-wider">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>{language === 'am' ? 'ክፍት የትምህርት መጻሕፍት' : '100% Free Open Access Curriculum'}</span>
+              </div>
+              
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black font-serif tracking-tight text-white leading-tight">
+                {language === 'am' ? 'የኢትዮለርን አካዳሚክ ቤተ-መጽሐፍት' : 'EthioLearn Pro Academic Library'}
+              </h1>
+              
+              <p className="text-sm text-slate-300 leading-relaxed font-normal">
+                {language === 'am' 
+                  ? 'የዩኒቨርሲቲ ሞጁሎችና የ12ኛ ክፍል ማትሪክ መማሪያ መጻሕፍት። ማናቸውንም መጽሐፍ ያለምንም ገደብ ወዲያውኑ ይክፈቱ፣ ያንብቡና ይማሩ።'
+                  : 'Access official Ethiopian University course modules and Grade 12 national matric textbooks. Open whatever book you need instantly with zero restrictions.'}
+              </p>
+
+              {/* Quick Metrics Ribbon */}
+              <div className="flex flex-wrap items-center gap-2.5 pt-2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-xs font-bold text-amber-300">
+                  <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{language === 'am' ? 'በቅርቡ የሚደርሱ የታተሙ መጻሕፍት' : 'Hardcover Bookstore Coming Soon'}</span>
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-semibold text-slate-300">
+                  <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{catalog.length} {language === 'am' ? 'መጻሕፍት' : 'Textbooks'}</span>
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-semibold text-slate-300">
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{language === 'am' ? 'ክፍት መዳረሻ' : 'All Free & Unlocked'}</span>
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-semibold text-slate-300">
+                  <Bot className="w-3.5 h-3.5 text-sky-400" />
+                  <span>{language === 'am' ? 'አስጎብኚ AI ያለው' : 'AI Asgobnyi Powered'}</span>
+                </span>
+              </div>
             </div>
           </div>
 

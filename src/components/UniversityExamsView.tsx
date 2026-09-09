@@ -6,11 +6,13 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Award, Bot, BookOpen, Clock, Check, CheckCircle, Flame, 
-  FileText, Sparkles, Zap, Trophy, ArrowRight, ChevronRight, 
+  Award, BookOpen, Clock, Check, CheckCircle, Flame, 
+  FileText, Zap, Trophy, ArrowRight, ChevronRight, 
   Search, X, Bookmark, Share2, Timer, RefreshCw, BarChart2, 
   Lightbulb, Play, RotateCcw, AlertTriangle, ShieldCheck, ChevronLeft,
-  Sliders, Database
+  Sliders, Database, Shuffle, PlusCircle, Layers, GraduationCap,
+  Code2, Atom, FlaskConical, Dna, Languages, BrainCircuit, Target,
+  FileQuestion, HelpCircle, Lock, FilePlus
 } from 'lucide-react';
 import { StudentProfile, QuestionBankRecord } from '../types';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
@@ -19,6 +21,7 @@ import { fetchPublishedExams } from '../utils/contentStore';
 import { INITIAL_QUESTIONS } from '../data/initialFirestoreContent';
 import { generateRandomExamQuestions, fetchQuestionsPaginated } from '../utils/supabaseQuestions';
 import { getEthiopian10kExamSheets } from '../data/ethiopianExams10kBank';
+import { generateUniqueQuestions } from '../utils/examQuestionGenerator';
 
 export interface ExamQuestion {
   id: number;
@@ -28,6 +31,8 @@ export interface ExamQuestion {
   subjectTopic: string;
   explanation: string;
   amharicExplanation?: string;
+  sourceType?: 'official_past_exam' | 'ai_generated';
+  generatedAt?: string;
 }
 
 export interface ExamPaperSheet {
@@ -50,6 +55,89 @@ interface UniversityExamsProps {
   onOpenInAppViewer?: (url: string, title: string) => void;
 }
 
+// Helper to safely load custom AI-generated questions from safeStorage
+export function loadGeneratedQuestionsForSheet(sheetId: string): ExamQuestion[] {
+  try {
+    const raw = safeStorage.getItem(`ethiolearn_generated_questions_${sheetId}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.warn('Could not load custom generated questions:', e);
+  }
+  return [];
+}
+
+// Helper to safely load custom user-created exam paper files from safeStorage
+export function loadCustomExamSheets(): ExamPaperSheet[] {
+  try {
+    const raw = safeStorage.getItem('ethiolearn_custom_exam_sheets');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.warn('Could not load custom exam sheets:', e);
+  }
+  return [];
+}
+
+export interface ParsedUnitChapter {
+  unitLabel: string;
+  unitNumber: number;
+  chapterLabel: string;
+  chapterNumber: number;
+  topic: string;
+  fullChapterTitle: string;
+}
+
+export function parseQuestionUnitChapter(q: ExamQuestion, index: number): ParsedUnitChapter {
+  let unitNumber = 1;
+  const unitMatch = ((q as any).unit || '').match(/Unit\s*(\d+)/i) || (q.subjectTopic || '').match(/Unit\s*(\d+)/i);
+  if (unitMatch) {
+    unitNumber = parseInt(unitMatch[1], 10);
+  } else {
+    const baseId = typeof q.id === 'number' ? q.id - 1 : index;
+    unitNumber = (Math.max(0, baseId) % 5) + 1;
+  }
+
+  let topic = '';
+  if (q.subjectTopic) {
+    const parts = q.subjectTopic.split('•');
+    if (parts.length > 1) {
+      topic = parts[1].replace(/\(Unit\s*\d+\)/i, '').trim();
+    } else {
+      topic = q.subjectTopic.replace(/\(Unit\s*\d+\)/i, '').trim();
+    }
+  }
+  if (!topic) {
+    topic = `Curriculum Topic ${((index % 6) + 1)}`;
+  }
+
+  let chapterNumber = 1;
+  const chapMatch = ((q as any).chapter || '').match(/Chapter\s*(\d+)/i) || (q.subjectTopic || '').match(/Chapter\s*(\d+)/i);
+  if (chapMatch) {
+    chapterNumber = parseInt(chapMatch[1], 10);
+  } else {
+    const subChap = (index % 2);
+    chapterNumber = (unitNumber - 1) * 2 + subChap + 1;
+  }
+
+  const unitLabel = `Unit ${unitNumber}`;
+  const chapterLabel = `Chapter ${chapterNumber}`;
+  const fullChapterTitle = `${chapterLabel}: ${topic}`;
+
+  return {
+    unitLabel,
+    unitNumber,
+    chapterLabel,
+    chapterNumber,
+    topic,
+    fullChapterTitle
+  };
+}
+
 // ============================================================================
 // 📚 VERIFIED PAST PAPERS REPOSITORY (Wolkite, AAU, ASTU, Hawassa, Jimma, EUEE)
 // ============================================================================
@@ -62,9 +150,48 @@ export default function UniversityExamsView({
   onNavigate,
   onStudyAction
 }: UniversityExamsProps) {
-  // Master papers repository state
-  const [examSheets, setExamSheets] = useState<ExamPaperSheet[]>(UNIVERSITY_SHEETS);
+  // Master papers repository state with separated official and student-generated questions
+  const [examSheets, setExamSheets] = useState<ExamPaperSheet[]>(() => {
+    const customSheets = loadCustomExamSheets();
+    const baseSheets = UNIVERSITY_SHEETS.map(sheet => {
+      const savedAi = loadGeneratedQuestionsForSheet(sheet.id);
+      const taggedOfficial: ExamQuestion[] = sheet.questions.map(q => ({
+        ...q,
+        sourceType: (q.sourceType || 'official_past_exam') as 'official_past_exam' | 'ai_generated'
+      }));
+      return {
+        ...sheet,
+        questions: [...taggedOfficial, ...savedAi]
+      };
+    });
+    return [...customSheets, ...baseSheets];
+  });
   const [selectedSheetId, setSelectedSheetId] = useState<string>(() => UNIVERSITY_SHEETS[0]?.id || '');
+
+  // 20-Question Free Practice Quota Management
+  const isProUser = Boolean(profile?.isPro || profile?.tier?.includes('pro'));
+  const FREE_TRIAL_LIMIT = 20;
+
+  const [triedQuestionKeys, setTriedQuestionKeys] = useState<string[]>(() => {
+    try {
+      const raw = safeStorage.getItem('ethiolearn_tried_question_keys');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const questionsTriedCount = triedQuestionKeys.length;
+  const isTrialLimitReached = !isProUser && questionsTriedCount >= FREE_TRIAL_LIMIT;
+  const [showTrialLimitModal, setShowTrialLimitModal] = useState(false);
+
+  // New Exam File & Empty File Management State
+  const [showNewFileModal, setShowNewFileModal] = useState(false);
+  const [newFileTitle, setNewFileTitle] = useState('');
+  const [newFileSubject, setNewFileSubject] = useState('Computer Science');
+  const [newFileUni, setNewFileUni] = useState('Wolkite University');
+  const [newFileYear, setNewFileYear] = useState('2016 E.C.');
+  const [isAddingToEmptyFile, setIsAddingToEmptyFile] = useState(false);
   
   // Total questions count across all loaded papers (10,000 questions in place)
   const totalQuestionsInRepository = useMemo(() => {
@@ -217,8 +344,13 @@ export default function UniversityExamsView({
       }
 
       // Subject filter
-      if (selectedSubject !== 'all' && sheet.subject.toLowerCase() !== selectedSubject.toLowerCase()) {
-        return false;
+      if (selectedSubject !== 'all') {
+        const sel = selectedSubject.toLowerCase();
+        const sht = sheet.subject.toLowerCase();
+        const isCppMatch = (sel.includes('computer') || sel.includes('c++')) && (sht.includes('computer') || sht.includes('c++'));
+        if (sht !== sel && !isCppMatch) {
+          return false;
+        }
       }
 
       // Search Query
@@ -255,13 +387,117 @@ export default function UniversityExamsView({
   // ============================================================================
   const [examMode, setExamMode] = useState<'practice' | 'simulation'>('practice');
 
+  // Question Source Separation Filter: 'all' | 'official' | 'generated'
+  const [questionSourceFilter, setQuestionSourceFilter] = useState<'all' | 'official' | 'generated'>('all');
+
+  // Curriculum Organization: Ordered by Unit & Chapter vs Original Exam Paper
+  const [orderMode, setOrderMode] = useState<'curriculum' | 'original'>('curriculum');
+  const [selectedUnitFilter, setSelectedUnitFilter] = useState<string>('all');
+  const [selectedChapterFilter, setSelectedChapterFilter] = useState<string>('all');
+
+  // Count official vs student AI-generated questions
+  const officialQuestionsCount = useMemo(() => {
+    if (!activeSheet) return 0;
+    return activeSheet.questions.filter(q => (q.sourceType || 'official_past_exam') === 'official_past_exam').length;
+  }, [activeSheet]);
+
+  const generatedQuestionsCount = useMemo(() => {
+    if (!activeSheet) return 0;
+    return activeSheet.questions.filter(q => q.sourceType === 'ai_generated').length;
+  }, [activeSheet]);
+
+  // Available units in the active sheet
+  const unitSummaryList = useMemo(() => {
+    if (!activeSheet || !activeSheet.questions) return [];
+    const map = new Map<string, { unitLabel: string; unitNumber: number; count: number; chapters: Set<string> }>();
+    
+    activeSheet.questions.forEach((q, idx) => {
+      const parsed = parseQuestionUnitChapter(q, idx);
+      const item = map.get(parsed.unitLabel);
+      if (item) {
+        item.count += 1;
+        item.chapters.add(parsed.fullChapterTitle);
+      } else {
+        map.set(parsed.unitLabel, {
+          unitLabel: parsed.unitLabel,
+          unitNumber: parsed.unitNumber,
+          count: 1,
+          chapters: new Set([parsed.fullChapterTitle])
+        });
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => a.unitNumber - b.unitNumber);
+  }, [activeSheet]);
+
+  // Available chapters in the active sheet (filtered by selected unit if chosen)
+  const availableChaptersList = useMemo(() => {
+    if (!activeSheet || !activeSheet.questions) return [];
+    const map = new Map<string, number>();
+
+    activeSheet.questions.forEach((q, idx) => {
+      const parsed = parseQuestionUnitChapter(q, idx);
+      if (selectedUnitFilter === 'all' || parsed.unitLabel === selectedUnitFilter) {
+        map.set(parsed.fullChapterTitle, (map.get(parsed.fullChapterTitle) || 0) + 1);
+      }
+    });
+
+    return Array.from(map.entries()).map(([chapterTitle, count]) => ({ chapterTitle, count }));
+  }, [activeSheet, selectedUnitFilter]);
+
+  // Questions visible under current source, unit, chapter filters and order mode
+  const visibleQuestions = useMemo(() => {
+    if (!activeSheet) return [];
+    let list = [...activeSheet.questions];
+
+    // 1. Source filter
+    if (questionSourceFilter === 'official') {
+      list = list.filter(q => (q.sourceType || 'official_past_exam') === 'official_past_exam');
+    } else if (questionSourceFilter === 'generated') {
+      list = list.filter(q => q.sourceType === 'ai_generated');
+    }
+
+    // 2. Unit filter
+    if (selectedUnitFilter !== 'all') {
+      list = list.filter((q, idx) => {
+        const parsed = parseQuestionUnitChapter(q, idx);
+        return parsed.unitLabel === selectedUnitFilter;
+      });
+    }
+
+    // 3. Chapter filter
+    if (selectedChapterFilter !== 'all') {
+      list = list.filter((q, idx) => {
+        const parsed = parseQuestionUnitChapter(q, idx);
+        return parsed.fullChapterTitle === selectedChapterFilter;
+      });
+    }
+
+    // 4. Curriculum Ordering (Sort by Unit Number -> Chapter Number -> Question ID)
+    if (orderMode === 'curriculum') {
+      list.sort((a, b) => {
+        const parsedA = parseQuestionUnitChapter(a, a.id || 0);
+        const parsedB = parseQuestionUnitChapter(b, b.id || 0);
+        if (parsedA.unitNumber !== parsedB.unitNumber) {
+          return parsedA.unitNumber - parsedB.unitNumber;
+        }
+        if (parsedA.chapterNumber !== parsedB.chapterNumber) {
+          return parsedA.chapterNumber - parsedB.chapterNumber;
+        }
+        return (a.id || 0) - (b.id || 0);
+      });
+    }
+
+    return list;
+  }, [activeSheet, questionSourceFilter, selectedUnitFilter, selectedChapterFilter, orderMode]);
+
   // Interactive Practice State
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
   const [selectedChoiceIndex, setSelectedChoiceIndex] = useState<number | null>(null);
   const [showAnswerFeedback, setShowAnswerFeedback] = useState(false);
   const [userPracticeHistory, setUserPracticeHistory] = useState<Record<string, Record<number, number>>>({});
 
-  // Reset question choice when active sheet or question changes
+  // Reset question choice when active sheet, filter or question changes
   useEffect(() => {
     setSelectedChoiceIndex(null);
     setShowAnswerFeedback(false);
@@ -269,7 +505,15 @@ export default function UniversityExamsView({
     setAiResponse('');
   }, [selectedSheetId, activeQuestionIndex]);
 
-  // Auto-align palette chunk with currently selected question in large 500-question papers
+  // Reset indices when sheet, source filter, unit filter, chapter filter, or orderMode changes
+  useEffect(() => {
+    setActiveQuestionIndex(0);
+    setPaletteChunkStart(0);
+    setSelectedChoiceIndex(null);
+    setShowAnswerFeedback(false);
+  }, [selectedSheetId, questionSourceFilter, selectedUnitFilter, selectedChapterFilter, orderMode]);
+
+  // Auto-align palette chunk with currently selected question
   useEffect(() => {
     const chunk = Math.floor(activeQuestionIndex / 25) * 25;
     if (chunk !== paletteChunkStart) {
@@ -278,9 +522,192 @@ export default function UniversityExamsView({
   }, [activeQuestionIndex]);
 
   const currentQuestion = useMemo(() => {
-    if (!activeSheet || !activeSheet.questions.length) return null;
-    return activeSheet.questions[activeQuestionIndex] || activeSheet.questions[0];
-  }, [activeSheet, activeQuestionIndex]);
+    if (!visibleQuestions.length) return null;
+    return visibleQuestions[activeQuestionIndex] || visibleQuestions[0];
+  }, [visibleQuestions, activeQuestionIndex]);
+
+  // ============================================================================
+  // ⚡ STRICT DEDUPLICATION & UNIQUE QUESTION GENERATOR STATES
+  // ============================================================================
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [generateCount, setGenerateCount] = useState<number>(5);
+  const [generateTopic, setGenerateTopic] = useState<string>('');
+  const [generateDifficulty, setGenerateDifficulty] = useState<'standard' | 'challenging' | 'honors'>('challenging');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generateFeedbackMsg, setGenerateFeedbackMsg] = useState<string>('');
+
+  const handleGenerateQuestions = async () => {
+    if (!activeSheet || isGenerating) return;
+    playClickChime();
+    setIsGenerating(true);
+    setGenerateFeedbackMsg(
+      language === 'am' 
+        ? 'የቀደሙትን ጥያቄዎች በማጣራት ያልተደገሙ አዳዲስ ጥያቄዎች እየተፈጠሩ ነው...' 
+        : 'Cross-checking with existing questions to guarantee zero duplication...'
+    );
+
+    try {
+      const newQuestions = await generateUniqueQuestions({
+        sheetId: activeSheet.id,
+        course: activeSheet.subject,
+        subject: activeSheet.subject,
+        university: activeSheet.university,
+        existingQuestions: activeSheet.questions,
+        count: generateCount,
+        difficulty: generateDifficulty,
+        topicFocus: generateTopic.trim() || undefined,
+        language
+      });
+
+      if (newQuestions && newQuestions.length > 0) {
+        // 1. Save to safeStorage
+        const existingSaved = loadGeneratedQuestionsForSheet(activeSheet.id);
+        const updatedSaved = [...existingSaved, ...newQuestions];
+        safeStorage.setItem(`ethiolearn_generated_questions_${activeSheet.id}`, JSON.stringify(updatedSaved));
+
+        // 2. Update activeSheet questions in state
+        setExamSheets(prev => prev.map(sheet => {
+          if (sheet.id === activeSheet.id) {
+            return {
+              ...sheet,
+              questions: [...sheet.questions, ...newQuestions]
+            };
+          }
+          return sheet;
+        }));
+
+        playSuccessChime();
+        setQuestionSourceFilter('generated');
+        setActiveQuestionIndex(0);
+        setPaletteChunkStart(0);
+        setShowGenerateModal(false);
+        setGenerateTopic('');
+        setGenerateFeedbackMsg('');
+        onStudyAction();
+      }
+    } catch (err) {
+      console.error('Error generating unique questions:', err);
+      playFailureChime();
+      setGenerateFeedbackMsg(
+        language === 'am' 
+          ? 'ጥያቄዎችን ማመንጨት አልተቻለም። እባክዎ እንደገና ይሞክሩ።' 
+          : 'Failed to generate questions. Please retry.'
+      );
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleClearGeneratedQuestions = () => {
+    if (!activeSheet) return;
+    const confirmMsg = language === 'am'
+      ? `ለ"${activeSheet.title}" የተዘጋጁትን ${generatedQuestionsCount} አዳዲስ ጥያቄዎች ማጽዳት ይፈልጋሉ? 500ዎቹ ኦፊሴላዊ ጥያቄዎች ሙሉ በሙሉ እንደተጠበቁ ይቆያሉ።`
+      : `Clear all ${generatedQuestionsCount} AI-generated practice questions for "${activeSheet.title}"? The 500 official past exam questions will remain completely intact.`;
+
+    if (window.confirm(confirmMsg)) {
+      playClickChime();
+      safeStorage.removeItem(`ethiolearn_generated_questions_${activeSheet.id}`);
+      setExamSheets(prev => prev.map(sheet => {
+        if (sheet.id === activeSheet.id) {
+          return {
+            ...sheet,
+            questions: sheet.questions.filter(q => (q.sourceType || 'official_past_exam') === 'official_past_exam')
+          };
+        }
+        return sheet;
+      }));
+      setQuestionSourceFilter('all');
+      setActiveQuestionIndex(0);
+      setPaletteChunkStart(0);
+    }
+  };
+
+  // Handler for adding 20 questions to an empty exam file
+  const handleAddQuestionsToEmptyFile = async (sheetId: string) => {
+    const targetSheet = examSheets.find(s => s.id === sheetId);
+    if (!targetSheet || isAddingToEmptyFile) return;
+
+    playClickChime();
+    setIsAddingToEmptyFile(true);
+
+    try {
+      const newQuestions = await generateUniqueQuestions({
+        sheetId: targetSheet.id,
+        course: targetSheet.department || targetSheet.subject,
+        subject: targetSheet.subject,
+        university: targetSheet.university,
+        existingQuestions: targetSheet.questions || [],
+        count: 20,
+        difficulty: 'challenging',
+        language
+      });
+
+      if (newQuestions && newQuestions.length > 0) {
+        // 1. Save to safeStorage for sheet
+        const existingSaved = loadGeneratedQuestionsForSheet(targetSheet.id);
+        const updatedSaved = [...existingSaved, ...newQuestions];
+        safeStorage.setItem(`ethiolearn_generated_questions_${targetSheet.id}`, JSON.stringify(updatedSaved));
+
+        // 2. If it's a custom exam sheet, persist to custom sheets storage
+        const customSheets = loadCustomExamSheets();
+        if (customSheets.some(s => s.id === targetSheet.id)) {
+          const updatedCustom = customSheets.map(s => {
+            if (s.id === targetSheet.id) {
+              return { ...s, questions: [...(s.questions || []), ...newQuestions] };
+            }
+            return s;
+          });
+          safeStorage.setItem('ethiolearn_custom_exam_sheets', JSON.stringify(updatedCustom));
+        }
+
+        // 3. Update active sheet questions in state
+        setExamSheets(prev => prev.map(sheet => {
+          if (sheet.id === targetSheet.id) {
+            return {
+              ...sheet,
+              questions: [...(sheet.questions || []), ...newQuestions]
+            };
+          }
+          return sheet;
+        }));
+
+        playSuccessChime();
+        setActiveQuestionIndex(0);
+        setPaletteChunkStart(0);
+        onStudyAction();
+      }
+    } catch (err) {
+      console.error('Error adding questions to empty file:', err);
+      playFailureChime();
+    } finally {
+      setIsAddingToEmptyFile(false);
+    }
+  };
+
+  // Handler for creating a brand-new exam file / paper
+  const handleCreateNewExamFile = () => {
+    if (!newFileTitle.trim()) return;
+    playClickChime();
+    const newSheetId = `custom_${Date.now()}`;
+    const newSheet: ExamPaperSheet = {
+      id: newSheetId,
+      title: newFileTitle.trim(),
+      university: newFileUni.trim() || 'Wolkite University',
+      year: newFileYear.trim() || '2016 E.C.',
+      subject: newFileSubject.trim() || 'Computer Science',
+      department: newFileSubject.trim() || 'University Department',
+      durationMinutes: 60,
+      questions: [] // Starts as an empty file!
+    };
+
+    const updatedCustom = [newSheet, ...loadCustomExamSheets()];
+    safeStorage.setItem('ethiolearn_custom_exam_sheets', JSON.stringify(updatedCustom));
+    setExamSheets(prev => [newSheet, ...prev]);
+    setSelectedSheetId(newSheetId);
+    setShowNewFileModal(false);
+    setNewFileTitle('');
+    playSuccessChime();
+  };
 
   // AI Faculty Asgobnyi Assistant States
   const [aiGuideOpen, setAiGuideOpen] = useState(false);
@@ -330,12 +757,45 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
   // Handle Practice Choice Selection
   const handleSelectChoice = (choiceIdx: number) => {
     if (showAnswerFeedback) return;
+    if (currentQuestion && activeSheet) {
+      const qKey = `${activeSheet.id}_q_${currentQuestion.id || activeQuestionIndex}`;
+      const alreadyTried = triedQuestionKeys.includes(qKey);
+      if (!isProUser && !alreadyTried && questionsTriedCount >= FREE_TRIAL_LIMIT) {
+        playFailureChime();
+        setShowTrialLimitModal(true);
+        return;
+      }
+    }
     playClickChime();
     setSelectedChoiceIndex(choiceIdx);
   };
 
   const handleCheckAnswer = () => {
-    if (selectedChoiceIndex === null || !currentQuestion) return;
+    if (selectedChoiceIndex === null || !currentQuestion || !activeSheet) return;
+
+    // 20-Question Free Practice Quota Check
+    const qKey = `${activeSheet.id}_q_${currentQuestion.id || activeQuestionIndex}`;
+    const alreadyTried = triedQuestionKeys.includes(qKey);
+
+    if (!isProUser && !alreadyTried && questionsTriedCount >= FREE_TRIAL_LIMIT) {
+      playFailureChime();
+      setShowTrialLimitModal(true);
+      return;
+    }
+
+    if (!alreadyTried) {
+      const updatedKeys = [...triedQuestionKeys, qKey];
+      setTriedQuestionKeys(updatedKeys);
+      safeStorage.setItem('ethiolearn_tried_question_keys', JSON.stringify(updatedKeys));
+      safeStorage.setItem('ethiolearn_questions_tried_count', String(updatedKeys.length));
+
+      if (!isProUser && updatedKeys.length >= FREE_TRIAL_LIMIT) {
+        setTimeout(() => {
+          setShowTrialLimitModal(true);
+        }, 1200);
+      }
+    }
+
     setShowAnswerFeedback(true);
     const isCorrect = selectedChoiceIndex === currentQuestion.correctIndex;
     if (isCorrect) {
@@ -364,6 +824,11 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
 
   const startTimedSimulation = () => {
     if (!activeSheet) return;
+    if (!isProUser && questionsTriedCount >= FREE_TRIAL_LIMIT) {
+      playFailureChime();
+      setShowTrialLimitModal(true);
+      return;
+    }
     playSuccessChime();
     setSimulationAnswers({});
     setFlaggedQuestions([]);
@@ -576,28 +1041,28 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
   };
 
   // ============================================================================
-  // 🎨 SUBJECT VISUAL IDENTITY HELPER
+  // 🎨 SUBJECT VISUAL IDENTITY HELPER (Pro Academic Standard)
   // ============================================================================
   const getSubjectBadge = (subject: string) => {
     const s = subject.toLowerCase();
     if (s.includes('math') || s.includes('calculus')) {
-      return { icon: '📐', border: 'border-blue-500/30', bg: 'bg-blue-500/10', text: 'text-blue-400' };
+      return { Icon: Target, code: 'MATH', border: 'border-blue-500/30', bg: 'bg-blue-500/10', text: 'text-blue-400' };
     } else if (s.includes('physics')) {
-      return { icon: '⚡', border: 'border-violet-500/30', bg: 'bg-violet-500/10', text: 'text-violet-400' };
+      return { Icon: Atom, code: 'PHYS', border: 'border-violet-500/30', bg: 'bg-violet-500/10', text: 'text-violet-400' };
     } else if (s.includes('chemistry')) {
-      return { icon: '🧪', border: 'border-emerald-500/30', bg: 'bg-emerald-500/10', text: 'text-emerald-400' };
+      return { Icon: FlaskConical, code: 'CHEM', border: 'border-emerald-500/30', bg: 'bg-emerald-500/10', text: 'text-emerald-400' };
     } else if (s.includes('biology')) {
-      return { icon: '🧬', border: 'border-green-500/30', bg: 'bg-green-500/10', text: 'text-green-400' };
+      return { Icon: Dna, code: 'BIOL', border: 'border-green-500/30', bg: 'bg-green-500/10', text: 'text-green-400' };
     } else if (s.includes('english')) {
-      return { icon: '💬', border: 'border-sky-500/30', bg: 'bg-sky-500/10', text: 'text-sky-400' };
+      return { Icon: Languages, code: 'ENGL', border: 'border-sky-500/30', bg: 'bg-sky-500/10', text: 'text-sky-400' };
     } else if (s.includes('computer') || s.includes('c++')) {
-      return { icon: '💻', border: 'border-cyan-500/30', bg: 'bg-cyan-500/10', text: 'text-cyan-400' };
+      return { Icon: Code2, code: 'COSC', border: 'border-cyan-500/30', bg: 'bg-cyan-500/10', text: 'text-cyan-400' };
     } else if (s.includes('logic')) {
-      return { icon: '🧠', border: 'border-pink-500/30', bg: 'bg-pink-500/10', text: 'text-pink-400' };
+      return { Icon: BrainCircuit, code: 'LOGC', border: 'border-pink-500/30', bg: 'bg-pink-500/10', text: 'text-pink-400' };
     } else if (s.includes('aptitude')) {
-      return { icon: '🎯', border: 'border-amber-500/30', bg: 'bg-amber-500/10', text: 'text-amber-400' };
+      return { Icon: Target, code: 'APTD', border: 'border-amber-500/30', bg: 'bg-amber-500/10', text: 'text-amber-400' };
     }
-    return { icon: '🏛️', border: 'border-amber-500/30', bg: 'bg-amber-500/10', text: 'text-amber-400' };
+    return { Icon: GraduationCap, code: 'ACAD', border: 'border-amber-500/30', bg: 'bg-amber-500/10', text: 'text-amber-400' };
   };
 
   return (
@@ -650,8 +1115,8 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
                 <span>{surpriseStreak} {language === 'am' ? 'ቀን ተከታታይ' : 'Day Streak'}</span>
               </span>
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-semibold text-slate-300">
-                <Bot className="w-3.5 h-3.5 text-sky-400" />
-                <span>{language === 'am' ? 'አስጎብኚ AI መፍትሔ' : 'Faculty AI Solver'}</span>
+                <GraduationCap className="w-3.5 h-3.5 text-amber-400" />
+                <span>{language === 'am' ? 'የአካዳሚክ ማብራሪያዎች' : 'Faculty Solutions'}</span>
               </span>
             </div>
           </div>
@@ -767,6 +1232,26 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 scrollbar-none">
           {subjectList.map(subj => {
             const isSelected = selectedSubject === subj;
+            const isCpp = subj.toLowerCase().includes('computer') || subj.toLowerCase().includes('c++');
+
+            if (isCpp) {
+              return (
+                <button
+                  key={subj}
+                  onClick={() => { playClickChime(); setSelectedSubject(subj); }}
+                  title="Introduction to Computer Programming with C++ (CoSc 1011)"
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                    isSelected
+                      ? 'bg-gradient-to-r from-cyan-500/25 to-blue-600/25 text-cyan-300 border border-cyan-400 shadow-md shadow-cyan-500/20 ring-1 ring-cyan-400/40'
+                      : 'bg-cyan-950/30 text-cyan-300/90 border border-cyan-500/35 hover:bg-cyan-900/40 hover:text-cyan-100 hover:border-cyan-400/60 shadow-xs'
+                  }`}
+                >
+                  <Code2 className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>{language === 'am' ? 'ሲ++ (C++)' : 'C++'}</span>
+                </button>
+              );
+            }
+
             return (
               <button
                 key={subj}
@@ -797,6 +1282,15 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
               {filteredSheets.length} {language === 'am' ? 'የፈተና ወረቀቶች' : 'Available Papers'}
             </span>
+            <button
+              type="button"
+              onClick={() => setShowNewFileModal(true)}
+              className="text-[11px] font-bold text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-1 cursor-pointer bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-lg border border-white/10"
+              title={language === 'am' ? 'አዲስ የፈተና ፋይል አክል' : 'Add New Exam File'}
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>{language === 'am' ? '+ አዲስ ፋይል' : '+ Add Exam File'}</span>
+            </button>
           </div>
 
           <div className="space-y-2.5 max-h-[750px] overflow-y-auto pr-1">
@@ -838,10 +1332,12 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2 mb-1.5">
-                      <div className="flex items-center gap-2">
-                        <span className="text-base">{badge.icon}</span>
-                        <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full border ${badge.bg} ${badge.border} ${badge.text}`}>
-                          {sheet.subject}
+                      <div className="flex items-center gap-1.5">
+                        <span className={`p-1 rounded-md border ${badge.bg} ${badge.border} flex items-center justify-center`}>
+                          <badge.Icon className={`w-3.5 h-3.5 ${badge.text}`} />
+                        </span>
+                        <span className={`text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${badge.bg} ${badge.border} ${badge.text}`}>
+                          {badge.code}
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5">
@@ -866,12 +1362,28 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
                     </h3>
 
                     <div className="flex items-center justify-between text-[10px] text-slate-400 border-t border-white/5 pt-2">
-                      <span className="truncate max-w-[180px] text-slate-300 font-medium">
+                      <span className="truncate max-w-[150px] text-slate-300 font-medium">
                         {sheet.university}
                       </span>
-                      <span className="font-semibold text-amber-400/90 shrink-0">
-                        {sheet.questions.length} {language === 'am' ? 'ጥያቄዎች' : 'questions'}
-                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {sheet.questions.length === 0 ? (
+                          <span className="font-semibold text-amber-300 bg-amber-500/15 px-2 py-0.5 rounded text-[9px] border border-amber-500/30 flex items-center gap-1">
+                            <FileQuestion className="w-2.5 h-2.5 text-amber-400" />
+                            {language === 'am' ? 'ባዶ ፋይል' : 'Empty File'}
+                          </span>
+                        ) : (
+                          <>
+                            <span className="font-semibold text-amber-400/90">
+                              {sheet.questions.filter(q => (q.sourceType || 'official_past_exam') === 'official_past_exam').length} {language === 'am' ? 'ኦፊሴላዊ' : 'official'}
+                            </span>
+                            {sheet.questions.some(q => q.sourceType === 'ai_generated') && (
+                              <span className="font-semibold text-indigo-300 bg-indigo-500/15 px-1.5 py-0.5 rounded text-[9px] border border-indigo-500/30">
+                                +{sheet.questions.filter(q => q.sourceType === 'ai_generated').length} {language === 'am' ? 'ተጨማሪ' : 'Practice'}
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -906,41 +1418,70 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
                   </p>
                 </div>
 
-                {/* Exam Mode Selector Buttons */}
-                <div className="flex items-center bg-[#0A1128] border border-white/10 p-1 rounded-xl shrink-0">
-                  <button
-                    onClick={() => {
-                      playClickChime();
-                      setExamMode('practice');
-                      setSimulationActive(false);
-                    }}
-                    className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
-                      examMode === 'practice'
-                        ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <BookOpen className="w-3.5 h-3.5" />
-                    <span>{language === 'am' ? 'ጥናትና ልምምድ' : 'Interactive Study'}</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      playClickChime();
-                      if (!simulationActive) {
-                        startTimedSimulation();
-                      } else {
-                        setExamMode('simulation');
-                      }
-                    }}
-                    className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
-                      examMode === 'simulation'
-                        ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <Timer className="w-3.5 h-3.5" />
-                    <span>{language === 'am' ? 'የፈተና ሞዴል' : 'Timed Exam'}</span>
-                  </button>
+                {/* Right controls: Quota Badge & Exam Mode Selector Buttons */}
+                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                  {/* Quota Indicator Pill */}
+                  {isProUser ? (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                      <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                      <span>{language === 'am' ? 'ፕሮ አባል' : 'Pro Scholar'}</span>
+                    </div>
+                  ) : (
+                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono font-bold ${
+                      questionsTriedCount >= FREE_TRIAL_LIMIT 
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse' 
+                        : 'bg-white/5 text-slate-300 border border-white/10'
+                    }`}>
+                      <Lock className="w-3 h-3 text-amber-400" />
+                      <span>{language === 'am' ? 'ሙከራ' : 'Trial'}: {Math.min(questionsTriedCount, FREE_TRIAL_LIMIT)}/{FREE_TRIAL_LIMIT}</span>
+                      {questionsTriedCount >= FREE_TRIAL_LIMIT && (
+                        <button 
+                          type="button"
+                          onClick={() => onNavigate('upgrade')}
+                          className="ml-1 text-amber-400 hover:text-amber-300 underline font-bold cursor-pointer"
+                        >
+                          {language === 'am' ? 'አሳድግ' : 'Upgrade'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Exam Mode Selector Buttons */}
+                  <div className="flex items-center bg-[#0A1128] border border-white/10 p-1 rounded-xl">
+                    <button
+                      onClick={() => {
+                        playClickChime();
+                        setExamMode('practice');
+                        setSimulationActive(false);
+                      }}
+                      className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                        examMode === 'practice'
+                          ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <BookOpen className="w-3.5 h-3.5" />
+                      <span>{language === 'am' ? 'ጥናትና ልምምድ' : 'Interactive Study'}</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        playClickChime();
+                        if (!simulationActive) {
+                          startTimedSimulation();
+                        } else {
+                          setExamMode('simulation');
+                        }
+                      }}
+                      className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                        examMode === 'simulation'
+                          ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <Timer className="w-3.5 h-3.5" />
+                      <span>{language === 'am' ? 'የፈተና ሞዴል' : 'Timed Exam'}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -966,210 +1507,439 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
                 </div>
               )}
 
-              {/* Question Navigation Palette Ribbon with 500-question windowing & quick jump */}
-              <div className="px-4 py-3 border-b border-white/5 bg-white/[0.02] space-y-2.5">
-                {/* Upper bar: Jump to Q#, Chunk Range selector, Random in Paper, Flag button */}
-                <div className="flex flex-wrap items-center justify-between gap-2.5 text-xs">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-slate-400 font-semibold text-[11px] uppercase tracking-wider">
-                      {language === 'am' ? 'ክልል' : 'Range'}:
+              {/* Question Source Separation Ribbon: All vs Official Past Exam vs AI Generated */}
+              <div className="px-4 sm:px-5 py-2.5 bg-gradient-to-r from-slate-900 via-[#0E172F] to-slate-900 border-b border-white/10 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-1.5 bg-white/5 p-1 rounded-xl border border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playClickChime();
+                      setQuestionSourceFilter('all');
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      questionSourceFilter === 'all'
+                        ? 'bg-amber-500 text-slate-950 shadow-md font-black'
+                        : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    <span>{language === 'am' ? 'ሁሉም ጥያቄዎች' : 'All Questions'}</span>
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/20 font-mono">
+                      {activeSheet.questions.length}
                     </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        disabled={paletteChunkStart === 0}
-                        onClick={() => {
-                          playClickChime();
-                          setPaletteChunkStart(prev => Math.max(0, prev - 25));
-                        }}
-                        className="px-2 py-1 bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-white/5 rounded-md text-slate-300 font-bold text-[11px] cursor-pointer"
-                        title="Previous 25 questions"
-                      >
-                        &laquo;
-                      </button>
-                      <span className="px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-md text-amber-400 font-extrabold text-[11px]">
-                        Q {paletteChunkStart + 1} – {Math.min(activeSheet.questions.length, paletteChunkStart + 25)}
-                      </span>
-                      <button
-                        type="button"
-                        disabled={paletteChunkStart + 25 >= activeSheet.questions.length}
-                        onClick={() => {
-                          playClickChime();
-                          setPaletteChunkStart(prev => Math.min(activeSheet.questions.length - 1, prev + 25));
-                        }}
-                        className="px-2 py-1 bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-white/5 rounded-md text-slate-300 font-bold text-[11px] cursor-pointer"
-                        title="Next 25 questions"
-                      >
-                        &raquo;
-                      </button>
-                    </div>
+                  </button>
 
-                    {/* Quick Jump Input */}
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const num = parseInt(jumpInput, 10);
-                        if (!isNaN(num) && num >= 1 && num <= activeSheet.questions.length) {
-                          playClickChime();
-                          setActiveQuestionIndex(num - 1);
-                          setJumpInput('');
-                        }
-                      }}
-                      className="flex items-center gap-1 ml-1 sm:ml-2"
-                    >
-                      <input
-                        type="number"
-                        min={1}
-                        max={activeSheet.questions.length}
-                        placeholder={language === 'am' ? 'ቁጥር...' : 'Jump to #'}
-                        value={jumpInput}
-                        onChange={(e) => setJumpInput(e.target.value)}
-                        className="w-20 px-2 py-1 bg-slate-900 border border-white/10 rounded-md text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
-                      />
-                      <button
-                        type="submit"
-                        className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-md text-[11px] cursor-pointer"
-                      >
-                        Go
-                      </button>
-                    </form>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playClickChime();
+                      setQuestionSourceFilter('official');
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      questionSourceFilter === 'official'
+                        ? 'bg-amber-500 text-slate-950 shadow-md font-black'
+                        : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    <Award className="w-3.5 h-3.5" />
+                    <span>{language === 'am' ? 'ኦፊሴላዊ ፈተናዎች' : 'Official Past Exams'}</span>
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/20 font-mono">
+                      {officialQuestionsCount}
+                    </span>
+                  </button>
 
-                  <div className="flex items-center gap-2">
-                    {/* Random in this 500-question paper */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playClickChime();
-                        const rnd = Math.floor(Math.random() * activeSheet.questions.length);
-                        setActiveQuestionIndex(rnd);
-                      }}
-                      className="px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/10 text-amber-300 font-semibold rounded-md text-[11px] flex items-center gap-1 cursor-pointer transition-all"
-                      title="Jump to random question in this paper"
-                    >
-                      <span>🎲</span>
-                      <span>{language === 'am' ? 'የዘፈቀደ ጥያቄ' : 'Random Q'}</span>
-                    </button>
-
-                    {examMode === 'simulation' && (
-                      <button
-                        onClick={() => toggleFlagQuestion(activeQuestionIndex)}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer shrink-0 ${
-                          flaggedQuestions.includes(activeQuestionIndex)
-                            ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                            : 'bg-white/5 text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        {flaggedQuestions.includes(activeQuestionIndex) 
-                          ? (language === 'am' ? 'ምልክት ተደርጓል' : 'Flagged') 
-                          : (language === 'am' ? 'ምልክት አድርግ' : 'Flag Question')}
-                      </button>
-                    )}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playClickChime();
+                      setQuestionSourceFilter('generated');
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      questionSourceFilter === 'generated'
+                        ? 'bg-indigo-600 text-white shadow-md font-black'
+                        : 'text-indigo-300 hover:text-white'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5 text-indigo-300" />
+                    <span>{language === 'am' ? 'ተጨማሪ ልምምድ' : 'Supplementary Practice'}</span>
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/20 font-mono">
+                      {generatedQuestionsCount}
+                    </span>
+                  </button>
                 </div>
 
-                {/* Question Buttons Strip for the current 25-question chunk */}
-                <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none">
-                  {activeSheet.questions
-                    .slice(paletteChunkStart, Math.min(activeSheet.questions.length, paletteChunkStart + 25))
-                    .map((q, localIdx) => {
-                      const idx = paletteChunkStart + localIdx;
-                      const isCurrent = idx === activeQuestionIndex;
-                      const isFlagged = flaggedQuestions.includes(idx);
-                      const isAnswered = examMode === 'simulation' 
-                        ? simulationAnswers[idx] !== undefined 
-                        : false;
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowGenerateModal(true)}
+                    className="px-3.5 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 hover:text-amber-200 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
+                  >
+                    <PlusCircle className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{language === 'am' ? 'ተጨማሪ ጥያቄዎችን አዘጋጅ' : 'Add Practice Questions'}</span>
+                  </button>
 
-                      return (
-                        <button
-                          key={`q_nav_${idx}`}
-                          onClick={() => {
-                            playClickChime();
-                            setActiveQuestionIndex(idx);
-                          }}
-                          className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer relative shrink-0 ${
-                            isCurrent
-                              ? 'bg-amber-500 text-slate-950 font-black shadow-md scale-105'
-                              : isAnswered
-                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                              : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
-                          }`}
-                        >
-                          {idx + 1}
-                          {isFlagged && (
-                            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500 ring-1 ring-[#101A33]" />
-                          )}
-                        </button>
-                      );
-                    })}
+                  {generatedQuestionsCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleClearGeneratedQuestions}
+                      title={language === 'am' ? 'የተፈጠሩትን ጥያቄዎች አጽዳ' : 'Clear practice questions for this paper'}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-white/5 transition-colors cursor-pointer text-xs"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
 
-              {/* Active Question Content Area */}
-              {currentQuestion ? (
+              {/* Question Navigation Palette Ribbon with Windowing & Quick Jump */}
+              {visibleQuestions.length > 0 && (
+                <div className="px-4 py-3 border-b border-white/5 bg-white/[0.02] space-y-2.5">
+                  {/* Upper bar: Jump to Q#, Chunk Range selector, Random in Paper, Flag button */}
+                  <div className="flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-slate-400 font-semibold text-[11px] uppercase tracking-wider">
+                        {language === 'am' ? 'ክልል' : 'Range'}:
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={paletteChunkStart === 0}
+                          onClick={() => {
+                            playClickChime();
+                            setPaletteChunkStart(prev => Math.max(0, prev - 25));
+                          }}
+                          className="px-2 py-1 bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-white/5 rounded-md text-slate-300 font-bold text-[11px] cursor-pointer"
+                          title="Previous 25 questions"
+                        >
+                          &laquo;
+                        </button>
+                        <span className="px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-md text-amber-400 font-extrabold text-[11px]">
+                          Q {paletteChunkStart + 1} – {Math.min(visibleQuestions.length, paletteChunkStart + 25)}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={paletteChunkStart + 25 >= visibleQuestions.length}
+                          onClick={() => {
+                            playClickChime();
+                            setPaletteChunkStart(prev => Math.min(visibleQuestions.length - 1, prev + 25));
+                          }}
+                          className="px-2 py-1 bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-white/5 rounded-md text-slate-300 font-bold text-[11px] cursor-pointer"
+                          title="Next 25 questions"
+                        >
+                          &raquo;
+                        </button>
+                      </div>
+
+                      {/* Quick Jump Input */}
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const num = parseInt(jumpInput, 10);
+                          if (!isNaN(num) && num >= 1 && num <= visibleQuestions.length) {
+                            playClickChime();
+                            setActiveQuestionIndex(num - 1);
+                            setJumpInput('');
+                          }
+                        }}
+                        className="flex items-center gap-1 ml-1 sm:ml-2"
+                      >
+                        <input
+                          type="number"
+                          min={1}
+                          max={visibleQuestions.length}
+                          placeholder={language === 'am' ? 'ቁጥር...' : 'Jump to #'}
+                          value={jumpInput}
+                          onChange={(e) => setJumpInput(e.target.value)}
+                          className="w-20 px-2 py-1 bg-slate-900 border border-white/10 rounded-md text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                        />
+                        <button
+                          type="submit"
+                          className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-md text-[11px] cursor-pointer"
+                        >
+                          Go
+                        </button>
+                      </form>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {/* Random in this question set */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playClickChime();
+                          const rnd = Math.floor(Math.random() * visibleQuestions.length);
+                          setActiveQuestionIndex(rnd);
+                        }}
+                        className="px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/10 text-amber-300 font-semibold rounded-md text-[11px] flex items-center gap-1.5 cursor-pointer transition-all"
+                        title="Jump to random question"
+                      >
+                        <Shuffle className="w-3 h-3 text-amber-400" />
+                        <span>{language === 'am' ? 'የዘፈቀደ ጥያቄ' : 'Random Q'}</span>
+                      </button>
+
+                      {examMode === 'simulation' && (
+                        <button
+                          onClick={() => toggleFlagQuestion(activeQuestionIndex)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer shrink-0 ${
+                            flaggedQuestions.includes(activeQuestionIndex)
+                              ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                              : 'bg-white/5 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {flaggedQuestions.includes(activeQuestionIndex) 
+                            ? (language === 'am' ? 'ምልክት ተደርጓል' : 'Flagged') 
+                            : (language === 'am' ? 'ምልክት አድርግ' : 'Flag Question')}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Question Buttons Strip for the current 25-question chunk */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none">
+                    {visibleQuestions
+                      .slice(paletteChunkStart, Math.min(visibleQuestions.length, paletteChunkStart + 25))
+                      .map((q, localIdx) => {
+                        const idx = paletteChunkStart + localIdx;
+                        const isCurrent = idx === activeQuestionIndex;
+                        const isFlagged = flaggedQuestions.includes(idx);
+                        const isAnswered = examMode === 'simulation' 
+                          ? simulationAnswers[idx] !== undefined 
+                          : false;
+                        const isAiGen = q.sourceType === 'ai_generated';
+                        const qKey = `${activeSheet.id}_q_${q.id || idx}`;
+                        const isTried = triedQuestionKeys.includes(qKey);
+                        const isLocked = !isProUser && questionsTriedCount >= FREE_TRIAL_LIMIT && !isTried;
+
+                        return (
+                          <button
+                            key={`q_nav_${idx}`}
+                            onClick={() => {
+                              playClickChime();
+                              if (isLocked) {
+                                setShowTrialLimitModal(true);
+                                return;
+                              }
+                              setActiveQuestionIndex(idx);
+                            }}
+                            className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer relative shrink-0 flex items-center justify-center ${
+                              isCurrent
+                                ? isAiGen
+                                  ? 'bg-indigo-600 text-white font-black shadow-md scale-105 ring-2 ring-indigo-400'
+                                  : 'bg-amber-500 text-slate-950 font-black shadow-md scale-105'
+                                : isAnswered
+                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                                : isLocked
+                                ? 'bg-amber-500/10 text-amber-400/80 border border-amber-500/30 hover:bg-amber-500/20'
+                                : isAiGen
+                                ? 'bg-indigo-950/40 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-900/50'
+                                : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
+                            }`}
+                          >
+                            {isLocked ? (
+                              <Lock className="w-3 h-3 text-amber-400" />
+                            ) : (
+                              idx + 1
+                            )}
+                            {isFlagged && (
+                              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500 ring-1 ring-[#101A33]" />
+                            )}
+                            {isAiGen && !isCurrent && !isLocked && (
+                              <span className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                            )}
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+
+              {/* Active Question Content Area or Empty State */}
+              {activeSheet.questions.length === 0 ? (
+                <div className="p-8 sm:p-12 text-center space-y-5 bg-white/[0.02] border border-white/10 rounded-2xl m-6">
+                  <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto shadow-lg">
+                    <FileQuestion className="w-8 h-8" />
+                  </div>
+                  <div className="space-y-2 max-w-lg mx-auto">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-mono font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 uppercase tracking-wider">
+                      <span>{language === 'am' ? 'ባዶ የፈተና ፋይል' : 'Empty Exam File'}</span>
+                    </div>
+                    <h3 className="text-lg font-extrabold text-white font-serif">
+                      {language === 'am' ? 'በዚህ የፈተና ፋይል ውስጥ ምንም ጥያቄዎች የሉም' : 'This Exam File Currently Has No Questions'}
+                    </h3>
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      {language === 'am' 
+                        ? `ለ"${activeSheet.title}" የተዘጋጁ ጥያቄዎች ገና አልተካተቱም። ወዲያውኑ 20 ደረጃቸውን የጠበቁ የዩኒቨርሲቲ ሲላበስ ጥያቄዎችን ማከል ይችላሉ።`
+                        : `No questions have been attached to "${activeSheet.title}" yet. Add 20 standardized university curriculum questions directly to this file to start practicing.`}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => handleAddQuestionsToEmptyFile(activeSheet.id)}
+                      disabled={isAddingToEmptyFile}
+                      className="px-6 py-3 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all inline-flex items-center gap-2 cursor-pointer active:scale-95"
+                    >
+                      <PlusCircle className="w-4 h-4 text-slate-950" />
+                      <span>
+                        {isAddingToEmptyFile 
+                          ? (language === 'am' ? 'ጥያቄዎች እየተጨመሩ ነው...' : 'Adding Questions...') 
+                          : (language === 'am' ? '+ 20 ጥያቄዎችን ወደ ፋይሉ አክል' : '+ Add 20 Questions to This File')}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowGenerateModal(true)}
+                      className="px-5 py-3 bg-white/10 hover:bg-white/15 text-slate-200 font-bold text-xs uppercase tracking-wider rounded-xl border border-white/10 transition-all inline-flex items-center gap-2 cursor-pointer"
+                    >
+                      <Layers className="w-4 h-4 text-amber-400" />
+                      <span>{language === 'am' ? 'ልዩ ጥያቄዎችን አዘጋጅ' : 'Compile Custom Batch'}</span>
+                    </button>
+                  </div>
+                </div>
+              ) : questionSourceFilter === 'generated' && generatedQuestionsCount === 0 ? (
+                <div className="p-10 text-center space-y-4 bg-white/[0.02] border border-white/10 rounded-2xl m-6">
+                  <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mx-auto shadow-md">
+                    <FileQuestion className="w-7 h-7" />
+                  </div>
+                  <div className="space-y-1.5 max-w-md mx-auto">
+                    <h3 className="text-base font-extrabold text-white">
+                      {language === 'am' ? 'ለዚህ ፈተና የተዘጋጁ ተጨማሪ የልምምድ ጥያቄዎች የሉም' : 'No Supplementary Practice Questions Yet'}
+                    </h3>
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      {language === 'am' 
+                        ? `የ${activeSheet.title} ነባር 500 ኦፊሴላዊ ጥያቄዎችን ሳይነኩ ፍጹም አዳዲስና ያልተደገሙ ተጨማሪ የልምምድ ጥያቄዎችን ማከል ይችላሉ።`
+                        : `Expand this exam sheet with brand-new, non-repeating practice questions tailored to the curriculum. The authentic past exam questions remain completely separate.`}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowGenerateModal(true)}
+                    className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all inline-flex items-center gap-2 cursor-pointer active:scale-95"
+                  >
+                    <PlusCircle className="w-4 h-4 text-slate-950" />
+                    <span>{language === 'am' ? 'ተጨማሪ ጥያቄዎችን አዘጋጅ' : 'Generate Practice Questions'}</span>
+                  </button>
+                </div>
+              ) : currentQuestion ? (
                 <div className="p-5 sm:p-7 space-y-6">
                   
                   {/* Topic Tag & Question Meta */}
-                  <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span className="font-extrabold text-amber-400 uppercase tracking-wider">
-                      {language === 'am' ? 'ጥያቄ' : 'Question'} {activeQuestionIndex + 1} / {activeSheet.questions.length}
-                    </span>
-                    <span className="bg-white/5 px-2.5 py-1 rounded-md text-slate-300 font-medium">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+                    <div className="flex items-center gap-2">
+                      <span className="font-extrabold text-amber-400 uppercase tracking-wider">
+                        {language === 'am' ? 'ጥያቄ' : 'Question'} {activeQuestionIndex + 1} / {visibleQuestions.length}
+                      </span>
+                      {currentQuestion.sourceType === 'ai_generated' ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-[10px] font-bold">
+                          <Layers className="w-3 h-3 text-indigo-400" />
+                          <span>{language === 'am' ? 'ተጨማሪ የልምምድ ጥያቄ (ያልተደገመ)' : 'Supplementary Practice (Strictly Unique)'}</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-bold">
+                          <Award className="w-3 h-3 text-amber-400" />
+                          <span>{language === 'am' ? 'ኦፊሴላዊ የቀደመ ፈተና' : 'Official Past Exam Archive'}</span>
+                        </span>
+                      )}
+                    </div>
+
+                    <span className="bg-white/5 px-2.5 py-1 rounded-md text-slate-300 font-medium text-[11px]">
                       {currentQuestion.subjectTopic}
                     </span>
                   </div>
 
-                  {/* Question Prompt */}
-                  <div className="text-sm sm:text-base font-medium text-white leading-relaxed whitespace-pre-line bg-white/[0.02] p-4 rounded-xl border border-white/5">
-                    {currentQuestion.qText}
-                  </div>
-
-                  {/* Choices A, B, C, D */}
-                  <div className="space-y-2.5">
-                    {currentQuestion.choices.map((choice, cIdx) => {
-                      const isSelected = examMode === 'simulation'
-                        ? simulationAnswers[activeQuestionIndex] === cIdx
-                        : selectedChoiceIndex === cIdx;
-
-                      // Verification styling in Interactive Practice mode
-                      let stateStyle = 'bg-white/5 border-white/10 hover:border-amber-500/40 hover:bg-white/[0.07] text-slate-200';
-
-                      if (examMode === 'practice' && showAnswerFeedback) {
-                        if (cIdx === currentQuestion.correctIndex) {
-                          stateStyle = 'bg-emerald-500/20 border-emerald-500/60 text-emerald-300 font-bold shadow-md';
-                        } else if (isSelected && cIdx !== currentQuestion.correctIndex) {
-                          stateStyle = 'bg-red-500/20 border-red-500/60 text-red-300 line-through';
-                        } else {
-                          stateStyle = 'bg-white/5 border-white/5 opacity-50 text-slate-400';
-                        }
-                      } else if (isSelected) {
-                        stateStyle = 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold ring-1 ring-amber-500/30';
-                      }
-
-                      return (
-                        <div
-                          key={`choice_${cIdx}`}
-                          onClick={() => {
-                            if (examMode === 'simulation') {
-                              playClickChime();
-                              setSimulationAnswers(prev => ({
-                                ...prev,
-                                [activeQuestionIndex]: cIdx
-                              }));
-                            } else {
-                              handleSelectChoice(cIdx);
-                            }
-                          }}
-                          className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 text-xs sm:text-sm ${stateStyle}`}
+                  {/* Quota Lock Warning if user has exceeded 20 questions */}
+                  {!isProUser && questionsTriedCount >= FREE_TRIAL_LIMIT && !triedQuestionKeys.includes(`${activeSheet.id}_q_${currentQuestion.id || activeQuestionIndex}`) ? (
+                    <div className="p-6 bg-gradient-to-br from-[#1A1A2E] to-[#16213E] border border-amber-500/40 rounded-2xl text-center space-y-4 shadow-xl">
+                      <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 mx-auto">
+                        <Lock className="w-6 h-6" />
+                      </div>
+                      <div className="space-y-1.5 max-w-md mx-auto">
+                        <h4 className="text-base font-extrabold text-white">
+                          {language === 'am' ? 'የነጻ 20 ጥያቄዎች ሙከራ ተጠናቋል' : 'Free 20-Question Limit Reached'}
+                        </h4>
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                          {language === 'am' 
+                            ? 'የነጻ 20 ጥያቄዎች ሙከራዎን አጠናቀዋል። ያልተገደቡ የፈተና ጥያቄዎችን፣ የፋኩልቲ ሙሉ የመፍትሔ ቅደም ተከተል እና የፈተና ሲሙሌሽን ለመክፈት ወደ ፕሮ ያሳድጉ።'
+                            : 'You have solved your 20 free trial questions. Upgrade to EthioLearn Pro to unlock all past exam papers across all Ethiopian universities.'}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => onNavigate('upgrade')}
+                          className="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all cursor-pointer active:scale-95"
                         >
-                          <span className="leading-relaxed">{choice}</span>
-                          {examMode === 'practice' && showAnswerFeedback && cIdx === currentQuestion.correctIndex && (
-                            <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                          {language === 'am' ? 'ወደ ፕሮ አሳድግ (Telebirr / CBE)' : 'Upgrade to Pro (Telebirr / CBE)'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Question Prompt */}
+                      <div className="text-sm sm:text-base font-medium text-white leading-relaxed whitespace-pre-line bg-white/[0.02] p-4 rounded-xl border border-white/5">
+                        {currentQuestion.qText}
+                      </div>
+
+                      {/* Choices A, B, C, D */}
+                      <div className="space-y-2.5">
+                        {currentQuestion.choices.map((choice, cIdx) => {
+                          const isSelected = examMode === 'simulation'
+                            ? simulationAnswers[activeQuestionIndex] === cIdx
+                            : selectedChoiceIndex === cIdx;
+
+                          // Verification styling in Interactive Practice mode
+                          let stateStyle = 'bg-white/5 border-white/10 hover:border-amber-500/40 hover:bg-white/[0.07] text-slate-200';
+
+                          if (examMode === 'practice' && showAnswerFeedback) {
+                            if (cIdx === currentQuestion.correctIndex) {
+                              stateStyle = 'bg-emerald-500/20 border-emerald-500/60 text-emerald-300 font-bold shadow-md';
+                            } else if (isSelected && cIdx !== currentQuestion.correctIndex) {
+                              stateStyle = 'bg-red-500/20 border-red-500/60 text-red-300 line-through';
+                            } else {
+                              stateStyle = 'bg-white/5 border-white/5 opacity-50 text-slate-400';
+                            }
+                          } else if (isSelected) {
+                            stateStyle = 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold ring-1 ring-amber-500/30';
+                          }
+
+                          return (
+                            <div
+                              key={`choice_${cIdx}`}
+                              onClick={() => {
+                                if (examMode === 'simulation') {
+                                  const qKey = `${activeSheet.id}_q_${currentQuestion.id || activeQuestionIndex}`;
+                                  const alreadyTried = triedQuestionKeys.includes(qKey);
+                                  if (!isProUser && !alreadyTried && questionsTriedCount >= FREE_TRIAL_LIMIT) {
+                                    playFailureChime();
+                                    setShowTrialLimitModal(true);
+                                    return;
+                                  }
+                                  if (!alreadyTried) {
+                                    const updatedKeys = [...triedQuestionKeys, qKey];
+                                    setTriedQuestionKeys(updatedKeys);
+                                    safeStorage.setItem('ethiolearn_tried_question_keys', JSON.stringify(updatedKeys));
+                                    safeStorage.setItem('ethiolearn_questions_tried_count', String(updatedKeys.length));
+                                  }
+                                  playClickChime();
+                                  setSimulationAnswers(prev => ({
+                                    ...prev,
+                                    [activeQuestionIndex]: cIdx
+                                  }));
+                                } else {
+                                  handleSelectChoice(cIdx);
+                                }
+                              }}
+                              className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 text-xs sm:text-sm ${stateStyle}`}
+                            >
+                              <span className="leading-relaxed">{choice}</span>
+                              {examMode === 'practice' && showAnswerFeedback && cIdx === currentQuestion.correctIndex && (
+                                <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
 
                   {/* Action Buttons: Practice Mode Feedback & AI Controls */}
                   {examMode === 'practice' && (
@@ -1200,12 +1970,12 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
                           </button>
                         )}
 
-                        {/* Asgobnyi Faculty AI Triggers */}
+                        {/* Faculty Syllabus Walkthrough Triggers */}
                         <button
                           onClick={() => handleAskAsgobnyi('breakdown')}
-                          className="px-3 py-2 rounded-xl text-xs font-bold bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-300 transition-all cursor-pointer flex items-center gap-1.5"
+                          className="px-3 py-2 rounded-xl text-xs font-bold bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 hover:text-white transition-all cursor-pointer flex items-center gap-1.5"
                         >
-                          <Bot className="w-3.5 h-3.5 text-sky-400" />
+                          <GraduationCap className="w-3.5 h-3.5 text-amber-400" />
                           <span>{language === 'am' ? 'የመፍትሔ ቅደም ተከተል' : 'Step Solution'}</span>
                         </button>
 
@@ -1213,7 +1983,8 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
                           onClick={() => handleAskAsgobnyi('amharic')}
                           className="px-3 py-2 rounded-xl text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 transition-all cursor-pointer flex items-center gap-1.5"
                         >
-                          <span>🇪🇹 በአማርኛ</span>
+                          <Languages className="w-3.5 h-3.5 text-amber-400" />
+                          <span>{language === 'am' ? 'በአማርኛ' : 'Amharic'}</span>
                         </button>
                       </div>
 
@@ -1235,13 +2006,13 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
                         </button>
 
                         <button
-                          disabled={activeQuestionIndex === activeSheet.questions.length - 1}
+                          disabled={activeQuestionIndex === visibleQuestions.length - 1}
                           onClick={() => {
                             playClickChime();
-                            setActiveQuestionIndex(prev => Math.min(activeSheet.questions.length - 1, prev + 1));
+                            setActiveQuestionIndex(prev => Math.min(visibleQuestions.length - 1, prev + 1));
                           }}
                           className={`p-2 rounded-xl border border-white/10 text-xs transition-colors ${
-                            activeQuestionIndex === activeSheet.questions.length - 1
+                            activeQuestionIndex === visibleQuestions.length - 1
                               ? 'text-slate-600 cursor-not-allowed'
                               : 'text-slate-300 hover:bg-white/10 hover:text-white cursor-pointer'
                           }`}
@@ -1287,19 +2058,19 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
                     </motion.div>
                   )}
 
-                  {/* Asgobnyi AI Response Drawer */}
+                  {/* Faculty Solution & Walkthrough Drawer */}
                   <AnimatePresence>
                     {aiGuideOpen && (
                       <motion.div
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
                         exit={{ opacity: 0, height: 0 }}
-                        className="rounded-xl bg-[#0D152A] border border-sky-500/30 p-4 space-y-3 shadow-inner overflow-hidden"
+                        className="rounded-xl bg-[#0D152A] border border-amber-500/30 p-4 space-y-3 shadow-inner overflow-hidden"
                       >
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-xs font-bold text-sky-400">
-                            <Bot className="w-4 h-4" />
-                            <span>{language === 'am' ? 'አስጎብኚ AI መፍትሔ' : 'Asgobnyi AI Faculty Assistant'}</span>
+                          <div className="flex items-center gap-2 text-xs font-bold text-amber-400">
+                            <GraduationCap className="w-4 h-4 text-amber-400" />
+                            <span>{language === 'am' ? 'የአካዳሚክ ማብራሪያና የአሰራር ቅደም ተከተል' : 'Faculty Course Syllabus & Step Solution'}</span>
                           </div>
                           <button
                             onClick={() => setAiGuideOpen(false)}
@@ -1311,8 +2082,8 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
 
                         {aiLoading ? (
                           <div className="flex items-center gap-2.5 py-4 text-xs text-slate-400">
-                            <RefreshCw className="w-4 h-4 animate-spin text-sky-400" />
-                            <span>{language === 'am' ? 'አስጎብኚ ማብራሪያውን እያዘጋጀ ነው...' : 'Asgobnyi AI is analyzing the faculty syllabus...'}</span>
+                            <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
+                            <span>{language === 'am' ? 'የአሰራር ቅደም ተከተሉን በማዘጋጀት ላይ ነው...' : 'Analyzing curriculum syllabus and solution steps...'}</span>
                           </div>
                         ) : (
                           <div className="text-xs leading-relaxed text-slate-200 whitespace-pre-line font-sans space-y-2">
@@ -1341,7 +2112,7 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
                         {language === 'am' ? 'ቀዳሚ ጥያቄ' : 'Previous'}
                       </button>
 
-                      {activeQuestionIndex < activeSheet.questions.length - 1 ? (
+                      {activeQuestionIndex < visibleQuestions.length - 1 ? (
                         <button
                           onClick={() => {
                             playClickChime();
@@ -1766,6 +2537,373 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
                       <span>{language === 'am' ? 'ፈተናውን አዘጋጅተህ ጀምር' : 'Assemble & Start Exam'}</span>
                     </>
                   )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ========================================================================= */}
+      {/* ✨ GENERATE NEW UNIQUE QUESTIONS MODAL (ZERO REPETITION GUARANTEED)        */}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {showGenerateModal && activeSheet && (
+          <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#101A33] border border-white/10 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 relative"
+            >
+              {/* Header */}
+              <div className="flex items-start justify-between border-b border-white/10 pb-4">
+                <div className="space-y-1">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-bold uppercase tracking-wider">
+                    <PlusCircle className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{language === 'am' ? 'ተጨማሪ የፈተና ጥያቄዎች አዘጋጅ' : 'Supplementary Question Compiler'}</span>
+                  </div>
+                  <h3 className="text-lg font-bold text-white font-serif">
+                    {language === 'am' ? 'ለዚህ ፈተና ተጨማሪ ጥያቄዎችን ጨምር' : 'Expand Exam with Non-Repeating Questions'}
+                  </h3>
+                  <p className="text-xs text-slate-300">
+                    {activeSheet.title} ({activeSheet.university})
+                  </p>
+                </div>
+                <button
+                  onClick={() => !isGenerating && setShowGenerateModal(false)}
+                  disabled={isGenerating}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer disabled:opacity-30"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Anti-Duplication Assurance Banner */}
+              <div className="p-3.5 bg-[#142245] border border-amber-500/25 rounded-xl flex items-start gap-3">
+                <CheckCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-0.5 text-xs">
+                  <span className="font-bold text-amber-200">
+                    {language === 'am' ? 'የጥያቄ ድግግሞሽ መከላከያ ስልት' : 'Strict Non-Repetition Guarantee'}
+                  </span>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    {language === 'am'
+                      ? `በዚህ ፈተና ውስጥ ያሉ ነባር ${activeSheet.questions.length} ኦፊሴላዊ ጥያቄዎች ሳይነኩ ይቀመጣሉ። አዳዲሶቹ ጥያቄዎች ከነባሮቹ ጋር ተነጻጽረው ፍጹም ያልተደገሙ ሆነው ይቀርባሉ።`
+                      : `The ${activeSheet.questions.length} existing authentic questions remain completely untouched. Supplementary questions are strictly filtered against the existing bank to guarantee zero repetition.`}
+                  </p>
+                </div>
+              </div>
+
+              {/* Form Controls */}
+              <div className="space-y-4">
+                {/* Topic Focus */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                    {language === 'am' ? 'የትምህርት ርዕስ (አማራጭ)' : 'Specific Topic Focus (Optional)'}
+                  </label>
+                  <input
+                    type="text"
+                    disabled={isGenerating}
+                    placeholder={
+                      activeSheet.subject.toLowerCase().includes('math')
+                        ? 'e.g. Limits, Integration, Matrices, Vectors'
+                        : activeSheet.subject.toLowerCase().includes('physic')
+                        ? 'e.g. Kinematics, Thermodynamics, Electromagnetism'
+                        : 'e.g. Core concepts or chapter name...'
+                    }
+                    value={generateTopic}
+                    onChange={(e) => setGenerateTopic(e.target.value)}
+                    className="w-full bg-[#182342] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 disabled:opacity-50"
+                  />
+                </div>
+
+                {/* Number of Questions */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                    {language === 'am' ? 'የጥያቄዎች ብዛት' : 'Number of New Questions'}
+                  </label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[3, 5, 10, 15].map((cnt) => (
+                      <button
+                        key={`gen_cnt_${cnt}`}
+                        type="button"
+                        disabled={isGenerating}
+                        onClick={() => setGenerateCount(cnt)}
+                        className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-50 ${
+                          generateCount === cnt
+                            ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                            : 'bg-[#182342] border border-white/10 text-slate-300 hover:text-white'
+                        }`}
+                      >
+                        +{cnt} {language === 'am' ? 'ጥያቄ' : 'Questions'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Difficulty Rigor */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                    {language === 'am' ? 'የጥያቄው ጥልቀት ደረጃ' : 'Academic Rigor'}
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'standard', labelEn: 'Standard', labelAm: 'መደበኛ' },
+                      { id: 'challenging', labelEn: 'Challenging', labelAm: 'ፈታኝ' },
+                      { id: 'honors', labelEn: 'Honors', labelAm: 'የክብር ደረጃ' }
+                    ].map((diff) => (
+                      <button
+                        key={`gen_diff_${diff.id}`}
+                        type="button"
+                        disabled={isGenerating}
+                        onClick={() => setGenerateDifficulty(diff.id as any)}
+                        className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-50 ${
+                          generateDifficulty === diff.id
+                            ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                            : 'bg-[#182342] border border-white/10 text-slate-300 hover:text-white'
+                        }`}
+                      >
+                        {language === 'am' ? diff.labelAm : diff.labelEn}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Generation Status or Feedback */}
+                {isGenerating && (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-3">
+                    <RefreshCw className="w-4 h-4 text-amber-400 animate-spin shrink-0" />
+                    <p className="text-xs text-amber-200">
+                      {generateFeedbackMsg || (language === 'am' ? 'ጥያቄዎች እየተዘጋጁ ነው...' : 'Compiling unique questions...')}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-2 border-t border-white/10">
+                <button
+                  type="button"
+                  disabled={isGenerating}
+                  onClick={() => setShowGenerateModal(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-400 hover:text-white rounded-xl hover:bg-white/5 transition-all cursor-pointer disabled:opacity-30"
+                >
+                  {language === 'am' ? 'ተመለስ' : 'Cancel'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleGenerateQuestions}
+                  disabled={isGenerating}
+                  className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 active:scale-95"
+                >
+                  {isGenerating ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>{language === 'am' ? 'እየተዘጋጀ ነው...' : 'Compiling...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <PlusCircle className="w-4 h-4 text-slate-950" />
+                      <span>{language === 'am' ? 'ጥያቄዎችን አዘጋጅ' : 'Compile Questions'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ========================================================================= */}
+      {/* 20-QUESTION TRIAL LIMIT MODAL                                            */}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {showTrialLimitModal && (
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#101A33] border border-amber-500/40 rounded-2xl p-6 sm:p-7 max-w-lg w-full shadow-2xl space-y-5 relative"
+            >
+              <button
+                type="button"
+                onClick={() => setShowTrialLimitModal(false)}
+                className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="text-center space-y-3 pt-2">
+                <div className="w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-amber-400 mx-auto shadow-lg">
+                  <Lock className="w-8 h-8" />
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-amber-400 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20 inline-block">
+                    {language === 'am' ? 'የነጻ ሙከራ ገደብ ደርሷል (20/20)' : 'Trial Limit Reached (20/20)'}
+                  </span>
+                  <h3 className="text-xl font-black text-white font-serif pt-1">
+                    {language === 'am' ? 'የ20 ጥያቄዎች ነጻ ሙከራዎ ተጠናቋል' : '20 Free Questions Solved!'}
+                  </h3>
+                  <p className="text-xs text-slate-300 leading-relaxed max-w-md mx-auto pt-1">
+                    {language === 'am'
+                      ? 'የ20 ጥያቄዎች የነጻ ሙከራዎን በተሳካ ሁኔታ አጠናቀዋል። ሙሉ የዩኒቨርሲቲ ፈተናዎችን፣ ያልተገደቡ የልምምድ ጥያቄዎችን እና የፋኩልቲ ሙሉ የመፍትሔ ቅደም ተከተል ለመጠቀም ወደ EthioLearn Pro ያሳድጉ።'
+                      : 'You have solved all 20 complimentary trial questions. Upgrade to EthioLearn Pro to unlock all 10,000+ authentic university past exam questions, step-by-step faculty proofs, and timed simulation mock rankings.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Pro Feature Checklist */}
+              <div className="bg-[#142245] border border-white/10 rounded-xl p-4 space-y-2.5 text-xs text-slate-200">
+                <div className="flex items-center gap-2.5">
+                  <CheckCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>{language === 'am' ? 'ያልተገደበ የፈተና ጥያቄዎች (WKU፣ AAU፣ ASTU እና ሌሎችም)' : 'Unlimited questions across WKU, AAU, ASTU & All Universities'}</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <CheckCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>{language === 'am' ? 'የፋኩልቲ ደረጃ-በደረጃ የመፍትሔ ማብራሪያ (Step-by-Step Proofs)' : 'Official Faculty Step-by-Step Solutions & Theory Breakdown'}</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <CheckCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>{language === 'am' ? 'ፈጣን የቴሌብር (Telebirr) እና ንግድ ባንክ (CBE) ክፍያ' : 'Instant Activation via Telebirr, CBE Birr & HelloCash'}</span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowTrialLimitModal(false);
+                    onNavigate('upgrade');
+                  }}
+                  className="w-full sm:flex-1 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                >
+                  <Award className="w-4 h-4 text-slate-950" />
+                  <span>{language === 'am' ? 'ወደ ፕሮ አሳድግ (ብር 99/ወር)' : 'Upgrade to Pro (99 ETB/mo)'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowTrialLimitModal(false)}
+                  className="w-full sm:w-auto px-4 py-3 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white font-bold text-xs rounded-xl border border-white/10 transition-all cursor-pointer"
+                >
+                  {language === 'am' ? 'የሞከርኳቸውን ገምግም' : 'Review Answered Qs'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ========================================================================= */}
+      {/* NEW EXAM FILE CREATION MODAL                                             */}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {showNewFileModal && (
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#101A33] border border-white/10 rounded-2xl p-6 sm:p-7 max-w-lg w-full shadow-2xl space-y-5 relative"
+            >
+              <button
+                type="button"
+                onClick={() => setShowNewFileModal(false)}
+                className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wider">
+                  <FilePlus className="w-3.5 h-3.5" />
+                  <span>{language === 'am' ? 'የፈተና ወረቀት ማከያ' : 'Exam Archive Manager'}</span>
+                </div>
+                <h3 className="text-lg font-bold text-white font-serif">
+                  {language === 'am' ? 'አዲስ የፈተና ፋይል ፍጠር' : 'Add New Exam File / Paper'}
+                </h3>
+                <p className="text-xs text-slate-400">
+                  {language === 'am'
+                    ? 'አዲስ የፈተና ፋይል ፍጠር፤ ባዶ ሆኖ ከተፈጠረ በኋላ በቀላሉ 20 ጥያቄዎችን በፋይሉ ውስጥ ማከል ትችላለህ።'
+                    : 'Create a new exam subject paper. If empty, you can add 20 standardized questions to it with one click.'}
+                </p>
+              </div>
+
+              <div className="space-y-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                    {language === 'am' ? 'የፈተናው ሙሉ ርዕስ *' : 'Paper Title *'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newFileTitle}
+                    onChange={(e) => setNewFileTitle(e.target.value)}
+                    placeholder="e.g. C++ Programming Final Exam 2016"
+                    className="w-full bg-[#182342] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                      {language === 'am' ? 'ዩኒቨርሲቲ' : 'University'}
+                    </label>
+                    <input
+                      type="text"
+                      value={newFileUni}
+                      onChange={(e) => setNewFileUni(e.target.value)}
+                      placeholder="e.g. Wolkite University"
+                      className="w-full bg-[#182342] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                      {language === 'am' ? 'የትምህርት ዓይነት' : 'Subject / Department'}
+                    </label>
+                    <input
+                      type="text"
+                      value={newFileSubject}
+                      onChange={(e) => setNewFileSubject(e.target.value)}
+                      placeholder="e.g. Computer Science"
+                      className="w-full bg-[#182342] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                    {language === 'am' ? 'የፈተና ዓመት' : 'Academic Year'}
+                  </label>
+                  <input
+                    type="text"
+                    value={newFileYear}
+                    onChange={(e) => setNewFileYear(e.target.value)}
+                    placeholder="e.g. 2016 E.C. (2024)"
+                    className="w-full bg-[#182342] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setShowNewFileModal(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-400 hover:text-white rounded-xl hover:bg-white/5 transition-all cursor-pointer"
+                >
+                  {language === 'am' ? 'ተመለስ' : 'Cancel'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreateNewExamFile}
+                  disabled={!newFileTitle.trim()}
+                  className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+                >
+                  <PlusCircle className="w-4 h-4 text-slate-950" />
+                  <span>{language === 'am' ? 'ፋይሉን ፍጠር' : 'Create Exam File'}</span>
                 </button>
               </div>
             </motion.div>
