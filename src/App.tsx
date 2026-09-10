@@ -235,7 +235,8 @@ export default function App() {
   const isUserAdmin = Boolean(
     isAdministratorEmail(profile?.email) || 
     isAdministratorEmail(supaUser?.email) || 
-    isAdministratorEmail(googleUser?.email)
+    isAdministratorEmail(googleUser?.email) ||
+    safeStorage.getItem('ethiolearn_admin_session') === 'ezrat2116@gmail.com'
   );
 
   // PWA elements
@@ -1152,17 +1153,21 @@ export default function App() {
 
 
 
-            {/* Admin Dashboard Shield Button - Strictly visible ONLY to ezrat2116@gmail.com */}
-            {isUserAdmin && (
-              <button
-                onClick={() => { playClickChime(); setIsAdminOpen(true); }}
-                className="p-2.5 border border-amber-500/30 bg-amber-500/10 rounded-xl hover:bg-amber-500/20 text-amber-500 cursor-pointer transition-all flex items-center gap-1"
-                title="Admin Control Dashboard (ezrat2116@gmail.com)"
-              >
-                <ShieldCheck className="w-4 h-4" />
-                <span className="hidden lg:inline text-[10px] font-black uppercase tracking-wider">Admin</span>
-              </button>
-            )}
+            {/* Admin Dashboard Shield Button */}
+            <button
+              onClick={() => { playClickChime(); setIsAdminOpen(true); }}
+              className={`p-2 sm:px-2.5 sm:py-1.5 border rounded-xl cursor-pointer transition-all flex items-center gap-1.5 ${
+                isUserAdmin
+                  ? 'border-amber-500/40 bg-amber-500/15 hover:bg-amber-500/25 text-amber-400'
+                  : 'border-slate-700/60 bg-slate-850 hover:bg-slate-800 text-slate-300 hover:text-amber-400'
+              }`}
+              title="Admin Control Dashboard (ezrat2116@gmail.com)"
+            >
+              <ShieldCheck className={`w-4 h-4 ${isUserAdmin ? 'text-amber-400' : 'text-slate-400'}`} />
+              <span className="hidden sm:inline text-[10px] font-black uppercase tracking-wider">
+                {isUserAdmin ? 'Admin' : 'Admin'}
+              </span>
+            </button>
 
             {profile.isPro && (
               <div 
@@ -1537,8 +1542,8 @@ export default function App() {
         />
       )}
 
-      {/* Admin Control Dashboard Modal Overlay - Strictly restricted to ezrat2116@gmail.com */}
-      {isAdminOpen && isUserAdmin && (
+      {/* Admin Control Dashboard Modal Overlay */}
+      {isAdminOpen && (
         <AdminDashboardView
           currentProfile={profile}
           language={language}

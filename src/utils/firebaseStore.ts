@@ -1364,9 +1364,20 @@ export async function fetchPublishedNotesFromFirestore(filters: NoteFilters = {}
     }
   }
 
-  // Combine with initial authentic notes
+  // Fallback to local storage cache if available
+  let localNotes: FirestoreStudyNote[] = [];
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('ethiolearn_admin_notes') : null;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) localNotes = parsed;
+    }
+  } catch {}
+
+  // Combine with initial authentic notes and local cache
   const noteMap = new Map<string, FirestoreStudyNote>();
   INITIAL_NOTES.forEach(n => noteMap.set(n.id, n));
+  localNotes.forEach(n => noteMap.set(n.id, n));
   dbNotes.forEach(n => noteMap.set(n.id, n));
 
   let results = Array.from(noteMap.values());
@@ -1456,6 +1467,17 @@ export async function saveAdminNoteToFirestore(noteData: Partial<FirestoreStudyN
     }
   }
 
+  // Resilient local caching so educator never loses published notes
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('ethiolearn_admin_notes') : null;
+    const list: FirestoreStudyNote[] = raw ? JSON.parse(raw) : [];
+    const filtered = list.filter(n => n.id !== id);
+    filtered.unshift(fullNote);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('ethiolearn_admin_notes', JSON.stringify(filtered));
+    }
+  } catch {}
+
   return fullNote;
 }
 
@@ -1467,12 +1489,18 @@ export async function deleteAdminNoteFromFirestore(noteId: string): Promise<bool
   if (currentDb) {
     try {
       await deleteDoc(doc(currentDb, 'notes', noteId));
-      return true;
     } catch (err) {
       console.warn('[Firestore] Error deleting admin note:', err);
     }
   }
-  return false;
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('ethiolearn_admin_notes') : null;
+    if (raw) {
+      const list: FirestoreStudyNote[] = JSON.parse(raw);
+      localStorage.setItem('ethiolearn_admin_notes', JSON.stringify(list.filter(n => n.id !== noteId)));
+    }
+  } catch {}
+  return true;
 }
 
 /**
@@ -1487,12 +1515,157 @@ export async function togglePublishAdminNoteInFirestore(noteId: string, currentS
         status: newStatus,
         updatedAt: new Date().toISOString()
       });
-      return true;
     } catch (err) {
       console.warn('[Firestore] Error toggling note status:', err);
     }
   }
-  return false;
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('ethiolearn_admin_notes') : null;
+    if (raw) {
+      const list: FirestoreStudyNote[] = JSON.parse(raw);
+      const updated = list.map(n => n.id === noteId ? { ...n, status: newStatus as any, updatedAt: new Date().toISOString() } : n);
+      localStorage.setItem('ethiolearn_admin_notes', JSON.stringify(updated));
+    }
+  } catch {}
+  return true;
+}
+
+// ============================================================================
+// 8. ANNOUNCEMENTS & CAMPUS POSTS FIRESTORE INTEGRATION
+// ============================================================================
+
+export interface FirestoreAnnouncementItem {
+  id: string;
+  title: string;
+  message: string;
+  badgeText?: string;
+  isImportant?: boolean;
+  status: 'published' | 'draft' | 'archived';
+  date: string;
+  createdAt?: string;
+}
+
+/**
+ * Fetch platform announcements from Firestore with resilient local fallback
+ */
+export async function fetchAnnouncementsFromFirestore(publishedOnly: boolean = false): Promise<FirestoreAnnouncementItem[]> {
+  const currentDb = getDb();
+  let dbAnnouncements: FirestoreAnnouncementItem[] = [];
+
+  if (currentDb) {
+    try {
+      const snap = await getDocs(collection(currentDb, 'announcements'));
+      snap.forEach(docSnap => {
+        const item = docSnap.data() as FirestoreAnnouncementItem;
+        dbAnnouncements.push({ ...item, id: docSnap.id });
+      });
+    } catch (err) {
+      console.warn('[Firestore Announcements notice]:', err);
+    }
+  }
+
+  let localAnnouncements: FirestoreAnnouncementItem[] = [];
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('ethiolearn_announcements') : null;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) localAnnouncements = parsed;
+    }
+  } catch {}
+
+  const map = new Map<string, FirestoreAnnouncementItem>();
+  localAnnouncements.forEach(a => map.set(a.id, a));
+  dbAnnouncements.forEach(a => map.set(a.id, a));
+
+  let results = Array.from(map.values()).sort((a, b) => {
+    return new Date(b.createdAt || b.date || 0).getTime() - new Date(a.createdAt || a.date || 0).getTime();
+  });
+
+  if (publishedOnly) {
+    results = results.filter(a => a.status === 'published' || !a.status);
+  }
+
+  return results;
+}
+
+/**
+ * Save or publish an announcement to Firestore and local cache
+ */
+export async function saveAnnouncementToFirestore(annData: Partial<FirestoreAnnouncementItem>): Promise<FirestoreAnnouncementItem> {
+  const currentDb = getDb();
+  const id = annData.id || `ann_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const now = new Date().toISOString();
+  const dateStr = annData.date || now.split('T')[0];
+
+  const fullAnn: FirestoreAnnouncementItem = {
+    id,
+    title: annData.title?.trim() || 'Platform Notice',
+    message: annData.message?.trim() || '',
+    badgeText: annData.badgeText?.trim() || 'Notice',
+    isImportant: Boolean(annData.isImportant),
+    status: (['published', 'draft', 'archived'].includes(annData.status as any) ? annData.status : 'published') as any,
+    date: dateStr,
+    createdAt: annData.createdAt || now,
+  };
+
+  if (currentDb) {
+    try {
+      const annDoc = doc(currentDb, 'announcements', id);
+      await setDoc(annDoc, fullAnn, { merge: true });
+    } catch (err) {
+      console.warn('[Firestore] Error saving announcement:', err);
+    }
+  }
+
+  // Update local storage cache
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('ethiolearn_announcements') : null;
+    const list: FirestoreAnnouncementItem[] = raw ? JSON.parse(raw) : [];
+    const filtered = list.filter(a => a.id !== id);
+    filtered.unshift(fullAnn);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('ethiolearn_announcements', JSON.stringify(filtered));
+    }
+  } catch {}
+
+  // Dispatch global event for instant UI reactivity
+  try {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ethiolearn_data_updated'));
+    }
+  } catch {}
+
+  return fullAnn;
+}
+
+/**
+ * Delete an announcement from Firestore and local cache
+ */
+export async function deleteAnnouncementFromFirestore(annId: string): Promise<boolean> {
+  const currentDb = getDb();
+  if (currentDb) {
+    try {
+      await deleteDoc(doc(currentDb, 'announcements', annId));
+    } catch (err) {
+      console.warn('[Firestore] Error deleting announcement:', err);
+    }
+  }
+
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('ethiolearn_announcements') : null;
+    if (raw) {
+      const list: FirestoreAnnouncementItem[] = JSON.parse(raw);
+      localStorage.setItem('ethiolearn_announcements', JSON.stringify(list.filter(a => a.id !== annId)));
+    }
+  } catch {}
+
+  try {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ethiolearn_data_updated'));
+    }
+  } catch {}
+
+  return true;
 }
 
 

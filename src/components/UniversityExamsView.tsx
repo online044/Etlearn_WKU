@@ -33,6 +33,9 @@ export interface ExamQuestion {
   amharicExplanation?: string;
   sourceType?: 'official_past_exam' | 'ai_generated';
   generatedAt?: string;
+  unit?: string;
+  chapter?: string;
+  difficulty?: string;
 }
 
 export interface ExamPaperSheet {

@@ -54,10 +54,13 @@ export interface AccountInfo {
 }
 
 export interface StudentProfile {
+  id?: string;
   name: string;
   email?: string;
   university: string;
   year: string;
+  grade?: string;
+  stream?: string;
   subjects: string[];
   claudeApiKey: string;
   dailyGoalHours: number;

@@ -235,17 +235,25 @@ export default function AppSidebar({
                   <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
                 </button>
 
-                {isUserAdmin && onOpenAdmin && (
+                {onOpenAdmin && (
                   <button
                     type="button"
                     onClick={() => { playClickChime(); onOpenAdmin(); onClose(); }}
-                    className="w-full p-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 font-bold transition-all flex items-center justify-between group cursor-pointer"
+                    className={`w-full p-2.5 rounded-xl border font-bold transition-all flex items-center justify-between group cursor-pointer ${
+                      isUserAdmin
+                        ? 'bg-amber-500/15 hover:bg-amber-500/25 border-amber-500/40 text-amber-300'
+                        : 'bg-slate-800/40 hover:bg-slate-800 border-slate-700/50 text-slate-300 hover:text-amber-300'
+                    }`}
                   >
                     <div className="flex items-center gap-3">
-                      <ShieldCheck className="w-4 h-4 text-red-400" />
-                      <span className="text-xs">Admin Control Center</span>
+                      <ShieldCheck className={`w-4 h-4 ${isUserAdmin ? 'text-amber-400' : 'text-slate-400'}`} />
+                      <span className="text-xs">
+                        {isAm ? 'የአስተዳዳሪ ማዕከል (Admin)' : 'Admin Control Center'}
+                      </span>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-red-400" />
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-400 font-mono">
+                      {isUserAdmin ? 'Lead Admin' : 'Sign in'}
+                    </span>
                   </button>
                 )}
               </div>

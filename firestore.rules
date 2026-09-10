@@ -121,6 +121,15 @@ service cloud.firestore {
         && (data.status == 'draft' || data.status == 'published' || data.status == 'archived');
     }
 
+    // 9. Announcements Schema Validation
+    function isValidAnnouncement(data) {
+      return data.keys().hasAll(['id', 'title', 'message', 'status'])
+        && data.id is string && data.id.size() <= 128
+        && data.title is string && data.title.size() <= 300
+        && data.message is string && data.message.size() <= 5000
+        && (data.status == 'draft' || data.status == 'published' || data.status == 'archived');
+    }
+
     // ================= COLLECTIONS =================
 
     // 1. Users Collection
@@ -185,6 +194,14 @@ service cloud.firestore {
     match /promotions/{promoId} {
       allow get, list: if true;
       allow create, update: if isAdmin() && isValidPromotion(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // 9. Announcements Collection (Platform & Campus Bulletins)
+    match /announcements/{annId} {
+      allow get, list: if true;
+      allow create: if isAdmin() && isValidId(annId) && isValidAnnouncement(request.resource.data);
+      allow update: if isAdmin() && isValidId(annId) && isValidAnnouncement(request.resource.data);
       allow delete: if isAdmin();
     }
   }

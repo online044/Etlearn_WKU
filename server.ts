@@ -43,7 +43,8 @@ import {
   handleAdminSaveCoupon, 
   handleAdminDeleteCoupon, 
   handleAdminSaveAnnouncement, 
-  handleAdminDeleteAnnouncement 
+  handleAdminDeleteAnnouncement,
+  handleGetAnnouncements
 } from './server/admin';
 
 import { 
@@ -461,6 +462,7 @@ app.post(['/api/admin/coupon', '/api/admin/coupon/'], requireAdmin, handleAdminS
 app.delete(['/api/admin/coupon/:code', '/api/admin/coupon/:code/'], requireAdmin, handleAdminDeleteCoupon);
 
 // Announcements management
+app.get(['/api/announcements', '/api/announcements/'], handleGetAnnouncements);
 app.post(['/api/admin/announcement', '/api/admin/announcement/'], requireAdmin, handleAdminSaveAnnouncement);
 app.delete(['/api/admin/announcement/:id', '/api/admin/announcement/:id/'], requireAdmin, handleAdminDeleteAnnouncement);
 

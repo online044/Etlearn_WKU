@@ -3,6 +3,11 @@ import { safeStorage } from './safeStorage';
 import { isAdministratorEmail, ADMIN_EMAIL } from './adminAuth';
 import { CourseRecord, LessonRecord, AdminDashboardStats, CouponCode, PlatformAnnouncement, CourseStatus } from '../types';
 import { INITIAL_CURRICULUM_COURSES, getCurriculumLessonsForCourse, getCurriculumCourse } from '../data/coursesCurriculum';
+import { 
+  fetchAnnouncementsFromFirestore, 
+  saveAnnouncementToFirestore, 
+  deleteAnnouncementFromFirestore 
+} from './firebaseStore';
 
 // ============================================================================
 // ETHIOLEARN PRO - SUPABASE COURSES, PUBLISHING & ADMIN DATA SERVICE
@@ -638,6 +643,25 @@ export async function fetchAdminDashboardStats(): Promise<AdminDashboardStats> {
 // ----------------------------------------------------------------------------
 
 export async function fetchAnnouncements(publishedOnly = false): Promise<PlatformAnnouncement[]> {
+  // 1. Fetch from Firestore
+  let firestoreAnnouncements: PlatformAnnouncement[] = [];
+  try {
+    const fsItems = await fetchAnnouncementsFromFirestore(publishedOnly);
+    firestoreAnnouncements = fsItems.map(item => ({
+      id: item.id,
+      title: item.title,
+      message: item.message,
+      badgeText: item.badgeText || 'Notice',
+      isImportant: Boolean(item.isImportant),
+      status: item.status || 'published',
+      date: item.date,
+      createdAt: item.createdAt || new Date().toISOString()
+    }));
+  } catch (err) {
+    console.warn('[Firestore Announcements fetch notice]:', err);
+  }
+
+  // 2. Fetch from Supabase (if connected)
   const supabase = getSupabase();
   let dbAnnouncements: PlatformAnnouncement[] = [];
 
@@ -670,6 +694,30 @@ export async function fetchAnnouncements(publishedOnly = false): Promise<Platfor
     }
   }
 
+  // 3. Fetch from Server backend endpoint
+  let serverAnnouncements: PlatformAnnouncement[] = [];
+  try {
+    const sRes = await fetch('/api/announcements');
+    if (sRes.ok) {
+      const sData = await sRes.json();
+      if (sData.success && Array.isArray(sData.announcements)) {
+        serverAnnouncements = sData.announcements.map((row: any) => ({
+          id: String(row.id),
+          title: row.title || 'Notice',
+          message: row.message || '',
+          badgeText: row.badgeText || row.badge_text || 'Notice',
+          isImportant: Boolean(row.isImportant ?? row.is_important),
+          status: row.status || 'published',
+          date: row.date || (row.createdAt ? row.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]),
+          createdAt: row.createdAt || row.created_at || new Date().toISOString()
+        }));
+      }
+    }
+  } catch (sErr) {
+    // Non-blocking server fetch notice
+  }
+
+  // 4. Fallback to local storage cache
   let cachedAnnouncements: PlatformAnnouncement[] = [];
   try {
     const raw = safeStorage.getItem(LOCAL_STORAGE_ANNOUNCEMENTS_KEY);
@@ -679,9 +727,11 @@ export async function fetchAnnouncements(publishedOnly = false): Promise<Platfor
     }
   } catch {}
 
-  // Merge announcements uniquely
+  // Merge announcements uniquely across sources
   const annMap = new Map<string, PlatformAnnouncement>();
   cachedAnnouncements.forEach(a => annMap.set(a.id, a));
+  serverAnnouncements.forEach(a => annMap.set(a.id, a));
+  firestoreAnnouncements.forEach(a => annMap.set(a.id, a));
   dbAnnouncements.forEach(a => annMap.set(a.id, a));
 
   const result = Array.from(annMap.values()).sort((a, b) => {
@@ -715,6 +765,14 @@ export async function createAnnouncement(ann: Partial<PlatformAnnouncement>): Pr
     createdAt: now,
   };
 
+  // 1. Save to Cloud Firestore
+  try {
+    await saveAnnouncementToFirestore(newAnn);
+  } catch (err: any) {
+    console.warn('[Firestore saveAnnouncement warning]:', err);
+  }
+
+  // 2. Save to Supabase (if connected)
   const supabase = getSupabase();
   if (supabase) {
     try {
@@ -737,6 +795,27 @@ export async function createAnnouncement(ann: Partial<PlatformAnnouncement>): Pr
     }
   }
 
+  // 3. Save to server admin endpoint
+  try {
+    const sPost = await fetch('/api/admin/announcement', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders()
+      },
+      body: JSON.stringify(newAnn)
+    });
+    if (sPost.ok) {
+      const sJson = await sPost.json();
+      if (sJson?.announcement) {
+        newAnn.id = sJson.announcement.id || newAnn.id;
+      }
+    }
+  } catch (err) {
+    console.warn('[Server Announcement Sync warning]:', err);
+  }
+
+  // 4. Update local storage cache
   try {
     const raw = safeStorage.getItem(LOCAL_STORAGE_ANNOUNCEMENTS_KEY);
     const list: PlatformAnnouncement[] = raw ? JSON.parse(raw) : [];
@@ -745,6 +824,7 @@ export async function createAnnouncement(ann: Partial<PlatformAnnouncement>): Pr
     safeStorage.setItem(LOCAL_STORAGE_ANNOUNCEMENTS_KEY, JSON.stringify(filtered));
   } catch {}
 
+  // 5. Broadcast real-time event to all views
   try {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ethiolearn_data_updated'));
@@ -755,6 +835,14 @@ export async function createAnnouncement(ann: Partial<PlatformAnnouncement>): Pr
 }
 
 export async function deleteAnnouncement(annId: string): Promise<{ success: boolean; error?: string }> {
+  // 1. Delete from Firestore
+  try {
+    await deleteAnnouncementFromFirestore(annId);
+  } catch (err) {
+    console.warn('[Firestore deleteAnnouncement notice]:', err);
+  }
+
+  // 2. Delete from Supabase (if connected)
   const supabase = getSupabase();
   if (supabase) {
     try {
@@ -764,6 +852,15 @@ export async function deleteAnnouncement(annId: string): Promise<{ success: bool
     }
   }
 
+  // 3. Delete from server admin endpoint
+  try {
+    fetch(`/api/admin/announcement/${annId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    }).catch(() => {});
+  } catch {}
+
+  // 4. Delete from local cache
   try {
     const raw = safeStorage.getItem(LOCAL_STORAGE_ANNOUNCEMENTS_KEY);
     if (raw) {

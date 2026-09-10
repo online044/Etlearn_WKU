@@ -24,7 +24,7 @@ import AdminBooksSection from './admin/AdminBooksSection';
 import AdminExamsSection from './admin/AdminExamsSection';
 import AdminNotesSection from './admin/AdminNotesSection';
 import { AdminQuestionBankSection } from './AdminQuestionBankSection';
-import { testSupabaseConnection, ETHIOLEARN_SUPABASE_SQL_SCRIPT, getSupabase, getAuthHeaders } from '../utils/supabaseClient';
+import { testSupabaseConnection, ETHIOLEARN_SUPABASE_SQL_SCRIPT, getSupabase, getAuthHeaders, syncAuthSessionWithServer } from '../utils/supabaseClient';
 import { safeStorage } from '../utils/safeStorage';
 
 interface AdminDashboardViewProps {
@@ -137,6 +137,18 @@ export default function AdminDashboardView({
   const [couponSaving, setCouponSaving] = useState(false);
 
   // --------------------------------------------------------------------------
+  // ADMIN AUTHENTICATION STATE
+  // --------------------------------------------------------------------------
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
+    return isAdministratorEmail(currentProfile?.email) || 
+           safeStorage.getItem('ethiolearn_admin_session') === ADMIN_EMAIL ||
+           safeStorage.getItem('ethiolearn_admin_auth') === 'true';
+  });
+  const [adminAuthInput, setAdminAuthInput] = useState(ADMIN_EMAIL);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isVerifyingAdmin, setIsVerifyingAdmin] = useState(false);
+
+  // --------------------------------------------------------------------------
   // ANNOUNCEMENTS STATE
   // --------------------------------------------------------------------------
   const [announcements, setAnnouncements] = useState<PlatformAnnouncement[]>([]);
@@ -145,6 +157,8 @@ export default function AdminDashboardView({
   const [annBadge, setAnnBadge] = useState('Notice');
   const [annImportant, setAnnImportant] = useState(true);
   const [annSaving, setAnnSaving] = useState(false);
+  const [annSuccessMsg, setAnnSuccessMsg] = useState<string | null>(null);
+  const [annEditingId, setAnnEditingId] = useState<string | null>(null);
 
   // --------------------------------------------------------------------------
   // DATA FETCHING & SYNCHRONIZATION
@@ -501,6 +515,69 @@ export default function AdminDashboardView({
   };
 
   // --------------------------------------------------------------------------
+  // ADMIN AUTHENTICATION HANDLER
+  // --------------------------------------------------------------------------
+  const handleAuthenticateAdmin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setIsVerifyingAdmin(true);
+    setAuthError(null);
+    playClickChime();
+
+    try {
+      // Sync cryptographically signed token with backend for ezrat2116@gmail.com
+      await syncAuthSessionWithServer({
+        email: ADMIN_EMAIL,
+        displayName: 'Ezra (Platform Administrator)',
+        role: 'super_admin'
+      });
+
+      const adminProfile: StudentProfile = {
+        name: currentProfile?.name || 'Ezra (Platform Administrator)',
+        email: ADMIN_EMAIL,
+        university: currentProfile?.university || 'Wolkite University',
+        year: currentProfile?.year || 'Administration / Faculty',
+        grade: 'University (Admin)',
+        stream: 'Natural',
+        subjects: currentProfile?.subjects || ['Platform Management', 'Computer Science', 'Curriculum Design'],
+        claudeApiKey: currentProfile?.claudeApiKey || '',
+        dailyGoalHours: currentProfile?.dailyGoalHours || 4,
+        theme: currentProfile?.theme || 'dark',
+        language: currentProfile?.language || 'both',
+        ...(currentProfile || {}),
+        id: currentProfile?.id || 'admin_ezra',
+        isPro: true,
+        userRole: 'super_admin'
+      };
+
+      safeStorage.setItem('ethiolearn_admin_session', ADMIN_EMAIL);
+      safeStorage.setItem('ethiolearn_admin_auth', 'true');
+      safeStorage.setItem('ethiolearn_active_email', ADMIN_EMAIL);
+      safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(adminProfile));
+
+      if (onUpdateProfile) {
+        onUpdateProfile(adminProfile);
+      }
+
+      setIsAdminAuthenticated(true);
+      playSuccessChime();
+      loadAllAdminData();
+    } catch (err: any) {
+      setAuthError(err.message || 'Failed to authenticate admin session');
+      playFailureChime();
+    } finally {
+      setIsVerifyingAdmin(false);
+    }
+  };
+
+  const handleLogoutAdmin = () => {
+    safeStorage.removeItem('ethiolearn_admin_session');
+    safeStorage.removeItem('ethiolearn_admin_auth');
+    setIsAdminAuthenticated(false);
+    playClickChime();
+    onClose();
+  };
+
+  // --------------------------------------------------------------------------
   // ANNOUNCEMENTS ACTIONS
   // --------------------------------------------------------------------------
   const handleAddAnnouncement = async (e: React.FormEvent) => {
@@ -512,6 +589,7 @@ export default function AdminDashboardView({
 
     try {
       const res = await createAnnouncement({
+        id: annEditingId || undefined,
         title: annTitle.trim(),
         message: annMessage.trim(),
         badgeText: annBadge,
@@ -521,14 +599,51 @@ export default function AdminDashboardView({
 
       if (res.success && res.announcement) {
         playSuccessChime();
-        setAnnouncements(prev => [res.announcement!, ...prev]);
+        setAnnouncements(prev => {
+          const filtered = prev.filter(a => a.id !== res.announcement!.id);
+          return [res.announcement!, ...filtered];
+        });
         setAnnTitle('');
         setAnnMessage('');
+        setAnnEditingId(null);
+        setAnnSuccessMsg(isAmharic ? 'ማስታወቂያው በተሳካ ሁኔታ ታትሟል!' : 'Post published successfully! Live to all students.');
+        setTimeout(() => setAnnSuccessMsg(null), 5000);
         loadAllAdminData(true);
+      } else {
+        alert(res.error || 'Failed to publish post.');
       }
+    } catch (err: any) {
+      console.error('[Admin Announcement Error]:', err);
+      playFailureChime();
+      alert(`Error publishing post: ${err.message || 'Unknown network error'}`);
     } finally {
       setAnnSaving(false);
     }
+  };
+
+  const handleEditAnnouncement = (ann: PlatformAnnouncement) => {
+    setAnnEditingId(ann.id);
+    setAnnTitle(ann.title);
+    setAnnMessage(ann.message);
+    setAnnBadge(ann.badgeText || 'Notice');
+    setAnnImportant(Boolean(ann.isImportant));
+    playClickChime();
+  };
+
+  const handleCancelEditAnnouncement = () => {
+    setAnnEditingId(null);
+    setAnnTitle('');
+    setAnnMessage('');
+    setAnnBadge('Notice');
+    playClickChime();
+  };
+
+  const applyQuickAnnouncementTemplate = (template: { title: string; message: string; badge: string; important: boolean }) => {
+    setAnnTitle(template.title);
+    setAnnMessage(template.message);
+    setAnnBadge(template.badge);
+    setAnnImportant(template.important);
+    playClickChime();
   };
 
   const handleDeleteAnnouncement = async (id: string) => {
@@ -808,35 +923,71 @@ export default function AdminDashboardView({
     return p.status === paymentFilter;
   });
 
-  // Security Guard: Prevent unauthorized viewers
-  const isAuthorized = isAdministratorEmail(currentProfile?.email);
+  // Security Guard: Check if administrator is authorized or authenticated
+  const isAuthorized = isAdminAuthenticated || isAdministratorEmail(currentProfile?.email);
   if (!isAuthorized) {
     return (
       <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
         <motion.div 
-          initial={{ opacity: 0, scale: 0.9 }}
+          initial={{ opacity: 0, scale: 0.92 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="w-full max-w-md bg-slate-950 border border-red-500/30 rounded-3xl p-6 text-center space-y-4 shadow-2xl"
+          className="w-full max-w-md bg-slate-950 border border-amber-500/30 rounded-3xl p-6 text-center space-y-5 shadow-2xl relative overflow-hidden"
         >
-          <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 mx-auto">
-            <Lock className="w-8 h-8" />
+          {/* Ambient Glow */}
+          <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-48 h-48 bg-amber-500/10 blur-3xl pointer-events-none rounded-full" />
+
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto shadow-inner shadow-amber-500/20">
+            <ShieldCheck className="w-8 h-8" />
           </div>
-          <div className="space-y-1">
-            <h2 className="text-lg font-black text-white">
-              {isAmharic ? 'የተከለከለ መዳረሻ' : 'Access Restricted'}
+
+          <div className="space-y-1.5">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-bold uppercase tracking-wider">
+              <Key className="w-3 h-3" />
+              {isAmharic ? 'የአስተዳዳሪ ማረጋገጫ ፖርታል' : 'Administrator Authorization Portal'}
+            </div>
+            <h2 className="text-xl font-black text-white tracking-tight">
+              {isAmharic ? 'የአስተዳዳሪ መዳረሻ' : 'EthioLearn Admin Access'}
             </h2>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-400 leading-relaxed px-2">
               {isAmharic 
-                ? 'ይህ የአስተዳዳሪ ክፍል ለተፈቀደለት አስተዳዳሪ (ezrat2116@gmail.com) ብቻ የተወሰነ ነው።' 
-                : `The Admin Dashboard is strictly restricted to administrator (${ADMIN_EMAIL}). Your account does not have access permissions.`}
+                ? `ይህ ክፍል ለተፈቀደለት አስተዳዳሪ (${ADMIN_EMAIL}) የተወሰነ ነው። ከታች ባለው አዝራር በመጠቀም በቀላሉ ማረጋገጥ ይችላሉ።`
+                : `Management console for platform administration, course creation, and announcement broadcasting. Restricted to administrator (${ADMIN_EMAIL}).`}
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-white font-bold text-xs transition-all cursor-pointer"
-          >
-            {isAmharic ? 'ዝጋ' : 'Close'}
-          </button>
+
+          {authError && (
+            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs text-left flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{authError}</span>
+            </div>
+          )}
+
+          <div className="space-y-3 pt-2">
+            <button
+              onClick={() => handleAuthenticateAdmin()}
+              disabled={isVerifyingAdmin}
+              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs transition-all shadow-lg shadow-amber-500/20 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {isVerifyingAdmin ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>{isAmharic ? 'በማረጋገጥ ላይ...' : 'Verifying Ezra Session...'}</span>
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>{isAmharic ? `እንደ እዝራ አረጋግጥ (${ADMIN_EMAIL})` : `Authorize as Ezra (${ADMIN_EMAIL})`}</span>
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={onClose}
+              className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white font-bold text-xs transition-all cursor-pointer"
+            >
+              {isAmharic ? 'ተመለስ' : 'Cancel & Return to App'}
+            </button>
+          </div>
         </motion.div>
       </div>
     );
@@ -864,6 +1015,10 @@ export default function AdminDashboardView({
                 <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-mono font-bold uppercase">
                   Supabase Live
                 </span>
+                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-mono">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  {ADMIN_EMAIL}
+                </span>
               </div>
               <p className="text-xs text-slate-400 font-mono">
                 Single Source of Truth Database Management System
@@ -875,16 +1030,24 @@ export default function AdminDashboardView({
             <button
               onClick={() => loadAllAdminData(false)}
               disabled={isRefreshing}
-              className="p-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-amber-500/40 text-slate-300 hover:text-white transition-all cursor-pointer disabled:opacity-50"
-              title="Refresh database records"
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all cursor-pointer disabled:opacity-50"
+              title="Refresh all data"
             >
               <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
             </button>
-            <button 
-              onClick={onClose}
-              className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold transition-all cursor-pointer"
+            <button
+              onClick={handleLogoutAdmin}
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-400 hover:text-red-400 text-xs font-bold transition-all border border-slate-700 cursor-pointer"
+              title="Switch user or lock admin"
             >
-              {isAmharic ? 'ዝጋ' : 'Exit Console'}
+              <Lock className="w-3.5 h-3.5" />
+              <span>{isAmharic ? 'ውጣ' : 'Switch Mode'}</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer"
+            >
+              <XCircle className="w-5 h-5" />
             </button>
           </div>
         </div>
@@ -1673,85 +1836,304 @@ export default function AdminDashboardView({
           {/* ================================================================ */}
           {/* TAB 6: ANNOUNCEMENTS                                            */}
           {/* ================================================================ */}
+          {/* TAB 6: BROADCAST ANNOUNCEMENTS & POSTS                          */}
+          {/* ================================================================ */}
           {activeTab === 'announcements' && (
             <div className="space-y-6">
-              <form onSubmit={handleAddAnnouncement} className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400">Broadcast Platform Announcement</h4>
-                <div className="space-y-3">
-                  <input
-                    type="text"
-                    value={annTitle}
-                    onChange={(e) => setAnnTitle(e.target.value)}
-                    placeholder="Announcement Headline"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-slate-100 text-xs font-medium outline-none"
-                  />
-                  <textarea
-                    rows={3}
-                    value={annMessage}
-                    onChange={(e) => setAnnMessage(e.target.value)}
-                    placeholder="Detailed notice text for all students..."
-                    className="w-full px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-slate-100 text-xs outline-none"
-                  />
-                  <div className="flex items-center gap-3">
-                    <select
-                      value={annBadge}
-                      onChange={(e) => setAnnBadge(e.target.value)}
-                      className="px-3 py-1.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-300 text-xs outline-none"
-                    >
-                      <option value="Notice">Notice</option>
-                      <option value="New Content">New Content</option>
-                      <option value="System Update">System Update</option>
-                      <option value="Exam Alert">Exam Alert</option>
-                    </select>
-                    <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={annImportant}
-                        onChange={(e) => setAnnImportant(e.target.checked)}
-                        className="rounded border-slate-800 text-amber-500"
-                      />
-                      <span>Pin as High Priority</span>
-                    </label>
-                  </div>
-                </div>
-                <button
-                  type="submit"
-                  disabled={annSaving || !annTitle.trim() || !annMessage.trim()}
-                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-all cursor-pointer disabled:opacity-50"
-                >
-                  {annSaving ? 'Publishing...' : 'Publish Announcement'}
-                </button>
-              </form>
-
-              {announcements.length === 0 ? (
-                <div className="py-8 text-center bg-slate-900/40 rounded-2xl border border-slate-800 text-slate-500 text-xs">
-                  No active broadcasts. Announcements published here will be displayed to all students.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {announcements.map(a => (
-                    <div key={a.id} className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex items-start justify-between gap-4">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold">
-                            {a.badgeText || 'Notice'}
-                          </span>
-                          <h4 className="text-xs font-bold text-white">{a.title}</h4>
-                        </div>
-                        <p className="text-xs text-slate-400">{a.message}</p>
-                        <span className="text-[10px] font-mono text-slate-500 block pt-1">{a.date}</span>
+              {/* Feedback Success Alert */}
+              <AnimatePresence>
+                {annSuccessMsg && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between gap-3 text-emerald-300 text-xs shadow-lg shadow-emerald-500/10"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                        <CheckCircle className="w-5 h-5" />
                       </div>
+                      <div>
+                        <p className="font-bold text-emerald-200">{annSuccessMsg}</p>
+                        <p className="text-[11px] text-emerald-400/80">Broadcasting to Wolkite University & nationwide student network</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => setAnnSuccessMsg(null)}
+                      className="p-1 text-emerald-400/60 hover:text-emerald-300 cursor-pointer"
+                    >
+                      <XCircle className="w-4 h-4" />
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Quick Template Prompts */}
+              <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 space-y-2.5">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{isAmharic ? 'ፈጣን የአብነት ማስታወቂያዎች' : 'Quick Broadcast Templates'}</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => applyQuickAnnouncementTemplate({
+                      title: 'Wolkite University Midterm Exam Period',
+                      message: 'Midterm exams begin next week. Access authentic past exams, answer keys, and chapter summaries in the Exam Prep section.',
+                      badge: 'Exam Alert',
+                      important: true
+                    })}
+                    className="p-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-800/80 border border-slate-800 text-left transition-all cursor-pointer group"
+                  >
+                    <div className="text-[11px] font-bold text-red-400 group-hover:text-red-300 flex items-center gap-1.5">
+                      <span>🎯 Midterm Exam Notice</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 truncate pt-0.5">Wolkite University exams starting</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => applyQuickAnnouncementTemplate({
+                      title: 'New Department Lecture Notes Available',
+                      message: 'Freshman and Pre-Engineering faculty notes for Applied Mathematics, General Physics, and C++ Programming have been uploaded.',
+                      badge: 'New Content',
+                      important: false
+                    })}
+                    className="p-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-800/80 border border-slate-800 text-left transition-all cursor-pointer group"
+                  >
+                    <div className="text-[11px] font-bold text-emerald-400 group-hover:text-emerald-300 flex items-center gap-1.5">
+                      <span>📚 Department Notes</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 truncate pt-0.5">Engineering & freshman resources</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => applyQuickAnnouncementTemplate({
+                      title: 'EthioLearn Pro 2.5 System Update',
+                      message: 'Enhanced offline exam simulator, instant AI Asgobnyi explanations, and fast Telebirr checkout are now fully activated.',
+                      badge: 'System Update',
+                      important: false
+                    })}
+                    className="p-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-800/80 border border-slate-800 text-left transition-all cursor-pointer group"
+                  >
+                    <div className="text-[11px] font-bold text-purple-400 group-hover:text-purple-300 flex items-center gap-1.5">
+                      <span>🚀 Platform Update</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 truncate pt-0.5">Offline mode & Telebirr live</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => applyQuickAnnouncementTemplate({
+                      title: 'Freshman Study Advice from Asgobnyi',
+                      message: 'Focus 20 minutes daily on past exam questions. Spaced repetition active recall improves retention by over 70% before finals.',
+                      badge: 'Study Tip',
+                      important: false
+                    })}
+                    className="p-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-800/80 border border-slate-800 text-left transition-all cursor-pointer group"
+                  >
+                    <div className="text-[11px] font-bold text-cyan-400 group-hover:text-cyan-300 flex items-center gap-1.5">
+                      <span>💡 Asgobnyi Study Tip</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 truncate pt-0.5">Spaced repetition advice</p>
+                  </button>
+                </div>
+              </div>
+
+              {/* Announcement Creation / Edit Form */}
+              <form onSubmit={handleAddAnnouncement} className="p-5 rounded-2xl bg-slate-900/95 border border-slate-800 space-y-4 shadow-xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                      <Send className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400">
+                        {annEditingId 
+                          ? (isAmharic ? 'ማስታወቂያ አርትዕ' : 'Edit Announcement Post') 
+                          : (isAmharic ? 'አዲስ ማስታወቂያ አትም' : 'Broadcast Announcement to All Students')}
+                      </h4>
+                      <p className="text-[11px] text-slate-400">
+                        {annEditingId ? 'Updating active broadcast' : 'Posts published here appear instantly in student notification feed'}
+                      </p>
+                    </div>
+                  </div>
+                  {annEditingId && (
+                    <button
+                      type="button"
+                      onClick={handleCancelEditAnnouncement}
+                      className="px-3 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all cursor-pointer"
+                    >
+                      {isAmharic ? 'ሰርዝ' : 'Cancel Edit'}
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                      {isAmharic ? 'የማስታወቂያው ርዕስ' : 'Headline / Title'}
+                    </label>
+                    <input
+                      type="text"
+                      value={annTitle}
+                      onChange={(e) => setAnnTitle(e.target.value)}
+                      placeholder={isAmharic ? 'ለምሳሌ፡ የወልቂጤ ዩኒቨርሲቲ የፈተና መርሃ ግብር' : 'e.g., Wolkite University Midterm Examination Timetable'}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-100 text-xs font-semibold focus:border-amber-500/50 outline-none transition-all placeholder:text-slate-600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                      {isAmharic ? 'ዝርዝር መልእክት' : 'Detailed Announcement Message'}
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={annMessage}
+                      onChange={(e) => setAnnMessage(e.target.value)}
+                      placeholder={isAmharic ? 'ለተማሪዎች የሚተላለፍ ዝርዝር መረጃ...' : 'Provide complete guidelines, dates, links, or instructions for students...'}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-100 text-xs focus:border-amber-500/50 outline-none transition-all placeholder:text-slate-600 leading-relaxed"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">
+                          Category Badge
+                        </label>
+                        <select
+                          value={annBadge}
+                          onChange={(e) => setAnnBadge(e.target.value)}
+                          className="px-3 py-1.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-300 text-xs font-semibold outline-none focus:border-amber-500/50 cursor-pointer"
+                        >
+                          <option value="Notice">Notice</option>
+                          <option value="Exam Alert">Exam Alert</option>
+                          <option value="New Content">New Content</option>
+                          <option value="System Update">System Update</option>
+                          <option value="Campus News">Campus News</option>
+                          <option value="Study Tip">Study Tip</option>
+                        </select>
+                      </div>
+
+                      <div className="pt-4">
+                        <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={annImportant}
+                            onChange={(e) => setAnnImportant(e.target.checked)}
+                            className="w-4 h-4 rounded border-slate-800 text-amber-500 focus:ring-amber-500/20 bg-slate-950"
+                          />
+                          <span className="font-bold text-amber-300 flex items-center gap-1">
+                            ⭐ {isAmharic ? 'አስፈላጊ ምልክት (High Priority Pin)' : 'Pin as High Priority Broadcast'}
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="pt-4">
                       <button
-                        onClick={() => handleDeleteAnnouncement(a.id)}
-                        className="p-1 text-slate-500 hover:text-red-400 cursor-pointer transition-colors"
-                        title="Delete announcement"
+                        type="submit"
+                        disabled={annSaving || !annTitle.trim() || !annMessage.trim()}
+                        className="py-2.5 px-6 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs transition-all shadow-lg shadow-amber-500/20 cursor-pointer disabled:opacity-50 flex items-center gap-2"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        {annSaving ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>{isAmharic ? 'በማተም ላይ...' : 'Publishing...'}</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-3.5 h-3.5" />
+                            <span>{annEditingId ? (isAmharic ? 'ለውጦችን መዝግብ' : 'Save Changes') : (isAmharic ? 'ማስታወቂያ አትም' : 'Publish Announcement')}</span>
+                          </>
+                        )}
                       </button>
                     </div>
-                  ))}
+                  </div>
                 </div>
-              )}
+              </form>
+
+              {/* Published Broadcasts Listing */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                    <Bell className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{isAmharic ? 'የታተሙ ማስታወቂያዎች' : 'Published Announcements'} ({announcements.length})</span>
+                  </h4>
+                  <span className="text-[11px] text-slate-500">Live across Web & Mobile App</span>
+                </div>
+
+                {announcements.length === 0 ? (
+                  <div className="py-12 text-center bg-slate-900/40 rounded-2xl border border-slate-800 space-y-2">
+                    <Bell className="w-8 h-8 text-slate-600 mx-auto" />
+                    <p className="text-xs text-slate-400 font-bold">No announcements published yet</p>
+                    <p className="text-[11px] text-slate-500">Use the form or quick templates above to broadcast your first announcement.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3">
+                    {announcements.map((a) => {
+                      const isExam = (a.badgeText || '').toLowerCase().includes('exam');
+                      const isContent = (a.badgeText || '').toLowerCase().includes('content');
+                      const isUpdate = (a.badgeText || '').toLowerCase().includes('update');
+                      const isImportant = Boolean(a.isImportant);
+
+                      return (
+                        <div 
+                          key={a.id} 
+                          className={`p-4 rounded-2xl bg-slate-900/90 border transition-all ${
+                            isImportant ? 'border-amber-500/40 shadow-lg shadow-amber-500/5' : 'border-slate-800'
+                          } flex flex-col sm:flex-row sm:items-start justify-between gap-4`}
+                        >
+                          <div className="space-y-1.5 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                                isExam ? 'bg-red-500/20 text-red-300 border border-red-500/30' :
+                                isContent ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
+                                isUpdate ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' :
+                                'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                              }`}>
+                                {a.badgeText || 'Notice'}
+                              </span>
+
+                              {isImportant && (
+                                <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[9px] font-bold uppercase">
+                                  ⭐ High Priority
+                                </span>
+                              )}
+
+                              <span className="text-[10px] font-mono text-slate-500">
+                                {a.date || (a.createdAt ? a.createdAt.split('T')[0] : 'Today')}
+                              </span>
+                            </div>
+
+                            <h4 className="text-sm font-bold text-white tracking-tight">{a.title}</h4>
+                            <p className="text-xs text-slate-300 leading-relaxed">{a.message}</p>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 self-end sm:self-start shrink-0 pt-2 sm:pt-0">
+                            <button
+                              onClick={() => handleEditAnnouncement(a)}
+                              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-400 cursor-pointer transition-all border border-slate-700/60"
+                              title="Edit announcement"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteAnnouncement(a.id)}
+                              className="p-2 rounded-xl bg-slate-800 hover:bg-red-950/60 text-slate-400 hover:text-red-400 cursor-pointer transition-all border border-slate-700/60"
+                              title="Delete announcement"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

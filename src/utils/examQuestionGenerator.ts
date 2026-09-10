@@ -7,6 +7,8 @@
 
 import { ExamQuestion } from '../components/UniversityExamsView';
 import { submitClaudeChat, ChatMessage } from './ai';
+import { AUTHENTIC_EXAM_SHEET_MAP, getAllAuthenticQuestionsForSubject } from '../data/questionBanks';
+import { AUTHENTIC_MASTER_QUESTIONS } from '../data/authenticExamRepository';
 
 const STOP_WORDS = new Set([
   'which', 'following', 'what', 'when', 'where', 'that', 'from', 'with', 'about',
@@ -249,90 +251,67 @@ function generateProceduralUniqueQuestions(
   existingStems: string[]
 ): ExamQuestion[] {
   const result: ExamQuestion[] = [];
-  const uniqueAngles = [
-    {
-      concept: 'Empirical Verification & Boundary Conditions',
-      stem: `In advanced evaluation of ${course}, under which boundary conditions does the primary governing theorem fail to maintain linearity?`,
-      choices: [
-        'A) When higher-order perturbation terms exceed first-order equilibrium thresholds',
-        'B) Under purely static homogeneous boundary states',
-        'C) When scalar potential fields remain conservative throughout the domain',
-        'D) During steady-state equilibrium with zero net gradient'
-      ],
-      correct: 0,
-      exp: `In higher education curricula for ${course}, non-linear deviation emerges once perturbation approximations surpass first-order Taylor expansion assumptions.`
-    },
-    {
-      concept: 'Real-World Ethiopian Case Application',
-      stem: `When deploying solutions in ${course} across infrastructural settings in Ethiopia, which operational parameter requires primary optimization?`,
-      choices: [
-        'A) Resilience against intermittent grid stability and bandwidth constraints',
-        'B) Exclusively theoretical infinite-precision floating point iterations',
-        'C) Complete isolation from existing regional legacy protocols',
-        'D) Fixed-rate unbuffered synchronous clock synchronization only'
-      ],
-      correct: 0,
-      exp: `Ethiopian infrastructure and applied academic projects prioritize fault-tolerance, robust buffering, and distributed asynchronous fallbacks.`
-    },
-    {
-      concept: 'Comparative Algorithmic Efficiency & Trade-offs',
-      stem: `For complex problem structures in ${course}, what represents the primary trade-off when selecting asymptotic optimization over brute-force verification?`,
-      choices: [
-        'A) Reduced runtime complexity at the cost of additional memory allocations or preprocessing overhead',
-        'B) Elimination of all verification guarantees across edge cases',
-        'C) Increased polynomial degree without asymptotic reduction',
-        'D) Requirement for continuous analog measurement rather than discrete modeling'
-      ],
-      correct: 0,
-      exp: `Standard algorithmic and analytical paradigms trade additional space or preprocessing time to achieve superior sub-exponential time bounds.`
-    },
-    {
-      concept: 'Error Propagation & Sensitivity Analysis',
-      stem: `During numerical or theoretical modeling in ${course}, how is error propagation systematically minimized across sequential iterations?`,
-      choices: [
-        'A) Implementing normalized pivot sequences and bounded condition number controls',
-        'B) Discarding intermediate residues without validation checks',
-        'C) Enforcing unconstrained parameter amplification across stages',
-        'D) Assuming zero variance in empirical input constants'
-      ],
-      correct: 0,
-      exp: `Condition number minimization and dynamic pivoting prevent catastrophic cancellation and precision drift in ${course} computations.`
-    },
-    {
-      concept: 'Ethical, Regulatory & Standards Compliance',
-      stem: `Under national Ethiopian academic standards and professional codes, which principle governs the verification of results in ${course}?`,
-      choices: [
-        'A) Independent peer reproducibility, rigorous error bounds, and transparent methodology',
-        'B) Proprietary concealment of methodology without external auditability',
-        'C) Acceptance of uncalibrated empirical observations without baseline control',
-        'D) Subjective evaluation based on single-trial demonstrations'
-      ],
-      correct: 0,
-      exp: `National higher education standards mandate reproducible methodology, standard deviations reporting, and peer validation.`
-    }
-  ];
+  const runningStems = [...existingStems];
 
-  for (let i = 0; i < count; i++) {
-    const template = uniqueAngles[i % uniqueAngles.length];
-    const candidateStem = template.stem;
+  // 1. Gather all authentic questions from verified subject banks and master repository
+  const candidatePool: Array<{
+    questionText: string;
+    options: [string, string, string, string];
+    correctIndex: number;
+    explanation: string;
+    amharicExplanation: string;
+    topic: string;
+    unit: string;
+    chapter?: string;
+  }> = [];
 
-    // Ensure it's not in existing stems
-    const isDup = isDuplicateQuestion(candidateStem, existingStems);
-    const finalStem = isDup 
-      ? `[Module Variation #${Date.now().toString().slice(-4)}] ${candidateStem}`
-      : candidateStem;
+  // Find direct subject matches first from comprehensive subject aggregator
+  const subjectPool = getAllAuthenticQuestionsForSubject(subject || course);
+  candidatePool.push(...subjectPool);
 
-    result.push({
-      id: 200000 + Date.now() + i,
-      qText: finalStem,
-      choices: template.choices,
-      correctIndex: template.correct,
-      subjectTopic: `${course} — ${template.concept}`,
-      explanation: template.exp,
-      amharicExplanation: `ይህ ጥያቄ በ ${course} ውስጥ ${template.concept} የሚለውን ቁልፍ የትምህርት ክፍል የሚገመግም አዲስ ጥያቄ ነው።`,
-      sourceType: 'ai_generated',
-      generatedAt: new Date().toISOString()
+  // Add all authentic sheet maps to broaden available choices
+  for (const questions of Object.values(AUTHENTIC_EXAM_SHEET_MAP)) {
+    candidatePool.push(...questions);
+  }
+
+  // Also include authentic master questions
+  AUTHENTIC_MASTER_QUESTIONS.forEach(m => {
+    candidatePool.push({
+      questionText: m.questionText,
+      options: m.options,
+      correctIndex: m.correctIndex,
+      explanation: m.explanation,
+      amharicExplanation: m.amharicExplanation,
+      topic: m.topic,
+      unit: m.unit,
+      chapter: m.chapter
     });
+  });
+
+  // 2. Select authentic questions that are NOT duplicates of existing questions
+  for (const item of candidatePool) {
+    if (!isDuplicateQuestion(item.questionText, runningStems)) {
+      runningStems.push(item.questionText);
+      const formattedChoices = item.options.map((opt, oIdx) => `${String.fromCharCode(65 + oIdx)}) ${opt}`);
+
+      result.push({
+        id: 200000 + Date.now() + result.length,
+        qText: item.questionText,
+        choices: formattedChoices,
+        correctIndex: item.correctIndex,
+        subjectTopic: `${subject || course} • ${item.topic} (${item.unit})`,
+        explanation: item.explanation,
+        amharicExplanation: item.amharicExplanation,
+        unit: item.unit,
+        chapter: item.chapter,
+        sourceType: 'ai_generated',
+        generatedAt: new Date().toISOString()
+      });
+
+      if (result.length >= count) {
+        return result;
+      }
+    }
   }
 
   return result;

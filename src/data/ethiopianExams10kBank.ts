@@ -1,8 +1,10 @@
 import { ExamPaperSheet, ExamQuestion } from '../components/UniversityExamsView';
 import { QuestionBankRecord, BankDifficulty, BankExamCategory, BankQuestionType } from '../types';
+import { getAuthenticQuestionsForSheet, getAllAuthenticQuestionsForSubject, AuthenticCurriculumQuestion } from './questionBanks';
+import { AUTHENTIC_MASTER_QUESTIONS } from './authenticExamRepository';
 
 // ============================================================================
-// 🇪🇹 ETHIOLEARN PRO — CENTRAL 10,000 ETHIOPIAN UNIVERSITY EXAM QUESTIONS REPOSITORY
+// 🇪🇹 ETHIOLEARN PRO — CENTRAL ETHIOPIAN UNIVERSITY EXAM QUESTIONS REPOSITORY
 // Verified Ethiopian University Exam Curricula: Wolkite (WKU), AAU, ASTU, Hawassa,
 // Jimma, Mekelle, Bahir Dar, Ambo, Haramaya, Arba Minch & MoE National EUEE / Exit Exams
 // ============================================================================
@@ -302,29 +304,50 @@ function pseudoRandom(seed: number): number {
 }
 
 /**
- * Procedurally and deterministically synthesizes the 500 questions for a given exam sheet.
- * Every question maps to verified Ethiopian university curriculum syllabi.
+ * Synthesizes authentic curriculum questions for a given exam sheet.
+ * Prioritizes 100% verified, authentic university past papers and entrance exam questions
+ * with rich explanations, verified options, and genuine syllabus depth.
  */
 export function generateSheetQuestions(meta: EthiopianExamSheetMeta): ExamQuestion[] {
-  const questions: ExamQuestion[] = [];
-  const count = meta.questionCount; // 500 questions
+  // 1. Primary authentic questions specifically curated for this sheet
+  const primaryPool = getAuthenticQuestionsForSheet(meta.sheetId) || [];
 
-  for (let i = 0; i < count; i++) {
-    const raw = createCurriculumQuestion(meta, i);
+  // 2. Secondary authentic questions across the subject curriculum
+  const subjectPool = getAllAuthenticQuestionsForSubject(meta.subject) || [];
+
+  // 3. Strict deduplication to ensure no repeated stems or variant numbers
+  const seenStems = new Set<string>();
+  const combinedPool: AuthenticCurriculumQuestion[] = [];
+
+  const addIfUnique = (q: AuthenticCurriculumQuestion) => {
+    if (!q || !q.questionText) return;
+    const stem = q.questionText.trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 70);
+    if (!seenStems.has(stem)) {
+      seenStems.add(stem);
+      combinedPool.push(q);
+    }
+  };
+
+  primaryPool.forEach(addIfUnique);
+  subjectPool.forEach(addIfUnique);
+
+  // Return formatted authentic questions
+  return combinedPool.map((raw, idx) => {
     const choices = raw.options.map((opt, oIdx) => `${String.fromCharCode(65 + oIdx)}) ${opt}`);
-
-    questions.push({
-      id: i + 1,
+    return {
+      id: idx + 1,
       qText: raw.questionText,
       choices,
       correctIndex: raw.correctIndex,
       subjectTopic: `${meta.subject} • ${raw.topic} (${raw.unit})`,
       explanation: raw.explanation,
-      amharicExplanation: raw.amharicExplanation
-    });
-  }
-
-  return questions;
+      amharicExplanation: raw.amharicExplanation,
+      unit: raw.unit,
+      chapter: raw.chapter,
+      difficulty: raw.difficulty,
+      sourceType: 'official_past_exam'
+    };
+  });
 }
 
 /**

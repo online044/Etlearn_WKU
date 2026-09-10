@@ -180,6 +180,22 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["id", "title", "university", "department", "course", "subject", "status", "accessLevel"]
+    },
+    "announcement": {
+      "title": "Announcement",
+      "description": "Campus bulletin, system update, or broadcast notice published by the administrator.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "badgeText": { "type": "string" },
+        "isImportant": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["draft", "published", "archived"] },
+        "date": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title", "message", "status"]
     }
   },
   "firestore": {
@@ -214,6 +230,10 @@
     "/promotions/{promoId}": {
       "schema": "promotion",
       "description": "Collection of promotion and discount codes for subscription upgrades."
+    },
+    "/announcements/{annId}": {
+      "schema": "announcement",
+      "description": "Collection of platform announcements and campus bulletins published by the administrator."
     }
   }
 }
