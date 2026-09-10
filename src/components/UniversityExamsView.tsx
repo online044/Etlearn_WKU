@@ -1590,6 +1590,112 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
                 </div>
               </div>
 
+              {/* 📖 Curriculum Unit & Chapter Navigation & Ordering Toolbar */}
+              <div className="px-4 sm:px-5 py-2.5 bg-[#0b1021] border-b border-white/10 flex flex-wrap items-center justify-between gap-3 text-xs">
+                {/* Order Selector (Curriculum Unit/Chapter Order vs Original Exam Paper Sequence) */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-slate-400 font-semibold text-[11px] flex items-center gap-1">
+                    <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{language === 'am' ? 'ቅደም ተከተል' : 'Order'}:</span>
+                  </span>
+                  <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playClickChime();
+                        setOrderMode('curriculum');
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                        orderMode === 'curriculum'
+                          ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                      title="Organize questions progressively by Unit and Chapter"
+                    >
+                      <span>{language === 'am' ? 'በምዕራፍና ርዕስ (Unit & Chapter)' : 'By Unit & Chapter'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playClickChime();
+                        setOrderMode('original');
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                        orderMode === 'original'
+                          ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                      title="Keep questions in original exam paper numbering sequence"
+                    >
+                      <span>{language === 'am' ? 'የመጀመሪያው የፈተና ቅደም ተከተል' : 'Original Paper Order'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filter by Unit Pills and Chapter Selector */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playClickChime();
+                        setSelectedUnitFilter('all');
+                        setSelectedChapterFilter('all');
+                      }}
+                      className={`px-2 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-all ${
+                        selectedUnitFilter === 'all'
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-black'
+                          : 'bg-white/5 text-slate-400 hover:text-white border border-transparent'
+                      }`}
+                    >
+                      {language === 'am' ? 'ሁሉም ዩኒቶች' : 'All Units'}
+                    </button>
+                    {unitSummaryList.map(u => (
+                      <button
+                        key={u.unitLabel}
+                        type="button"
+                        onClick={() => {
+                          playClickChime();
+                          setSelectedUnitFilter(u.unitLabel);
+                          setSelectedChapterFilter('all');
+                        }}
+                        className={`px-2 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-all flex items-center gap-1 ${
+                          selectedUnitFilter === u.unitLabel
+                            ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
+                            : 'bg-white/5 text-slate-400 hover:text-white border border-white/5'
+                        }`}
+                      >
+                        <span>{u.unitLabel}</span>
+                        <span className={`text-[9px] px-1 py-0.2 rounded-full ${selectedUnitFilter === u.unitLabel ? 'bg-slate-950/30 text-slate-950' : 'bg-white/10 text-slate-300'}`}>
+                          {u.count}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Chapter Dropdown if multiple chapters available */}
+                  {availableChaptersList.length > 1 && (
+                    <select
+                      value={selectedChapterFilter}
+                      onChange={(e) => {
+                        playClickChime();
+                        setSelectedChapterFilter(e.target.value);
+                      }}
+                      className="bg-slate-900 border border-white/15 text-slate-200 text-[11px] font-medium rounded-lg px-2.5 py-1 focus:outline-none focus:border-amber-400 cursor-pointer"
+                    >
+                      <option value="all">
+                        {language === 'am' ? 'ሁሉም ምዕራፎች (All Chapters)' : 'All Chapters'}
+                      </option>
+                      {availableChaptersList.map(c => (
+                        <option key={c.chapterTitle} value={c.chapterTitle}>
+                          {c.chapterTitle} ({c.count})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+
               {/* Question Navigation Palette Ribbon with Windowing & Quick Jump */}
               {visibleQuestions.length > 0 && (
                 <div className="px-4 py-3 border-b border-white/5 bg-white/[0.02] space-y-2.5">
@@ -1841,9 +1947,20 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
                       )}
                     </div>
 
-                    <span className="bg-white/5 px-2.5 py-1 rounded-md text-slate-300 font-medium text-[11px]">
-                      {currentQuestion.subjectTopic}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {(() => {
+                        const parsed = parseQuestionUnitChapter(currentQuestion, currentQuestion.id || activeQuestionIndex);
+                        return (
+                          <span className="inline-flex items-center gap-1 bg-amber-500/15 border border-amber-500/30 text-amber-300 px-2.5 py-0.5 rounded-full font-bold text-[10px]">
+                            <BookOpen className="w-3 h-3 text-amber-400" />
+                            <span>{parsed.unitLabel} • {parsed.chapterLabel}</span>
+                          </span>
+                        );
+                      })()}
+                      <span className="bg-white/5 px-2.5 py-1 rounded-md text-slate-300 font-medium text-[11px]">
+                        {currentQuestion.subjectTopic}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Quota Lock Warning if user has exceeded 20 questions */}

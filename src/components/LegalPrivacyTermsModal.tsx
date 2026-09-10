@@ -1,12 +1,4 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { 
-  ShieldCheck, FileText, Scale, Lock, X, Check, BookOpen, Clock, 
-  Eye, UserCheck, Database, HardDrive, BellRing, Mail, CheckCircle2 
-} from 'lucide-react';
-import { playClickChime } from '../utils/audio';
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ShieldCheck, FileText, Scale, Lock, X, Check, BookOpen, Clock, 
@@ -32,6 +24,12 @@ export default function LegalPrivacyTermsModal({
 }: LegalModalProps) {
   const [activeTab, setActiveTab] = useState<'about' | 'terms' | 'privacy'>(initialTab);
   const [copiedLabel, setCopiedLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
 
   if (!isOpen) return null;
 

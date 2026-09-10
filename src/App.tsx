@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Home as HomeIcon, Bot, Trophy, Award, Sparkles, Calendar, Sun, Moon, User as UserIcon, BookOpen, CheckCircle,
-  Share, X, ShieldCheck, Download, WifiOff, GraduationCap, FileText
+  Share, X, ShieldCheck, Download, WifiOff, GraduationCap, FileText, Menu
 } from 'lucide-react';
 
 import { StudentProfile, CustomNote, Flashcard, AITeacherContext } from './types';
@@ -28,6 +28,8 @@ import AdminDashboardView from './components/AdminDashboardView';
 import CourseExperienceView from './components/CourseExperienceView';
 import ExamEngineView from './components/ExamEngineView';
 import EthioLearnAppPromoBanner from './components/EthioLearnAppPromoBanner';
+import AppSidebar from './components/AppSidebar';
+import LegalPrivacyTermsModal from './components/LegalPrivacyTermsModal';
 
 import { 
   testFirestoreConnection, 
@@ -245,6 +247,11 @@ export default function App() {
   // In-App Viewer States
   const [inAppViewerUrl, setInAppViewerUrl] = useState<string | null>(null);
   const [inAppViewerTitle, setInAppViewerTitle] = useState<string>('');
+
+  // App Sidebar & Legal/Privacy/Terms States
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [showLegalModal, setShowLegalModal] = useState(false);
+  const [legalModalTab, setLegalModalTab] = useState<'about' | 'terms' | 'privacy'>('about');
 
   // Trigger toast
   const showToast = (msg: string) => {
@@ -986,8 +993,22 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center gap-4">
           
           <div className="flex items-center gap-3">
+            {/* 📱 App Sidebar & Info Menu Toggle Button */}
+            <button
+              type="button"
+              onClick={() => {
+                playClickChime();
+                setIsSidebarOpen(true);
+              }}
+              className="p-2 -ml-1 rounded-xl text-slate-600 dark:text-zinc-300 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-zinc-900 border border-transparent hover:border-slate-200 dark:hover:border-zinc-800 transition-all cursor-pointer flex items-center justify-center shrink-0"
+              title={language === 'en' ? 'Open App Menu & Info' : 'የአፕሊኬሽን ሜኑ እና መረጃ'}
+              aria-label="Toggle App Sidebar"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
             <div className="flex items-center gap-2">
-              <EthioLearnLogo size={42} showCardBackground={true} iconOnly={true} className="hover:rotate-6 duration-300 transition-all shrink-0" />
+              <EthioLearnLogo size={42} showCardBackground={true} iconOnly={true} className="hover:rotate-6 duration-300 transition-all shrink-0 cursor-pointer" onClick={() => { playClickChime(); setIsSidebarOpen(true); }} />
               <div className="leading-none text-left">
                 <div className="flex items-center">
                   <span className="font-serif font-black text-slate-900 dark:text-white text-lg tracking-tight">ET_LEARN</span>
@@ -1528,6 +1549,40 @@ export default function App() {
 
       {/* Floating conversational support assistant chat bubble */}
       <SupportChatBubble language={language} studentName={profile?.name} />
+
+      {/* 📱 Slide-over App Sidebar with Phone, Email, Telegram & App Details */}
+      <AppSidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        language={language}
+        setLanguage={setLanguage}
+        themeMode={themeMode}
+        setThemeMode={setThemeMode}
+        onNavigate={(page) => {
+          setCurrentPage(page as any);
+          setIsSidebarOpen(false);
+        }}
+        profile={profile}
+        ethDateFormatted={ethDate.formatted}
+        onOpenLegal={(tab) => {
+          setLegalModalTab(tab);
+          setShowLegalModal(true);
+        }}
+        isUserAdmin={isUserAdmin}
+        onOpenAdmin={() => {
+          setIsSidebarOpen(false);
+          setIsAdminOpen(true);
+        }}
+      />
+
+      {/* 📜 Legal, Privacy & About EthioLearn Modal */}
+      <LegalPrivacyTermsModal
+        isOpen={showLegalModal}
+        onClose={() => setShowLegalModal(false)}
+        language={language}
+        initialTab={legalModalTab}
+        onAcceptAndClose={() => setShowLegalModal(false)}
+      />
     </div>
   );
 }

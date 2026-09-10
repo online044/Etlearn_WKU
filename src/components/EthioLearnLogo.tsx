@@ -5,18 +5,21 @@ interface EthioLearnLogoProps {
   size?: number | string;
   showCardBackground?: boolean;
   iconOnly?: boolean;
+  onClick?: () => void;
 }
 
 export default function EthioLearnLogo({ 
   className = '', 
   size = 40, 
   showCardBackground = false,
-  iconOnly = true 
+  iconOnly = true,
+  onClick
 }: EthioLearnLogoProps) {
   const pixelSize = typeof size === 'number' ? `${size}px` : size;
   
   return (
     <div 
+      onClick={onClick}
       className={`relative select-none shrink-0 flex items-center justify-center transition-all duration-300 ${
         showCardBackground 
           ? 'bg-slate-900/90 rounded-2xl border border-amber-500/30 shadow-lg shadow-amber-500/10 p-2' 
