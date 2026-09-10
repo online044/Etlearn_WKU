@@ -612,7 +612,7 @@ export interface AppState {
 
 export type BankQuestionType = 'multiple_choice' | 'true_false' | 'short_answer' | 'fill_in_the_blank';
 export type BankDifficulty = 'easy' | 'medium' | 'hard';
-export type BankExamCategory = 'practice_exam' | 'university_exam' | 'mock_exam' | 'quiz';
+export type BankExamCategory = 'practice_exam' | 'university_exam' | 'mock_exam' | 'quiz' | 'exit_exam';
 export type BankQuestionSource = 'imported' | 'verified_past_paper' | 'faculty_authored' | 'sample_test';
 
 export interface QuestionBankRecord {

@@ -72,6 +72,54 @@ export const ETHIOPIAN_EXAM_SHEETS_CONFIG: EthiopianExamSheetMeta[] = [
     examCategory: 'university_exam',
     questionCount: 500
   },
+  {
+    sheetId: 'wku_chem_1011',
+    title: 'General Chemistry I: Principles & Reactions (Chem 1011)',
+    university: 'Wolkite University (WKU)',
+    year: '2016 E.C.',
+    subject: 'Chemistry',
+    course: 'General Chemistry',
+    department: 'College of Natural & Computational Sciences',
+    durationMinutes: 60,
+    examCategory: 'university_exam',
+    questionCount: 500
+  },
+  {
+    sheetId: 'wku_geog_1011',
+    title: 'Geography of Ethiopia & The Horn (Geog 1011)',
+    university: 'Wolkite University (WKU)',
+    year: '2016 E.C.',
+    subject: 'Geography',
+    course: 'Geography of Ethiopia',
+    department: 'College of Social Sciences & Humanities',
+    durationMinutes: 50,
+    examCategory: 'university_exam',
+    questionCount: 500
+  },
+  {
+    sheetId: 'wku_global_1012',
+    title: 'Global Trends & International Relations (GlTr 1012)',
+    university: 'Wolkite University (WKU)',
+    year: '2016 E.C.',
+    subject: 'Global Trends',
+    course: 'Global Trends',
+    department: 'College of Social Sciences & Humanities',
+    durationMinutes: 50,
+    examCategory: 'university_exam',
+    questionCount: 500
+  },
+  {
+    sheetId: 'wku_dsa_2021',
+    title: 'Data Structures & Algorithms (CoSc 2021) Midterm & Final',
+    university: 'Wolkite University (WKU)',
+    year: '2016 E.C.',
+    subject: 'Computer Science',
+    course: 'Data Structures & Algorithms',
+    department: 'College of Computing & Informatics',
+    durationMinutes: 60,
+    examCategory: 'university_exam',
+    questionCount: 500
+  },
 
   // ─── ADDIS ABABA UNIVERSITY (AAU) ───
   {
@@ -243,6 +291,72 @@ export const ETHIOPIAN_EXAM_SHEETS_CONFIG: EthiopianExamSheetMeta[] = [
     questionCount: 500
   },
 
+  // ─── HARAMAYA UNIVERSITY (HrU) ───
+  {
+    sheetId: 'hru_econ_1011',
+    title: 'Introduction to Economics: Micro & Macro Fundamentals (Econ 1011)',
+    university: 'Haramaya University (HrU)',
+    year: '2016 E.C.',
+    subject: 'Economics',
+    course: 'Introduction to Economics',
+    department: 'College of Business & Economics',
+    durationMinutes: 50,
+    examCategory: 'university_exam',
+    questionCount: 500
+  },
+
+  // ─── ARBA MINCH UNIVERSITY (AMU) ───
+  {
+    sheetId: 'amu_statics_1022',
+    title: 'Engineering Mechanics I: Statics & Vector Systems (CEng 1022)',
+    university: 'Arba Minch University (AMU)',
+    year: '2016 E.C.',
+    subject: 'Engineering Mechanics',
+    course: 'Engineering Mechanics (Statics)',
+    department: 'Arba Minch Institute of Technology (AMiT)',
+    durationMinutes: 60,
+    examCategory: 'university_exam',
+    questionCount: 500
+  },
+
+  // ─── MOE NATIONAL UNIVERSITY EXIT EXAMS (ፈተና መውጫ) ───
+  {
+    sheetId: 'exit_cs_2016',
+    title: 'MoE National University Exit Exam — Computer Science & Software (2016 E.C.)',
+    university: 'MoE National Exit Exam Board',
+    year: '2016 E.C.',
+    subject: 'Computer Science',
+    course: 'Computer Science Exit Exam',
+    department: 'Graduating Class of 2016 E.C.',
+    durationMinutes: 90,
+    examCategory: 'exit_exam',
+    questionCount: 500
+  },
+  {
+    sheetId: 'exit_accounting_2016',
+    title: 'MoE National University Exit Exam — Accounting & Finance (2016 E.C.)',
+    university: 'MoE National Exit Exam Board',
+    year: '2016 E.C.',
+    subject: 'Accounting',
+    course: 'Accounting & Finance Exit Exam',
+    department: 'Graduating Class of 2016 E.C.',
+    durationMinutes: 90,
+    examCategory: 'exit_exam',
+    questionCount: 500
+  },
+  {
+    sheetId: 'exit_ece_2016',
+    title: 'MoE National University Exit Exam — Electrical & Computer Engineering (2016 E.C.)',
+    university: 'MoE National Exit Exam Board',
+    year: '2016 E.C.',
+    subject: 'Electrical Engineering',
+    course: 'ECE Exit Exam',
+    department: 'Graduating Class of 2016 E.C.',
+    durationMinutes: 90,
+    examCategory: 'exit_exam',
+    questionCount: 500
+  },
+
   // ─── MOE GRADE 12 NATIONAL ENTRANCE EXAM (EUEE / MATRIC) ───
   {
     sheetId: 'g12_math_euee_2016',
@@ -277,6 +391,42 @@ export const ETHIOPIAN_EXAM_SHEETS_CONFIG: EthiopianExamSheetMeta[] = [
     course: 'Scholastic Aptitude (EUEE)',
     department: 'All National Matric Candidates',
     durationMinutes: 50,
+    examCategory: 'university_exam',
+    questionCount: 500
+  },
+  {
+    sheetId: 'g12_english_euee_2016',
+    title: 'Grade 12 National University Entrance Exam (EUEE) — English Language',
+    university: 'MoE National Examination Agency',
+    year: '2016 E.C.',
+    subject: 'English',
+    course: 'Grade 12 English (EUEE)',
+    department: 'Natural & Social Science Streams',
+    durationMinutes: 60,
+    examCategory: 'university_exam',
+    questionCount: 500
+  },
+  {
+    sheetId: 'g12_chem_euee_2016',
+    title: 'Grade 12 National University Entrance Exam (EUEE) — Chemistry',
+    university: 'MoE National Examination Agency',
+    year: '2016 E.C.',
+    subject: 'Chemistry',
+    course: 'Grade 12 Chemistry (EUEE)',
+    department: 'Natural Science Stream',
+    durationMinutes: 60,
+    examCategory: 'university_exam',
+    questionCount: 500
+  },
+  {
+    sheetId: 'g12_bio_euee_2016',
+    title: 'Grade 12 National University Entrance Exam (EUEE) — Biology',
+    university: 'MoE National Examination Agency',
+    year: '2016 E.C.',
+    subject: 'Biology',
+    course: 'Grade 12 Biology (EUEE)',
+    department: 'Natural Science Stream',
+    durationMinutes: 60,
     examCategory: 'university_exam',
     questionCount: 500
   }

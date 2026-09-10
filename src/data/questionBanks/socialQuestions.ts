@@ -65,6 +65,38 @@ export const AUTHENTIC_ANTHROPOLOGY_QUESTIONS_JU_1012: AuthenticCurriculumQuesti
     difficulty: "easy",
     explanation: "The Shimagillay (or Jaarsummaa) represents the traditional mediation council composed of trusted village elders who arbitrate interpersonal, domestic, and inter-clan disputes peacefully.",
     amharicExplanation: "ሽምግልና (Shimagillay) በማህበረሰብ ሽማግሌዎች የሚመራ ግጭቶችን በሰላማዊ መንገድ የመፍታት ባህላዊ ተቋም ነው።"
+  },
+  {
+    questionText: "In anthropological kinship terminology, a unilineal descent system where an individual's lineage, property rights, and clan identity are traced exclusively through the father's male line is known as:",
+    options: [
+      "Patrilineal descent",
+      "Matrilineal descent",
+      "Bilateral descent",
+      "Ambilineal descent"
+    ],
+    correctIndex: 0,
+    topic: "Kinship, Marriage and Family",
+    unit: "Unit 2",
+    chapter: "Chapter 3: Kinship Systems",
+    difficulty: "easy",
+    explanation: "Patrilineal (agnatic) descent traces descent through male ancestors only. This is the predominant descent system across the majority of Ethiopian linguistic and ethnic groups.",
+    amharicExplanation: "ፓትሪሊኒያል (Patrilineal) ዝምድና እና የዘር ሀረግ በአባት በኩል ብቻ የሚቆጠርበት ባህላዊ ስርዓት ነው።"
+  },
+  {
+    questionText: "What is the anthropological definition of 'Ethnography' in social and cultural anthropology?",
+    options: [
+      "The empirical, in-depth descriptive study of a particular human society or culture based on direct participant observation",
+      "The statistical census computation of national population demographics",
+      "The biological classification of human skeletal fossils",
+      "The laboratory chemical analysis of ancient archaeological pottery"
+    ],
+    correctIndex: 0,
+    topic: "Anthropological Research Methods",
+    unit: "Unit 1",
+    chapter: "Chapter 1: Introducing Anthropology",
+    difficulty: "easy",
+    explanation: "Ethnography is the primary qualitative methodology of cultural anthropology, requiring long-term fieldwork, immersion, and participant observation within the community under study.",
+    amharicExplanation: "ኢትኖግራፊ (Ethnography) አንትሮፖሎጂስቶች ወደ ማህበረሰቡ ገብተው አብረው በመኖርና በመታዘብ (Participant Observation) የሚያዘጋጁት ጥልቅ የባህል ጥናት ነው።"
   }
 ];
 
@@ -117,6 +149,38 @@ export const AUTHENTIC_INCLUSIVENESS_QUESTIONS_BDU_1012: AuthenticCurriculumQues
     difficulty: "easy",
     explanation: "Screen readers convert text displayed on a monitor into synthetic speech or refreshed Braille displays, enabling blind and low-vision students to read lecture notes and research papers independently.",
     amharicExplanation: "ስክሪን ሪደሮች (እንደ NVDA እና JAWS) በኮምፒውተር ላይ ያለውን ጽሁፍ ወደ ድምጽ በመቀየር ማየት ለተሳናቸው ተማሪዎች እኩል የትምህርት እድል ይሰጣሉ።"
+  },
+  {
+    questionText: "In Ethiopian higher education policy, what is the key distinction between 'Integration' and genuine 'Inclusion'?",
+    options: [
+      "Integration forces the student with disabilities to adapt to an unchanged system, while Inclusion transforms the institutional system to accommodate the student's diverse needs",
+      "Integration only applies to elementary schools while inclusion is for universities",
+      "Integration requires separate classrooms while inclusion bans physical attendance",
+      "There is no conceptual difference between integration and inclusion"
+    ],
+    correctIndex: 0,
+    topic: "Inclusion vs Integration in Education",
+    unit: "Unit 2",
+    chapter: "Chapter 2: Inclusive Education Strategies",
+    difficulty: "medium",
+    explanation: "Integration simply places individuals with disabilities into existing mainstream structures with the expectation that they assimilate. Genuine Inclusion changes the curriculum, physical architecture, and pedagogy to welcome all learners.",
+    amharicExplanation: "ኢንቴግሬሽን (Integration) ተማሪው ራሱን ከትምህርት ቤቱ ጋር እንዲያላምድ ሲጠብቅ፣ እውነተኛ አካታችነት (Inclusion) ግን ትምህርት ቤቱ ለተማሪው ፍላጎት ምቹ እንዲሆን ራሱን ይለውጣል።"
+  },
+  {
+    questionText: "What architectural feature is required by building code standards to enable wheelchair-accessible navigation in university campuses with multi-story academic buildings?",
+    options: [
+      "Continuous access ramps with a maximum slope of 1:12 and elevators",
+      "Revolving doors and high door thresholds",
+      "Steep exterior stairs with polished marble treads",
+      "Narrow gravel pathways with deep gutters"
+    ],
+    correctIndex: 0,
+    topic: "Physical Accessibility & Universal Design",
+    unit: "Unit 2",
+    chapter: "Chapter 3: Campus Accessibility",
+    difficulty: "easy",
+    explanation: "Ramps must maintain a maximum gradient of 1:12 (one unit of rise for every 12 units of run) equipped with continuous handrails, alongside elevator access for multi-floor academic halls.",
+    amharicExplanation: "ለተሽከርካሪ ወንበር ተጠቃሚዎች የህንፃዎች መወጣጫ (Ramp) ዝንባሌ ከ 1፡12 መብለጥ የለበትም፤ የእጅ መደገፊያዎችም ሊኖሩት ይገባል።"
   }
 ];
 
@@ -169,5 +233,37 @@ export const AUTHENTIC_ENTREPRENEURSHIP_QUESTIONS_AAU_1012: AuthenticCurriculumQ
     difficulty: "easy",
     explanation: "The Value Proposition building block describes why customers turn to one company over another, solving a customer problem or satisfying an unmet need.",
     amharicExplanation: "ቫልዩ ፕሮፖዚሽን (Value Proposition) ደንበኞች ሌላውን ትተው የእኛን ምርትና አገልግሎት እንዲመርጡ የሚያደርገውን ልዩ ጠቀሜታ የሚገልጽ ነው።"
+  },
+  {
+    questionText: "In Ethiopian commercial law and small enterprise financing, what is an 'Equb' (ዕቁብ)?",
+    options: [
+      "A traditional rotating savings and credit association (ROSCA) based on mutual trust and regular peer contributions",
+      "A government-subsidized commercial bank loan with zero collateral",
+      "A formal stock exchange listing for blue-chip companies",
+      "An intellectual property trademark registration body"
+    ],
+    correctIndex: 0,
+    topic: "Traditional Financing & ROSCAs in Ethiopia",
+    unit: "Unit 2",
+    chapter: "Chapter 3: Financing New Ventures",
+    difficulty: "easy",
+    explanation: "Equb is a traditional Rotating Savings and Credit Association (ROSCA) widely used in Ethiopia by entrepreneurs to pool informal capital, obtain lump-sum liquidity, and launch enterprises without commercial bank collateral.",
+    amharicExplanation: "ዕቁብ (Equb) በማህበረሰብ አባላት እምነት ላይ የተመሰረተ ባህላዊ የቁጠባና የብድር ማህበር ሲሆን፣ አነስተኛ የንግድ ስራዎችን በራስ አቅም ለመጀመር ከፍተኛ ሚና ይጫወታል።"
+  },
+  {
+    questionText: "What type of intellectual property protection grants an inventor exclusive legal rights to manufacture, use, or sell a novel, non-obvious technical invention for a fixed duration (typically 20 years)?",
+    options: [
+      "Patent",
+      "Trademark",
+      "Copyright",
+      "Trade secret"
+    ],
+    correctIndex: 0,
+    topic: "Intellectual Property & Patents",
+    unit: "Unit 2",
+    chapter: "Chapter 4: Legal Forms of Business",
+    difficulty: "easy",
+    explanation: "A patent is an exclusive right granted for an invention (a product or process that provides a new way of doing something or offers a new technical solution to a problem).",
+    amharicExplanation: "ፓተንት (Patent) ለአዲስ ፈጠራ ባለቤት ለተወሰነ ጊዜ (በተለምዶ ለ 20 ዓመታት) ፈጠራውን ብቻውን እንዲጠቀም፣ እንዲያመርት ወይም እንዲሸጥ የሚሰጥ ህጋዊ የባለቤትነት መብት ነው።"
   }
 ];

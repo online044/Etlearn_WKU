@@ -339,9 +339,11 @@ export default function UniversityExamsView({
     return examSheets.filter(sheet => {
       // Level filter
       if (levelFilter === 'uni') {
-        if (sheet.id.startsWith('g12')) return false;
+        if (sheet.id.startsWith('g12') || sheet.id.startsWith('exit')) return false;
       } else if (levelFilter === 'matric') {
         if (!sheet.id.startsWith('g12')) return false;
+      } else if (levelFilter === 'exit') {
+        if (!sheet.id.startsWith('exit') && !(sheet as any).examCategory?.includes('exit')) return false;
       } else if (levelFilter === 'bookmarked') {
         if (!bookmarkedPapers.includes(sheet.id)) return false;
       }
@@ -1064,6 +1066,18 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
       return { Icon: BrainCircuit, code: 'LOGC', border: 'border-pink-500/30', bg: 'bg-pink-500/10', text: 'text-pink-400' };
     } else if (s.includes('aptitude')) {
       return { Icon: Target, code: 'APTD', border: 'border-amber-500/30', bg: 'bg-amber-500/10', text: 'text-amber-400' };
+    } else if (s.includes('accounting') || s.includes('finance')) {
+      return { Icon: BarChart2, code: 'ACCT', border: 'border-emerald-500/30', bg: 'bg-emerald-500/10', text: 'text-emerald-400' };
+    } else if (s.includes('economics')) {
+      return { Icon: BarChart2, code: 'ECON', border: 'border-teal-500/30', bg: 'bg-teal-500/10', text: 'text-teal-400' };
+    } else if (s.includes('electrical') || s.includes('ece')) {
+      return { Icon: Zap, code: 'ECE', border: 'border-yellow-500/30', bg: 'bg-yellow-500/10', text: 'text-yellow-400' };
+    } else if (s.includes('engineering') || s.includes('statics')) {
+      return { Icon: Sliders, code: 'ENGR', border: 'border-orange-500/30', bg: 'bg-orange-500/10', text: 'text-orange-400' };
+    } else if (s.includes('geography')) {
+      return { Icon: BookOpen, code: 'GEOG', border: 'border-amber-500/30', bg: 'bg-amber-500/10', text: 'text-amber-400' };
+    } else if (s.includes('global') || s.includes('international')) {
+      return { Icon: BookOpen, code: 'GLTR', border: 'border-indigo-500/30', bg: 'bg-indigo-500/10', text: 'text-indigo-400' };
     }
     return { Icon: GraduationCap, code: 'ACAD', border: 'border-amber-500/30', bg: 'bg-amber-500/10', text: 'text-amber-400' };
   };
@@ -1184,6 +1198,16 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
               }`}
             >
               {language === 'am' ? '12ኛ ክፍል ማትሪክ' : 'Grade 12 (EUEE)'}
+            </button>
+            <button
+              onClick={() => { playClickChime(); setLevelFilter('exit'); }}
+              className={`px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                levelFilter === 'exit'
+                  ? 'bg-amber-500 text-slate-950 shadow-md font-extrabold'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {language === 'am' ? 'የመውጫ ፈተና (Exit Exam)' : 'Exit Exam'}
             </button>
             <button
               onClick={() => { playClickChime(); setLevelFilter('bookmarked'); }}

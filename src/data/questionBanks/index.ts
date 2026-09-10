@@ -26,6 +26,26 @@ import {
   AUTHENTIC_ENTREPRENEURSHIP_QUESTIONS_AAU_1012
 } from './socialQuestions';
 import { AUTHENTIC_APTITUDE_QUESTIONS_EUEE_2016 } from './eueeAptitudeQuestions';
+import {
+  AUTHENTIC_EXIT_EXAM_CS_2016,
+  AUTHENTIC_EXIT_EXAM_ACCOUNTING_2016,
+  AUTHENTIC_EXIT_EXAM_ECE_2016
+} from './exitExamQuestions';
+import {
+  AUTHENTIC_EUEE_ENGLISH_2016,
+  AUTHENTIC_EUEE_CHEMISTRY_2016,
+  AUTHENTIC_EUEE_BIOLOGY_2016
+} from './matricEueeExtraQuestions';
+import {
+  AUTHENTIC_CHEMISTRY_QUESTIONS_WKU_1011,
+  AUTHENTIC_GEOGRAPHY_QUESTIONS_WKU_1011,
+  AUTHENTIC_GLOBAL_TRENDS_QUESTIONS_WKU_1012,
+  AUTHENTIC_DSA_QUESTIONS_WKU_2021
+} from './wkuExtraQuestions';
+import {
+  AUTHENTIC_ECONOMICS_QUESTIONS_HRU_1011,
+  AUTHENTIC_STATICS_QUESTIONS_AMU_1022
+} from './regionalExtraQuestions';
 import { AUTHENTIC_MASTER_QUESTIONS } from '../authenticExamRepository';
 
 export * from './mathQuestions';
@@ -38,31 +58,68 @@ export * from './chemQuestions';
 export * from './bioQuestions';
 export * from './socialQuestions';
 export * from './eueeAptitudeQuestions';
+export * from './exitExamQuestions';
+export * from './matricEueeExtraQuestions';
+export * from './wkuExtraQuestions';
+export * from './regionalExtraQuestions';
 
 /**
  * Maps each exam sheet ID to its verified authentic curriculum questions.
  */
 export const AUTHENTIC_EXAM_SHEET_MAP: Record<string, AuthenticCurriculumQuestion[]> = {
+  // Wolkite University (WKU)
   wku_math_1011: AUTHENTIC_MATH_QUESTIONS_WKU_1011,
   wku_cpp_1011: AUTHENTIC_CPP_QUESTIONS_WKU_1011,
   wku_physics_1011: AUTHENTIC_PHYSICS_QUESTIONS_WKU_1011,
   wku_emtech_1011: AUTHENTIC_EMTECH_QUESTIONS_WKU_1011,
+  wku_chem_1011: AUTHENTIC_CHEMISTRY_QUESTIONS_WKU_1011,
+  wku_geog_1011: AUTHENTIC_GEOGRAPHY_QUESTIONS_WKU_1011,
+  wku_global_1012: AUTHENTIC_GLOBAL_TRENDS_QUESTIONS_WKU_1012,
+  wku_dsa_2021: AUTHENTIC_DSA_QUESTIONS_WKU_2021,
+
+  // Addis Ababa University (AAU)
   aau_logic_1011: AUTHENTIC_LOGIC_QUESTIONS_AAU_1011,
   aau_entrepreneur_1012: AUTHENTIC_ENTREPRENEURSHIP_QUESTIONS_AAU_1012,
   aau_math_1012: AUTHENTIC_MATH_QUESTIONS_AAU_1012,
   aau_english_1011: AUTHENTIC_ENGLISH_QUESTIONS_FLEn_1011,
+
+  // Adama Science & Technology University (ASTU)
   astu_physics_1011: AUTHENTIC_PHYSICS_QUESTIONS_ASTU_1011,
   astu_math_1012: AUTHENTIC_MATH_QUESTIONS_ASTU_1012,
+
+  // Hawassa University (HU)
   hu_english_1011: AUTHENTIC_ENGLISH_QUESTIONS_HU_1011,
   hu_bio_1011: AUTHENTIC_BIOLOGY_QUESTIONS_HU_1011,
+
+  // Jimma University (JU)
   ju_anthro_1012: AUTHENTIC_ANTHROPOLOGY_QUESTIONS_JU_1012,
   ju_physics_1011: AUTHENTIC_PHYSICS_QUESTIONS_JU_1011,
+
+  // Mekelle University (MU)
   mu_chem_1011: AUTHENTIC_CHEMISTRY_QUESTIONS_MU_1011,
+
+  // Bahir Dar University (BDU)
   bdu_inclusive_1012: AUTHENTIC_INCLUSIVENESS_QUESTIONS_BDU_1012,
+
+  // Ambo University (AU)
   ambo_bio_1011: AUTHENTIC_BIOLOGY_QUESTIONS_HU_1011,
+
+  // Haramaya University (HrU) & Arba Minch University (AMU)
+  hru_econ_1011: AUTHENTIC_ECONOMICS_QUESTIONS_HRU_1011,
+  amu_statics_1022: AUTHENTIC_STATICS_QUESTIONS_AMU_1022,
+
+  // MoE National University Exit Exams (ፈተና መውጫ)
+  exit_cs_2016: AUTHENTIC_EXIT_EXAM_CS_2016,
+  exit_accounting_2016: AUTHENTIC_EXIT_EXAM_ACCOUNTING_2016,
+  exit_ece_2016: AUTHENTIC_EXIT_EXAM_ECE_2016,
+
+  // MoE Grade 12 National University Entrance Exam (EUEE / Matric)
   g12_math_euee_2016: AUTHENTIC_MATH_QUESTIONS_EUEE_2016,
   g12_physics_euee_2016: AUTHENTIC_PHYSICS_QUESTIONS_EUEE_2016,
-  g12_aptitude_euee_2016: AUTHENTIC_APTITUDE_QUESTIONS_EUEE_2016
+  g12_aptitude_euee_2016: AUTHENTIC_APTITUDE_QUESTIONS_EUEE_2016,
+  g12_english_euee_2016: AUTHENTIC_EUEE_ENGLISH_2016,
+  g12_chem_euee_2016: AUTHENTIC_EUEE_CHEMISTRY_2016,
+  g12_bio_euee_2016: AUTHENTIC_EUEE_BIOLOGY_2016
 };
 
 /**
@@ -104,7 +161,14 @@ export function getAllAuthenticQuestionsForSubject(subject: string): AuthenticCu
       (norm.includes('bio') && sheetKey.includes('bio')) ||
       (norm.includes('tech') && sheetKey.includes('emtech')) ||
       (norm.includes('apt') && sheetKey.includes('aptitude')) ||
-      (norm.includes('soc') && (sheetKey.includes('anthro') || sheetKey.includes('inclusive') || sheetKey.includes('entrepreneur')))
+      (norm.includes('soc') && (sheetKey.includes('anthro') || sheetKey.includes('inclusive') || sheetKey.includes('entrepreneur'))) ||
+      (norm.includes('account') && sheetKey.includes('accounting')) ||
+      (norm.includes('dsa') && sheetKey.includes('dsa')) ||
+      (norm.includes('geog') && sheetKey.includes('geog')) ||
+      (norm.includes('global') && sheetKey.includes('global')) ||
+      (norm.includes('econ') && sheetKey.includes('econ')) ||
+      (norm.includes('static') && sheetKey.includes('statics')) ||
+      (norm.includes('ece') && sheetKey.includes('ece'))
     ) {
       questions.forEach(addIfUnique);
     }
