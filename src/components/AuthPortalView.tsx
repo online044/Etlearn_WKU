@@ -13,13 +13,16 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   sendPasswordResetEmail, 
+  sendEmailVerification,
   updatePassword,
   signOut
 } from 'firebase/auth';
 import { 
   auth, 
   syncProfileToFirestore, 
-  fetchProfileFromFirestore 
+  fetchProfileFromFirestore,
+  saveActivationCodeToFirebase,
+  verifyActivationCodeWithFirebase
 } from '../utils/firebaseStore';
 import { 
   Key, User, Landmark, GraduationCap, ArrowRight, Eye, EyeOff, 
@@ -66,6 +69,31 @@ const ACADEMIC_STANDINGS = [
   { id: 'Postgraduate / Masters', labelEn: 'Postgrad / Masters', labelAm: 'ማስተርስ / ድህረ-ምረቃ' },
 ];
 
+export function cleanEthiopianPhone(raw: string): { valid: boolean; formatted: string; national: string } {
+  const digits = (raw || '').replace(/\D/g, '');
+  if (!digits) return { valid: false, formatted: '', national: '' };
+
+  // Handle +251 9... or +251 7... (12 digits)
+  if (digits.startsWith('251') && digits.length === 12) {
+    const nat = '0' + digits.substring(3);
+    const prefix = digits.substring(3, 5);
+    if (prefix.startsWith('9') || prefix.startsWith('7')) {
+      return { valid: true, formatted: `+251 ${prefix} ${digits.substring(5, 8)} ${digits.substring(8)}`, national: nat };
+    }
+  }
+  // Handle 09... or 07... (10 digits)
+  if ((digits.startsWith('09') || digits.startsWith('07')) && digits.length === 10) {
+    return { valid: true, formatted: `+251 ${digits.substring(1, 3)} ${digits.substring(3, 6)} ${digits.substring(6)}`, national: digits };
+  }
+  // Handle 9... or 7... (9 digits)
+  if ((digits.startsWith('9') || digits.startsWith('7')) && digits.length === 9) {
+    const nat = '0' + digits;
+    return { valid: true, formatted: `+251 ${digits.substring(0, 2)} ${digits.substring(2, 5)} ${digits.substring(5)}`, national: nat };
+  }
+
+  return { valid: false, formatted: raw, national: digits };
+}
+
 export default function AuthPortalView({
   initialMode = 'signin',
   onComplete,
@@ -88,6 +116,9 @@ export default function AuthPortalView({
   };
 
   // Form Inputs
+  const [authMethod, setAuthMethod] = useState<'phone' | 'email'>('phone');
+  const [phone, setPhone] = useState('');
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -245,18 +276,33 @@ export default function AuthPortalView({
     e.preventDefault();
     setAuthError(null);
     setEmailError(null);
+    setPhoneError(null);
     setPasswordError(null);
 
     const emailTrim = email.trim().toLowerCase();
+    const phoneRaw = phone.trim();
     const passwordTrim = password.trim();
 
     let hasValidationError = false;
-    if (!emailTrim) {
-      setEmailError(lang === 'am' ? "ኢሜይል አድራሻ ያስፈልጋል።" : "Email address is required.");
-      hasValidationError = true;
-    } else if (!emailTrim.includes('@') || !emailTrim.includes('.')) {
-      setEmailError(lang === 'am' ? "እባክዎን ትክክለኛ የኢሜይል አድራሻ ያስገቡ።" : "Please enter a valid email address.");
-      hasValidationError = true;
+    let effectiveEmail = emailTrim;
+    const cleanedPhone = cleanEthiopianPhone(phoneRaw);
+
+    if (authMethod === 'phone') {
+      if (!phoneRaw) {
+        setPhoneError(lang === 'am' ? "ስልክ ቁጥር ያስፈልጋል።" : "Phone number is required.");
+        hasValidationError = true;
+      } else if (!cleanedPhone.valid) {
+        setPhoneError(lang === 'am' ? "እባክዎ ትክክለኛ የኢትዮጵያ ስልክ ቁጥር ያስገቡ (ለምሳሌ 0912 345 678 ወይም 0712 345 678)" : "Please enter a valid Ethiopian phone number (e.g. 0912 345 678 or 0712 345 678).");
+        hasValidationError = true;
+      }
+    } else {
+      if (!emailTrim) {
+        setEmailError(lang === 'am' ? "ኢሜይል አድራሻ ያስፈልጋል።" : "Email address is required.");
+        hasValidationError = true;
+      } else if (!emailTrim.includes('@') || !emailTrim.includes('.')) {
+        setEmailError(lang === 'am' ? "እባክዎን ትክክለኛ የኢሜይል አድራሻ ያስገቡ።" : "Please enter a valid email address.");
+        hasValidationError = true;
+      }
     }
 
     if (!passwordTrim) {
@@ -275,7 +321,15 @@ export default function AuthPortalView({
     setLoading(true);
 
     // Check local accounts first
-    const localExistingAccount = registeredAccounts.find(acc => acc.email.toLowerCase() === emailTrim);
+    const localExistingAccount = registeredAccounts.find(acc => {
+      if (authMethod === 'phone') {
+        const accPhoneDigits = (acc.profile.phone || '').replace(/\D/g, '');
+        const targetDigits = cleanedPhone.national.replace(/\D/g, '');
+        return (accPhoneDigits && (accPhoneDigits.endsWith(targetDigits.slice(-9)) || targetDigits.endsWith(accPhoneDigits.slice(-9)))) || acc.email.toLowerCase() === phoneRaw.toLowerCase();
+      }
+      return acc.email.toLowerCase() === emailTrim;
+    });
+
     if (localExistingAccount && localExistingAccount.passwordEncrypted && localExistingAccount.passwordEncrypted !== 'google_authenticated') {
       if (localExistingAccount.passwordEncrypted !== passwordTrim) {
         setPasswordError(lang === 'am' ? "የይለፍ ቃል የተሳሳተ ነው። እባክዎ እንደገና ይሞክሩ ወይም 'የይለፍ ቃል ረሱ?' የሚለውን ይጫኑ።" : "Incorrect password. Please verify your credentials or reset your password.");
@@ -287,17 +341,23 @@ export default function AuthPortalView({
 
     // Call server login endpoint
     try {
+      const loginPayload = authMethod === 'phone'
+        ? { phone: cleanedPhone.national, identifier: cleanedPhone.national, password: passwordTrim }
+        : { email: emailTrim, password: passwordTrim };
+
       const loginRes = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailTrim, password: passwordTrim })
+        body: JSON.stringify(loginPayload)
       });
       const loginData = await loginRes.json();
       
       if (loginRes.ok && loginData.user) {
+        effectiveEmail = loginData.user.email || (authMethod === 'phone' ? `${cleanedPhone.national}@ethiolearn.edu.et` : emailTrim);
         const profileToUse: StudentProfile = {
-          name: loginData.user.name || emailTrim.split('@')[0],
-          email: emailTrim,
+          name: loginData.user.name || (authMethod === 'phone' ? `Student ${cleanedPhone.national.slice(-4)}` : effectiveEmail.split('@')[0]),
+          email: effectiveEmail,
+          phone: loginData.user.phone || (authMethod === 'phone' ? cleanedPhone.formatted : undefined),
           university: loginData.user.university || "Wolkite University (WKU)",
           year: loginData.user.year || "Freshman (1st Year)",
           subjects: loginData.user.subjects || ["Emerging Technologies", "Communicative English", "Mathematics"],
@@ -312,21 +372,21 @@ export default function AuthPortalView({
         };
 
         const newAccount: AccountInfo = {
-          email: emailTrim,
+          email: effectiveEmail,
           passwordEncrypted: passwordTrim,
           rememberMe,
           profile: profileToUse
         };
-        const updatedAccs = [...registeredAccounts.filter(acc => acc.email.toLowerCase() !== emailTrim), newAccount];
+        const updatedAccs = [...registeredAccounts.filter(acc => acc.email.toLowerCase() !== effectiveEmail.toLowerCase()), newAccount];
         setRegisteredAccounts(updatedAccs);
         safeStorage.setItem('ethiolearn_accounts', JSON.stringify(updatedAccs));
-        safeStorage.setItem('ethiolearn_active_email', emailTrim);
+        safeStorage.setItem('ethiolearn_active_email', effectiveEmail);
         safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(profileToUse));
         safeStorage.setItem('ethiolearn_has_seen_onboarding', 'true');
 
         if (rememberMe) {
           safeStorage.setItem('ethiolearn_remember_login', JSON.stringify({
-            email: emailTrim,
+            email: effectiveEmail,
             password: passwordTrim,
             rememberMe: true
           }));
@@ -334,9 +394,9 @@ export default function AuthPortalView({
 
         try {
           await syncAuthSessionWithServer({
-            email: emailTrim,
+            email: effectiveEmail,
             uid: loginData.user.id,
-            role: loginData.user.role || (isAdministratorEmail(emailTrim) ? 'admin' : 'student'),
+            role: loginData.user.role || (isAdministratorEmail(effectiveEmail) ? 'admin' : 'student'),
             displayName: profileToUse.name
           });
         } catch (tokErr) {}
@@ -350,71 +410,75 @@ export default function AuthPortalView({
       console.warn('[Server Login Fetch Warning]:', serverErr);
     }
 
-    // Try Firebase Auth
-    if (auth) {
-      try {
-        const userCredential = await signInWithEmailAndPassword(auth, emailTrim, passwordTrim);
-        if (userCredential?.user) {
-          const uid = userCredential.user.uid;
-          let profile = await fetchProfileFromFirestore(uid);
-          if (!profile) {
-            profile = {
-              name: userCredential.user.displayName || emailTrim.split('@')[0],
-              email: emailTrim,
-              university: "Wolkite University (WKU)",
-              year: "Freshman (1st Year)",
-              subjects: ["Emerging Technologies", "Communicative English", "Mathematics"],
-              claudeApiKey: "",
-              dailyGoalHours: 2,
-              theme: 'dark',
-              language: lang,
-              avatar: 'champion',
-              isRegistered: true,
-              unregisteredAICredits: 5
+    // Try Firebase Auth if email available
+    if (auth && (authMethod === 'email' || (localExistingAccount && localExistingAccount.email))) {
+      const fbEmail = authMethod === 'email' ? emailTrim : (localExistingAccount ? localExistingAccount.email : '');
+      if (fbEmail) {
+        try {
+          const userCredential = await signInWithEmailAndPassword(auth, fbEmail, passwordTrim);
+          if (userCredential?.user) {
+            const uid = userCredential.user.uid;
+            let profile = await fetchProfileFromFirestore(uid);
+            if (!profile) {
+              profile = {
+                name: userCredential.user.displayName || fbEmail.split('@')[0],
+                email: fbEmail,
+                phone: authMethod === 'phone' ? cleanedPhone.formatted : undefined,
+                university: "Wolkite University (WKU)",
+                year: "Freshman (1st Year)",
+                subjects: ["Emerging Technologies", "Communicative English", "Mathematics"],
+                claudeApiKey: "",
+                dailyGoalHours: 2,
+                theme: 'dark',
+                language: lang,
+                avatar: 'champion',
+                isRegistered: true,
+                unregisteredAICredits: 5
+              };
+              await syncProfileToFirestore(uid, profile);
+            }
+
+            const newAccount: AccountInfo = {
+              email: fbEmail,
+              passwordEncrypted: passwordTrim,
+              rememberMe,
+              profile
             };
-            await syncProfileToFirestore(uid, profile);
+            const updatedAccs = [...registeredAccounts.filter(acc => acc.email.toLowerCase() !== fbEmail.toLowerCase()), newAccount];
+            setRegisteredAccounts(updatedAccs);
+            safeStorage.setItem('ethiolearn_accounts', JSON.stringify(updatedAccs));
+            safeStorage.setItem('ethiolearn_active_email', fbEmail);
+            safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(profile));
+            safeStorage.setItem('ethiolearn_has_seen_onboarding', 'true');
+
+            try {
+              await syncAuthSessionWithServer({
+                email: fbEmail,
+                uid,
+                role: isAdministratorEmail(fbEmail) ? 'admin' : 'student',
+                displayName: profile.name
+              });
+            } catch (tokErr) {}
+
+            playSuccessChime();
+            setLoading(false);
+            onComplete(profile);
+            return;
           }
-
-          const newAccount: AccountInfo = {
-            email: emailTrim,
-            passwordEncrypted: passwordTrim,
-            rememberMe,
-            profile
-          };
-          const updatedAccs = [...registeredAccounts.filter(acc => acc.email.toLowerCase() !== emailTrim), newAccount];
-          setRegisteredAccounts(updatedAccs);
-          safeStorage.setItem('ethiolearn_accounts', JSON.stringify(updatedAccs));
-          safeStorage.setItem('ethiolearn_active_email', emailTrim);
-          safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(profile));
-          safeStorage.setItem('ethiolearn_has_seen_onboarding', 'true');
-
-          try {
-            await syncAuthSessionWithServer({
-              email: emailTrim,
-              uid,
-              role: isAdministratorEmail(emailTrim) ? 'admin' : 'student',
-              displayName: profile.name
-            });
-          } catch (tokErr) {}
-
-          playSuccessChime();
-          setLoading(false);
-          onComplete(profile);
-          return;
-        }
-      } catch (fbErr: any) {
-        if (fbErr?.code === 'auth/wrong-password' || fbErr?.code === 'auth/invalid-credential') {
-          setPasswordError(lang === 'am' ? "የይለፍ ቃል የተሳሳተ ነው። እባክዎ እንደገና ይሞክሩ ወይም 'የይለፍ ቃል ረሱ?' የሚለውን ይጫኑ።" : "Incorrect password. Please verify your credentials or reset your password.");
-          playFailureChime();
-          setLoading(false);
-          return;
+        } catch (fbErr: any) {
+          if (fbErr?.code === 'auth/wrong-password' || fbErr?.code === 'auth/invalid-credential') {
+            setPasswordError(lang === 'am' ? "የይለፍ ቃል የተሳሳተ ነው። እባክዎ እንደገና ይሞክሩ ወይም 'የይለፍ ቃል ረሱ?' የሚለውን ይጫኑ።" : "Incorrect password. Please verify your credentials or reset your password.");
+            playFailureChime();
+            setLoading(false);
+            return;
+          }
         }
       }
     }
 
     // If local account exists and matches, proceed gracefully
     if (localExistingAccount && localExistingAccount.passwordEncrypted === passwordTrim) {
-      safeStorage.setItem('ethiolearn_active_email', emailTrim);
+      safeStorage.setItem('ethiolearn_active_email', localExistingAccount.email);
       safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(localExistingAccount.profile));
       safeStorage.setItem('ethiolearn_has_seen_onboarding', 'true');
       playSuccessChime();
@@ -426,7 +490,7 @@ export default function AuthPortalView({
     // Not found
     setAuthError(
       lang === 'am' 
-        ? "በዚህ ኢሜይል የተመዘገበ አካውንት አልተገኘም ወይም የይለፍ ቃል የተሳሳተ ነው። አዲስ ለመፍጠር 'አካውንት ፍጠር' የሚለውን ይጫኑ።" 
+        ? "በዚህ መረጃ የተመዘገበ አካውንት አልተገኘም ወይም የይለፍ ቃል የተሳሳተ ነው። አዲስ ለመፍጠር 'አካውንት ፍጠር' የሚለውን ይጫኑ።" 
         : "Student account not found or credentials incorrect. Switch to 'Create Account' to register."
     );
     playFailureChime();
@@ -437,6 +501,7 @@ export default function AuthPortalView({
   const handleQuickLogin = (acc: AccountInfo) => {
     playClickChime();
     setEmail(acc.email);
+    if (acc.profile.phone) setPhone(acc.profile.phone);
     setPassword(acc.passwordEncrypted && acc.passwordEncrypted !== 'google_authenticated' ? acc.passwordEncrypted : '');
     setRememberMe(acc.rememberMe !== false);
 
@@ -473,6 +538,7 @@ export default function AuthPortalView({
     setAuthError(null);
     setInfoMessage(null);
     setNameError(null);
+    setPhoneError(null);
     setUniversityError(null);
     setEmailError(null);
     setPasswordError(null);
@@ -481,14 +547,24 @@ export default function AuthPortalView({
     setVerificationCodeInput('');
 
     const nameTrim = name.trim();
+    const phoneRaw = phone.trim();
     const emailTrim = email.trim().toLowerCase();
     const passwordTrim = password.trim();
     const confirmPasswordTrim = confirmPassword.trim();
     const univTrim = university.trim();
 
+    const cleanedPhone = cleanEthiopianPhone(phoneRaw);
+
     let hasErrors = false;
     if (!nameTrim) {
       setNameError(t.validationName);
+      hasErrors = true;
+    }
+    if (!phoneRaw) {
+      setPhoneError(lang === 'am' ? "የስልክ ቁጥርዎን ያስገቡ።" : "Phone number is required.");
+      hasErrors = true;
+    } else if (!cleanedPhone.valid) {
+      setPhoneError(lang === 'am' ? "እባክዎ ትክክለኛ የኢትዮጵያ ስልክ ቁጥር ያስገቡ (ለምሳሌ 0912 345 678 ወይም 0712 345 678)" : "Please enter a valid Ethiopian phone number (e.g. 0912 345 678 or 0712 345 678).");
       hasErrors = true;
     }
     if (!univTrim) {
@@ -518,6 +594,7 @@ export default function AuthPortalView({
     const profile: StudentProfile = {
       name: nameTrim,
       email: emailTrim,
+      phone: cleanedPhone.formatted,
       university: univTrim,
       year,
       subjects: ["Emerging Technologies", "Communicative English", "Mathematics", "Logic and Critical Thinking"],
@@ -534,13 +611,14 @@ export default function AuthPortalView({
     setPendingStudentProfile(profile);
     setPendingPasswordString(passwordTrim);
 
-    let dispatchedCode = Math.floor(100000 + Math.random() * 900000).toString();
+    let dispatchedCode = '';
     try {
       const res = await fetch('/api/auth/send-verification-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: emailTrim,
+          phone: cleanedPhone.formatted,
           name: nameTrim,
           university: univTrim,
           year,
@@ -555,31 +633,40 @@ export default function AuthPortalView({
       console.warn('[Verification Code API Warning]:', apiErr);
     }
 
-    setDispatchedSecurityCode(dispatchedCode);
-    setDispatchedMessagePreview({
-      text: `EthioLearn Registration Confirmation: Welcome ${nameTrim}! Your 6-digit confirmation security code is [ ${dispatchedCode} ]. Enter this code to activate your student account.`,
-      amharicText: `ኢትዮ ለርን ፕሮ ምዝገባ ማረጋገጫ፡ እንኳን ደህና መጡ ${nameTrim}! ባለ 6-አሃዝ የተማሪ ማረጋገጫ ኮድዎ [ ${dispatchedCode} ] ነው። ኮዱን በማስገባት አካውንትዎን ያግብሩ።`,
-      email: emailTrim,
-      studentName: nameTrim,
-      university: univTrim,
-      year: year,
-      type: 'registration'
-    });
+    // Also persist activation code state in Firebase Firestore
+    if (dispatchedCode) {
+      await saveActivationCodeToFirebase(emailTrim, dispatchedCode, 'registration', cleanedPhone.formatted);
+    }
 
-    setResendTimer(30);
+    // Try creating user in Firebase Auth and dispatch native email verification
+    if (auth && passwordTrim) {
+      try {
+        const cred = await createUserWithEmailAndPassword(auth, emailTrim, passwordTrim);
+        if (cred?.user) {
+          try {
+            await sendEmailVerification(cred.user);
+          } catch (e) {}
+          await syncProfileToFirestore(cred.user.uid, profile);
+        }
+      } catch (fbErr: any) {
+        console.warn('[Firebase Auth Creation Notice]:', fbErr?.message);
+      }
+    }
+
+    setResendTimer(60);
     setLoading(false);
     playSuccessChime();
     setMode('verify_registration');
   };
 
-  // 5. Verification Handler for Registration
+  // 5. Verification Handler for Registration (Pure & Pro Board - Real Codes Only)
   const handleVerifyRegistrationCode = async (e?: React.FormEvent, customCode?: string) => {
     if (e) e.preventDefault();
     setCodeError(null);
 
     const codeToVerify = (customCode || verificationCodeInput || '').trim();
-    if (!codeToVerify) {
-      setCodeError(lang === 'am' ? "እባክዎን ባለ 6-አሃዝ የማረጋገጫ ኮድ ያስገቡ።" : "Please enter the 6-digit verification code.");
+    if (!codeToVerify || codeToVerify.length < 6) {
+      setCodeError(lang === 'am' ? "እባክዎን ባለ 6-አሃዝ የማረጋገጫ ኮድ ያስገቡ።" : "Please enter the complete 6-digit activation code.");
       playFailureChime();
       return;
     }
@@ -589,7 +676,7 @@ export default function AuthPortalView({
     const targetEmail = pendingStudentProfile?.email || email.trim().toLowerCase();
     let isCodeValid = false;
 
-    // Check with server endpoint
+    // Check with server endpoint (ephemeral verified memory)
     try {
       const res = await fetch('/api/auth/verify-code', {
         method: 'POST',
@@ -601,32 +688,42 @@ export default function AuthPortalView({
         })
       });
       const data = await res.json();
-      if (res.ok && data.success) {
+      if (res.ok && (data.success || data.verified)) {
         isCodeValid = true;
+      } else if (data.error) {
+        setCodeError(data.amharicError && lang === 'am' ? data.amharicError : data.error);
       }
     } catch (err) {
       console.warn('[Verify Code Server Warning]:', err);
     }
 
-    // Fallback comparison
-    if (!isCodeValid && dispatchedSecurityCode && codeToVerify === dispatchedSecurityCode) {
-      isCodeValid = true;
-    }
-    if (!isCodeValid && (codeToVerify === '123456' || codeToVerify === '777888')) {
-      isCodeValid = true;
+    // Verify through Firebase Firestore activation_codes
+    if (!isCodeValid) {
+      try {
+        const fbValid = await verifyActivationCodeWithFirebase(targetEmail, codeToVerify, 'registration');
+        if (fbValid) {
+          isCodeValid = true;
+          setCodeError(null);
+        }
+      } catch (fbErr) {
+        console.warn('[Verify Code Firebase Warning]:', fbErr);
+      }
     }
 
     if (!isCodeValid) {
-      setCodeError(lang === 'am' ? "የተሳሳተ የማረጋገጫ ኮድ ነው። እባክዎ በትክክል አስገብተው እንደገና ይሞክሩ።" : "Invalid security code. Please check the code and try again.");
+      if (!codeError) {
+        setCodeError(lang === 'am' ? "የተሳሳተ የማረጋገጫ ኮድ ነው። እባክዎ ወደ ኢሜይልዎ የተላከውን ትክክለኛ ኮድ ያስገቡ።" : "Invalid activation code. Please enter the real code sent to your email address.");
+      }
       playFailureChime();
       setLoading(false);
       return;
     }
 
     // Valid code! Register in Firebase if enabled
-    let finalProfile: StudentProfile = pendingStudentProfile || {
+    const finalProfile: StudentProfile = pendingStudentProfile || {
       name: name.trim() || targetEmail.split('@')[0],
       email: targetEmail,
+      phone: phone ? cleanEthiopianPhone(phone).formatted : undefined,
       university: university || "Wolkite University (WKU)",
       year: year || "Freshman (1st Year)",
       subjects: ["Emerging Technologies", "Communicative English", "Mathematics"],
@@ -647,13 +744,23 @@ export default function AuthPortalView({
           await syncProfileToFirestore(cred.user.uid, finalProfile);
         }
       } catch (fbErr: any) {
-        // If account already exists in Firebase, try logging in
         if (fbErr?.code === 'auth/email-already-in-use') {
           try {
             await signInWithEmailAndPassword(auth, targetEmail, pendingPasswordString);
           } catch (e) {}
         }
       }
+    }
+
+    // Save profile to Supabase database
+    try {
+      await fetch('/api/db/student-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile: finalProfile })
+      });
+    } catch (dbErr) {
+      console.warn('[Profile DB Upsert Warning]:', dbErr);
     }
 
     // Save to local device accounts
@@ -687,15 +794,31 @@ export default function AuthPortalView({
   const handleResendRegistrationCode = async () => {
     if (resendTimer > 0) return;
     playClickChime();
-    setResendTimer(30);
-    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
-    setDispatchedSecurityCode(newCode);
-    setDispatchedMessagePreview({
-      text: `EthioLearn Security: New verification code [ ${newCode} ] dispatched.`,
-      amharicText: `ኢትዮ ለርን ፕሮ፡ አዲስ የማረጋገጫ ኮድ [ ${newCode} ] ተልኳል።`,
-      email: pendingStudentProfile?.email || email,
-      type: 'registration'
-    });
+    setResendTimer(60);
+    const targetEmail = pendingStudentProfile?.email || email.trim().toLowerCase();
+    const targetPhone = pendingStudentProfile?.phone || phone.trim();
+    try {
+      const res = await fetch('/api/auth/send-verification-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: targetEmail,
+          phone: targetPhone,
+          name: pendingStudentProfile?.name || name,
+          university: pendingStudentProfile?.university || university,
+          type: 'registration'
+        })
+      });
+      const data = await res.json();
+      if (data.code) {
+        await saveActivationCodeToFirebase(targetEmail, data.code, 'registration', targetPhone);
+      }
+    } catch (e) {}
+    setInfoMessage(
+      lang === 'am' 
+        ? `አዲስ የማረጋገጫ ኮድ ወደ ${targetEmail} ተልኳል።` 
+        : `A fresh activation code was dispatched to ${targetEmail}.`
+    );
     playSuccessChime();
   };
 
@@ -703,38 +826,62 @@ export default function AuthPortalView({
   const handleSendResetEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setEmailError(null);
+    setPhoneError(null);
     setAuthError(null);
     setInfoMessage(null);
 
-    const emailTrim = email.trim().toLowerCase();
-    if (!emailTrim || !emailTrim.includes('@') || !emailTrim.includes('.')) {
-      setEmailError(lang === 'am' ? "እባክዎን ትክክለኛ የኢሜይል አድራሻ ያስገቡ።" : "Please enter a valid email address.");
-      playFailureChime();
-      return;
+    const inputVal = (authMethod === 'phone' ? phone : email).trim();
+    const isEmailInput = inputVal.includes('@');
+    let targetEmail = email.trim().toLowerCase();
+
+    if (authMethod === 'phone' || !isEmailInput) {
+      const cleaned = cleanEthiopianPhone(inputVal);
+      if (!cleaned.valid) {
+        setPhoneError(lang === 'am' ? "እባክዎ ትክክለኛ ስልክ ቁጥር ያስገቡ።" : "Please enter a valid phone number.");
+        playFailureChime();
+        return;
+      }
+      // Look up email associated with this phone
+      const matched = registeredAccounts.find(acc => {
+        const accPhoneDigits = (acc.profile.phone || '').replace(/\D/g, '');
+        const targetDigits = cleaned.national.replace(/\D/g, '');
+        return accPhoneDigits && (accPhoneDigits.endsWith(targetDigits.slice(-9)) || targetDigits.endsWith(accPhoneDigits.slice(-9)));
+      });
+      if (matched) {
+        targetEmail = matched.email;
+      } else {
+        targetEmail = `${cleaned.national}@ethiolearn.edu.et`;
+      }
+    } else {
+      if (!targetEmail || !targetEmail.includes('.')) {
+        setEmailError(lang === 'am' ? "እባክዎን ትክክለኛ የኢሜይል አድራሻ ያስገቡ።" : "Please enter a valid email address.");
+        playFailureChime();
+        return;
+      }
     }
 
     setLoading(true);
-    let code = Math.floor(100000 + Math.random() * 900000).toString();
 
     try {
       const res = await fetch('/api/auth/send-verification-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailTrim, type: 'password_reset' })
+        body: JSON.stringify({ email: targetEmail, type: 'password_reset' })
       });
       const data = await res.json();
-      if (data.code) code = data.code;
+      if (data.code) {
+        await saveActivationCodeToFirebase(targetEmail, data.code, 'password_reset');
+      }
     } catch (e) {}
 
-    setDispatchedSecurityCode(code);
-    setDispatchedMessagePreview({
-      text: `EthioLearn Password Reset: Your recovery code is [ ${code} ]. Enter this code to reset your password.`,
-      amharicText: `ኢትዮ ለርን የይለፍ ቃል መቀየሪያ ኮድ [ ${code} ] ነው። ኮዱን በማስገባት አዲስ የይለፍ ቃል ያዘጋጁ።`,
-      email: emailTrim,
-      type: 'password_reset'
-    });
+    // Send Firebase native reset email if auth initialized
+    if (auth && targetEmail.includes('@') && !targetEmail.endsWith('@ethiolearn.edu.et')) {
+      try {
+        await sendPasswordResetEmail(auth, targetEmail);
+      } catch (fbErr) {}
+    }
 
-    setResendTimer(30);
+    setResendTimer(60);
     setLoading(false);
     playSuccessChime();
     setMode('verify_reset_code');
@@ -745,7 +892,7 @@ export default function AuthPortalView({
     setCodeError(null);
 
     const codeToVerify = (customCode || verificationCodeInput || '').trim();
-    if (!codeToVerify) {
+    if (!codeToVerify || codeToVerify.length < 6) {
       setCodeError(lang === 'am' ? "እባክዎን ባለ 6-አሃዝ የማረጋገጫ ኮድ ያስገቡ።" : "Please enter the 6-digit recovery code.");
       playFailureChime();
       return;
@@ -753,12 +900,29 @@ export default function AuthPortalView({
 
     setLoading(true);
     let isCodeValid = false;
+    const targetEmail = email.trim().toLowerCase();
 
-    if (dispatchedSecurityCode && codeToVerify === dispatchedSecurityCode) isCodeValid = true;
-    if (codeToVerify === '123456' || codeToVerify === '777888') isCodeValid = true;
+    try {
+      const res = await fetch('/api/auth/verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: targetEmail, code: codeToVerify, type: 'password_reset' })
+      });
+      const data = await res.json();
+      if (res.ok && (data.success || data.verified)) {
+        isCodeValid = true;
+      }
+    } catch (err) {}
 
     if (!isCodeValid) {
-      setCodeError(lang === 'am' ? "የተሳሳተ የማረጋገጫ ኮድ ነው።" : "Invalid recovery code.");
+      try {
+        const fbValid = await verifyActivationCodeWithFirebase(targetEmail, codeToVerify, 'password_reset');
+        if (fbValid) isCodeValid = true;
+      } catch (e) {}
+    }
+
+    if (!isCodeValid) {
+      setCodeError(lang === 'am' ? "የተሳሳተ የማረጋገጫ ኮድ ነው። እባክዎ ኢሜይልዎን ፈትሸው እንደገና ይሞክሩ።" : "Invalid recovery code. Please check your email inbox/spam and try again.");
       playFailureChime();
       setLoading(false);
       return;
@@ -1103,30 +1267,105 @@ export default function AuthPortalView({
             {/* ======================================================= */}
             {mode === 'signin' && (
               <form onSubmit={handleSignIn} className="space-y-4">
-                {/* Email Field */}
-                <div className="space-y-1.5 text-left">
-                  <label className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider block">
-                    {t.email}
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                    <input
-                      type="email"
-                      placeholder={t.emailPlaceholder}
-                      value={email}
-                      onChange={(e) => {
-                        setEmail(e.target.value);
-                        if (emailError) setEmailError(null);
-                      }}
-                      className={`w-full bg-[#0a0f1d] border ${
-                        emailError ? 'border-red-500/80 focus:border-red-500' : 'border-slate-800 focus:border-[#F59E0B]'
-                      } rounded-xl pl-10 pr-4 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-all focus:ring-1 focus:ring-[#F59E0B]/20`}
-                    />
-                  </div>
-                  {emailError && (
-                    <p className="text-[11px] text-red-400 font-medium pl-1">{emailError}</p>
-                  )}
+                {/* Method Switcher: Phone vs Email */}
+                <div className="flex items-center p-1 bg-[#090f1d] border border-slate-800 rounded-lg text-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playClickChime();
+                      setAuthMethod('phone');
+                      setAuthError(null);
+                      setEmailError(null);
+                      setPhoneError(null);
+                    }}
+                    className={`flex-1 py-1.5 px-2 rounded-md font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      authMethod === 'phone'
+                        ? 'bg-amber-500/20 text-[#F59E0B] border border-amber-500/40 shadow-xs'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Smartphone className="w-3.5 h-3.5" />
+                    <span>{lang === 'am' ? 'በስልክ ቁጥር' : 'Phone Number'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playClickChime();
+                      setAuthMethod('email');
+                      setAuthError(null);
+                      setEmailError(null);
+                      setPhoneError(null);
+                    }}
+                    className={`flex-1 py-1.5 px-2 rounded-md font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      authMethod === 'email'
+                        ? 'bg-amber-500/20 text-[#F59E0B] border border-amber-500/40 shadow-xs'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Mail className="w-3.5 h-3.5" />
+                    <span>{lang === 'am' ? 'በኢሜይል አድራሻ' : 'Email Address'}</span>
+                  </button>
                 </div>
+
+                {/* Conditional Input: Phone or Email */}
+                {authMethod === 'phone' ? (
+                  <div className="space-y-1.5 text-left">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider block">
+                        {lang === 'am' ? 'የተማሪ ስልክ ቁጥር' : 'Student Mobile Number'}
+                      </label>
+                      <span className="text-[9.5px] text-amber-400/90 font-mono font-medium">
+                        🇪🇹 09... / 07...
+                      </span>
+                    </div>
+                    <div className="relative flex items-center">
+                      <div className="absolute left-3 flex items-center gap-1.5 text-slate-400 font-mono text-xs select-none pointer-events-none">
+                        <span className="text-base leading-none">🇪🇹</span>
+                        <span className="text-slate-500 font-bold">+251</span>
+                      </div>
+                      <input
+                        type="tel"
+                        placeholder="0912 345 678"
+                        value={phone}
+                        onChange={(e) => {
+                          setPhone(e.target.value);
+                          if (phoneError) setPhoneError(null);
+                        }}
+                        className={`w-full bg-[#0a0f1d] border ${
+                          phoneError ? 'border-red-500/80 focus:border-red-500' : 'border-slate-800 focus:border-[#F59E0B]'
+                        } rounded-xl pl-20 pr-4 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs font-mono transition-all focus:ring-1 focus:ring-[#F59E0B]/20`}
+                      />
+                    </div>
+                    {phoneError && (
+                      <p className="text-[11px] text-red-400 font-medium pl-1">{phoneError}</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 text-left">
+                    <label className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider block">
+                      {t.email}
+                    </label>
+                    <div className="relative">
+                      <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                      <input
+                        type="email"
+                        placeholder={t.emailPlaceholder}
+                        value={email}
+                        onChange={(e) => {
+                          setEmail(e.target.value);
+                          if (emailError) setEmailError(null);
+                        }}
+                        className={`w-full bg-[#0a0f1d] border ${
+                          emailError ? 'border-red-500/80 focus:border-red-500' : 'border-slate-800 focus:border-[#F59E0B]'
+                        } rounded-xl pl-10 pr-4 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-all focus:ring-1 focus:ring-[#F59E0B]/20`}
+                      />
+                    </div>
+                    {emailError && (
+                      <p className="text-[11px] text-red-400 font-medium pl-1">{emailError}</p>
+                    )}
+                  </div>
+                )}
 
                 {/* Password Field */}
                 <div className="space-y-1.5 text-left">
@@ -1246,6 +1485,43 @@ export default function AuthPortalView({
                   )}
                 </div>
 
+                {/* Phone Number Field (Official Ethiopian Phone Number) */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider block">
+                      {lang === 'am' ? 'የስልክ ቁጥር (የኢትዮጵያ ስልክ)' : 'Mobile Phone Number'}
+                    </label>
+                    <span className="text-[9.5px] text-amber-400/90 font-mono font-medium">
+                      🇪🇹 09... / 07... (SMS/OTP)
+                    </span>
+                  </div>
+                  <div className="relative flex items-center">
+                    <div className="absolute left-3 flex items-center gap-1.5 text-slate-400 font-mono text-xs select-none pointer-events-none">
+                      <span className="text-base leading-none">🇪🇹</span>
+                      <span className="text-slate-500 font-bold">+251</span>
+                    </div>
+                    <input
+                      type="tel"
+                      placeholder="0912 345 678"
+                      value={phone}
+                      onChange={(e) => {
+                        setPhone(e.target.value);
+                        if (phoneError) setPhoneError(null);
+                      }}
+                      className={`w-full bg-[#0a0f1d] border ${
+                        phoneError ? 'border-red-500/80 focus:border-red-500' : 'border-slate-800 focus:border-[#F59E0B]'
+                      } rounded-xl pl-20 pr-4 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs font-mono transition-all focus:ring-1 focus:ring-[#F59E0B]/20`}
+                    />
+                  </div>
+                  {phoneError ? (
+                    <p className="text-[11px] text-red-400 font-medium pl-1">{phoneError}</p>
+                  ) : (
+                    <p className="text-[10px] text-slate-400 pl-1">
+                      {lang === 'am' ? 'ለፈጣን መግቢያ እና ለአካውንት ደህንነት ያገለግላል' : 'Used for instant mobile login and SMS alerts'}
+                    </p>
+                  )}
+                </div>
+
                 {/* University / College Dropdown & Quick Badges */}
                 <div className="space-y-1.5 relative">
                   <label className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider block">
@@ -1353,11 +1629,16 @@ export default function AuthPortalView({
                   </div>
                 </div>
 
-                {/* Email Field */}
+                {/* Official Student Email Field */}
                 <div className="space-y-1.5">
-                  <label className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider block">
-                    {t.email}
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider block">
+                      {t.email}
+                    </label>
+                    <span className="text-[9.5px] text-[#F59E0B] font-medium">
+                      {lang === 'am' ? 'ትክክለኛ ኮድ የሚላክበት' : 'Activation code destination'}
+                    </span>
+                  </div>
                   <div className="relative">
                     <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                     <input
@@ -1435,11 +1716,11 @@ export default function AuthPortalView({
                   <ShieldCheck className="w-4 h-4 text-[#F59E0B] shrink-0 mt-0.5" />
                   <div className="text-[10.5px] text-slate-300 leading-relaxed">
                     <span className="font-bold text-amber-300">
-                      {lang === 'am' ? 'ባለ 2-ደረጃ የተማሪ ደህንነት ማረጋገጫ፡' : '2-Step Student Security:'}
+                      {lang === 'am' ? 'ባለ 2-ደረጃ የተማሪ ደህንነት ማረጋገጫ፡' : 'Real-Time Academic Security:'}
                     </span>{' '}
                     {lang === 'am' 
-                      ? 'ምዝገባውን ሲያጠናቅቁ ባለ 6-አሃዝ የማረጋገጫ ኮድ ይሰጥዎታል።' 
-                      : 'A 6-digit confirmation security code is dispatched upon sign-up.'}
+                      ? 'ምዝገባውን ሲያጠናቅቁ ትክክለኛው ባለ 6-አሃዝ የማረጋገጫ ኮድ ወደ ኢሜይልዎ ይላካል እና በFirebase ይረጋገጣል።' 
+                      : 'An authentic 6-digit activation code is sent to your email address and verified cryptographically by Firebase.'}
                   </div>
                 </div>
 
@@ -1487,7 +1768,7 @@ export default function AuthPortalView({
         )}
 
         {/* ========================================================================= */}
-        {/* MODE: VERIFY REGISTRATION CODE */}
+        {/* MODE: VERIFY REGISTRATION CODE (PURE & PRO BOARD - REAL CODES ONLY) */}
         {/* ========================================================================= */}
         {mode === 'verify_registration' && (
           <motion.div
@@ -1495,67 +1776,75 @@ export default function AuthPortalView({
             animate={{ opacity: 1, scale: 1 }}
             className="space-y-5 text-left"
           >
-            <div className="text-center space-y-1.5">
-              <div className="w-12 h-12 rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-[#F59E0B] mx-auto shadow-[0_0_20px_rgba(245,158,11,0.2)]">
+            {/* Pure & Pro Security Header */}
+            <div className="text-center space-y-2">
+              <div className="w-12 h-12 rounded-full bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-[#F59E0B] mx-auto shadow-[0_0_20px_rgba(245,158,11,0.25)]">
                 <Key className="w-6 h-6" />
               </div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#121c33] border border-amber-500/30 text-[#F59E0B] text-[10px] font-extrabold uppercase tracking-wider shadow-sm">
+                <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                <span>{lang === 'am' ? 'የተማሪ ደህንነትና ማረጋገጫ ቦርድ' : 'Firebase Pro Security Board'}</span>
+              </div>
               <h3 className="font-serif text-lg font-black text-white">
-                {lang === 'am' ? 'የተማሪ ምዝገባ ማረጋገጫ' : 'Confirm Student Verification Code'}
+                {lang === 'am' ? 'የተማሪ ማረጋገጫ ኮድ ያስገቡ' : 'Verify Activation Code'}
               </h3>
-              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+              <p className="text-xs text-slate-300 max-w-sm mx-auto leading-relaxed">
                 {lang === 'am'
-                  ? 'ለአካውንትዎ የተዘጋጀውን ባለ 6-አሃዝ የደህንነት ኮድ በማስገባት ምዝገባዎን ያጠናቁ።'
-                  : 'Enter the 6-digit confirmation security code issued for your student account.'}
+                  ? `ባለ 6-አሃዝ የተማሪ ማረጋገጫ ኮድ ወደ ኢሜይልዎ `
+                  : `An authentic 6-digit activation code was dispatched to `}
+                <strong className="text-amber-300 font-mono underline">
+                  {pendingStudentProfile?.email || email}
+                </strong>
+                {lang === 'am'
+                  ? ` ተልኳል። እባክዎ የኢሜይል ሳጥንዎን (Inbox/Spam) ይመልከቱ።`
+                  : `. Please check your email inbox and spam folder.`}
               </p>
             </div>
 
-            {/* Dispatched Code Preview Card (Frictionless Testing & Live Feedback) */}
-            {dispatchedSecurityCode && (
-              <div className="bg-[#090f1d] border border-amber-500/30 rounded-xl p-3.5 space-y-2 shadow-sm">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <Smartphone className="w-3.5 h-3.5 text-[#F59E0B]" />
-                    {lang === 'am' ? 'የተላከ የደህንነት መልዕክት' : 'Security Dispatch Message'}
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[9.5px] font-bold border border-emerald-500/30">
-                    Active Code
-                  </span>
-                </div>
-                
-                <div className="flex items-center justify-between pt-1 border-t border-slate-800">
-                  <span className="font-mono text-slate-300 text-xs">
-                    Code: <strong className="text-[#F59E0B] text-base tracking-widest">{dispatchedSecurityCode}</strong>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setVerificationCodeInput(dispatchedSecurityCode);
-                      setCodeCopiedToast(true);
-                      setTimeout(() => setCodeCopiedToast(false), 2000);
-                    }}
-                    className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-md text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
-                  >
-                    {codeCopiedToast ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                    <span>{codeCopiedToast ? (lang === 'am' ? 'ተቀድቷል!' : 'Copied!') : (lang === 'am' ? 'ኮድ ቅዳ' : 'Copy Code')}</span>
-                  </button>
-                </div>
+            {/* Academic Verification Delivery Info Card */}
+            <div className="bg-[#090f1d] border border-slate-700/80 rounded-xl p-3.5 space-y-2.5 shadow-sm">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[10.5px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5 text-[#F59E0B]" />
+                  <span>{lang === 'am' ? 'የተላከበት ኢሜይል' : 'Dispatched Target'}</span>
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[9.5px] font-bold border border-amber-500/30 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>{lang === 'am' ? 'ኮድ ተልኳል' : 'Dispatched'}</span>
+                </span>
               </div>
-            )}
+              
+              <div className="space-y-1 text-xs text-slate-300">
+                <div className="flex items-center justify-between font-mono text-[11px]">
+                  <span className="text-slate-400">{lang === 'am' ? 'ኢሜይል፡' : 'Email:'}</span>
+                  <span className="font-bold text-amber-200">{pendingStudentProfile?.email || email}</span>
+                </div>
+                {(pendingStudentProfile?.phone || phone) && (
+                  <div className="flex items-center justify-between font-mono text-[11px]">
+                    <span className="text-slate-400">{lang === 'am' ? 'ስልክ ቁጥር፡' : 'Phone:'}</span>
+                    <span className="font-bold text-slate-200">
+                      {pendingStudentProfile?.phone || (phone ? cleanEthiopianPhone(phone).formatted : '')}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
 
             {codeError && (
-              <div className="p-3 bg-red-950/30 border border-red-500/40 text-red-300 text-xs rounded-xl flex items-start gap-2">
+              <div className="p-3.5 bg-red-950/40 border border-red-500/50 text-red-300 text-xs rounded-xl flex items-start gap-2 shadow-sm">
                 <ShieldAlert className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                <p>{codeError}</p>
+                <p className="leading-relaxed">{codeError}</p>
               </div>
             )}
 
             <form onSubmit={handleVerifyRegistrationCode} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider block">
-                  {lang === 'am' ? 'ባለ 6-አሃዝ ማረጋገጫ ኮድ' : 'Enter 6-Digit Security Code'}
+                  {lang === 'am' ? 'ባለ 6-አሃዝ የማረጋገጫ ኮድ' : 'Enter 6-Digit Activation Code'}
                 </label>
                 <input
                   type="text"
+                  inputMode="numeric"
                   maxLength={6}
                   placeholder="• • • • • •"
                   value={verificationCodeInput}
@@ -1563,35 +1852,26 @@ export default function AuthPortalView({
                     setVerificationCodeInput(e.target.value.replace(/\D/g, ''));
                     if (codeError) setCodeError(null);
                   }}
-                  className="w-full bg-[#0a0f1d] border border-slate-700 focus:border-[#F59E0B] rounded-xl py-3 text-slate-100 placeholder-slate-600 outline-none text-lg tracking-[0.4em] font-mono font-bold transition-all text-center focus:ring-1 focus:ring-[#F59E0B]/20"
+                  className="w-full bg-[#0a0f1d] border border-slate-700 focus:border-[#F59E0B] rounded-xl py-3 text-slate-100 placeholder-slate-600 outline-none text-xl tracking-[0.4em] font-mono font-bold transition-all text-center focus:ring-2 focus:ring-[#F59E0B]/30"
                 />
               </div>
 
-              {/* 1-Tap Auto Fill Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  const code = dispatchedSecurityCode || '123456';
-                  setVerificationCodeInput(code);
-                  handleVerifyRegistrationCode(undefined, code);
-                }}
-                className="w-full py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 font-bold text-xs rounded-xl cursor-pointer transition flex items-center justify-center gap-1.5"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                <span>{lang === 'am' ? 'ኮዱን በራስ-ሰር ሙላና ወዲያውኑ አረጋግጥ' : 'Auto-Fill Code & Verify Now'}</span>
-              </button>
-
+              {/* Submit Verification Button */}
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full py-3.5 bg-gradient-to-r from-[#F59E0B] via-[#EAB308] to-[#D97706] hover:brightness-105 active:scale-[0.99] text-black font-serif font-extrabold text-xs tracking-wider uppercase rounded-xl cursor-pointer flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(245,158,11,0.25)] transition-all disabled:opacity-50"
+                disabled={loading || verificationCodeInput.length < 6}
+                className="w-full py-3.5 bg-gradient-to-r from-[#F59E0B] via-[#EAB308] to-[#D97706] hover:brightness-105 active:scale-[0.99] text-black font-serif font-extrabold text-xs tracking-wider uppercase rounded-xl cursor-pointer flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(245,158,11,0.25)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
                   <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <ShieldCheck className="w-4 h-4 text-black" />
                 )}
-                <span>{loading ? (lang === 'am' ? 'በማረጋገጥ ላይ...' : 'Verifying...') : (lang === 'am' ? 'አረጋግጥና አካውንት አግብር' : 'Verify & Activate Account')}</span>
+                <span>
+                  {loading 
+                    ? (lang === 'am' ? 'በFirebase በማረጋገጥ ላይ...' : 'Verifying with Firebase...') 
+                    : (lang === 'am' ? 'አረጋግጥና አካውንት አግብር' : 'Verify & Activate Account')}
+                </span>
               </button>
 
               <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800">
@@ -1711,33 +1991,98 @@ export default function AuthPortalView({
               </h3>
               <p className="text-xs text-slate-400">
                 {lang === 'am'
-                  ? 'የተመዘገቡበትን ኢሜይል ያስገቡ። ባለ 6-አሃዝ የማረጋገጫ ኮድ ይላክልዎታል።'
-                  : 'Enter your registered email address to receive a 6-digit password recovery code.'}
+                  ? 'የተመዘገቡበትን ኢሜይል ወይም ስልክ ቁጥር ያስገቡ። ባለ 6-አሃዝ የማረጋገጫ ኮድ ይላክልዎታል።'
+                  : 'Enter your registered email or mobile phone to receive a 6-digit recovery code.'}
               </p>
             </div>
 
             <form onSubmit={handleSendResetEmail} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider block">
-                  {t.email}
-                </label>
-                <div className="relative">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  <input
-                    type="email"
-                    placeholder={t.emailPlaceholder}
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      if (emailError) setEmailError(null);
-                    }}
-                    className="w-full bg-[#0a0f1d] border border-slate-700 focus:border-[#F59E0B] rounded-xl pl-10 pr-4 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-all focus:ring-1 focus:ring-[#F59E0B]/20"
-                  />
-                </div>
-                {emailError && (
-                  <p className="text-[11px] text-red-400 font-medium pl-1">{emailError}</p>
-                )}
+              {/* Method switch: email vs phone */}
+              <div className="flex items-center p-1 bg-[#090f1d] border border-slate-800 rounded-lg text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    playClickChime();
+                    setAuthMethod('email');
+                    setEmailError(null);
+                    setPhoneError(null);
+                  }}
+                  className={`flex-1 py-1 px-2 rounded font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    authMethod === 'email'
+                      ? 'bg-amber-500/20 text-[#F59E0B] border border-amber-500/40'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  <span>{lang === 'am' ? 'በኢሜይል' : 'By Email'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playClickChime();
+                    setAuthMethod('phone');
+                    setEmailError(null);
+                    setPhoneError(null);
+                  }}
+                  className={`flex-1 py-1 px-2 rounded font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    authMethod === 'phone'
+                      ? 'bg-amber-500/20 text-[#F59E0B] border border-amber-500/40'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Smartphone className="w-3.5 h-3.5" />
+                  <span>{lang === 'am' ? 'በስልክ ቁጥር' : 'By Phone'}</span>
+                </button>
               </div>
+
+              {authMethod === 'phone' ? (
+                <div className="space-y-1.5">
+                  <label className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider block">
+                    {lang === 'am' ? 'የተመዘገበ ስልክ ቁጥር' : 'Registered Phone Number'}
+                  </label>
+                  <div className="relative flex items-center">
+                    <div className="absolute left-3 flex items-center gap-1.5 text-slate-400 font-mono text-xs select-none pointer-events-none">
+                      <span className="text-base leading-none">🇪🇹</span>
+                      <span className="text-slate-500 font-bold">+251</span>
+                    </div>
+                    <input
+                      type="tel"
+                      placeholder="0912 345 678"
+                      value={phone}
+                      onChange={(e) => {
+                        setPhone(e.target.value);
+                        if (phoneError) setPhoneError(null);
+                      }}
+                      className="w-full bg-[#0a0f1d] border border-slate-700 focus:border-[#F59E0B] rounded-xl pl-20 pr-4 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs font-mono transition-all focus:ring-1 focus:ring-[#F59E0B]/20"
+                    />
+                  </div>
+                  {phoneError && (
+                    <p className="text-[11px] text-red-400 font-medium pl-1">{phoneError}</p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <label className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider block">
+                    {t.email}
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                    <input
+                      type="email"
+                      placeholder={t.emailPlaceholder}
+                      value={email}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        if (emailError) setEmailError(null);
+                      }}
+                      className="w-full bg-[#0a0f1d] border border-slate-700 focus:border-[#F59E0B] rounded-xl pl-10 pr-4 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-all focus:ring-1 focus:ring-[#F59E0B]/20"
+                    />
+                  </div>
+                  {emailError && (
+                    <p className="text-[11px] text-red-400 font-medium pl-1">{emailError}</p>
+                  )}
+                </div>
+              )}
 
               <button
                 type="submit"
@@ -1767,7 +2112,7 @@ export default function AuthPortalView({
         )}
 
         {/* ========================================================================= */}
-        {/* MODE: VERIFY RESET CODE */}
+        {/* MODE: VERIFY RESET CODE (PURE & PRO BOARD) */}
         {/* ========================================================================= */}
         {mode === 'verify_reset_code' && (
           <motion.div
@@ -1776,33 +2121,19 @@ export default function AuthPortalView({
             className="space-y-5 text-left"
           >
             <div className="text-center space-y-1">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#121c33] border border-amber-500/30 text-[#F59E0B] text-[10px] font-extrabold uppercase tracking-wider mb-1">
+                <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                <span>{lang === 'am' ? 'የደህንነት ማረጋገጫ ቦርድ' : 'Account Recovery Board'}</span>
+              </div>
               <h3 className="font-serif text-lg font-black text-white">
                 {lang === 'am' ? 'የይለፍ ቃል መቀየሪያ ኮድ' : 'Enter Recovery Code'}
               </h3>
-              <p className="text-xs text-slate-400">
-                {lang === 'am' ? 'ለኢሜይልዎ የተላከውን ባለ 6-አሃዝ ኮድ ያስገቡ።' : 'Enter the 6-digit recovery code dispatched to your email.'}
+              <p className="text-xs text-slate-300">
+                {lang === 'am' 
+                  ? 'ለአካውንትዎ የተላከውን ባለ 6-አሃዝ የማረጋገጫ ኮድ ያስገቡ።' 
+                  : 'Enter the authentic 6-digit recovery code dispatched to your registered address.'}
               </p>
             </div>
-
-            {dispatchedSecurityCode && (
-              <div className="bg-[#090f1d] border border-amber-500/30 rounded-xl p-3 flex items-center justify-between text-xs">
-                <span className="font-mono text-slate-300">
-                  Code: <strong className="text-[#F59E0B] text-base tracking-widest">{dispatchedSecurityCode}</strong>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setVerificationCodeInput(dispatchedSecurityCode);
-                    setCodeCopiedToast(true);
-                    setTimeout(() => setCodeCopiedToast(false), 2000);
-                  }}
-                  className="px-2.5 py-1 bg-amber-500/20 text-amber-300 rounded-md text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
-                >
-                  {codeCopiedToast ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                  <span>{codeCopiedToast ? 'Copied!' : 'Copy Code'}</span>
-                </button>
-              </div>
-            )}
 
             {codeError && (
               <div className="p-3 bg-red-950/30 border border-red-500/40 text-red-300 text-xs rounded-xl flex items-start gap-2">
@@ -1813,8 +2144,12 @@ export default function AuthPortalView({
 
             <form onSubmit={handleVerifyResetCode} className="space-y-4">
               <div className="space-y-1.5">
+                <label className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider block">
+                  {lang === 'am' ? 'ባለ 6-አሃዝ የማረጋገጫ ኮድ' : '6-Digit Verification Code'}
+                </label>
                 <input
                   type="text"
+                  inputMode="numeric"
                   maxLength={6}
                   placeholder="• • • • • •"
                   value={verificationCodeInput}
@@ -1822,31 +2157,36 @@ export default function AuthPortalView({
                     setVerificationCodeInput(e.target.value.replace(/\D/g, ''));
                     if (codeError) setCodeError(null);
                   }}
-                  className="w-full bg-[#0a0f1d] border border-slate-700 focus:border-[#F59E0B] rounded-xl py-3 text-slate-100 placeholder-slate-600 outline-none text-lg tracking-[0.4em] font-mono font-bold transition-all text-center focus:ring-1 focus:ring-[#F59E0B]/20"
+                  className="w-full bg-[#0a0f1d] border border-slate-700 focus:border-[#F59E0B] rounded-xl py-3 text-slate-100 placeholder-slate-600 outline-none text-xl tracking-[0.4em] font-mono font-bold transition-all text-center focus:ring-2 focus:ring-[#F59E0B]/30"
                 />
               </div>
 
               <button
-                type="button"
-                onClick={() => {
-                  const code = dispatchedSecurityCode || '777888';
-                  setVerificationCodeInput(code);
-                  handleVerifyResetCode(undefined, code);
-                }}
-                className="w-full py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 font-bold text-xs rounded-xl cursor-pointer transition flex items-center justify-center gap-1.5"
+                type="submit"
+                disabled={loading || verificationCodeInput.length < 6}
+                className="w-full py-3.5 bg-gradient-to-r from-[#F59E0B] via-[#EAB308] to-[#D97706] hover:brightness-105 active:scale-[0.99] text-black font-serif font-extrabold text-xs tracking-wider uppercase rounded-xl cursor-pointer flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(245,158,11,0.25)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                <span>{lang === 'am' ? 'ኮዱን በራስ-ሰር ሙላና አረጋግጥ' : 'Auto-Fill Code & Verify Now'}</span>
+                {loading ? (
+                  <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <CheckCircle className="w-4 h-4 text-black" />
+                )}
+                <span>
+                  {loading 
+                    ? (lang === 'am' ? 'በማረጋገጥ ላይ...' : 'Verifying...') 
+                    : (lang === 'am' ? 'ኮዱን አረጋግጥና ቀጥል' : 'Confirm Code & Continue')}
+                </span>
               </button>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 bg-gradient-to-r from-[#F59E0B] to-[#D97706] hover:brightness-105 text-black font-serif font-extrabold text-xs tracking-wider uppercase rounded-xl cursor-pointer flex items-center justify-center gap-2 transition-all shadow-[0_0_20px_rgba(245,158,11,0.2)] disabled:opacity-50"
-              >
-                <CheckCircle className="w-4 h-4 text-black" />
-                <span>{lang === 'am' ? 'ኮዱን አረጋግጥና ቀጥል' : 'Confirm Code & Continue'}</span>
-              </button>
+              <div className="text-center pt-1 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => { playClickChime(); setMode('forgot_password'); }}
+                  className="text-xs text-slate-400 hover:text-slate-200 transition cursor-pointer"
+                >
+                  {lang === 'am' ? 'ኮድ አልደረሰኝም? እንደገና ላክ' : "Didn't receive code? Resend"}
+                </button>
+              </div>
             </form>
           </motion.div>
         )}

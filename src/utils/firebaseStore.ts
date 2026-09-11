@@ -223,11 +223,34 @@ export async function testFirestoreConnection() {
 export async function syncProfileToFirestore(userId: string, profile: StudentProfile): Promise<void> {
   const currentDb = getDb();
   if (!currentDb) return;
-  const path = `profiles/${userId}`;
+  const path = `users/${userId}`;
   try {
+    const cleanUserRecord = {
+      id: userId,
+      name: profile.name || 'Student',
+      email: profile.email || '',
+      phone: profile.phone || '',
+      university: profile.university || 'Wolkite University',
+      department: profile.department || 'Freshman General Science / Pre-Engineering',
+      year: profile.year || 'Freshman',
+      subjects: profile.subjects || ["Emerging Technologies", "Communicative English", "Mathematics", "Logic and Critical Thinking"],
+      studyStreak: 1,
+      totalStudyMinutes: 30,
+      isPro: Boolean(profile.isPro),
+      theme: profile.theme || 'dark',
+      language: profile.language || 'en',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    // Write to users collection
+    await setDoc(doc(currentDb, 'users', userId), cleanUserRecord, { merge: true });
+
+    // Also mirror to legacy profiles collection
     const cleanProfile = {
       name: profile.name,
       email: profile.email || '',
+      phone: profile.phone || '',
       university: profile.university,
       year: profile.year,
       subjects: profile.subjects || [],
@@ -236,9 +259,67 @@ export async function syncProfileToFirestore(userId: string, profile: StudentPro
       theme: profile.theme || 'dark',
       language: profile.language || 'en'
     };
-    await setDoc(doc(currentDb, 'profiles', userId), cleanProfile);
+    await setDoc(doc(currentDb, 'profiles', userId), cleanProfile, { merge: true });
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+    console.warn('[Firestore syncProfile error]:', error);
+  }
+}
+
+/**
+ * Save active activation code to Firebase Firestore
+ */
+export async function saveActivationCodeToFirebase(
+  identifier: string, 
+  code: string, 
+  type: 'registration' | 'password_reset' = 'registration',
+  phone?: string
+): Promise<boolean> {
+  const currentDb = getDb();
+  if (!currentDb) return false;
+  const cleanId = `${identifier.toLowerCase().replace(/[^a-zA-Z0-9]/g, '_')}_${type}`;
+  try {
+    await setDoc(doc(currentDb, 'activation_codes', cleanId), {
+      id: cleanId,
+      email: identifier.includes('@') ? identifier.toLowerCase().trim() : '',
+      phone: phone || (identifier.includes('@') ? '' : identifier.trim()),
+      code: code.trim(),
+      type,
+      verified: false,
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString()
+    });
+    return true;
+  } catch (err) {
+    console.warn('[Firebase saveActivationCode]:', err);
+    return false;
+  }
+}
+
+/**
+ * Verify activation code in Firebase Firestore
+ */
+export async function verifyActivationCodeWithFirebase(
+  identifier: string, 
+  code: string, 
+  type: 'registration' | 'password_reset' = 'registration'
+): Promise<boolean> {
+  const currentDb = getDb();
+  if (!currentDb) return false;
+  const cleanId = `${identifier.toLowerCase().replace(/[^a-zA-Z0-9]/g, '_')}_${type}`;
+  try {
+    const snap = await getDoc(doc(currentDb, 'activation_codes', cleanId));
+    if (snap.exists()) {
+      const data = snap.data();
+      const now = new Date().toISOString();
+      if (data.code === code.trim() && data.expiresAt > now) {
+        await updateDoc(doc(currentDb, 'activation_codes', cleanId), { verified: true });
+        return true;
+      }
+    }
+    return false;
+  } catch (err) {
+    console.warn('[Firebase verifyActivationCode]:', err);
+    return false;
   }
 }
 

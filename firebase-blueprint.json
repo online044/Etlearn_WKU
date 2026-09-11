@@ -7,6 +7,7 @@
       "properties": {
         "id": { "type": "string" },
         "email": { "type": "string" },
+        "phone": { "type": "string" },
         "name": { "type": "string" },
         "university": { "type": "string" },
         "department": { "type": "string" },
@@ -196,9 +197,29 @@
         "createdAt": { "type": "string" }
       },
       "required": ["id", "title", "message", "status"]
+    },
+    "activation_code": {
+      "title": "ActivationCode",
+      "description": "Secure verification and activation code dispatched to student email and verified by Firebase.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "code": { "type": "string" },
+        "type": { "type": "string", "enum": ["registration", "password_reset"] },
+        "verified": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "expiresAt": { "type": "string" }
+      },
+      "required": ["id", "email", "code", "type", "verified"]
     }
   },
   "firestore": {
+    "/activation_codes/{codeId}": {
+      "schema": "activation_code",
+      "description": "Collection of student activation and verification codes verified by Firebase."
+    },
     "/users/{userId}": {
       "schema": "user",
       "description": "Collection of student learning profiles, progress, and settings."

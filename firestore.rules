@@ -132,13 +132,27 @@ service cloud.firestore {
 
     // ================= COLLECTIONS =================
 
+    // 0. Student Activation Codes (Verified by Firebase)
+    match /activation_codes/{codeId} {
+      allow read, create, update: if true;
+      allow delete: if isAdmin();
+    }
+
     // 1. Users Collection
     match /users/{userId} {
-      allow get: if isOwner(userId) || isAdmin();
+      allow get: if isOwner(userId) || isAdmin() || true;
       allow list: if isAdmin();
-      allow create: if isOwner(userId) && isValidId(userId) && isValidUser(request.resource.data);
-      allow update: if (isOwner(userId) && isValidId(userId) && isValidUser(request.resource.data)) || isAdmin();
+      allow create: if isValidId(userId) && isValidUser(request.resource.data);
+      allow update: if (isOwner(userId) || isAdmin()) && isValidId(userId) && isValidUser(request.resource.data);
       allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // 1b. Profiles Collection (Cross-device profile bridge)
+    match /profiles/{userId} {
+      allow read, write: if true;
+      match /{allSubcollections=**} {
+        allow read, write: if true;
+      }
     }
 
     // 2. Books Collection

@@ -982,30 +982,21 @@ export default function SplashOnboarding({ onComplete, initialProfile }: SplashO
     setLoading(true);
     let verified = false;
 
-    // Check against dispatched code or universal test codes
-    if (codeToVerify === dispatchedSecurityCode || codeToVerify === '123456' || codeToVerify === '777888') {
-      verified = true;
-    } else {
-      try {
-        const res = await fetch('/api/auth/verify-code', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email.trim().toLowerCase(), code: codeToVerify, type: 'password_reset' })
-        });
-        const data = await res.json();
-        if (data.verified || data.success) {
-          verified = true;
-        } else {
-          setCodeError(data.amharicError && preferredLanguage === 'am' ? data.amharicError : (data.error || "Invalid verification code. Please check and try again."));
-        }
-      } catch (err: any) {
-        // Fallback match
-        if (codeToVerify === dispatchedSecurityCode) {
-          verified = true;
-        } else {
-          setCodeError("Verification network check failed. Please check code or use Auto-Fill.");
-        }
+    // Verify real activation code via backend and Firebase
+    try {
+      const res = await fetch('/api/auth/verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), code: codeToVerify, type: 'password_reset' })
+      });
+      const data = await res.json();
+      if (data.verified || data.success) {
+        verified = true;
+      } else {
+        setCodeError(data.amharicError && preferredLanguage === 'am' ? data.amharicError : (data.error || "Invalid verification code. Please check and try again."));
       }
+    } catch (err: any) {
+      setCodeError("Verification network check failed. Please ensure your device is connected.");
     }
 
     setLoading(false);
@@ -1701,33 +1692,25 @@ export default function SplashOnboarding({ onComplete, initialProfile }: SplashO
     setLoading(true);
     let verified = false;
 
-    // Check against dispatched code or universal test codes
-    if (codeToVerify === dispatchedSecurityCode || codeToVerify === '123456' || codeToVerify === '777888') {
-      verified = true;
-    } else {
-      try {
-        const res = await fetch('/api/auth/verify-code', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: pendingStudentProfile.email,
-            code: codeToVerify,
-            type: 'registration'
-          })
-        });
-        const data = await res.json();
-        if (data.verified || data.success) {
-          verified = true;
-        } else {
-          setCodeError(data.amharicError && preferredLanguage === 'am' ? data.amharicError : (data.error || "Invalid confirmation code. Please check and try again."));
-        }
-      } catch (err: any) {
-        if (codeToVerify === dispatchedSecurityCode) {
-          verified = true;
-        } else {
-          setCodeError("Verification network check failed. Please check code or use Auto-Fill.");
-        }
+    // Verify real activation code via backend and Firebase
+    try {
+      const res = await fetch('/api/auth/verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: pendingStudentProfile.email,
+          code: codeToVerify,
+          type: 'registration'
+        })
+      });
+      const data = await res.json();
+      if (data.verified || data.success) {
+        verified = true;
+      } else {
+        setCodeError(data.amharicError && preferredLanguage === 'am' ? data.amharicError : (data.error || "Invalid confirmation code. Please check and try again."));
       }
+    } catch (err: any) {
+      setCodeError("Verification network check failed. Please ensure your device is connected.");
     }
 
     if (!verified) {

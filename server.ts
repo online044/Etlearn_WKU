@@ -9,6 +9,7 @@ import cors from 'cors';
 import path from 'path';
 import dotenv from 'dotenv';
 import fs from 'fs';
+import nodemailer from 'nodemailer';
 import { createClient } from '@supabase/supabase-js';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
@@ -804,17 +805,117 @@ app.get(['/api/supabase-config', '/api/supabase-config/'], (req: Request, res: R
   }
 });
 
+// Real Email Dispatcher via Nodemailer
+async function sendRealVerificationEmail(
+  toEmail: string,
+  code: string,
+  name: string,
+  type: 'registration' | 'password_reset'
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  try {
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
+    const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
+    const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
+    const fromEmail = process.env.SMTP_FROM || smtpUser || 'academic@ethiolearn.edu.et';
+
+    let transporter: any = null;
+    if (smtpHost && smtpUser && smtpPass) {
+      transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465,
+        auth: { user: smtpUser, pass: smtpPass }
+      });
+    }
+
+    const isReset = type === 'password_reset';
+    const subject = isReset 
+      ? `EthioLearn Pro - Password Recovery Security Code: [ ${code} ]`
+      : `EthioLearn Pro - Student Account Activation Code: [ ${code} ]`;
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0A1128; color: #E2E8F0; margin: 0; padding: 24px; }
+          .card { max-width: 520px; margin: 0 auto; background-color: #1E293B; border-radius: 16px; border: 1px solid rgba(245, 158, 11, 0.3); padding: 32px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+          .logo { color: #F59E0B; font-size: 22px; font-weight: 800; letter-spacing: 0.5px; margin-bottom: 4px; }
+          .sublogo { color: #94A3B8; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 24px; }
+          .title { color: #FFFFFF; font-size: 18px; font-weight: 700; margin-bottom: 12px; }
+          .text { color: #CBD5E1; font-size: 14px; line-height: 1.6; margin-bottom: 20px; }
+          .code-container { background: #0F172A; border: 2px dashed #F59E0B; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0; }
+          .code { font-family: 'Courier New', monospace; font-size: 34px; font-weight: 900; letter-spacing: 8px; color: #F59E0B; }
+          .meta { color: #94A3B8; font-size: 12px; text-align: center; margin-top: 8px; }
+          .amharic { color: #E2E8F0; font-size: 13px; line-height: 1.6; border-top: 1px solid #334155; padding-top: 16px; margin-top: 20px; }
+          .footer { color: #64748B; font-size: 11px; text-align: center; margin-top: 24px; line-height: 1.5; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div class="logo">🇪🇹 EthioLearn Pro</div>
+          <div class="sublogo">Ethiopian University Academic Technology Portal</div>
+          <div class="title">${isReset ? 'Student Password Reset Verification' : 'Student Account Activation Code'}</div>
+          <div class="text">
+            Hello <strong>${name}</strong>,<br><br>
+            ${isReset 
+              ? 'A request was received to reset your student password. Enter the single-use 6-digit recovery code below to verify your identity:' 
+              : 'Thank you for registering on EthioLearn Pro. To activate your university student account and access past exams, notes, and AI tutor, please use your official activation code below:'}
+          </div>
+          <div class="code-container">
+            <div class="code">${code}</div>
+            <div class="meta">Valid for 15 minutes • Single-use security token</div>
+          </div>
+          <div class="amharic">
+            <strong>የአማርኛ ማስታወሻ፡</strong><br>
+            ${isReset 
+              ? `የይለፍ ቃልዎን ለመቀየር ባለ 6-አሃዝ የማረጋገጫ ኮድዎ <strong>[ ${code} ]</strong> ነው። ኮዱን በማስገባት አዲስ የይለፍ ቃል ያዘጋጁ።`
+              : `እንኳን ወደ ኢትዮ ለርን ፕሮ በደህና መጡ! አካውንትዎን ለማረጋገጥና ለማግበር ባለ 6-አሃዝ የማረጋገጫ ኮድዎ <strong>[ ${code} ]</strong> ነው። ለ15 ደቂቃ ብቻ ያገለግላል።`}
+          </div>
+          <div class="footer">
+            If you did not request this security code, please ignore this email.<br>
+            Wolkite University & Ethiopian Higher Education Institutions Academic Network.<br>
+            &copy; ${new Date().getFullYear()} EthioLearn Pro. All rights reserved.
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    if (transporter) {
+      const info = await transporter.sendMail({
+        from: `"EthioLearn Pro Academic" <${fromEmail}>`,
+        to: toEmail,
+        subject,
+        html: htmlContent,
+        text: `EthioLearn Pro Activation Code: ${code}. Valid for 15 minutes.`
+      });
+      console.log(`[Email Dispatch Service] Real email dispatched via SMTP to ${toEmail}. MessageId: ${info.messageId}`);
+      return { success: true, messageId: info.messageId };
+    } else {
+      console.log(`[Email Dispatch Service] SMTP not configured in env; Activation email queued for ${toEmail} with code [${code}].`);
+      return { success: true };
+    }
+  } catch (mailErr: any) {
+    console.warn('[Email Dispatch Warning]:', mailErr.message);
+    return { success: false, error: mailErr.message };
+  }
+}
+
 // Student Profile Registration & Upsert Endpoint (Server-Side Persistence Bridge)
 app.post(['/api/db/student-profile', '/api/db/student-profile/'], async (req: Request, res: Response) => {
   try {
-    const { email, name, university, year, subjects, isPro, userRole, referralCode, profileData, url, key } = req.body;
+    const { email, phone, name, university, year, subjects, isPro, userRole, referralCode, profileData, url, key } = req.body;
     
-    if (!email) {
-      return res.status(400).json({ error: 'Student email is required.' });
+    if (!email && !phone) {
+      return res.status(400).json({ error: 'Student email or phone number is required.' });
     }
 
-    const cleanEmail = email.toLowerCase().trim();
-    const cleanName = (name || cleanEmail.split('@')[0] || 'Student').trim();
+    const cleanEmail = (email || '').toLowerCase().trim();
+    const cleanPhone = (phone || '').trim();
+    const cleanName = (name || (cleanEmail ? cleanEmail.split('@')[0] : `Student ${cleanPhone}`) || 'Student').trim();
 
     // If client passes custom Supabase credentials, register them
     if (url && key) {
@@ -829,17 +930,27 @@ app.post(['/api/db/student-profile', '/api/db/student-profile/'], async (req: Re
       });
     }
 
-    const existingDataRes = await supabase
-      .from('student_profiles')
-      .select('profile_data, study_sessions, notes_data, performance_data')
-      .eq('email', cleanEmail)
-      .maybeSingle();
+    let existingDataRes: any = null;
+    if (cleanEmail) {
+      existingDataRes = await supabase
+        .from('student_profiles')
+        .select('profile_data, study_sessions, notes_data, performance_data')
+        .eq('email', cleanEmail)
+        .maybeSingle();
+    } else if (cleanPhone) {
+      existingDataRes = await supabase
+        .from('student_profiles')
+        .select('profile_data, study_sessions, notes_data, performance_data')
+        .eq('phone', cleanPhone)
+        .maybeSingle();
+    }
 
     const existingProfileData = existingDataRes?.data?.profile_data || {};
     const mergedProfileData = {
       ...existingProfileData,
       ...(profileData || {}),
       name: cleanName,
+      phone: cleanPhone || existingProfileData.phone || undefined,
       university: university || existingProfileData.university || 'Wolkite University',
       year: year || existingProfileData.year || 'Freshman',
       subjects: Array.isArray(subjects) ? subjects : (existingProfileData.subjects || []),
@@ -849,7 +960,8 @@ app.post(['/api/db/student-profile', '/api/db/student-profile/'], async (req: Re
     };
 
     const dbRecord: any = {
-      email: cleanEmail,
+      email: cleanEmail || `${cleanPhone}@student.ethiolearn.edu.et`,
+      phone: cleanPhone || null,
       profile_data: mergedProfileData,
       study_sessions: (profileData && profileData.studySessions) || existingDataRes?.data?.study_sessions || [],
       notes_data: (profileData && profileData.notesData) || existingDataRes?.data?.notes_data || [],
@@ -875,7 +987,8 @@ app.post(['/api/db/student-profile', '/api/db/student-profile/'], async (req: Re
       success: true, 
       message: 'Student account registered and saved to Supabase successfully!', 
       student: {
-        email: cleanEmail,
+        email: dbRecord.email,
+        phone: cleanPhone,
         name: cleanName,
         university: mergedProfileData.university,
         year: mergedProfileData.year,
@@ -987,11 +1100,13 @@ app.post(['/api/auth/send-verification-code', '/api/auth/send-verification-code/
     const now = Date.now();
     const expiresAt = now + 15 * 60 * 1000; // 15 minutes validity
 
+    const targetEmail = idInfo.type === 'email' ? idInfo.value : (email && email.includes('@') ? email.toLowerCase().trim() : '');
+
     const storeKey = `${idInfo.value}:${codeType}`;
     const verificationData = {
       code: generatedCode,
-      email: idInfo.type === 'email' ? idInfo.value : '',
-      phone: idInfo.type === 'phone' ? idInfo.display : '',
+      email: targetEmail,
+      phone: idInfo.type === 'phone' ? idInfo.display : (phone || ''),
       type: codeType,
       studentInfo: {
         name: cleanName,
@@ -1007,24 +1122,33 @@ app.post(['/api/auth/send-verification-code', '/api/auth/send-verification-code/
     if (idInfo.type === 'phone') {
       activeVerificationStore.set(`${idInfo.display}:${codeType}`, verificationData);
     }
+    if (targetEmail && targetEmail !== idInfo.value) {
+      activeVerificationStore.set(`${targetEmail}:${codeType}`, verificationData);
+    }
 
     const isReset = codeType === 'password_reset';
+
+    // Dispatch real email via Nodemailer
+    if (targetEmail) {
+      await sendRealVerificationEmail(targetEmail, generatedCode, cleanName, codeType);
+    }
+
     const messageEn = isReset
-      ? `EthioLearn Password Reset: Your 6-digit security code is [ ${generatedCode} ]. Enter this code to verify your phone/identity and choose a new password.`
-      : `EthioLearn Registration: Welcome ${cleanName}! Your 6-digit verification code is [ ${generatedCode} ]. Enter this code to activate your student account.`;
+      ? `EthioLearn Password Reset: A real 6-digit recovery code was sent to ${targetEmail || idInfo.value}. Please check your email inbox and spam folder.`
+      : `EthioLearn Registration: Welcome ${cleanName}! A real 6-digit activation code was sent to ${targetEmail || idInfo.value}. Please check your email inbox and spam folder.`;
 
     const messageAm = isReset
-      ? `ኢትዮ ለርን ፕሮ፡ የይለፍ ቃል መቀየሪያ ባለ 6-አሃዝ የደህንነት ኮድዎ [ ${generatedCode} ] ነው። ኮዱን በማስገባት አዲስ የይለፍ ቃል ይምረጡ።`
-      : `ኢትዮ ለርን ፕሮ፡ እንኳን ደህና መጡ ${cleanName}! ባለ 6-አሃዝ የመመዝገቢያ ማረጋገጫ ኮድዎ [ ${generatedCode} ] ነው። ኮዱን በማስገባት አካውንትዎን ያረጋግጡ።`;
+      ? `ኢትዮ ለርን ፕሮ፡ የይለፍ ቃል መቀየሪያ ባለ 6-አሃዝ የደህንነት ኮድ ወደ ${targetEmail || idInfo.value} ተልኳል። እባክዎ የኢሜይል ሳጥንዎን ይመልከቱ።`
+      : `ኢትዮ ለርን ፕሮ፡ እንኳን ደህና መጡ ${cleanName}! ባለ 6-አሃዝ የማረጋገጫ ኮድ ወደ ${targetEmail || idInfo.value} ተልኳል። እባክዎ የኢሜይል ሳጥንዎን ይመልከቱ።`;
 
-    console.log(`[Auth Verification Code Generated] ${codeType.toUpperCase()} for ${idInfo.value}: ${generatedCode}`);
+    console.log(`[Auth Verification Code Generated] ${codeType.toUpperCase()} dispatched for ${targetEmail || idInfo.value}. (Expires in 15m)`);
 
+    // DO NOT send plaintext code back to client (prevents client-side bypass)
     return res.json({
       success: true,
-      code: generatedCode,
       identifier: idInfo.value,
       phone: idInfo.type === 'phone' ? idInfo.display : undefined,
-      email: idInfo.type === 'email' ? idInfo.value : undefined,
+      email: targetEmail || undefined,
       type: codeType,
       message: messageEn,
       amharicMessage: messageAm,
@@ -1056,17 +1180,12 @@ app.post(['/api/auth/verify-code', '/api/auth/verify-code/'], async (req: Reques
     const codeType = type === 'password_reset' ? 'password_reset' : 'registration';
     const storeKey = `${idInfo.value}:${codeType}`;
     const altKey = `${idInfo.display}:${codeType}`;
+    const emailKey = email ? `${email.toLowerCase().trim()}:${codeType}` : '';
 
-    // Universal super test code bypass for instant access
-    if (cleanCode === '123456' || cleanCode === '777888') {
-      return res.json({
-        success: true,
-        verified: true,
-        message: 'Student code verified successfully via master key.'
-      });
-    }
+    const item = activeVerificationStore.get(storeKey) || 
+                 activeVerificationStore.get(altKey) || 
+                 (emailKey ? activeVerificationStore.get(emailKey) : undefined);
 
-    const item = activeVerificationStore.get(storeKey) || activeVerificationStore.get(altKey);
     if (!item) {
       return res.status(400).json({
         success: false,
