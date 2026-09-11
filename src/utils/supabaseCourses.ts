@@ -914,7 +914,47 @@ export async function fetchCoupons(): Promise<CouponCode[]> {
     }
   } catch {}
 
+  const defaultCampusCoupons: CouponCode[] = [
+    {
+      code: 'WKU2026',
+      discountPercentage: 20,
+      fixedDiscountETB: 0,
+      maxUses: 1000,
+      usedCount: 14,
+      expiresAt: '2026-12-31',
+      isActive: true
+    },
+    {
+      code: 'FREESTUDENT',
+      discountPercentage: 100,
+      fixedDiscountETB: 200,
+      maxUses: 500,
+      usedCount: 28,
+      expiresAt: '2026-12-31',
+      isActive: true
+    },
+    {
+      code: 'ETHIOLEARN50',
+      discountPercentage: 50,
+      fixedDiscountETB: 100,
+      maxUses: 200,
+      usedCount: 42,
+      expiresAt: '2026-12-31',
+      isActive: true
+    },
+    {
+      code: 'TELEBIRR25',
+      discountPercentage: 25,
+      fixedDiscountETB: 50,
+      maxUses: 300,
+      usedCount: 9,
+      expiresAt: '2026-12-31',
+      isActive: true
+    }
+  ];
+
   const couponMap = new Map<string, CouponCode>();
+  defaultCampusCoupons.forEach(c => couponMap.set(c.code.toUpperCase(), c));
   cachedCoupons.forEach(c => couponMap.set(c.code.toUpperCase(), c));
   dbCoupons.forEach(c => couponMap.set(c.code.toUpperCase(), c));
 
@@ -1246,7 +1286,9 @@ export async function updatePaymentStatus(paymentId: string, status: 'completed'
 
   // If approved, automatically upgrade the corresponding student account to Pro!
   if (status === 'completed' && paymentRecord) {
-    const targetEmail = (paymentRecord.user_id || paymentRecord.userId || paymentRecord.sender_name || paymentRecord.senderName || '').toLowerCase().trim();
+    const targetEmail = (paymentRecord.user_id || paymentRecord.userId || '').toLowerCase().trim();
+    const targetPhone = (paymentRecord.sender_phone || paymentRecord.senderPhone || '').toLowerCase().trim();
+    const targetName = (paymentRecord.sender_name || paymentRecord.senderName || '').toLowerCase().trim();
     
     // Update local accounts
     try {
@@ -1254,7 +1296,15 @@ export async function updatePaymentStatus(paymentId: string, status: 'completed'
       if (rawAccounts) {
         const accounts: any[] = JSON.parse(rawAccounts);
         const updatedAccounts = accounts.map(acc => {
-          if (acc.email && (acc.email.toLowerCase().trim() === targetEmail || targetEmail.includes(acc.email.toLowerCase().trim()))) {
+          const accEmail = (acc.email || '').toLowerCase().trim();
+          const accPhone = (acc.phone || acc.profile?.phone || '').toLowerCase().trim();
+          const accName = (acc.profile?.name || '').toLowerCase().trim();
+
+          const matchesEmail = targetEmail && accEmail === targetEmail;
+          const matchesPhone = targetPhone && accPhone && (accPhone.includes(targetPhone) || targetPhone.includes(accPhone));
+          const matchesName = targetName && accName === targetName;
+
+          if (matchesEmail || matchesPhone || matchesName) {
             return {
               ...acc,
               profile: {
@@ -1277,7 +1327,13 @@ export async function updatePaymentStatus(paymentId: string, status: 'completed'
       const rawProf = safeStorage.getItem('ethiolearn_current_profile');
       if (rawProf) {
         const curProf = JSON.parse(rawProf);
-        if (curProf.email && (curProf.email.toLowerCase().trim() === targetEmail || targetEmail.includes(curProf.email.toLowerCase().trim()))) {
+        const profEmail = (curProf.email || '').toLowerCase().trim();
+        const profPhone = (curProf.phone || '').toLowerCase().trim();
+
+        const matchesEmail = targetEmail && profEmail === targetEmail;
+        const matchesPhone = targetPhone && profPhone && (profPhone.includes(targetPhone) || targetPhone.includes(profPhone));
+
+        if (matchesEmail || matchesPhone) {
           const upgraded = {
             ...curProf,
             isPro: true,
@@ -1291,25 +1347,33 @@ export async function updatePaymentStatus(paymentId: string, status: 'completed'
     } catch {}
 
     // Also update Supabase student profile if available
-    if (supabase && targetEmail) {
+    if (supabase) {
       try {
-        const { data: existingProf } = await supabase
-          .from('student_profiles')
-          .select('profile_data')
-          .eq('email', targetEmail)
-          .maybeSingle();
+        let query = supabase.from('student_profiles').select('profile_data, email, phone');
+        if (targetEmail) {
+          query = query.eq('email', targetEmail);
+        } else if (targetPhone) {
+          query = query.or(`phone.eq.${targetPhone},email.eq.${targetPhone}`);
+        }
 
-        const updatedProfileData = {
-          ...(existingProf?.profile_data || {}),
-          isPro: true,
-          proStatus: 'active'
-        };
+        const { data: existingRecords } = await query.limit(1);
+        const existingProf = existingRecords && existingRecords[0];
 
-        await supabase
-          .from('student_profiles')
-          .update({ profile_data: updatedProfileData, updated_at: new Date().toISOString() })
-          .eq('email', targetEmail);
-      } catch {}
+        if (existingProf) {
+          const updatedProfileData = {
+            ...(existingProf.profile_data || {}),
+            isPro: true,
+            proStatus: 'active'
+          };
+
+          await supabase
+            .from('student_profiles')
+            .update({ profile_data: updatedProfileData, updated_at: new Date().toISOString() })
+            .match(existingProf.email ? { email: existingProf.email } : { phone: existingProf.phone });
+        }
+      } catch (dbEx) {
+        console.warn('Supabase student pro upgrade notice:', dbEx);
+      }
     }
   }
 

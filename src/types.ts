@@ -47,7 +47,8 @@ export interface FeatureUsageRecord {
 }
 
 export interface AccountInfo {
-  email: string;
+  email?: string;
+  phone?: string;
   passwordEncrypted: string;
   rememberMe: boolean;
   profile: StudentProfile;
@@ -695,3 +696,32 @@ export interface QuestionBankFilter {
   search?: string;
   university?: string;
 }
+
+export interface UniversityQuestionItem {
+  id: number;
+  qText: string;
+  choices: string[];
+  correctIndex: number;
+  subjectTopic?: string;
+  explanation?: string;
+  explanationAmharic?: string;
+  amharicExplanation?: string;
+  solutionProof?: string;
+  sourceType?: 'official_past_exam' | 'ai_generated';
+  year?: string;
+  unit?: string;
+  chapter?: string;
+  difficulty?: string;
+}
+
+export interface ExamPaperSheet {
+  id: string;
+  title: string;
+  university: string;
+  year: string;
+  subject: string;
+  department?: string;
+  durationMinutes: number;
+  questions: any[];
+}
+

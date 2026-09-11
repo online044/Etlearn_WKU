@@ -20,7 +20,9 @@ declare global {
 export interface VerifiedUser {
   id: string;
   email: string;
+  phone?: string;
   name?: string;
+  displayName?: string;
   user_role: 'student' | 'instructor' | 'admin' | 'super_admin';
   is_pro: boolean;
   is_admin: boolean;
@@ -85,7 +87,7 @@ export function getSupabaseAdmin(): SupabaseClient | null {
 /**
  * Generate a cryptographically signed session token for verified users
  */
-export function generateSessionToken(payload: { id: string; email: string; user_role?: string; is_pro?: boolean }): string {
+export function generateSessionToken(payload: { id: string; email: string; phone?: string; user_role?: string; is_pro?: boolean }): string {
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
   const exp = Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 7); // 7 days expiration
   const body = Buffer.from(JSON.stringify({
@@ -239,7 +241,9 @@ export async function authenticateRequest(req: Request): Promise<VerifiedUser | 
         return {
           id: payload.id || payload.email,
           email: payload.email.toLowerCase(),
+          phone: payload.phone,
           name: name || payload.name,
+          displayName: name || payload.name,
           user_role,
           is_pro,
           is_admin: isAdmin,
@@ -261,7 +265,9 @@ export async function authenticateRequest(req: Request): Promise<VerifiedUser | 
         return {
           id: payload.id || payload.email,
           email: payload.email.toLowerCase(),
+          phone: payload.phone,
           name: name || payload.name,
+          displayName: name || payload.name,
           user_role,
           is_pro,
           is_admin: isAdmin,

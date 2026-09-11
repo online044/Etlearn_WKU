@@ -36,16 +36,15 @@ export async function handlePaymentSubmission(req: Request, res: Response) {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const {
-      tier,
-      provider,
-      provider_transaction_id,
-      sender_name,
-      sender_phone,
-      receipt_url,
-      coupon_code,
-      subject_bundle_id
-    } = req.body as PaymentSubmissionPayload;
+    const body = req.body || {};
+    const tier = (body.tier || body.plan || 'pro_monthly') as 'pro_monthly' | 'exam_season_pass' | 'subject_bundle' | 'free';
+    const provider = (body.provider || 'telebirr') as 'telebirr' | 'cbe_birr' | 'chapa' | 'santim_pay' | 'manual';
+    const provider_transaction_id = String(body.provider_transaction_id || body.providerTxnId || '').trim();
+    const sender_name = String(body.sender_name || body.senderName || user.displayName || user.email || 'Student').trim();
+    const sender_phone = String(body.sender_phone || body.senderPhone || user.phone || '').trim();
+    const receipt_url = body.receipt_url || body.receiptImage || body.receiptUrl || null;
+    const coupon_code = body.coupon_code || body.couponCode || null;
+    const subject_bundle_id = body.subject_bundle_id || body.subjectBundleId || null;
 
     // 1. Validate required fields
     if (!tier || !provider || !provider_transaction_id || !sender_name) {
@@ -110,7 +109,7 @@ export async function handlePaymentSubmission(req: Request, res: Response) {
 
     const paymentRecord = {
       id: paymentId,
-      user_id: user.email,
+      user_id: user.phone || user.email,
       amount: finalAmountETB,
       currency: 'ETB',
       provider,
@@ -120,7 +119,7 @@ export async function handlePaymentSubmission(req: Request, res: Response) {
       status: 'pending',
       receipt_url: receipt_url || null,
       raw_webhook_payload: {
-        submitted_by: user.email,
+        submitted_by: user.phone || user.email,
         tier,
         subject_bundle_id: subject_bundle_id || null,
         coupon_applied: appliedCoupon ? appliedCoupon.code : null,

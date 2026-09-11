@@ -119,6 +119,29 @@ CREATE TABLE IF NOT EXISTS public.books (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 8b. Create exams table (Past Exams & Model Papers)
+CREATE TABLE IF NOT EXISTS public.exams (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  university TEXT NOT NULL DEFAULT 'Wolkite University',
+  department TEXT NOT NULL DEFAULT 'General',
+  course TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  exam_type TEXT NOT NULL DEFAULT 'final',
+  exam_year TEXT NOT NULL DEFAULT '2016 E.C.',
+  academic_year TEXT DEFAULT '2016 E.C.',
+  description TEXT,
+  access_level TEXT DEFAULT 'free',
+  status TEXT DEFAULT 'published',
+  allow_download BOOLEAN DEFAULT TRUE,
+  pdf_url TEXT,
+  pdf_storage_path TEXT,
+  file_size BIGINT DEFAULT 0,
+  page_count INT DEFAULT 1,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- 9. Create subscriptions table
 CREATE TABLE IF NOT EXISTS public.subscriptions (
   email TEXT PRIMARY KEY,
@@ -219,6 +242,9 @@ CREATE POLICY "Allow public all access on announcements" ON public.announcements
 DROP POLICY IF EXISTS "Allow public all access on books" ON public.books;
 CREATE POLICY "Allow public all access on books" ON public.books FOR ALL USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Allow public all access on exams" ON public.exams;
+CREATE POLICY "Allow public all access on exams" ON public.exams FOR ALL USING (true) WITH CHECK (true);
+
 DROP POLICY IF EXISTS "Allow public all access on ethiolearn_sync" ON public.ethiolearn_sync;
 CREATE POLICY "Allow public all access on ethiolearn_sync" ON public.ethiolearn_sync FOR ALL USING (true) WITH CHECK (true);
 
@@ -242,6 +268,38 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role
 GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+
+-- 15. Create Storage Buckets (books and exams) for PDFs, covers, and study materials
+INSERT INTO storage.buckets (id, name, public)
+VALUES 
+  ('books', 'books', true),
+  ('exams', 'exams', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+-- Storage RLS policies for books and exams
+DROP POLICY IF EXISTS "Allow public view books bucket" ON storage.objects;
+CREATE POLICY "Allow public view books bucket" ON storage.objects FOR SELECT USING (bucket_id = 'books');
+
+DROP POLICY IF EXISTS "Allow upload to books bucket" ON storage.objects;
+CREATE POLICY "Allow upload to books bucket" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'books');
+
+DROP POLICY IF EXISTS "Allow update to books bucket" ON storage.objects;
+CREATE POLICY "Allow update to books bucket" ON storage.objects FOR UPDATE USING (bucket_id = 'books');
+
+DROP POLICY IF EXISTS "Allow delete to books bucket" ON storage.objects;
+CREATE POLICY "Allow delete to books bucket" ON storage.objects FOR DELETE USING (bucket_id = 'books');
+
+DROP POLICY IF EXISTS "Allow public view exams bucket" ON storage.objects;
+CREATE POLICY "Allow public view exams bucket" ON storage.objects FOR SELECT USING (bucket_id = 'exams');
+
+DROP POLICY IF EXISTS "Allow upload to exams bucket" ON storage.objects;
+CREATE POLICY "Allow upload to exams bucket" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'exams');
+
+DROP POLICY IF EXISTS "Allow update to exams bucket" ON storage.objects;
+CREATE POLICY "Allow update to exams bucket" ON storage.objects FOR UPDATE USING (bucket_id = 'exams');
+
+DROP POLICY IF EXISTS "Allow delete to exams bucket" ON storage.objects;
+CREATE POLICY "Allow delete to exams bucket" ON storage.objects FOR DELETE USING (bucket_id = 'exams');
 `;
 
 /**

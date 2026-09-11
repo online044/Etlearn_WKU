@@ -7,7 +7,6 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { StudentProfile } from '../types';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
-import { googleSignIn, googleSignInRedirect } from '../utils/workspace';
 import { getSupabase, saveSupabaseCredentials, initSupabaseConfig, syncAuthSessionWithServer } from '../utils/supabaseClient';
 import { 
   signInWithEmailAndPassword, 
@@ -82,7 +81,11 @@ export const onboardingTranslations = {
     fullNamePlaceholder: "e.g. Abebe Kebede",
     university: "University / College",
     universityPlaceholder: "Search or select your university",
-    email: "Email Address",
+    phone: "Mobile Phone Number",
+    phonePlaceholder: "e.g. 0912 34 56 78 or 07...",
+    phoneOrEmail: "Phone Number or Email",
+    phoneOrEmailPlaceholder: "e.g. 0912345678 or student@gmail.com",
+    email: "Email Address (Optional)",
     emailPlaceholder: "student@gmail.com",
     password: "Academy Password",
     passwordPlaceholder: "Minimum 5 characters",
@@ -95,7 +98,8 @@ export const onboardingTranslations = {
     googleRegisterBtn: "Register instantly with Google",
     validationName: "Please enter your full name.",
     validationUniversity: "Please select or type your university.",
-    validationEmail: "Please enter a valid Gmail address (@gmail.com).",
+    validationPhone: "Please enter a valid Ethiopian phone number (e.g. 09... or 07...).",
+    validationEmail: "Please enter a valid email address.",
     validationPassword: "Password must be at least 5 characters long.",
     validationConfirmPassword: "Passwords do not match.",
     academicStanding: "Academic Standing / Level",
@@ -161,7 +165,11 @@ export const onboardingTranslations = {
     fullNamePlaceholder: "ምሳሌ፡ አበበ ከበደ",
     university: "ዩኒቨርሲቲ / ኮሌጅ",
     universityPlaceholder: "ዩኒቨርሲቲዎን ይፈልጉ ወይም ይምረጡ",
-    email: "የኢሜይል አድራሻ",
+    phone: "የሞባይል ስልክ ቁጥር",
+    phonePlaceholder: "ምሳሌ፡ 0912 34 56 78 ወይም 07...",
+    phoneOrEmail: "ስልክ ቁጥር ወይም ኢሜይል",
+    phoneOrEmailPlaceholder: "ምሳሌ፡ 0912345678 ወይም ኢሜይል አድራሻ",
+    email: "የኢሜይል አድራሻ (አማራጭ)",
     emailPlaceholder: "student@gmail.com",
     password: "የአካዳሚ የይለፍ ቃል",
     passwordPlaceholder: "ቢያንስ 5 ቁምፊዎች",
@@ -174,7 +182,8 @@ export const onboardingTranslations = {
     googleRegisterBtn: "በGoogle ፈጣን ምዝገባ",
     validationName: "እባክዎን ሙሉ ስምዎን ያስገቡ።",
     validationUniversity: "እባክዎን ዩኒቨርሲቲዎን ይምረጡ ወይም ያስገቡ።",
-    validationEmail: "እባክዎን ትክክለኛ የጂሜይል አድራሻ ያስገቡ (@gmail.com)።",
+    validationPhone: "እባክዎን ትክክለኛ የኢትዮጵያ ስልክ ቁጥር ያስገቡ (09... ወይም 07...)።",
+    validationEmail: "እባክዎን ትክክለኛ የኢሜይል አድራሻ ያስገቡ።",
     validationPassword: "የይለፍ ቃል ቢያንስ 5 ቁምፊዎች መሆን አለበት።",
     validationConfirmPassword: "የይለፍ ቃሎች አይዛመዱም።",
     academicStanding: "የትምህርት ደረጃ / አመት",
@@ -873,39 +882,6 @@ export default function SplashOnboarding({ onComplete, initialProfile }: SplashO
       console.error('Google onboarding auth failed:', err);
       playFailureChime();
       setAuthError(err.message || 'Google Sign-In was canceled or encountered an issue. Please try again.');
-    }
-  };
-
-  const handleGoogleAuth = async () => {
-    try {
-      setAuthError(null);
-      setIsPopupBlocked(false);
-      playClickChime();
-      const res = await googleSignIn();
-      if (res?.user && res.user.email) {
-        await completeGoogleProfileSetup(
-          res.user.email,
-          res.user.displayName || res.user.email.split('@')[0],
-          res.user.uid
-        );
-      }
-    } catch (err: any) {
-      console.error('Google sign-in failed:', err);
-      playFailureChime();
-      setAuthError(err.message || 'Google Sign-In could not start. Please try again.');
-    }
-  };
-
-  const handleGoogleRedirect = async () => {
-    try {
-      setAuthError(null);
-      setIsPopupBlocked(false);
-      playClickChime();
-      await googleSignInRedirect();
-    } catch (err: any) {
-      console.error('Google onboarding redirect failed:', err);
-      setAuthError(err.message || 'Google Redirect Sign-In encountered an issue. Please try again.');
-      playFailureChime();
     }
   };
 

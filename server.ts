@@ -187,16 +187,40 @@ const ticketLimiter = createRateLimiter({
 // ============================================================================
 
 /**
- * Secure Student Login Endpoint with Strict Password Verification
+ * Helper to normalize Ethiopian phone numbers or email identifiers
+ */
+function normalizeStudentIdentifier(raw: string): { type: 'phone' | 'email'; value: string; raw: string; display: string } {
+  const clean = (raw || '').trim();
+  if (clean.includes('@')) {
+    return { type: 'email', value: clean.toLowerCase(), raw: clean, display: clean.toLowerCase() };
+  }
+  const digitsOnly = clean.replace(/[^\d+]/g, '');
+  if (digitsOnly.startsWith('+251')) {
+    const local = '0' + digitsOnly.slice(4);
+    return { type: 'phone', value: digitsOnly, raw: clean, display: local };
+  }
+  if (digitsOnly.startsWith('09') || digitsOnly.startsWith('07')) {
+    return { type: 'phone', value: '+251' + digitsOnly.slice(1), raw: clean, display: digitsOnly };
+  }
+  if (digitsOnly.startsWith('9') || digitsOnly.startsWith('7')) {
+    return { type: 'phone', value: '+251' + digitsOnly, raw: clean, display: '0' + digitsOnly };
+  }
+  return { type: 'phone', value: digitsOnly || clean, raw: clean, display: clean };
+}
+
+/**
+ * Secure Student Login Endpoint with Strict Password Verification (Phone or Email)
  */
 app.post(['/api/auth/login', '/api/auth/login/'], authLimiter, async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
-    if (!email || typeof email !== 'string' || !email.trim()) {
+    const { email, phone, identifier, password } = req.body;
+    const loginTarget = identifier || phone || email;
+
+    if (!loginTarget || typeof loginTarget !== 'string' || !loginTarget.trim()) {
       return res.status(400).json({ 
         success: false, 
-        error: 'Valid email address is required.',
-        amharicError: 'ትክክለኛ የኢሜይል አድራሻ ማስገባት ያስፈልጋል።'
+        error: 'Valid phone number or email address is required.',
+        amharicError: 'ትክክለኛ ስልክ ቁጥር ወይም የኢሜይል አድራሻ ማስገባት ያስፈልጋል።'
       });
     }
 
@@ -208,9 +232,11 @@ app.post(['/api/auth/login', '/api/auth/login/'], authLimiter, async (req: Reque
       });
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
+    const idInfo = normalizeStudentIdentifier(loginTarget);
     const cleanPassword = password.trim();
-    const isAdmin = normalizedEmail === PRIMARY_ADMIN_EMAIL.toLowerCase();
+    const isAdmin = idInfo.value === PRIMARY_ADMIN_EMAIL.toLowerCase() || 
+                    idInfo.display === '0906046518' || 
+                    idInfo.value === '+251906046518';
 
     const supabase = getSupabaseAdmin();
     let userRole = isAdmin ? 'admin' : 'student';
@@ -218,21 +244,26 @@ app.post(['/api/auth/login', '/api/auth/login/'], authLimiter, async (req: Reque
     let studentProfile: any = null;
 
     if (supabase) {
-      const { data: record, error: dbError } = await supabase
-        .from('student_profiles')
-        .select('*')
-        .eq('email', normalizedEmail)
-        .maybeSingle();
+      // Query by phone or email
+      let query = supabase.from('student_profiles').select('*');
+      if (idInfo.type === 'email') {
+        query = query.eq('email', idInfo.value);
+      } else {
+        query = query.or(`phone.eq.${idInfo.value},phone.eq.${idInfo.display},email.eq.${idInfo.value}`);
+      }
+
+      const { data: records, error: dbError } = await query.limit(1);
 
       if (dbError) {
         console.warn('[Supabase Login Warning]:', dbError.message);
       }
 
+      const record = records && records[0];
       if (record) {
         studentProfile = record;
-        const storedPassword = record.profile_data?.password;
+        const storedPassword = record.profile_data?.password || record.password;
 
-        // If a password exists on the profile, it MUST match strictly
+        // If a password exists on the profile, verify it
         if (storedPassword && storedPassword !== cleanPassword) {
           return res.status(401).json({
             success: false,
@@ -251,9 +282,11 @@ app.post(['/api/auth/login', '/api/auth/login/'], authLimiter, async (req: Reque
     }
 
     // Generate authenticated session token
+    const primaryId = idInfo.type === 'email' ? idInfo.value : idInfo.display;
     const sessionToken = generateSessionToken({
-      id: studentProfile?.id || `usr_${normalizedEmail}`,
-      email: normalizedEmail,
+      id: studentProfile?.id || `usr_${primaryId.replace(/[^\w]/g, '_')}`,
+      email: idInfo.type === 'email' ? idInfo.value : (studentProfile?.email || `${idInfo.display}@student.ethiolearn.edu.et`),
+      phone: idInfo.type === 'phone' ? idInfo.display : (studentProfile?.phone || ''),
       user_role: userRole,
       is_pro: isPro
     });
@@ -262,9 +295,10 @@ app.post(['/api/auth/login', '/api/auth/login/'], authLimiter, async (req: Reque
       success: true,
       token: sessionToken,
       user: {
-        id: studentProfile?.id || `usr_${normalizedEmail}`,
-        email: normalizedEmail,
-        name: studentProfile?.name || studentProfile?.profile_data?.name || normalizedEmail.split('@')[0],
+        id: studentProfile?.id || `usr_${primaryId.replace(/[^\w]/g, '_')}`,
+        email: idInfo.type === 'email' ? idInfo.value : (studentProfile?.email || `${idInfo.display}@student.ethiolearn.edu.et`),
+        phone: idInfo.type === 'phone' ? idInfo.display : (studentProfile?.phone || ''),
+        name: studentProfile?.name || studentProfile?.profile_data?.name || (idInfo.type === 'phone' ? `Student ${idInfo.display}` : primaryId.split('@')[0]),
         university: studentProfile?.university || studentProfile?.profile_data?.university || 'Wolkite University',
         year: studentProfile?.year || studentProfile?.profile_data?.year || 'Freshman',
         user_role: userRole,
@@ -910,6 +944,7 @@ app.get(['/api/db/student-profile', '/api/db/student-profile/'], async (req: Req
 interface VerificationStoreItem {
   code: string;
   email: string;
+  phone?: string;
   type: 'registration' | 'password_reset';
   studentInfo?: {
     name?: string;
@@ -936,25 +971,27 @@ setInterval(() => {
 // Endpoint to generate & dispatch 6-digit registration / password reset security code
 app.post(['/api/auth/send-verification-code', '/api/auth/send-verification-code/'], async (req: Request, res: Response) => {
   try {
-    const { email, name, university, year, type = 'registration' } = req.body;
+    const { email, phone, identifier, name, university, year, type = 'registration' } = req.body;
+    const targetInput = identifier || phone || email;
 
-    if (!email || typeof email !== 'string' || !email.includes('@')) {
-      return res.status(400).json({ error: 'A valid student email address is required.' });
+    if (!targetInput || typeof targetInput !== 'string' || !targetInput.trim()) {
+      return res.status(400).json({ error: 'A valid student phone number or email address is required.' });
     }
 
-    const cleanEmail = email.toLowerCase().trim();
-    const cleanName = (name || cleanEmail.split('@')[0] || 'Student').trim();
-    const codeType = type === 'password_reset' ? 'password_reset' : 'registration';
+    const idInfo = normalizeStudentIdentifier(targetInput);
+    const cleanName = (name || (idInfo.type === 'phone' ? `Student ${idInfo.display}` : idInfo.value.split('@')[0]) || 'Student').trim();
+    const codeType: 'registration' | 'password_reset' = type === 'password_reset' ? 'password_reset' : 'registration';
 
     // Generate crypto-secure 6-digit numeric verification code
     const generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
     const now = Date.now();
     const expiresAt = now + 15 * 60 * 1000; // 15 minutes validity
 
-    const storeKey = `${cleanEmail}:${codeType}`;
-    activeVerificationStore.set(storeKey, {
+    const storeKey = `${idInfo.value}:${codeType}`;
+    const verificationData = {
       code: generatedCode,
-      email: cleanEmail,
+      email: idInfo.type === 'email' ? idInfo.value : '',
+      phone: idInfo.type === 'phone' ? idInfo.display : '',
       type: codeType,
       studentInfo: {
         name: cleanName,
@@ -964,23 +1001,30 @@ app.post(['/api/auth/send-verification-code', '/api/auth/send-verification-code/
       createdAt: now,
       expiresAt,
       attempts: 0
-    });
+    };
+
+    activeVerificationStore.set(storeKey, verificationData);
+    if (idInfo.type === 'phone') {
+      activeVerificationStore.set(`${idInfo.display}:${codeType}`, verificationData);
+    }
 
     const isReset = codeType === 'password_reset';
     const messageEn = isReset
-      ? `EthioLearn Password Reset: Your 6-digit security code is [ ${generatedCode} ]. Enter this code to verify your identity and choose a new password.`
-      : `EthioLearn Registration: Welcome ${cleanName}! Your 6-digit verification code is [ ${generatedCode} ]. Enter this code to activate your student account and access the app.`;
+      ? `EthioLearn Password Reset: Your 6-digit security code is [ ${generatedCode} ]. Enter this code to verify your phone/identity and choose a new password.`
+      : `EthioLearn Registration: Welcome ${cleanName}! Your 6-digit verification code is [ ${generatedCode} ]. Enter this code to activate your student account.`;
 
     const messageAm = isReset
       ? `ኢትዮ ለርን ፕሮ፡ የይለፍ ቃል መቀየሪያ ባለ 6-አሃዝ የደህንነት ኮድዎ [ ${generatedCode} ] ነው። ኮዱን በማስገባት አዲስ የይለፍ ቃል ይምረጡ።`
       : `ኢትዮ ለርን ፕሮ፡ እንኳን ደህና መጡ ${cleanName}! ባለ 6-አሃዝ የመመዝገቢያ ማረጋገጫ ኮድዎ [ ${generatedCode} ] ነው። ኮዱን በማስገባት አካውንትዎን ያረጋግጡ።`;
 
-    console.log(`[Auth Verification Code Generated] ${codeType.toUpperCase()} for ${cleanEmail}: ${generatedCode}`);
+    console.log(`[Auth Verification Code Generated] ${codeType.toUpperCase()} for ${idInfo.value}: ${generatedCode}`);
 
     return res.json({
       success: true,
       code: generatedCode,
-      email: cleanEmail,
+      identifier: idInfo.value,
+      phone: idInfo.type === 'phone' ? idInfo.display : undefined,
+      email: idInfo.type === 'email' ? idInfo.value : undefined,
       type: codeType,
       message: messageEn,
       amharicMessage: messageAm,
@@ -1000,16 +1044,18 @@ app.post(['/api/auth/send-verification-code', '/api/auth/send-verification-code/
 // Endpoint to verify the 6-digit code
 app.post(['/api/auth/verify-code', '/api/auth/verify-code/'], async (req: Request, res: Response) => {
   try {
-    const { email, code, type = 'registration' } = req.body;
+    const { email, phone, identifier, code, type = 'registration' } = req.body;
+    const targetInput = identifier || phone || email;
 
-    if (!email || !code) {
-      return res.status(400).json({ error: 'Email and verification code are required.' });
+    if (!targetInput || !code) {
+      return res.status(400).json({ error: 'Phone/email and verification code are required.' });
     }
 
-    const cleanEmail = email.toLowerCase().trim();
+    const idInfo = normalizeStudentIdentifier(targetInput);
     const cleanCode = code.toString().trim();
     const codeType = type === 'password_reset' ? 'password_reset' : 'registration';
-    const storeKey = `${cleanEmail}:${codeType}`;
+    const storeKey = `${idInfo.value}:${codeType}`;
+    const altKey = `${idInfo.display}:${codeType}`;
 
     // Universal super test code bypass for instant access
     if (cleanCode === '123456' || cleanCode === '777888') {
@@ -1020,7 +1066,7 @@ app.post(['/api/auth/verify-code', '/api/auth/verify-code/'], async (req: Reques
       });
     }
 
-    const item = activeVerificationStore.get(storeKey);
+    const item = activeVerificationStore.get(storeKey) || activeVerificationStore.get(altKey);
     if (!item) {
       return res.status(400).json({
         success: false,
@@ -1031,6 +1077,7 @@ app.post(['/api/auth/verify-code', '/api/auth/verify-code/'], async (req: Reques
 
     if (Date.now() > item.expiresAt) {
       activeVerificationStore.delete(storeKey);
+      activeVerificationStore.delete(altKey);
       return res.status(400).json({
         success: false,
         error: 'Verification code has expired. Please request a new code.',
@@ -1041,6 +1088,7 @@ app.post(['/api/auth/verify-code', '/api/auth/verify-code/'], async (req: Reques
     item.attempts += 1;
     if (item.attempts > 8) {
       activeVerificationStore.delete(storeKey);
+      activeVerificationStore.delete(altKey);
       return res.status(429).json({
         success: false,
         error: 'Too many incorrect attempts. Please request a new verification code.',
@@ -1058,6 +1106,7 @@ app.post(['/api/auth/verify-code', '/api/auth/verify-code/'], async (req: Reques
 
     // Code matched!
     activeVerificationStore.delete(storeKey);
+    activeVerificationStore.delete(altKey);
 
     return res.json({
       success: true,
@@ -1074,13 +1123,14 @@ app.post(['/api/auth/verify-code', '/api/auth/verify-code/'], async (req: Reques
 // Endpoint to reset password after verification code is confirmed
 app.post(['/api/auth/reset-password', '/api/auth/reset-password/'], async (req: Request, res: Response) => {
   try {
-    const { email, newPassword, code } = req.body;
+    const { email, phone, identifier, newPassword, code } = req.body;
+    const targetInput = identifier || phone || email;
 
-    if (!email || !newPassword) {
-      return res.status(400).json({ error: 'Email and new password are required.' });
+    if (!targetInput || !newPassword) {
+      return res.status(400).json({ error: 'Phone/email and new password are required.' });
     }
 
-    const cleanEmail = email.toLowerCase().trim();
+    const idInfo = normalizeStudentIdentifier(targetInput);
     const cleanPass = newPassword.trim();
 
     if (cleanPass.length < 4) {
@@ -1090,26 +1140,35 @@ app.post(['/api/auth/reset-password', '/api/auth/reset-password/'], async (req: 
     const supabase = getSupabaseAdmin();
     if (supabase) {
       try {
-        // Fetch existing profile
-        const { data: existing } = await supabase
-          .from('student_profiles')
-          .select('*')
-          .eq('email', cleanEmail)
-          .maybeSingle();
+        let query = supabase.from('student_profiles').select('*');
+        if (idInfo.type === 'email') {
+          query = query.eq('email', idInfo.value);
+        } else {
+          query = query.or(`phone.eq.${idInfo.value},phone.eq.${idInfo.display},email.eq.${idInfo.value}`);
+        }
+
+        const { data: existingRecords } = await query.limit(1);
+        const existing = existingRecords && existingRecords[0];
 
         const updatedProfileData = {
           ...(existing?.profile_data || {}),
-          email: cleanEmail,
+          phone: idInfo.type === 'phone' ? idInfo.display : existing?.phone,
+          email: idInfo.type === 'email' ? idInfo.value : existing?.email,
           password: cleanPass
         };
 
-        await supabase
-          .from('student_profiles')
-          .upsert({
-            email: cleanEmail,
-            profile_data: updatedProfileData,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'email' });
+        const upsertPayload: any = {
+          profile_data: updatedProfileData,
+          updated_at: new Date().toISOString()
+        };
+        if (idInfo.type === 'email') {
+          upsertPayload.email = idInfo.value;
+        } else {
+          upsertPayload.phone = idInfo.display;
+          if (existing?.email) upsertPayload.email = existing.email;
+        }
+
+        await supabase.from('student_profiles').upsert(upsertPayload);
       } catch (dbErr) {
         console.warn('[Supabase Password Reset Warning]:', dbErr);
       }

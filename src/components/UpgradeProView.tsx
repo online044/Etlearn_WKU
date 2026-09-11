@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Check, Shield, Clock, Phone, CreditCard, Send, Sparkles, CheckCircle, ExternalLink, Star,
-  Zap, Lock, BookOpen, FileText, Smartphone, AlertCircle, ArrowRight, ShieldCheck, Upload, Image as ImageIcon, Trash2, Scale
+  Zap, Lock, BookOpen, FileText, Smartphone, AlertCircle, ArrowRight, ShieldCheck, Upload, Image as ImageIcon, Trash2, Scale,
+  Ticket, Tag
 } from 'lucide-react';
-import { StudentProfile, SubscriptionTier, PaymentProvider, PaymentRecord } from '../types';
+import { StudentProfile, SubscriptionTier, PaymentProvider, PaymentRecord, CouponCode } from '../types';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
 import { safeStorage } from '../utils/safeStorage';
 import { addPaymentRecordLocal, getPaymentHistoryLocal } from '../utils/monetization';
+import { validateCoupon } from '../utils/supabaseCourses';
 import TermsModal from './TermsModal';
 
 interface UpgradeProViewProps {
@@ -36,6 +38,12 @@ export default function UpgradeProView({
   const [agreedToTerms, setAgreedToTerms] = useState<boolean>(profile.agreedToTerms || false);
   const [showTermsModal, setShowTermsModal] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Campus Coupon / Promo Code States
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<CouponCode | null>(null);
+  const [couponStatus, setCouponStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [couponMessage, setCouponMessage] = useState<string | null>(null);
   
   // Handle receipt image file select
   const handleReceiptImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -68,11 +76,57 @@ export default function UpgradeProView({
   };
 
   const currentPrice = getTierPrice(selectedTier);
-  const finalPayableETB = currentPrice.etb;
+  const couponDiscount = appliedCoupon
+    ? Math.min(currentPrice.etb, Math.round((currentPrice.etb * appliedCoupon.discountPercentage) / 100))
+    : 0;
+  const finalPayableETB = Math.max(0, currentPrice.etb - couponDiscount);
+
+  // Coupon Handlers
+  const handleApplyCoupon = async () => {
+    if (!couponInput.trim()) return;
+    setCouponStatus('loading');
+    setCouponMessage(null);
+    playClickChime();
+    try {
+      const res = await validateCoupon(couponInput.trim(), currentPrice.etb);
+      if (res.valid && res.coupon) {
+        setAppliedCoupon(res.coupon);
+        setCouponStatus('success');
+        playSuccessChime();
+        setCouponMessage(language === 'en' 
+          ? `Coupon "${res.coupon.code}" activated! ${res.coupon.discountPercentage}% discount applied (${res.discountETB} ETB saved).` 
+          : `ኩፖን "${res.coupon.code}" ተግብሯል! የ ${res.coupon.discountPercentage}% ቅናሽ (${res.discountETB} ብር ቅናሽ) ተሰጥቷል።`);
+        if (res.coupon.discountPercentage >= 100) {
+          setTxnRef(`COUPON-${res.coupon.code}`);
+        }
+      } else {
+        setCouponStatus('error');
+        playFailureChime();
+        setCouponMessage(res.message || (language === 'en' ? 'Invalid or expired coupon code.' : 'የተሳሳተ ወይም ጊዜው ያለፈበት ኩፖን ኮድ።'));
+      }
+    } catch (err: any) {
+      setCouponStatus('error');
+      playFailureChime();
+      setCouponMessage(err?.message || (language === 'en' ? 'Failed to validate coupon.' : 'ኩፖኑን ማረጋገጥ አልተቻለም።'));
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    playClickChime();
+    setAppliedCoupon(null);
+    setCouponInput('');
+    setCouponStatus('idle');
+    setCouponMessage(null);
+    if (txnRef.startsWith('COUPON-')) {
+      setTxnRef('');
+    }
+  };
 
   const handleSubmitPayment = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!senderName.trim() || !txnRef.trim()) {
+    const effectiveTxn = finalPayableETB === 0 ? (txnRef.trim() || `COUPON-${appliedCoupon?.code || 'FREE'}`) : txnRef.trim();
+
+    if (!senderName.trim() || !effectiveTxn) {
       alert(language === 'en' ? 'Please fill in Sender Name and Transaction Reference.' : 'እባክዎ መለያ ስምና የትራንዛክሽን ቁጥሩን በትክክል ያስገቡ።');
       return;
     }
@@ -102,38 +156,43 @@ export default function UpgradeProView({
       endDate = end.toISOString();
     }
 
-    // Save payment record with pending status for administrator review
+    // Is 100% coupon activation instant
+    const isInstantCouponGrant = finalPayableETB === 0 && Boolean(appliedCoupon);
+
+    // Save payment record
     const paymentRecord: PaymentRecord = {
       id: `PAY-${Date.now()}`,
-      userId: profile.email || profile.name || 'student',
+      userId: profile.email || profile.phone || profile.name || 'student',
       amount: finalPayableETB,
       originalAmount: currentPrice.etb,
+      couponCode: appliedCoupon?.code,
+      discountETB: couponDiscount,
       currency: 'ETB',
-      provider: paymentMethod,
-      providerTxnId: txnRef.trim(),
+      provider: isInstantCouponGrant ? 'manual' : paymentMethod,
+      providerTxnId: effectiveTxn,
       senderName: senderName.trim(),
       senderPhone: phoneInput.trim(),
       receiptImage: receiptImage,
       agreedToTerms: agreedToTerms,
-      status: 'pending',
+      status: isInstantCouponGrant ? 'completed' : 'pending',
       createdAt: new Date().toISOString()
     };
     
     addPaymentRecordLocal(paymentRecord);
     
-    // Save payment submission details inside student profile (pending admin review)
+    // Save payment submission details inside student profile
     const updatedProfile: StudentProfile = {
       ...profile,
       tier: selectedTier,
-      isPro: false, // Pending verification by admin
-      proStatus: 'pending',
-      proPaymentTxn: txnRef.trim(),
+      isPro: isInstantCouponGrant ? true : false,
+      proStatus: isInstantCouponGrant ? 'active' : 'pending',
+      proPaymentTxn: effectiveTxn,
       proPaymentDate: startDate,
       proStartDate: startDate,
       proEndDate: endDate,
       senderName: senderName.trim(),
       proPaymentPhone: phoneInput.trim(),
-      paymentMethod: paymentMethod,
+      paymentMethod: isInstantCouponGrant ? 'manual' : paymentMethod,
       proReceiptImage: receiptImage,
       agreedToTerms: true,
       agreedToTermsDate: startDate,
@@ -400,10 +459,35 @@ export default function UpgradeProView({
                   <p className="text-sm font-black font-serif text-white uppercase">{selectedTier.replace('_', ' ')}</p>
                 </div>
                 <div className="text-right">
-                  <span className="text-2xl font-black font-serif text-amber-400">{currentPrice.etb} ETB</span>
-                  <p className="text-[10px] text-slate-400">{currentPrice.label}</p>
+                  {appliedCoupon ? (
+                    <div>
+                      <div className="flex items-center justify-end gap-2">
+                        <span className="text-xs text-slate-500 line-through">{currentPrice.etb} ETB</span>
+                        <span className="text-2xl font-black font-serif text-emerald-400">{finalPayableETB} ETB</span>
+                      </div>
+                      <p className="text-[10px] text-emerald-400 font-bold">
+                        {language === 'en' ? `-${couponDiscount} ETB (${appliedCoupon.discountPercentage}% OFF)` : `-${couponDiscount} ብር (${appliedCoupon.discountPercentage}% ቅናሽ)`}
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <span className="text-2xl font-black font-serif text-amber-400">{currentPrice.etb} ETB</span>
+                      <p className="text-[10px] text-slate-400">{currentPrice.label}</p>
+                    </div>
+                  )}
                 </div>
               </div>
+
+              {appliedCoupon && finalPayableETB === 0 && (
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 shrink-0 animate-bounce" />
+                  <span className="font-bold">
+                    {language === 'en' 
+                      ? '100% Free Campus Coupon applied! No bank payment needed. Activate instantly below.' 
+                      : 'የ100% ነፃ የካምፓስ ኩፖን ተተግብሯል! ምንም የባንክ ክፍያ አያስፈልግዎትም። ከታች ወዲያውኑ ያግብሩ።'}
+                  </span>
+                </div>
+              )}
 
               <div className="pt-3 border-t border-slate-800/80 flex items-center gap-2 text-xs text-slate-300">
                 <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -413,6 +497,112 @@ export default function UpgradeProView({
                     : 'ትክክለኛ ዋጋ። ክፍያው በአስተዳዳሪው የባንክ መዝገብ ከተረጋገጠ በኋላ ብቻ አካውንቱ ይበራል።'}
                 </span>
               </div>
+            </div>
+
+            {/* Campus Coupon / Promo Code Input Box */}
+            <div className="p-4 bg-slate-900/90 rounded-2xl border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Ticket className="w-4 h-4" />
+                  {language === 'en' ? 'Have a Campus Coupon / Promo Code?' : 'የቅናሽ ወይም የካምፓስ ኩፖን ኮድ አለዎት?'}
+                </label>
+                {appliedCoupon && (
+                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    {appliedCoupon.discountPercentage}% OFF
+                  </span>
+                )}
+              </div>
+
+              {appliedCoupon ? (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/40 rounded-xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 font-bold font-mono text-xs">
+                      %
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-mono font-black text-white tracking-wider flex items-center gap-1.5 truncate">
+                        <Tag className="w-3 h-3 text-emerald-400 shrink-0" />
+                        {appliedCoupon.code}
+                      </p>
+                      <p className="text-[10px] text-emerald-300 truncate">
+                        {appliedCoupon.description || `${appliedCoupon.discountPercentage}% discount active`}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemoveCoupon}
+                    className="px-2.5 py-1 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer shrink-0 font-medium"
+                  >
+                    {language === 'en' ? 'Remove' : 'አስወግድ'}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        value={couponInput}
+                        onChange={(e) => {
+                          setCouponInput(e.target.value.toUpperCase());
+                          if (couponStatus === 'error') setCouponStatus('idle');
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleApplyCoupon();
+                          }
+                        }}
+                        placeholder={language === 'en' ? 'e.g. WKU2026, FREESTUDENT' : 'ለምሳሌ፡ WKU2026፣ FREESTUDENT'}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs font-mono font-bold text-white uppercase placeholder:text-slate-600 focus:ring-1 focus:ring-amber-400 outline-none"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleApplyCoupon}
+                      disabled={!couponInput.trim() || couponStatus === 'loading'}
+                      className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer shadow-md transition-all flex items-center gap-1.5 shrink-0"
+                    >
+                      {couponStatus === 'loading' ? (
+                        <Clock className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Check className="w-3.5 h-3.5" />
+                      )}
+                      {language === 'en' ? 'Apply' : 'ተግብር'}
+                    </button>
+                  </div>
+
+                  {/* Coupon status messages */}
+                  {couponMessage && (
+                    <p className={`text-[11px] font-medium flex items-center gap-1 ${
+                      couponStatus === 'error' ? 'text-rose-400' : 'text-emerald-400'
+                    }`}>
+                      {couponStatus === 'error' ? <AlertCircle className="w-3.5 h-3.5 shrink-0" /> : <CheckCircle className="w-3.5 h-3.5 shrink-0" />}
+                      {couponMessage}
+                    </p>
+                  )}
+
+                  {/* Campus Quick Codes Helper */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <span className="text-[10px] text-slate-400">{language === 'en' ? 'Quick campus codes:' : 'የካምፓስ ኮዶች:'}</span>
+                    <button
+                      type="button"
+                      onClick={() => setCouponInput('WKU2026')}
+                      className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 cursor-pointer"
+                    >
+                      WKU2026
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCouponInput('FREESTUDENT')}
+                      className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 cursor-pointer"
+                    >
+                      FREESTUDENT
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Provider Selector Grid */}
@@ -506,64 +696,66 @@ export default function UpgradeProView({
 
               <div>
                 <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">
-                  {language === 'en' ? 'Transaction ID / Reference Number' : 'የትራንዛክሽን መለያ ቁጥር'} *
+                  {language === 'en' ? 'Transaction ID / Reference Number' : 'የትራንዛክሽን መለያ ቁጥር'} {finalPayableETB > 0 ? '*' : language === 'en' ? '(Auto-filled from coupon)' : '(ከኩፖን የተወሰደ)'}
                 </label>
                 <input
                   type="text"
-                  required
+                  required={finalPayableETB > 0}
                   value={txnRef}
                   onChange={(e) => setTxnRef(e.target.value)}
-                  placeholder="e.g. FT16A1926B or Telebirr Txn No"
+                  placeholder={finalPayableETB === 0 ? `COUPON-${appliedCoupon?.code || 'FREE'}` : "e.g. FT16A1926B or Telebirr Txn No"}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono focus:ring-1 focus:ring-amber-400 outline-none"
                 />
               </div>
 
               {/* Receipt Image / Screenshot Upload */}
-              <div>
-                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1 flex items-center justify-between">
-                  <span>{language === 'en' ? 'Attach Payment Receipt / Screenshot' : 'የክፍያ ማረጋገጫ ደረሰኝ ፎቶ'}</span>
-                  <span className="text-[10px] text-amber-400 font-normal">{language === 'en' ? '(Recommended)' : '(ይመረጣል)'}</span>
-                </label>
-
-                {receiptImage ? (
-                  <div className="relative p-2 bg-slate-900 border border-amber-500/40 rounded-xl flex items-center gap-3">
-                    <img 
-                      src={receiptImage} 
-                      alt="Payment Receipt" 
-                      className="w-14 h-14 object-cover rounded-lg border border-slate-700 shrink-0" 
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-emerald-400 flex items-center gap-1">
-                        <CheckCircle className="w-3.5 h-3.5" />
-                        {language === 'en' ? 'Receipt Screenshot Attached' : 'የደረሰኝ ፎቶ ተያይዟል'}
-                      </p>
-                      <p className="text-[10px] text-slate-400 truncate">Image ready for admin verification</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setReceiptImage(undefined)}
-                      className="p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg cursor-pointer transition-colors"
-                      title="Remove receipt"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-700 hover:border-amber-400 rounded-xl bg-slate-900/60 hover:bg-slate-900 transition-all cursor-pointer text-center group">
-                    <Upload className="w-5 h-5 text-slate-400 group-hover:text-amber-400 mb-1 transition-colors" />
-                    <span className="text-xs font-bold text-slate-300 group-hover:text-amber-300">
-                      {language === 'en' ? 'Click or tap to upload receipt image' : 'የደስረኝ ፎቶ ለመጫን እዚህ ይጫኑ'}
-                    </span>
-                    <span className="text-[10px] text-slate-500 mt-0.5">JPG, PNG, WEBP (Max 8MB)</span>
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      onChange={handleReceiptImageChange} 
-                      className="hidden" 
-                    />
+              {finalPayableETB > 0 && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1 flex items-center justify-between">
+                    <span>{language === 'en' ? 'Attach Payment Receipt / Screenshot' : 'የክፍያ ማረጋገጫ ደረሰኝ ፎቶ'}</span>
+                    <span className="text-[10px] text-amber-400 font-normal">{language === 'en' ? '(Recommended)' : '(ይመረጣል)'}</span>
                   </label>
-                )}
-              </div>
+
+                  {receiptImage ? (
+                    <div className="relative p-2 bg-slate-900 border border-amber-500/40 rounded-xl flex items-center gap-3">
+                      <img 
+                        src={receiptImage} 
+                        alt="Payment Receipt" 
+                        className="w-14 h-14 object-cover rounded-lg border border-slate-700 shrink-0" 
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-emerald-400 flex items-center gap-1">
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          {language === 'en' ? 'Receipt Screenshot Attached' : 'የደረሰኝ ፎቶ ተያይዟል'}
+                        </p>
+                        <p className="text-[10px] text-slate-400 truncate">Image ready for admin verification</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setReceiptImage(undefined)}
+                        className="p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg cursor-pointer transition-colors"
+                        title="Remove receipt"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-700 hover:border-amber-400 rounded-xl bg-slate-900/60 hover:bg-slate-900 transition-all cursor-pointer text-center group">
+                      <Upload className="w-5 h-5 text-slate-400 group-hover:text-amber-400 mb-1 transition-colors" />
+                      <span className="text-xs font-bold text-slate-300 group-hover:text-amber-300">
+                        {language === 'en' ? 'Click or tap to upload receipt image' : 'የደስረኝ ፎቶ ለመጫን እዚህ ይጫኑ'}
+                      </span>
+                      <span className="text-[10px] text-slate-500 mt-0.5">JPG, PNG, WEBP (Max 8MB)</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={handleReceiptImageChange} 
+                        className="hidden" 
+                      />
+                    </label>
+                  )}
+                </div>
+              )}
 
               {/* Terms and Academic Integrity Agreement Checkbox */}
               <div className="pt-2 border-t border-slate-800 space-y-2">
@@ -597,10 +789,25 @@ export default function UpgradeProView({
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-3 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer shadow-lg active:scale-98 transition-all flex items-center justify-center gap-2"
+                className={`w-full py-3 font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer shadow-lg active:scale-98 transition-all flex items-center justify-center gap-2 ${
+                  finalPayableETB === 0
+                    ? 'bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-300 hover:to-teal-400 text-slate-950'
+                    : 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950'
+                }`}
               >
-                <Send className="w-4 h-4" />
-                {language === 'en' ? 'Submit Receipt & Reference' : 'ደረሰኝ እና ማረጋገጫ ያስገቡ'}
+                {finalPayableETB === 0 ? (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    {language === 'en' ? 'Activate Pro Instantly (0 ETB)' : 'ወዲያውኑ በነፃ አግብር (0 ብር)'}
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    {language === 'en' 
+                      ? `Submit Receipt (${finalPayableETB} ETB)` 
+                      : `ደረሰኝ እና ማረጋገጫ ያስገቡ (${finalPayableETB} ብር)`}
+                  </>
+                )}
               </button>
             </form>
           </div>
