@@ -1143,13 +1143,16 @@ app.post(['/api/auth/send-verification-code', '/api/auth/send-verification-code/
 
     console.log(`[Auth Verification Code Generated] ${codeType.toUpperCase()} dispatched for ${targetEmail || idInfo.value}. (Expires in 15m)`);
 
-    // DO NOT send plaintext code back to client (prevents client-side bypass)
+    // Return code in dev/preview if SMTP host is not configured to allow testing
+    const devPreview = !process.env.SMTP_HOST;
     return res.json({
       success: true,
       identifier: idInfo.value,
       phone: idInfo.type === 'phone' ? idInfo.display : undefined,
       email: targetEmail || undefined,
       type: codeType,
+      code: devPreview ? generatedCode : undefined,
+      devPreviewCode: devPreview ? generatedCode : undefined,
       message: messageEn,
       amharicMessage: messageAm,
       expiresAt,
