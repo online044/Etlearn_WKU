@@ -30,6 +30,7 @@ import ExamEngineView from './components/ExamEngineView';
 import EthioLearnAppPromoBanner from './components/EthioLearnAppPromoBanner';
 import AppSidebar from './components/AppSidebar';
 import LegalPrivacyTermsModal from './components/LegalPrivacyTermsModal';
+import AppDeviceFrame from './components/AppDeviceFrame';
 
 import { 
   testFirestoreConnection, 
@@ -976,15 +977,24 @@ export default function App() {
 
   if (!profile) {
     return (
-      <SplashOnboarding 
-        onComplete={handleOnboardingComplete} 
-        initialProfile={null} 
-      />
+      <AppDeviceFrame language={language}>
+        <SplashOnboarding 
+          onComplete={handleOnboardingComplete} 
+          initialProfile={null} 
+        />
+      </AppDeviceFrame>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#050508] text-slate-800 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-200">
+    <AppDeviceFrame
+      currentPage={currentPage}
+      onNavigateBack={() => {
+        if (currentPage !== 'home') setCurrentPage('home');
+      }}
+      language={language}
+    >
+      <div className="min-h-full bg-slate-50 dark:bg-[#050508] text-slate-800 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-200">
       
       {/* HEADER BAR FOR TITLE AND ETHIOPIAN CALENDAR */}
       <header 
@@ -1588,6 +1598,7 @@ export default function App() {
         initialTab={legalModalTab}
         onAcceptAndClose={() => setShowLegalModal(false)}
       />
-    </div>
+      </div>
+    </AppDeviceFrame>
   );
 }

@@ -52,6 +52,32 @@ export function triggerHaptic(type: 'light' | 'medium' | 'heavy' | 'success' | '
   }
 }
 
+export function setTelegramBackButton(visible: boolean, onClick?: () => void) {
+  const tg = getTelegramWebApp();
+  if (!tg || !tg.BackButton) return;
+
+  try {
+    if (visible) {
+      tg.BackButton.show();
+      if (onClick) {
+        tg.BackButton.onClick(onClick);
+      }
+    } else {
+      tg.BackButton.hide();
+    }
+  } catch (e) {
+    console.warn('[Telegram WebApp] BackButton error:', e);
+  }
+}
+
+export function closeTelegramWebApp() {
+  const tg = getTelegramWebApp();
+  if (!tg) return;
+  try {
+    tg.close();
+  } catch (e) {}
+}
+
 export async function verifyAndSyncTelegramAuth(initData: string) {
   try {
     const response = await fetch('/api/telegram/auth', {
