@@ -25,10 +25,4 @@ export const GOOGLE_SERVICES_PROJECT = {
   ]
 };
 
-export const RECAPTCHA_ENTERPRISE_CONFIG = {
-  keyName: "Etlearn2",
-  siteKey: "6LdZM7ctAAAAAGYxsk7t7gN54l2VOwDfvuLwux23",
-  projectId: "etlearn-7b27d"
-};
-
 export default GOOGLE_SERVICES_PROJECT;

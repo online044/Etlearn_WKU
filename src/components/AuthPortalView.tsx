@@ -35,8 +35,6 @@ import {
 } from 'lucide-react';
 import EthioLearnLogo from './EthioLearnLogo';
 import LegalPrivacyTermsModal from './LegalPrivacyTermsModal';
-import FirebaseRecaptchaGuideModal from './FirebaseRecaptchaGuideModal';
-import { executeRecaptchaEnterprise } from '../utils/recaptchaEnterprise';
 import { safeStorage } from '../utils/safeStorage';
 import { isAdministratorEmail } from '../utils/adminAuth';
 import { ETHIOPIAN_UNIVERSITIES, onboardingTranslations } from './SplashOnboarding';
@@ -194,8 +192,6 @@ export default function AuthPortalView({
   // Modals
   const [showLegalModal, setShowLegalModal] = useState(false);
   const [legalModalTab, setLegalModalTab] = useState<'terms' | 'privacy'>('terms');
-  const [showRecaptchaModal, setShowRecaptchaModal] = useState(false);
-  const [isRecaptchaSolved, setIsRecaptchaSolved] = useState(false);
 
   const handleUseTestPhoneCredentials = () => {
     setAuthMethod('phone');
@@ -564,7 +560,7 @@ export default function AuthPortalView({
   };
 
   // 2b. Firebase Phone Authentication setup & handlers
-  const setupRecaptcha = (forceVisible: boolean = false) => {
+  const setupRecaptcha = () => {
     if (!auth || typeof window === 'undefined') return null;
     try {
       const existing = (window as any).recaptchaVerifier;
@@ -574,14 +570,7 @@ export default function AuthPortalView({
         } catch (e) {}
       }
       const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-        size: forceVisible ? 'normal' : 'invisible',
-        callback: (response: any) => {
-          setIsRecaptchaSolved(true);
-        },
-        'expired-callback': () => {
-          setIsRecaptchaSolved(false);
-          console.warn('[Phone Auth] reCAPTCHA challenge expired');
-        }
+        size: 'invisible'
       });
       (window as any).recaptchaVerifier = verifier;
       return verifier;
@@ -616,9 +605,6 @@ export default function AuthPortalView({
 
     setIsPhoneAuthLoading(true);
     setLoading(true);
-
-    // Run reCAPTCHA Enterprise risk evaluation in background (Key: Etlearn2)
-    executeRecaptchaEnterprise('PHONE_SMS').catch(() => {});
 
     try {
       const appVerifier = setupRecaptcha();
@@ -672,9 +658,8 @@ export default function AuthPortalView({
           : "SMS quota reached. Please try again later or use Firebase Console test numbers (e.g. +251 91 100 0000 / 123456).";
       } else if (err?.code === 'auth/captcha-check-failed' || err?.message?.toLowerCase().includes('recaptcha') || err?.message?.toLowerCase().includes('sms toll')) {
         msg = lang === 'am' 
-          ? "የreCAPTCHA ደህንነት ማረጋገጫ ተቋርጧል። እባክዎ የreCAPTCHA መመሪያውን ይመልከቱ ወይም የሙከራ ቁጥር (+251 91 100 0000) ይጠቀሙ።" 
-          : "reCAPTCHA check failed. Please check your Firebase reCAPTCHA settings or use the test number (+251 91 100 0000).";
-        setShowRecaptchaModal(true);
+          ? "የስልክ ጥያቄው አልተሳካም። እባክዎ እንደገና ይሞክሩ ወይም የሙከራ ቁጥር (+251 91 100 0000) ይጠቀሙ።" 
+          : "Verification check failed. Please try again or use the test number (+251 91 100 0000).";
       } else if (err?.code === 'auth/missing-phone-number') {
         msg = lang === 'am' ? "እባክዎ የስልክ ቁጥር ያስገቡ።" : "Please enter a valid phone number.";
       } else if (err?.message) {
@@ -1601,8 +1586,8 @@ export default function AuthPortalView({
                       />
                     </div>
 
-                    {/* Quick helper for reCAPTCHA and Test Number */}
-                    <div className="flex items-center justify-between pt-1 text-[10.5px]">
+                    {/* Quick helper for Test Number */}
+                    <div className="flex items-center justify-start pt-1 text-[10.5px]">
                       <button
                         type="button"
                         onClick={() => {
@@ -1614,15 +1599,6 @@ export default function AuthPortalView({
                       >
                         <Sparkles className="w-3 h-3 text-amber-400" />
                         <span>{lang === 'am' ? 'የሙከራ ቁጥር (0911 000 000)' : 'Test Number (0911 000 000)'}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setShowRecaptchaModal(true)}
-                        className="text-slate-400 hover:text-amber-400 transition flex items-center gap-1 cursor-pointer"
-                      >
-                        <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                        <span>reCAPTCHA Guide</span>
                       </button>
                     </div>
 
@@ -1757,19 +1733,9 @@ export default function AuthPortalView({
                       )}
                       <span>{lang === 'am' ? 'በፈጣን የFirebase SMS ኮድ ግባ' : 'Sign In with Firebase Phone SMS'}</span>
                     </button>
-                    <div className="pt-2 flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                      <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block"></span>
-                        reCAPTCHA Enterprise Active
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setShowRecaptchaModal(true)}
-                        className="text-amber-400 hover:text-amber-300 transition underline cursor-pointer"
-                      >
-                        Etlearn2 Key
-                      </button>
-                    </div>
+                    <p className="text-[10.5px] text-slate-400 text-center pt-2 font-sans">
+                      🇪🇹 {lang === 'am' ? 'የኢትዮጵያ ስልክ ቁጥሮችና የሙከራ አካውንቶች ይደገፋሉ' : 'Supports Ethiopian SIMs & instant testing'}
+                    </p>
                   </div>
                 )}
               </form>
@@ -2784,8 +2750,8 @@ export default function AuthPortalView({
         )}
       </motion.div>
 
-      {/* reCAPTCHA container for Firebase Phone Authentication */}
-      <div id="recaptcha-container" className="fixed bottom-3 right-3 z-50 transition-all pointer-events-auto" />
+      {/* Hidden container for Firebase invisible phone verification */}
+      <div id="recaptcha-container" className="hidden" />
 
       {/* Privacy Policy & Terms Modal */}
       <LegalPrivacyTermsModal
@@ -2793,14 +2759,6 @@ export default function AuthPortalView({
         onClose={() => setShowLegalModal(false)}
         language={lang}
         initialTab={legalModalTab}
-      />
-
-      {/* Firebase reCAPTCHA Guide & Setup Modal */}
-      <FirebaseRecaptchaGuideModal
-        isOpen={showRecaptchaModal}
-        onClose={() => setShowRecaptchaModal(false)}
-        language={lang}
-        onUseTestCredentials={handleUseTestPhoneCredentials}
       />
     </div>
   );
