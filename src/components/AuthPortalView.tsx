@@ -15,7 +15,10 @@ import {
   sendPasswordResetEmail, 
   sendEmailVerification,
   updatePassword,
-  signOut
+  signOut,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+  type ConfirmationResult
 } from 'firebase/auth';
 import { 
   auth, 
@@ -69,29 +72,54 @@ const ACADEMIC_STANDINGS = [
   { id: 'Postgraduate / Masters', labelEn: 'Postgrad / Masters', labelAm: 'ማስተርስ / ድህረ-ምረቃ' },
 ];
 
-export function cleanEthiopianPhone(raw: string): { valid: boolean; formatted: string; national: string } {
+export function cleanEthiopianPhone(raw: string): { valid: boolean; formatted: string; national: string; e164: string } {
   const digits = (raw || '').replace(/\D/g, '');
-  if (!digits) return { valid: false, formatted: '', national: '' };
+  if (!digits) return { valid: false, formatted: '', national: '', e164: '' };
 
   // Handle +251 9... or +251 7... (12 digits)
   if (digits.startsWith('251') && digits.length === 12) {
     const nat = '0' + digits.substring(3);
     const prefix = digits.substring(3, 5);
     if (prefix.startsWith('9') || prefix.startsWith('7')) {
-      return { valid: true, formatted: `+251 ${prefix} ${digits.substring(5, 8)} ${digits.substring(8)}`, national: nat };
+      return { 
+        valid: true, 
+        formatted: `+251 ${prefix} ${digits.substring(5, 8)} ${digits.substring(8)}`, 
+        national: nat,
+        e164: `+${digits}`
+      };
     }
   }
   // Handle 09... or 07... (10 digits)
   if ((digits.startsWith('09') || digits.startsWith('07')) && digits.length === 10) {
-    return { valid: true, formatted: `+251 ${digits.substring(1, 3)} ${digits.substring(3, 6)} ${digits.substring(6)}`, national: digits };
+    return { 
+      valid: true, 
+      formatted: `+251 ${digits.substring(1, 3)} ${digits.substring(3, 6)} ${digits.substring(6)}`, 
+      national: digits,
+      e164: `+251${digits.substring(1)}`
+    };
   }
   // Handle 9... or 7... (9 digits)
   if ((digits.startsWith('9') || digits.startsWith('7')) && digits.length === 9) {
     const nat = '0' + digits;
-    return { valid: true, formatted: `+251 ${digits.substring(0, 2)} ${digits.substring(2, 5)} ${digits.substring(5)}`, national: nat };
+    return { 
+      valid: true, 
+      formatted: `+251 ${digits.substring(0, 2)} ${digits.substring(2, 5)} ${digits.substring(5)}`, 
+      national: nat,
+      e164: `+251${digits}`
+    };
   }
 
-  return { valid: false, formatted: raw, national: digits };
+  // Handle international test numbers (e.g. +1 650-555-3434 or other test phones with +)
+  if (digits.length >= 10 && raw.trim().startsWith('+')) {
+    return {
+      valid: true,
+      formatted: raw.trim(),
+      national: digits,
+      e164: `+${digits}`
+    };
+  }
+
+  return { valid: false, formatted: raw, national: digits, e164: '' };
 }
 
 export default function AuthPortalView({
@@ -101,8 +129,8 @@ export default function AuthPortalView({
   onLanguageChange,
   onBackToOnboarding
 }: AuthPortalViewProps) {
-  // Mode state: 'signin' | 'signup' | 'forgot_password' | 'verify_reset_code' | 'verify_registration' | 'registration_success' | 'update_password'
-  const [mode, setMode] = useState<'signin' | 'signup' | 'forgot_password' | 'verify_reset_code' | 'verify_registration' | 'registration_success' | 'update_password'>(initialMode);
+  // Mode state: 'signin' | 'signup' | 'forgot_password' | 'verify_reset_code' | 'verify_registration' | 'registration_success' | 'update_password' | 'verify_phone_code'
+  const [mode, setMode] = useState<'signin' | 'signup' | 'forgot_password' | 'verify_reset_code' | 'verify_registration' | 'registration_success' | 'update_password' | 'verify_phone_code'>(initialMode);
   
   const [lang, setLang] = useState<'en' | 'am'>(() => {
     return externalLang || (safeStorage.getItem('ethiolearn_language') === 'am' ? 'am' : 'en');
@@ -148,6 +176,8 @@ export default function AuthPortalView({
   const [codeCopiedToast, setCodeCopiedToast] = useState(false);
   const [pendingStudentProfile, setPendingStudentProfile] = useState<StudentProfile | null>(null);
   const [pendingPasswordString, setPendingPasswordString] = useState<string>('');
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+  const [isPhoneAuthLoading, setIsPhoneAuthLoading] = useState(false);
 
   // Saved accounts on device
   const [registeredAccounts, setRegisteredAccounts] = useState<AccountInfo[]>([]);
@@ -493,6 +523,237 @@ export default function AuthPortalView({
         ? "በዚህ መረጃ የተመዘገበ አካውንት አልተገኘም ወይም የይለፍ ቃል የተሳሳተ ነው። አዲስ ለመፍጠር 'አካውንት ፍጠር' የሚለውን ይጫኑ።" 
         : "Student account not found or credentials incorrect. Switch to 'Create Account' to register."
     );
+    playFailureChime();
+    setLoading(false);
+  };
+
+  // 2b. Firebase Phone Authentication setup & handlers
+  const setupRecaptcha = () => {
+    if (!auth || typeof window === 'undefined') return null;
+    try {
+      const existing = (window as any).recaptchaVerifier;
+      if (existing) {
+        try {
+          existing.clear();
+        } catch (e) {}
+      }
+      const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        size: 'invisible',
+        callback: () => {
+          // reCAPTCHA solved
+        },
+        'expired-callback': () => {
+          console.warn('[Phone Auth] reCAPTCHA challenge expired');
+        }
+      });
+      (window as any).recaptchaVerifier = verifier;
+      return verifier;
+    } catch (err) {
+      console.error('[Phone Auth] Setup RecaptchaVerifier failed:', err);
+      return null;
+    }
+  };
+
+  const handleSendPhoneSmsCode = async (targetPhoneRaw?: string, fromSignUp: boolean = false) => {
+    setAuthError(null);
+    setPhoneError(null);
+    setCodeError(null);
+
+    const rawTarget = (targetPhoneRaw || phone || '').trim();
+    const cleaned = cleanEthiopianPhone(rawTarget);
+    if (!cleaned.valid || !cleaned.e164) {
+      setPhoneError(
+        lang === 'am' 
+          ? "እባክዎ ትክክለኛ የኢትዮጵያ ስልክ ቁጥር ያስገቡ (ለምሳሌ 0912 345 678 ወይም 0712 345 678)" 
+          : "Please enter a valid phone number (e.g. 0912 345 678 or 0712 345 678)"
+      );
+      playFailureChime();
+      return;
+    }
+
+    if (!auth) {
+      setAuthError(lang === 'am' ? "የFirebase አገልግሎት አልተገኘም።" : "Firebase Authentication service is unavailable.");
+      playFailureChime();
+      return;
+    }
+
+    setIsPhoneAuthLoading(true);
+    setLoading(true);
+
+    try {
+      const appVerifier = setupRecaptcha();
+      if (!appVerifier) {
+        throw new Error("Could not initialize app verification container.");
+      }
+
+      const confirmation = await signInWithPhoneNumber(auth, cleaned.e164, appVerifier);
+      setConfirmationResult(confirmation);
+      setPhone(cleaned.formatted);
+      setVerificationCodeInput('');
+      setResendTimer(60);
+
+      // If initiating from signup, ensure pending profile has student attributes
+      if (fromSignUp || mode === 'signup') {
+        const studentProfile: StudentProfile = {
+          name: name.trim() || `Student ${cleaned.national.slice(-4) || 'Scholar'}`,
+          email: email.trim() ? email.trim().toLowerCase() : `${cleaned.national}@ethiolearn.edu.et`,
+          phone: cleaned.formatted,
+          university: university.trim() || "Wolkite University (WKU)",
+          year,
+          subjects: ["Emerging Technologies", "Communicative English", "Mathematics", "Logic and Critical Thinking"],
+          claudeApiKey: "",
+          dailyGoalHours: 2,
+          theme: 'dark',
+          language: lang,
+          avatar: 'champion',
+          isRegistered: true,
+          unregisteredAICredits: 5,
+          isPro: false
+        };
+        setPendingStudentProfile(studentProfile);
+      }
+
+      setIsPhoneAuthLoading(false);
+      setLoading(false);
+      playSuccessChime();
+      setMode('verify_phone_code');
+    } catch (err: any) {
+      console.error('[Firebase Phone Auth Error]:', err);
+      setIsPhoneAuthLoading(false);
+      setLoading(false);
+      playFailureChime();
+
+      let msg = lang === 'am' ? "የስልክ ማረጋገጫ SMS መላክ አልተቻለም።" : "Failed to dispatch SMS verification code.";
+      if (err?.code === 'auth/invalid-phone-number') {
+        msg = lang === 'am' ? "የስልክ ቁጥሩ ተቀባይነት የለውም። እባክዎ እንደገና ያረጋግጡ።" : "The phone number format is invalid. Please check and retry.";
+      } else if (err?.code === 'auth/too-many-requests') {
+        msg = lang === 'am' 
+          ? "የSMS ጥያቄ ገደብ ደርሷል። እባክዎ ጥቂት ደቂቃ ቆይተው ይሞክሩ ወይም በኮንሶል የተመዘገበ የሙከራ ቁጥር ይጠቀሙ።" 
+          : "SMS quota reached. Please try again later or use Firebase Console test numbers (e.g. +251 91 100 0000 / 123456).";
+      } else if (err?.code === 'auth/captcha-check-failed') {
+        msg = lang === 'am' ? "የደህንነት ማረጋገጫ አልተሳካም። እባክዎ ገጹን አድሰው እንደገና ይሞክሩ።" : "App verification challenge failed. Please refresh and retry.";
+      } else if (err?.code === 'auth/missing-phone-number') {
+        msg = lang === 'am' ? "እባክዎ የስልክ ቁጥር ያስገቡ።" : "Please enter a valid phone number.";
+      } else if (err?.message) {
+        msg = `${msg} (${err.message})`;
+      }
+      setAuthError(msg);
+    }
+  };
+
+  const handleConfirmPhoneOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setCodeError(null);
+
+    const codeToVerify = verificationCodeInput.trim();
+    if (!codeToVerify || codeToVerify.length < 6) {
+      setCodeError(lang === 'am' ? "እባክዎን ባለ 6-አሃዝ የማረጋገጫ ኮድ ያስገቡ።" : "Please enter the complete 6-digit verification code.");
+      playFailureChime();
+      return;
+    }
+
+    setLoading(true);
+
+    if (confirmationResult) {
+      try {
+        const cred = await confirmationResult.confirm(codeToVerify);
+        if (cred?.user) {
+          const uid = cred.user.uid;
+          const phoneNum = cred.user.phoneNumber || cleanEthiopianPhone(phone).e164 || phone;
+          const cleaned = cleanEthiopianPhone(phoneNum);
+
+          let existingProfile = await fetchProfileFromFirestore(uid);
+          const effectiveProfile: StudentProfile = existingProfile || pendingStudentProfile || {
+            name: name.trim() || `Student ${cleaned.national ? cleaned.national.slice(-4) : 'Scholar'}`,
+            email: email.trim() ? email.trim().toLowerCase() : `${cleaned.national || 'student'}@ethiolearn.edu.et`,
+            phone: cleaned.formatted || phoneNum,
+            university: university.trim() || "Wolkite University (WKU)",
+            year: year || "Freshman (1st Year)",
+            subjects: ["Emerging Technologies", "Communicative English", "Mathematics", "Logic and Critical Thinking"],
+            claudeApiKey: "",
+            dailyGoalHours: 2,
+            theme: 'dark',
+            language: lang,
+            avatar: 'champion',
+            isRegistered: true,
+            unregisteredAICredits: 5,
+            isPro: false
+          };
+
+          await syncProfileToFirestore(uid, effectiveProfile);
+
+          const newAccount: AccountInfo = {
+            email: effectiveProfile.email,
+            passwordEncrypted: 'firebase_phone_authenticated',
+            rememberMe,
+            profile: effectiveProfile
+          };
+
+          const updatedAccs = [...registeredAccounts.filter(acc => acc.email.toLowerCase() !== effectiveProfile.email.toLowerCase()), newAccount];
+          setRegisteredAccounts(updatedAccs);
+          safeStorage.setItem('ethiolearn_accounts', JSON.stringify(updatedAccs));
+          safeStorage.setItem('ethiolearn_active_email', effectiveProfile.email);
+          safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(effectiveProfile));
+          safeStorage.setItem('ethiolearn_has_seen_onboarding', 'true');
+
+          try {
+            await syncAuthSessionWithServer({
+              email: effectiveProfile.email,
+              uid,
+              role: isAdministratorEmail(effectiveProfile.email) ? 'admin' : 'student',
+              displayName: effectiveProfile.name
+            });
+          } catch (tokErr) {}
+
+          playSuccessChime();
+          setLoading(false);
+          onComplete(effectiveProfile);
+          return;
+        }
+      } catch (fbErr: any) {
+        console.warn('[Firebase Confirm Phone Error]:', fbErr);
+        if (fbErr?.code === 'auth/invalid-verification-code') {
+          setCodeError(lang === 'am' ? "የተሳሳተ የማረጋገጫ ኮድ ነው። እባክዎ በስልክዎ የደረሰውን ኮድ ያረጋግጡ።" : "Invalid SMS verification code. Please check the code received on your phone.");
+        } else if (fbErr?.code === 'auth/code-expired') {
+          setCodeError(lang === 'am' ? "የማረጋገጫ ኮዱ ጊዜው አልፏል። እባክዎ አዲስ ኮድ ይጠይቁ።" : "Verification code has expired. Please request a new code.");
+        } else {
+          setCodeError(fbErr?.message || (lang === 'am' ? "ማረጋገጥ አልተቻለም።" : "Verification failed."));
+        }
+        playFailureChime();
+        setLoading(false);
+        return;
+      }
+    }
+
+    // Fallback: check activation codes stored in Firestore/Server
+    try {
+      const targetEmail = pendingStudentProfile?.email || email.trim().toLowerCase();
+      const fbValid = await verifyActivationCodeWithFirebase(targetEmail, codeToVerify, 'registration');
+      if (fbValid) {
+        playSuccessChime();
+        setLoading(false);
+        const finalProfile: StudentProfile = pendingStudentProfile || {
+          name: name.trim() || 'Student',
+          email: targetEmail,
+          phone: cleanEthiopianPhone(phone).formatted,
+          university: university || "Wolkite University (WKU)",
+          year: year || "Freshman (1st Year)",
+          subjects: ["Emerging Technologies", "Communicative English", "Mathematics"],
+          claudeApiKey: "",
+          dailyGoalHours: 2,
+          theme: 'dark',
+          language: lang,
+          avatar: 'champion',
+          isRegistered: true,
+          unregisteredAICredits: 5,
+          isPro: false
+        };
+        onComplete(finalProfile);
+        return;
+      }
+    } catch (e) {}
+
+    setCodeError(lang === 'am' ? "የተሳሳተ የማረጋገጫ ኮድ ነው።" : "Invalid activation code.");
     playFailureChime();
     setLoading(false);
   };
@@ -1452,6 +1713,27 @@ export default function AuthPortalView({
                   )}
                   <span>{loading ? t.signInLoading : t.signInBtn}</span>
                 </button>
+
+                {authMethod === 'phone' && (
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSendPhoneSmsCode(phone)}
+                      disabled={loading || isPhoneAuthLoading}
+                      className="w-full py-3 bg-[#0c162c] hover:bg-[#122143] border border-amber-500/40 hover:border-amber-400 text-amber-300 font-bold text-xs rounded-xl cursor-pointer flex items-center justify-center gap-2 transition-all shadow-xs disabled:opacity-50"
+                    >
+                      {isPhoneAuthLoading ? (
+                        <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Smartphone className="w-4 h-4 text-[#F59E0B]" />
+                      )}
+                      <span>{lang === 'am' ? 'በፈጣን የFirebase SMS ኮድ ግባ' : 'Sign In with Firebase Phone SMS'}</span>
+                    </button>
+                    <p className="text-[10px] text-slate-500 text-center pt-1.5 font-mono">
+                      🇪🇹 Supports Ethiopian SIMs & Firebase test credentials
+                    </p>
+                  </div>
+                )}
               </form>
             )}
 
@@ -1737,6 +2019,21 @@ export default function AuthPortalView({
                   )}
                   <span>{loading ? t.loading : t.createAccountBtn}</span>
                 </button>
+
+                {/* Option to Verify Directly via Phone SMS */}
+                <button
+                  type="button"
+                  onClick={() => handleSendPhoneSmsCode(phone, true)}
+                  disabled={loading || isPhoneAuthLoading}
+                  className="w-full py-3 bg-[#0c162c] hover:bg-[#122143] border border-amber-500/40 hover:border-amber-400 text-amber-300 font-bold text-xs rounded-xl cursor-pointer flex items-center justify-center gap-2 transition-all shadow-xs disabled:opacity-50"
+                >
+                  {isPhoneAuthLoading ? (
+                    <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Smartphone className="w-4 h-4 text-[#F59E0B]" />
+                  )}
+                  <span>{lang === 'am' ? 'በስልክ SMS ተመዝገብ (Firebase Phone Auth)' : 'Verify & Register via Phone SMS'}</span>
+                </button>
               </form>
             )}
 
@@ -1893,6 +2190,144 @@ export default function AuthPortalView({
                   className="text-slate-400 hover:text-slate-200 transition cursor-pointer"
                 >
                   {lang === 'am' ? 'መረጃ ቀይር' : 'Edit Info'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* MODE: VERIFY PHONE CODE (FIREBASE PHONE AUTHENTICATION) */}
+        {/* ========================================================================= */}
+        {mode === 'verify_phone_code' && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="space-y-5 text-left"
+          >
+            {/* Firebase Phone Security Header */}
+            <div className="text-center space-y-2">
+              <div className="w-12 h-12 rounded-full bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-[#F59E0B] mx-auto shadow-[0_0_20px_rgba(245,158,11,0.25)]">
+                <Smartphone className="w-6 h-6" />
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#121c33] border border-amber-500/30 text-[#F59E0B] text-[10px] font-extrabold uppercase tracking-wider shadow-sm">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>{lang === 'am' ? 'የFirebase ስልክ ማረጋገጫ' : 'Firebase Phone Auth'}</span>
+              </div>
+              <h3 className="font-serif text-lg font-black text-white">
+                {lang === 'am' ? 'የSMS ማረጋገጫ ኮድ ያስገቡ' : 'Verify SMS One-Time Code'}
+              </h3>
+              <p className="text-xs text-slate-300 max-w-sm mx-auto leading-relaxed">
+                {lang === 'am'
+                  ? `ባለ 6-አሃዝ የማረጋገጫ ኮድ በFirebase SMS ወደ ስልክ ቁጥር `
+                  : `A 6-digit authentication code was sent via SMS to `}
+                <strong className="text-amber-300 font-mono underline">
+                  {cleanEthiopianPhone(phone).formatted || phone}
+                </strong>
+                {lang === 'am'
+                  ? ` ተልኳል። እባክዎ በስልክዎ የደረሰውን ኮድ ያስገቡ።`
+                  : `. Please enter the code received on your phone.`}
+              </p>
+            </div>
+
+            {/* Target Delivery Card */}
+            <div className="bg-[#090f1d] border border-slate-700/80 rounded-xl p-3.5 space-y-2 shadow-sm">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[10.5px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Smartphone className="w-3.5 h-3.5 text-[#F59E0B]" />
+                  <span>{lang === 'am' ? 'የተማሪ ስልክ ቁጥር' : 'Destination Mobile'}</span>
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 text-[9.5px] font-bold border border-emerald-500/30 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>{lang === 'am' ? 'SMS ተልኳል' : 'SMS Dispatched'}</span>
+                </span>
+              </div>
+              
+              <div className="flex items-center justify-between font-mono text-xs">
+                <span className="text-slate-400">{lang === 'am' ? 'ኢትዮጵያ (+251):' : 'Phone (E.164):'}</span>
+                <span className="font-bold text-amber-300 text-sm">
+                  {cleanEthiopianPhone(phone).formatted || phone}
+                </span>
+              </div>
+            </div>
+
+            {/* Test Numbers Guidance */}
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5 text-[11px] text-amber-200/90 leading-relaxed flex items-start gap-2">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold text-amber-300">
+                  {lang === 'am' ? 'የFirebase የሙከራ ቁጥሮች፡' : 'Firebase Test Credentials:'}
+                </span>{' '}
+                {lang === 'am'
+                  ? 'በFirebase ኮንሶል የተመዘገቡ የሙከራ ቁጥሮችን (ለምሳሌ +251 91 100 0000 በኮድ 123456) ለሙከራ መጠቀም ይችላሉ።'
+                  : 'Fictional/test numbers configured in Firebase Console (e.g. +251 91 100 0000 with 123456) verify instantly.'}
+              </div>
+            </div>
+
+            {codeError && (
+              <div className="p-3.5 bg-red-950/40 border border-red-500/50 text-red-300 text-xs rounded-xl flex items-start gap-2 shadow-sm">
+                <ShieldAlert className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                <p className="leading-relaxed">{codeError}</p>
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmPhoneOtp} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider block">
+                  {lang === 'am' ? 'ባለ 6-አሃዝ የSMS ኮድ' : 'Enter 6-Digit SMS Code'}
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  autoFocus
+                  placeholder="• • • • • •"
+                  value={verificationCodeInput}
+                  onChange={(e) => {
+                    setVerificationCodeInput(e.target.value.replace(/\D/g, ''));
+                    if (codeError) setCodeError(null);
+                  }}
+                  className="w-full bg-[#0a0f1d] border border-slate-700 focus:border-[#F59E0B] rounded-xl py-3.5 text-slate-100 placeholder-slate-600 outline-none text-2xl tracking-[0.4em] font-mono font-bold transition-all text-center focus:ring-2 focus:ring-[#F59E0B]/30"
+                />
+              </div>
+
+              {/* Submit Verification Button */}
+              <button
+                type="submit"
+                disabled={loading || verificationCodeInput.length < 6}
+                className="w-full py-3.5 bg-gradient-to-r from-[#F59E0B] via-[#EAB308] to-[#D97706] hover:brightness-105 active:scale-[0.99] text-black font-serif font-extrabold text-xs tracking-wider uppercase rounded-xl cursor-pointer flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(245,158,11,0.25)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <ShieldCheck className="w-4 h-4 text-black" />
+                )}
+                <span>
+                  {loading 
+                    ? (lang === 'am' ? 'በFirebase በማረጋገጥ ላይ...' : 'Verifying with Firebase...') 
+                    : (lang === 'am' ? 'ኮዱን አረጋግጥና ግባ' : 'Confirm Code & Sign In')}
+                </span>
+              </button>
+
+              <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => handleSendPhoneSmsCode(phone)}
+                  disabled={resendTimer > 0 || isPhoneAuthLoading}
+                  className={`font-bold transition cursor-pointer ${
+                    resendTimer > 0 ? 'text-slate-500 cursor-not-allowed' : 'text-[#F59E0B] hover:underline'
+                  }`}
+                >
+                  {resendTimer > 0
+                    ? `${lang === 'am' ? 'SMS እንደገና ለመላክ' : 'Resend SMS in'} ${resendTimer}s`
+                    : (lang === 'am' ? 'SMS እንደገና ላክ' : 'Resend SMS')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { playClickChime(); setMode('signin'); }}
+                  className="text-slate-400 hover:text-slate-200 transition cursor-pointer"
+                >
+                  {lang === 'am' ? 'ስልክ ቁጥር ቀይር' : 'Change Phone'}
                 </button>
               </div>
             </form>
@@ -2255,6 +2690,9 @@ export default function AuthPortalView({
           </motion.div>
         )}
       </motion.div>
+
+      {/* Invisible reCAPTCHA container for Firebase Phone Authentication */}
+      <div id="recaptcha-container" className="fixed bottom-0 right-0 pointer-events-none opacity-0 z-0" />
 
       {/* Privacy Policy & Terms Modal */}
       <LegalPrivacyTermsModal
