@@ -155,8 +155,8 @@ const CAMPAIGNS: PromoCampaign[] = [
     badge: { en: 'Official Student Channel • @ethiolearn_wku', am: 'ኦፊሴላዊ የቴሌግራም ቻናል' },
     badgeColor: 'bg-sky-500/15 text-sky-400 border-sky-500/30',
     title: { 
-      en: 'Join 15,000+ Ethiopian University Scholars on Telegram', 
-      am: 'ከ15,000+ ተማሪዎች ጋር በቴሌግራም ቻናላችን ይቀላቀሉ' 
+      en: 'Join 200+ Ethiopian University Scholars on Telegram', 
+      am: 'ከ200+ ተማሪዎች ጋር በቴሌግራም ቻናላችን ይቀላቀሉ' 
     },
     description: { 
       en: 'Receive instant alerts when new university exam keys are released, download high-yield study handout PDFs, and connect with peer study groups.', 
@@ -164,7 +164,7 @@ const CAMPAIGNS: PromoCampaign[] = [
     },
     ctaText: { en: 'Join Telegram Channel', am: 'ቴሌግራም ይቀላቀሉ' },
     icon: Send,
-    statValue: '15k+',
+    statValue: '200+',
     statLabel: { en: 'Active University Students', am: 'ንቁ ተማሪዎች' },
     accentColor: '#0EA5E9',
     actionType: 'telegram'
