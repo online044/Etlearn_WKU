@@ -218,5 +218,11 @@ service cloud.firestore {
       allow update: if isAdmin() && isValidId(annId) && isValidAnnouncement(request.resource.data);
       allow delete: if isAdmin();
     }
+
+    // 10. Student Auth Sessions (Never forget sign-in and sign-out timestamps)
+    match /auth_sessions/{sessionId} {
+      allow read, create, update: if true;
+      allow delete: if isAdmin();
+    }
   }
 }

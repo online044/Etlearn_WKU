@@ -52,6 +52,21 @@ export interface AccountInfo {
   passwordEncrypted: string;
   rememberMe: boolean;
   profile: StudentProfile;
+  lastSignInAt?: string;
+  lastSignOutAt?: string;
+}
+
+export interface AuthSessionRecord {
+  id: string;
+  type: 'signin' | 'signout';
+  email: string;
+  name?: string;
+  userId?: string;
+  timestamp: string; // ISO String
+  formattedTime: string; // Human readable
+  ethDate: string; // Ethiopian calendar date
+  device?: string;
+  durationMinutes?: number;
 }
 
 export interface StudentProfile {
@@ -95,6 +110,12 @@ export interface StudentProfile {
   referralCode?: string;
   referredBy?: string;
   userRole?: 'student' | 'instructor' | 'admin' | 'super_admin';
+  // Session audit trail - Never forget when students sign in and sign out
+  lastSignInAt?: string;
+  lastSignOutAt?: string;
+  firstSignInAt?: string;
+  signInCount?: number;
+  lastSessionDurationMinutes?: number;
 }
 
 export interface CouponCode {

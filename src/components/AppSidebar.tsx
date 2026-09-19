@@ -12,6 +12,7 @@ import {
   HelpCircle, Scale, Lock, HeartHandshake, Layers
 } from 'lucide-react';
 import EthioLearnLogo from './EthioLearnLogo';
+import StudentAvatar from './StudentAvatar';
 import { StudentProfile } from '../types';
 import { playClickChime } from '../utils/audio';
 import { PWAInstallButton } from './PWAInstallButton';
@@ -129,21 +130,28 @@ export default function AppSidebar({
             <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-6 custom-scrollbar text-xs">
               
               {/* Profile Overview Card */}
-              <div className="p-3.5 rounded-2xl bg-gradient-to-br from-white/[0.05] to-white/[0.02] border border-white/10 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 font-black font-serif text-sm">
-                    {profile.name ? profile.name.charAt(0).toUpperCase() : 'S'}
-                  </div>
-                  <div>
-                    <div className="font-bold text-white text-sm flex items-center gap-1.5">
-                      <span>{profile.name || (isAm ? 'ተማሪ' : 'Student')}</span>
+              <div 
+                onClick={() => handleNavClick('profile')}
+                className="p-3.5 rounded-2xl bg-gradient-to-br from-white/[0.05] to-white/[0.02] border border-white/10 flex items-center justify-between hover:border-amber-400/40 transition-all cursor-pointer group"
+                title={isAm ? "የተማሪ መገለጫ ክፈት" : "Open Student Profile"}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <StudentAvatar 
+                    avatar={profile.avatar} 
+                    name={profile.name} 
+                    size={42} 
+                    className="border-2 border-amber-400 shadow-md group-hover:scale-105 transition-transform"
+                  />
+                  <div className="min-w-0">
+                    <div className="font-bold text-white text-sm flex items-center gap-1.5 truncate">
+                      <span className="truncate group-hover:text-amber-400 transition-colors">{profile.name || (isAm ? 'ተማሪ' : 'Student')}</span>
                       {profile.isPro && (
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-500 text-slate-950 uppercase">
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-500 text-slate-950 uppercase shrink-0">
                           PRO
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] text-slate-400">
+                    <div className="text-[11px] text-slate-400 truncate">
                       {profile.university || 'Wolkite University'} • {profile.department || (isAm ? 'ፋኩልቲ' : 'General')}
                     </div>
                   </div>
@@ -151,8 +159,11 @@ export default function AppSidebar({
 
                 <button
                   type="button"
-                  onClick={() => handleNavClick('profile')}
-                  className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleNavClick('profile');
+                  }}
+                  className="p-2 rounded-lg bg-white/5 group-hover:bg-amber-500/20 text-slate-300 group-hover:text-amber-400 transition-colors cursor-pointer shrink-0"
                   title="View Profile"
                 >
                   <ChevronRight className="w-4 h-4" />

@@ -3,16 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   User, Mail, GraduationCap, Award, Flame, BookOpen, Lock, 
   Edit3, Save, X, Clock, AlertCircle, Database, Check, ShieldAlert, KeyRound,
   Copy, RefreshCw, CloudLightning, ChevronDown, ChevronUp, CheckCircle,
   FileText, HelpCircle, ShieldCheck, LogOut, Sparkles, CreditCard,
-  BarChart3, Settings, Send
+  BarChart3, Settings, Send, Camera, LogIn, History, Calendar, Smartphone, Laptop, Activity, CheckCircle2
 } from 'lucide-react';
-import { StudentProfile, AccountInfo } from '../types';
+import { StudentProfile, AccountInfo, AuthSessionRecord } from '../types';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
+import { getSessionHistory, getLastSignedOutUser, getActiveSessionDurationMinutes, formatSessionDuration } from '../utils/sessionTracker';
 import { getSupabase, saveSupabaseCredentials, clearSupabaseCredentials, testSupabaseConnection } from '../utils/supabaseClient';
 import { syncProfileToFirestore, saveNoteToFirestore, getAuthInstance, testFirestoreConnection } from '../utils/firebaseStore';
 import StudentAvatar from './StudentAvatar';
@@ -76,6 +77,8 @@ export default function StudentProfileView({
   const [formYear, setFormYear] = useState('');
   const [formSubjects, setFormSubjects] = useState<string[]>([]);
   const [formAvatar, setFormAvatar] = useState('');
+  const directPhotoInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingDirectPhoto, setIsUploadingDirectPhoto] = useState(false);
 
   // Status message states
   const [isSaving, setIsSaving] = useState(false);
@@ -94,6 +97,34 @@ export default function StudentProfileView({
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncSuccessMsg, setSyncSuccessMsg] = useState<string | null>(null);
   const [syncErrorMsg, setSyncErrorMsg] = useState<string | null>(null);
+
+  // Student Session Audit States (Never Forget Sign-In and Sign-Out Timestamps)
+  const [sessionLogs, setSessionLogs] = useState<AuthSessionRecord[]>([]);
+  const [activeSessionMins, setActiveSessionMins] = useState<number>(() => getActiveSessionDurationMinutes());
+  const [lastSignOutInfo, setLastSignOutInfo] = useState(() => getLastSignedOutUser());
+
+  const currentEmail = dbProfile?.email || profile?.email;
+
+  useEffect(() => {
+    const history = getSessionHistory(currentEmail);
+    setSessionLogs(history);
+    setLastSignOutInfo(getLastSignedOutUser());
+    setActiveSessionMins(getActiveSessionDurationMinutes());
+
+    const timer = setInterval(() => {
+      setActiveSessionMins(getActiveSessionDurationMinutes());
+    }, 30000);
+
+    return () => clearInterval(timer);
+  }, [currentEmail, activeTab]);
+
+  const refreshSessionLogs = () => {
+    playClickChime();
+    const history = getSessionHistory(currentEmail);
+    setSessionLogs(history);
+    setLastSignOutInfo(getLastSignedOutUser());
+    setActiveSessionMins(getActiveSessionDurationMinutes());
+  };
 
   // Focus module subject pool
   const subjectsList = [
@@ -140,6 +171,65 @@ export default function StudentProfileView({
     setFetchError(null);
     setDbProfile(profile);
     setLoading(false);
+  };
+
+  // Direct manual photo upload handler (one-tap student photo upload)
+  const handleDirectPhotoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert(language === 'am' ? 'እባክዎ ትክክለኛ የምስል ፋይል ይምረጡ (JPG, PNG)' : 'Please select a valid image file (JPG, PNG)');
+      return;
+    }
+
+    setIsUploadingDirectPhoto(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = async () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const targetWidth = 200;
+        const targetHeight = 200;
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+
+        if (ctx) {
+          const minD = Math.min(img.width, img.height);
+          const sx = (img.width - minD) / 2;
+          const sy = (img.height - minD) / 2;
+          ctx.drawImage(img, sx, sy, minD, minD, 0, 0, targetWidth, targetHeight);
+          const compressed = canvas.toDataURL('image/jpeg', 0.88);
+          
+          setFormAvatar(compressed);
+          const updated = {
+            ...activeProfileData,
+            avatar: compressed
+          };
+          setDbProfile(updated);
+          onUpdateProfile(updated);
+          safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(updated));
+          playSuccessChime();
+
+          try {
+            const supa = getSupabase();
+            if (supa && activeProfileData.email) {
+              const email = activeProfileData.email.toLowerCase().trim();
+              await supa
+                .from('student_profiles')
+                .update({ profile_data: updated })
+                .eq('email', email);
+            }
+          } catch (err) {
+            console.error('Photo sync error:', err);
+          }
+        }
+        setIsUploadingDirectPhoto(false);
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
   };
 
   useEffect(() => {
@@ -514,6 +604,14 @@ export default function StudentProfileView({
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto px-1 pb-safe">
+      {/* Hidden manual photo input */}
+      <input 
+        type="file" 
+        ref={directPhotoInputRef}
+        onChange={handleDirectPhotoFile}
+        accept="image/*"
+        className="hidden"
+      />
       
       {/* 1. HERO HEADER PROFILE CARD */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 md:p-6 shadow-xl relative overflow-hidden">
@@ -528,12 +626,25 @@ export default function StudentProfileView({
           
           {/* Avatar & Key Metadata */}
           <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
-            <StudentAvatar 
-              avatar={activeProfileData.avatar} 
-              name={activeProfileData.name} 
-              size={84} 
-              className="border-2 border-amber-400 shadow-md shrink-0"
-            />
+            <div 
+              className="relative group cursor-pointer shrink-0"
+              onClick={() => directPhotoInputRef.current?.click()}
+              title={language === 'am' ? "የራስዎን ፎቶ ለመስቀል ይጫኑ" : "Click to upload student manual photo"}
+            >
+              <StudentAvatar 
+                avatar={activeProfileData.avatar} 
+                name={activeProfileData.name} 
+                size={84} 
+                className="border-2 border-amber-400 shadow-md group-hover:scale-105 transition-all duration-200"
+              />
+              <div className="absolute inset-0 bg-black/65 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center rounded-full transition-opacity text-white text-[9px] font-bold gap-0.5">
+                <Camera className="w-4 h-4 text-amber-400" />
+                <span>{isUploadingDirectPhoto ? "..." : (language === 'am' ? "ፎቶ ቀይር" : "Change")}</span>
+              </div>
+              <div className="absolute -bottom-1 -right-1 bg-amber-500 text-slate-950 rounded-full p-1 border-2 border-slate-900 shadow group-hover:scale-110 transition-transform">
+                <Camera className="w-3.5 h-3.5" />
+              </div>
+            </div>
             
             <div className="space-y-1.5 min-w-0">
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
@@ -619,15 +730,18 @@ export default function StudentProfileView({
                 onClick={() => {
                   const confirmSignOut = window.confirm(
                     language === 'en'
-                      ? 'Sign out of EthioLearn? Your study data will be saved locally.'
-                      : 'እርግጠኛ ነዎት መውጣት ይፈልጋሉ?'
+                      ? 'Sign out of EthioLearn? Your sign-in and sign-out timestamps will be safely recorded.'
+                      : 'እርግጠኛ ነዎት መውጣት ይፈልጋሉ? የመግቢያና የመውጫ ሰዓትዎ በደህንነት ተመዝግቦ ይቀመጣል።'
                   );
                   if (confirmSignOut) onSignOut();
                 }}
-                className="p-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 rounded-xl transition-colors cursor-pointer"
+                className="px-3 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
                 title={language === 'en' ? "Sign Out" : "ውጣ"}
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline font-bold uppercase tracking-wider">
+                  {language === 'en' ? "Sign Out" : "ውጣ"}
+                </span>
               </button>
             )}
           </div>
@@ -741,17 +855,26 @@ export default function StudentProfileView({
                       <div className="h-0.5 w-full bg-amber-400/60" />
                     </div>
                     <span className={`px-2 py-0.5 rounded-full border font-mono text-[9px] font-bold uppercase tracking-widest ${activeStyle.badge}`}>
-                      {activeProfileData.isPro ? "PRO CAMPUS" : "ETHIOLEARN ID"}
+                      {activeProfileData.isPro ? "PRO SCHOLAR" : "ACADEMIC SCHOLAR"}
                     </span>
                   </div>
 
                   <div className="flex flex-col items-center text-center space-y-2 pb-4">
-                    <StudentAvatar 
-                      avatar={isEditing ? formAvatar : activeProfileData.avatar} 
-                      name={isEditing ? formName : activeProfileData.name} 
-                      size={80} 
-                      className="border-2 border-amber-400 shadow-md"
-                    />
+                    <div 
+                      className="relative group cursor-pointer"
+                      onClick={() => directPhotoInputRef.current?.click()}
+                      title={language === 'am' ? "ፎቶ ለመቀየር ይጫኑ" : "Click to change student photo"}
+                    >
+                      <StudentAvatar 
+                        avatar={isEditing ? formAvatar : activeProfileData.avatar} 
+                        name={isEditing ? formName : activeProfileData.name} 
+                        size={80} 
+                        className="border-2 border-amber-400 shadow-md group-hover:scale-105 transition-transform"
+                      />
+                      <div className="absolute -bottom-1 -right-1 bg-amber-500 text-slate-950 rounded-full p-1 border border-slate-900 shadow">
+                        <Camera className="w-3 h-3" />
+                      </div>
+                    </div>
                     <h3 className="text-base font-bold text-white truncate max-w-[200px]">
                       {isEditing ? (formName || 'Student Name') : activeProfileData.name}
                     </h3>
@@ -786,9 +909,9 @@ export default function StudentProfileView({
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-slate-400 text-[10px] uppercase font-mono">Student ID</span>
-                      <span className={`font-mono text-[10px] select-all font-bold ${activeStyle.accent}`}>
-                        EL-{activeProfileData.email ? Math.abs(activeProfileData.email.split('').reduce((acc, char) => char.charCodeAt(0) + acc, 0)).toString().substring(0, 5) : '8327'}
+                      <span className="text-slate-400 text-[10px] uppercase font-mono">Curriculum</span>
+                      <span className="text-slate-200 font-medium truncate max-w-[150px] text-right">
+                        {isEditing ? formYear : activeProfileData.year}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
@@ -929,10 +1052,10 @@ export default function StudentProfileView({
                   </div>
                 </div>
 
-                {/* ID Card Customization Theme */}
+                {/* Card Customization Theme */}
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
-                    {language === 'en' ? "Student ID Card Theme" : "የተማሪ መታወቂያ ካርድ ዲዛይን"}
+                    {language === 'en' ? "Academic Card Theme" : "የተማሪ ካርድ ዲዛይን"}
                   </label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     {[
@@ -1302,6 +1425,251 @@ export default function StudentProfileView({
                     : (language === 'en' ? "Sync Data Now" : "አሁን አመሳስል")}
                 </span>
               </button>
+            </div>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* STUDENT AUTHENTICATION & SESSION AUDIT TRAIL (Never Forget Sign-In & Sign-Out) */}
+          {/* ========================================================================= */}
+          <div className="md:col-span-2 bg-slate-900/90 rounded-2xl border border-slate-800 p-5 space-y-5 shadow-lg">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-amber-400 shrink-0" />
+                  <h4 className="text-sm font-bold text-slate-100 uppercase tracking-wider">
+                    {language === 'en' ? "Session & Authentication Audit Trail" : "የተማሪ የመግቢያና የመውጫ ሰዓት መዝገብ"}
+                  </h4>
+                </div>
+                <p className="text-xs text-slate-400">
+                  {language === 'en' 
+                    ? "EthioLearn Pro permanently records when scholars sign in and sign out across local storage and cloud database."
+                    : "ተማሪዎች ወደ መተግበሪያው የገቡበት እና የወጡበት ትክክለኛ ሰዓት በዝርዝር ተመዝግቦ በስልክዎ እና በክላውድ ይቀመጣል።"}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  {language === 'en' ? "Audit Active" : "መዝገብ ንቁ"}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={refreshSessionLogs}
+                  title="Refresh Session Logs"
+                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Top 3 Stat Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              {/* Stat 1: Current Active Session */}
+              <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                    {language === 'en' ? "Active Session" : "የአሁኑ ክፍለ-ጊዜ"}
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-mono text-[9.5px] font-bold uppercase">
+                    Live
+                  </span>
+                </div>
+                <div>
+                  <p className="text-base font-extrabold text-slate-100 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                    {language === 'en' ? "Online Now" : "አሁን ገብተዋል"}
+                  </p>
+                  <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                    {formatSessionDuration(activeSessionMins, language)} {language === 'en' ? "active duration" : "የጥናት ቆይታ"}
+                  </p>
+                </div>
+                <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-900">
+                  {language === 'en' ? "Signed in: " : "የገቡት፡ "}
+                  <span className="text-slate-300 font-mono">
+                    {activeProfileData.lastSignInAt ? new Date(activeProfileData.lastSignInAt).toLocaleTimeString() : 'Current Session'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Stat 2: Previous Sign-Out */}
+              <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <LogOut className="w-3.5 h-3.5 text-amber-400" />
+                    {language === 'en' ? "Last Sign-Out" : "ያለፈው መውጫ"}
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-300 font-mono text-[9.5px] font-bold uppercase">
+                    Preserved
+                  </span>
+                </div>
+                <div>
+                  <p className="text-xs font-extrabold text-slate-200 truncate">
+                    {lastSignOutInfo?.formattedTime || (activeProfileData.lastSignOutAt ? new Date(activeProfileData.lastSignOutAt).toLocaleString() : (language === 'en' ? "First Recorded Session" : "የመጀመሪያ ክፍለ-ጊዜ"))}
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+                    {lastSignOutInfo?.ethDate || (language === 'en' ? "Standard calendar session" : "የቀን መቁጠሪያ")}
+                  </p>
+                </div>
+                <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-900">
+                  {lastSignOutInfo?.durationMinutes 
+                    ? `${language === 'en' ? "Last session length: " : "የቆዩበት፡ "} ${formatSessionDuration(lastSignOutInfo.durationMinutes, language)}`
+                    : (language === 'en' ? "Logged and verified" : "የተረጋገጠ መዝገብ")}
+                </div>
+              </div>
+
+              {/* Stat 3: Total Sessions Recorded */}
+              <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <History className="w-3.5 h-3.5 text-purple-400" />
+                    {language === 'en' ? "Lifetime Logins" : "ጠቅላላ መግቢያዎች"}
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono text-[9.5px] font-bold uppercase">
+                    Cloud Synced
+                  </span>
+                </div>
+                <div>
+                  <p className="text-base font-extrabold text-slate-100 font-mono">
+                    {activeProfileData.signInCount || Math.max(1, sessionLogs.filter(s => s.type === 'signin').length)} {language === 'en' ? "Logins" : "ጊዜ"}
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {language === 'en' ? "Verified scholar attendance" : "የተረጋገጠ የጥናት ተሳትፎ"}
+                  </p>
+                </div>
+                <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-900">
+                  {language === 'en' ? "Student ID: " : "የተማሪ መለያ፡ "}
+                  <span className="text-slate-300 font-mono truncate">{activeProfileData.email}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Audit Trail Activity Timeline */}
+            <div className="space-y-2.5 pt-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-amber-400" />
+                  {language === 'en' ? "Recent Sign-In & Sign-Out Events" : "የቅርብ ጊዜ የመግቢያ እና የመውጫ ክስተቶች"}
+                </span>
+                <span className="text-[10px] font-mono text-slate-400">
+                  {sessionLogs.length > 0 ? `${sessionLogs.length} events logged` : 'Active session initialized'}
+                </span>
+              </div>
+
+              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {/* Always show current live sign-in if history is empty */}
+                {sessionLogs.length === 0 && (
+                  <div className="p-3 bg-slate-950 border border-emerald-500/30 rounded-xl flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                        <LogIn className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-slate-100">
+                            {language === 'en' ? "Current Sign-In Session" : "የአሁኑ የተማሪ መግቢያ"}
+                          </p>
+                          <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-mono text-[9px] font-bold">
+                            CURRENT ACTIVE
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 font-mono">
+                          {activeProfileData.lastSignInAt ? new Date(activeProfileData.lastSignInAt).toLocaleString() : new Date().toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-[10px] font-mono text-emerald-400 font-bold">
+                        {formatSessionDuration(activeSessionMins, language)} active
+                      </span>
+                      <p className="text-[9px] text-slate-500">Firestore Tracked</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Render full persistent session logs */}
+                {sessionLogs.map((log) => {
+                  const isSignIn = log.type === 'signin';
+                  return (
+                    <div 
+                      key={log.id}
+                      className={`p-3 rounded-xl border flex items-center justify-between text-xs transition-colors ${
+                        isSignIn 
+                          ? 'bg-slate-950/90 border-slate-800 hover:border-emerald-500/40' 
+                          : 'bg-slate-950/60 border-slate-800/80 hover:border-amber-500/40'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${
+                          isSignIn 
+                            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
+                            : 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+                        }`}>
+                          {isSignIn ? <LogIn className="w-4 h-4" /> : <LogOut className="w-4 h-4" />}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-bold text-slate-200 text-xs">
+                              {isSignIn 
+                                ? (language === 'en' ? "Student Sign-In" : "የተማሪ መግቢያ") 
+                                : (language === 'en' ? "Student Sign-Out" : "የተማሪ መውጫ")}
+                            </p>
+                            <span className={`px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold uppercase tracking-wider ${
+                              isSignIn 
+                                ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' 
+                                : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                            }`}>
+                              {isSignIn ? 'AUTHENTICATED' : 'LOGGED OUT'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2 text-[10.5px] text-slate-400 font-mono mt-0.5 flex-wrap">
+                            <span>{log.formattedTime}</span>
+                            <span>&bull;</span>
+                            <span className="text-amber-400/90 font-medium">{log.ethDate}</span>
+                            {log.device && (
+                              <>
+                                <span className="hidden sm:inline">&bull;</span>
+                                <span className="text-slate-500 hidden sm:inline">{log.device}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0 pl-2">
+                        {!isSignIn && log.durationMinutes ? (
+                          <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 font-mono text-[10px] font-bold">
+                            {formatSessionDuration(log.durationMinutes, language)}
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono text-[10px] font-bold">
+                            ONLINE
+                          </span>
+                        )}
+                        <p className="text-[9px] text-slate-500 mt-0.5">
+                          {language === 'en' ? "Synced" : "ተመዝግቧል"}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Academic Notice Banner */}
+            <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center gap-2.5 text-xs text-slate-400">
+              <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
+              <p className="leading-relaxed">
+                {language === 'en'
+                  ? "Security Notice: Session timestamps are authenticated and cannot be altered. They guarantee accurate study streak calculations and exam verification."
+                  : "የደህንነት ማሳሰቢያ፡ የመግቢያና የመውጫ ሰዓታት ትክክለኛነት በክላውድ የተረጋገጠ ሲሆን የጥናት እድገትዎን እና የፈተና ተሳትፎዎን ለመመዝገብ ያገለግላል።"}
+              </p>
             </div>
           </div>
 

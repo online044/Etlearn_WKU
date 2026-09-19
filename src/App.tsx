@@ -17,6 +17,7 @@ import ExamPrep from './components/ExamPrep';
 import StudyNotesView from './components/StudyNotesView';
 import HomeDashboard from './components/HomeDashboard';
 import StudentProfileView from './components/StudentProfileView';
+import StudentAvatar from './components/StudentAvatar';
 import BookStoreView from './components/BookStoreView';
 import UniversityExamsView from './components/UniversityExamsView';
 import UpgradeProView from './components/UpgradeProView';
@@ -45,6 +46,7 @@ import {
 import { signOut as firebaseSignOut } from 'firebase/auth';
 
 import { getEthiopianDate } from './utils/ethiopianCalendar';
+import { recordSignIn, recordSignOut } from './utils/sessionTracker';
 import { playClickChime, playSuccessChime, playFailureChime } from './utils/audio';
 import { initAuth, googleSignIn, googleSignInRedirect, logoutGoogle, exportAnalyticsToGoogleSheets } from './utils/workspace';
 import { User as FirebaseUser } from 'firebase/auth';
@@ -135,9 +137,34 @@ function getCurrentStreak(): number {
   return currentStreak;
 }
 
+const DEFAULT_STUDENT_PROFILE: StudentProfile = {
+  id: 'guest-scholar',
+  name: 'Scholar',
+  university: 'Wolkite University',
+  year: 'Freshman (Year 1)',
+  department: 'Freshman Common Courses',
+  subjects: [
+    "Emerging Technologies",
+    "Introduction to Economics",
+    "General Biology",
+    "Communicative English",
+    "Moral and Civic Education",
+    "Mathematics",
+    "Geography"
+  ],
+  claudeApiKey: '',
+  dailyGoalHours: 2,
+  theme: 'dark',
+  language: 'both',
+  avatar: 'star',
+  isPro: false,
+  proStatus: 'none',
+  unregisteredAICredits: 20
+};
+
 export default function App() {
   // Load profile with multi-layer fallback to reliably remember the student
-  const [profile, setProfile] = useState<StudentProfile | null>(() => {
+  const [profile, setProfile] = useState<StudentProfile>(() => {
     // 1. Check primary current profile
     const saved = safeStorage.getItem('ethiolearn_current_profile');
     if (saved) {
@@ -179,7 +206,8 @@ export default function App() {
         }
       } catch (e) {}
     }
-    return null;
+    // 3. Fallback to default scholar profile immediately so student enters the app directly without any front greeting or intro tour
+    return DEFAULT_STUDENT_PROFILE;
   });
 
   // Persistent language preference
@@ -357,6 +385,16 @@ export default function App() {
       console.warn("Failed standard Ethiopian calendar compute:", e);
     }
   }, []);
+
+  // Active session tracking - Never forget sign-in and sign-out timestamps
+  useEffect(() => {
+    if (profile && profile.email && profile.email !== DEFAULT_STUDENT_PROFILE.email) {
+      const activeStart = safeStorage.getItem('ethiolearn_active_session_start');
+      if (!activeStart) {
+        recordSignIn(profile, profile.email);
+      }
+    }
+  }, [profile?.email]);
 
   // Sync and initialize real active study streak
   useEffect(() => {
@@ -749,34 +787,53 @@ export default function App() {
     }
   };
 
-  const handleOnboardingComplete = (completedProfile: StudentProfile) => {
+  const handleOnboardingComplete = async (completedProfile: StudentProfile) => {
     // Override theme to default to current selected style
     const updated = { ...completedProfile, theme: themeMode };
-    setProfile(updated);
-    safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(updated));
-    if (completedProfile.email) {
-      safeStorage.setItem('ethiolearn_active_email', completedProfile.email.toLowerCase().trim());
+
+    // Accurately record sign-in timestamp, increment session counters, and sync to cloud
+    const { updatedProfile } = await recordSignIn(updated, updated.email);
+
+    setProfile(updatedProfile);
+    safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(updatedProfile));
+    if (updatedProfile.email) {
+      safeStorage.setItem('ethiolearn_active_email', updatedProfile.email.toLowerCase().trim());
     }
-    syncWithSupabase(updated);
+    syncWithSupabase(updatedProfile);
     playSuccessChime();
-    showToast(`Welcome ${completedProfile.name}!`);
+    showToast(`Welcome ${updatedProfile.name}!`);
   };
 
-  const handleProfileReset = () => {
+  const handleProfileReset = async () => {
     playClickChime();
     if (window.confirm("Would you like to reset your profile and re-register?")) {
+      if (profile && profile.email) {
+        await recordSignOut(profile, profile.email);
+      }
       safeStorage.removeItem('ethiolearn_current_profile');
-      setProfile(null);
+      safeStorage.removeItem('ethiolearn_active_email');
+      setProfile(DEFAULT_STUDENT_PROFILE);
     }
   };
 
   const handleSignOut = async () => {
     playClickChime();
-    // Clear local profile and authentication variables
+
+    // 1. Accurately record student sign-out event with timestamp, duration, and cloud sync BEFORE clearing session
+    const currentActiveEmail = profile?.email || safeStorage.getItem('ethiolearn_active_email');
+    if (profile && currentActiveEmail) {
+      try {
+        await recordSignOut(profile, currentActiveEmail);
+      } catch (err) {
+        console.warn('[SignOut Session Tracking Warning]:', err);
+      }
+    }
+
+    // 2. Clear local profile and authentication variables
     safeStorage.removeItem('ethiolearn_current_profile');
     safeStorage.removeItem('ethiolearn_active_email');
     clearSessionToken();
-    setProfile(null);
+    setProfile(DEFAULT_STUDENT_PROFILE);
     
     // Clear Google Workspace auth session if active
     if (googleUser) {
@@ -810,7 +867,7 @@ export default function App() {
     }
     
     playSuccessChime();
-    showToast(language === 'en' ? "Signed out successfully." : "በተሳካ ሁኔታ ወጥተዋል።");
+    showToast(language === 'en' ? "Signed out successfully. Session recorded." : "በተሳካ ሁኔታ ወጥተዋል። የመውጫ ሰዓትዎ ተመዝግቧል።");
   };
 
   const handleSyncStatsToSheets = async () => {
@@ -1184,12 +1241,25 @@ export default function App() {
               </div>
             )}
 
+            {/* Student Profile Icon with manual photo - opens profile on touch/click */}
             <button
-              onClick={handleProfileReset}
-              className="p-2.5 border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 rounded-xl hover:bg-red-50 dark:hover:bg-zinc-800 hover:text-red-650 transition-all text-slate-500 dark:text-zinc-400 cursor-pointer"
-              title="Reset Profile"
+              onClick={() => {
+                triggerHaptic('light');
+                playClickChime();
+                setCurrentPage('profile');
+              }}
+              className="p-1 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 rounded-xl hover:border-amber-400/60 hover:scale-105 active:scale-95 transition-all cursor-pointer flex items-center gap-2 group"
+              title={language === 'am' ? "የተማሪ መገለጫ ይክፈቱ" : "Open Student Profile"}
             >
-              <UserIcon className="w-4 h-4" />
+              <StudentAvatar 
+                avatar={profile.avatar} 
+                name={profile.name} 
+                size={34} 
+                className="border border-amber-400/60 shadow-sm group-hover:border-amber-400"
+              />
+              <span className="hidden md:inline text-xs font-semibold text-slate-700 dark:text-slate-200 group-hover:text-amber-400 max-w-[110px] truncate pr-1">
+                {profile.name || 'Scholar'}
+              </span>
             </button>
           </div>
 
@@ -1433,7 +1503,12 @@ export default function App() {
               currentPage === 'profile' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <UserIcon className="w-5 h-5 shrink-0" />
+            <StudentAvatar 
+              avatar={profile.avatar} 
+              name={profile.name} 
+              size={24} 
+              className={`transition-all ${currentPage === 'profile' ? 'border-2 border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.6)] scale-110' : 'border border-slate-700 opacity-80'}`}
+            />
             <span className="text-[10px] font-semibold mt-1">
               {language === 'en' ? 'Profile' : 'መገለጫ'}
             </span>

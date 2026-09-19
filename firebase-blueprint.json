@@ -213,6 +213,25 @@
         "expiresAt": { "type": "string" }
       },
       "required": ["id", "email", "code", "type", "verified"]
+    },
+    "auth_session": {
+      "title": "AuthSession",
+      "description": "Detailed audit log record of student sign-in and sign-out timestamps, session duration, and device information.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["signin", "signout"] },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "userId": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "formattedTime": { "type": "string" },
+        "ethDate": { "type": "string" },
+        "device": { "type": "string" },
+        "durationMinutes": { "type": "integer" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "type", "email", "timestamp"]
     }
   },
   "firestore": {
@@ -255,6 +274,10 @@
     "/announcements/{annId}": {
       "schema": "announcement",
       "description": "Collection of platform announcements and campus bulletins published by the administrator."
+    },
+    "/auth_sessions/{sessionId}": {
+      "schema": "auth_session",
+      "description": "Collection of student sign-in and sign-out audit trail records permanently preserved in Firestore."
     }
   }
 }

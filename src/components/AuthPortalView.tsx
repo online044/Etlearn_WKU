@@ -28,12 +28,13 @@ import {
   Key, User, Landmark, GraduationCap, ArrowRight, Eye, EyeOff, 
   Mail, Lock, LogIn, UserPlus, ArrowLeft, ShieldAlert, CheckCircle, 
   Sparkles, RefreshCw, Trash2, Smartphone, ShieldCheck, Check, Copy, 
-  CheckCircle2, FileText, ChevronDown, ExternalLink
+  CheckCircle2, FileText, ChevronDown, ExternalLink, Clock
 } from 'lucide-react';
 import EthioLearnLogo from './EthioLearnLogo';
 import LegalPrivacyTermsModal from './LegalPrivacyTermsModal';
 import { safeStorage } from '../utils/safeStorage';
 import { isAdministratorEmail } from '../utils/adminAuth';
+import { getLastSignedOutUser } from '../utils/sessionTracker';
 import { ETHIOPIAN_UNIVERSITIES, onboardingTranslations } from './SplashOnboarding';
 
 export interface AccountInfo {
@@ -42,6 +43,9 @@ export interface AccountInfo {
   passwordEncrypted: string;
   rememberMe: boolean;
   profile: StudentProfile;
+  lastSignInAt?: string;
+  lastSignOutAt?: string;
+  lastEthDate?: string;
 }
 
 interface AuthPortalViewProps {
@@ -179,6 +183,7 @@ export default function AuthPortalView({
   const [registeredAccounts, setRegisteredAccounts] = useState<AccountInfo[]>([]);
   const [showAllSavedAccounts, setShowAllSavedAccounts] = useState(false);
   const [isPopupBlocked, setIsPopupBlocked] = useState(false);
+  const [lastSignedOutUser, setLastSignedOutUser] = useState(() => getLastSignedOutUser());
 
   // Modals
   const [showLegalModal, setShowLegalModal] = useState(false);
@@ -187,6 +192,12 @@ export default function AuthPortalView({
   // Load saved accounts from storage on mount & check URL verification params
   useEffect(() => {
     try {
+      const recentSignOut = getLastSignedOutUser();
+      setLastSignedOutUser(recentSignOut);
+      if (recentSignOut?.email && !email) {
+        setEmail(recentSignOut.email);
+      }
+
       const stored = safeStorage.getItem('ethiolearn_accounts');
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -1271,6 +1282,38 @@ export default function AuthPortalView({
               </button>
             </div>
 
+            {/* Session Memory Reassurance Banner (Never forget when student signed out) */}
+            {mode === 'signin' && lastSignedOutUser && (
+              <div className="bg-[#0b1426] border border-amber-500/30 rounded-xl p-3 flex items-center justify-between text-xs shadow-xs">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 border border-amber-500/30">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="text-slate-200 font-bold text-xs truncate">
+                        {lang === 'am' 
+                          ? `እንኳን ደህና ተመለሱ፡ ${lastSignedOutUser.name || 'ተማሪ'}` 
+                          : `Welcome Back, ${lastSignedOutUser.name || 'Scholar'}`}
+                      </p>
+                      <span className="px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-400 font-mono text-[9px] font-bold border border-amber-500/20">
+                        {lang === 'am' ? 'የተመዘገበ ክፍለ-ጊዜ' : 'SESSION LOGGED'}
+                      </span>
+                    </div>
+                    <p className="text-slate-400 text-[10.5px] truncate font-mono mt-0.5">
+                      {lang === 'am' 
+                        ? `የወጡት፡ ${lastSignedOutUser.formattedTime} (${lastSignedOutUser.ethDate})` 
+                        : `Last signed out: ${lastSignedOutUser.formattedTime} (${lastSignedOutUser.ethDate})`}
+                    </p>
+                  </div>
+                </div>
+
+                <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-amber-300 font-mono text-[10px] shrink-0 font-bold">
+                  {lastSignedOutUser.durationMinutes}m {lang === 'am' ? 'ቆይታ' : 'session'}
+                </span>
+              </div>
+            )}
+
             {/* Quick Resume Card for Saved Accounts on Device (shown in Sign In mode) */}
             {mode === 'signin' && registeredAccounts.length > 0 && (
               <div className="bg-[#090f1d] border border-slate-800/90 rounded-xl p-3.5 space-y-2.5 shadow-sm">
@@ -1309,6 +1352,16 @@ export default function AuthPortalView({
                           <p className="text-[10px] text-slate-400 truncate">
                             {acc.profile?.university || acc.email}
                           </p>
+                          {(acc.lastSignOutAt || acc.lastSignInAt) && (
+                            <p className="text-[9.5px] text-amber-400/90 truncate flex items-center gap-1 mt-0.5 font-mono">
+                              <Clock className="w-2.5 h-2.5 shrink-0" />
+                              <span>
+                                {acc.lastSignOutAt 
+                                  ? `${lang === 'am' ? 'የወጡት፡ ' : 'Signed out: '} ${new Date(acc.lastSignOutAt).toLocaleDateString()}`
+                                  : `${lang === 'am' ? 'የገቡት፡ ' : 'Signed in: '} ${new Date(acc.lastSignInAt!).toLocaleDateString()}`}
+                              </span>
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -2080,7 +2133,7 @@ export default function AuthPortalView({
                   <EthioLearnLogo size={28} />
                   <div>
                     <p className="text-[11px] font-bold font-serif text-[#F59E0B]">ETHIOLEARN PRO</p>
-                    <p className="text-[8.5px] text-slate-400 tracking-widest uppercase font-mono">National Scholar ID</p>
+                    <p className="text-[8.5px] text-slate-400 tracking-widest uppercase font-mono">National Academic Scholar</p>
                   </div>
                 </div>
                 <div className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-400 text-[9.5px] font-extrabold flex items-center gap-1">

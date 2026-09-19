@@ -224,6 +224,10 @@ export async function syncProfileToFirestore(userId: string, profile: StudentPro
       isPro: Boolean(profile.isPro),
       theme: profile.theme || 'dark',
       language: profile.language || 'en',
+      lastSignInAt: profile.lastSignInAt || '',
+      lastSignOutAt: profile.lastSignOutAt || '',
+      firstSignInAt: profile.firstSignInAt || '',
+      signInCount: profile.signInCount || 1,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -242,7 +246,11 @@ export async function syncProfileToFirestore(userId: string, profile: StudentPro
       claudeApiKey: profile.claudeApiKey || '',
       dailyGoalHours: profile.dailyGoalHours || 2,
       theme: profile.theme || 'dark',
-      language: profile.language || 'en'
+      language: profile.language || 'en',
+      lastSignInAt: profile.lastSignInAt || '',
+      lastSignOutAt: profile.lastSignOutAt || '',
+      firstSignInAt: profile.firstSignInAt || '',
+      signInCount: profile.signInCount || 1
     };
     await setDoc(doc(currentDb, 'profiles', userId), cleanProfile, { merge: true });
   } catch (error) {

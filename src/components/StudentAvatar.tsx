@@ -155,25 +155,41 @@ export default function StudentAvatar({ avatar, name, size = 48, className = '' 
     }
   };
 
+  const isPhoto = Boolean(
+    avatar && (
+      avatar.startsWith('data:image/') ||
+      avatar.startsWith('http://') ||
+      avatar.startsWith('https://') ||
+      avatar.startsWith('blob:') ||
+      avatar.length > 50
+    )
+  );
+
+  const [imageError, setImageError] = React.useState(false);
+
+  // Reset image error if avatar changes
+  React.useEffect(() => {
+    setImageError(false);
+  }, [avatar]);
+
   return (
     <div 
       className={`relative rounded-full select-none flex items-center justify-center overflow-hidden shrink-0 transition-transform duration-200 border bg-[#0F172A] shadow-md ${className}`}
       style={{ width: size, height: size, minWidth: size, minHeight: size }}
     >
-      {avatar ? (
-        avatar.startsWith('data:image/') ? (
-          <img 
-            src={avatar} 
-            alt={name} 
-            referrerPolicy="no-referrer"
-            className="w-full h-full object-cover rounded-full"
-          />
-        ) : (
-          renderPreset(avatar) || (
-            <div className="font-serif font-black text-amber-400" style={{ fontSize: size * 0.45 }}>
-              {initial}
-            </div>
-          )
+      {avatar && isPhoto && !imageError ? (
+        <img 
+          src={avatar} 
+          alt={name} 
+          referrerPolicy="no-referrer"
+          onError={() => setImageError(true)}
+          className="w-full h-full object-cover rounded-full"
+        />
+      ) : avatar && !isPhoto ? (
+        renderPreset(avatar) || (
+          <div className="font-serif font-black text-amber-400 flex items-center justify-center" style={{ fontSize: size * 0.45 }}>
+            {initial}
+          </div>
         )
       ) : (
         <div className="font-serif font-black text-amber-400 flex items-center justify-center" style={{ fontSize: size * 0.45 }}>

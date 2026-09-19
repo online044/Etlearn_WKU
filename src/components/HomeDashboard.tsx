@@ -4,8 +4,9 @@ import {
   Flame, Calendar, Target, CheckSquare, Square, TrendingUp, ArrowRight, 
   ShieldCheck, X, ChevronRight, Bookmark, Award, Plus, Trash2, RefreshCw,
   AlertCircle, Sparkles, BookCheck, HelpCircle, Layers, CheckCircle, BarChart3,
-  ExternalLink, Compass, Lightbulb, BrainCircuit, ArrowUpRight, Trophy
+  ExternalLink, Compass, Lightbulb, BrainCircuit, ArrowUpRight, Trophy, Camera
 } from 'lucide-react';
+import StudentAvatar from './StudentAvatar';
 import { 
   StudentProfile, CourseRecord, PlatformAnnouncement, StudyTask, ExamAttemptRecord, 
   StudentCourseProgress, AITeacherContext 
@@ -52,19 +53,6 @@ export default function HomeDashboard({
       h => h.day === ethDate.day && h.monthIndex === ethDate.monthIndex
     );
   }, [ethDate.day, ethDate.monthIndex]);
-
-  // Greeting based on time of day
-  const greetingText = useMemo(() => {
-    const hour = new Date().getHours();
-    if (isAmharic) {
-      if (hour < 12) return 'እንደምን አደሩ';
-      if (hour < 17) return 'እንደምን ዋሉ';
-      return 'እንደምን አመሹ';
-    }
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
-  }, [isAmharic]);
 
   // --------------------------------------------------------------------------
   // REAL DATABASE STATE (Fast-launch zero-latency local initialization)
@@ -564,7 +552,7 @@ export default function HomeDashboard({
       </div>
 
       {/* ─── 2. EDITORIAL SCHOLAR HERO COMMAND CENTER ─── */}
-      <section className="p-6 sm:p-7 rounded-2xl bg-[#111C35] border border-slate-800/90 shadow-md">
+      <section className="p-6 sm:p-7 rounded-2xl bg-[#111C35] border border-slate-800/90 shadow-lg">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           <div className="space-y-3.5 max-w-2xl">
             {/* Academic Tags */}
@@ -581,17 +569,48 @@ export default function HomeDashboard({
                 <Flame className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
                 <span>{streakCount} {streakCount === 1 ? 'Day Streak' : 'Days Streak'}</span>
               </div>
+              {profile.isPro && (
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500 text-slate-950">
+                  PRO SCHOLAR
+                </span>
+              )}
             </div>
 
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                {greetingText}, {profile.name || 'Scholar'}
-              </h1>
-              <p className="text-sm text-slate-300 mt-1.5 leading-relaxed">
-                {isAmharic 
-                  ? 'ወደ እለታዊ የጥናት ማዕከልዎ እንኳን ደህና መጡ። የዩኒቨርሲቲ ሞጁሎች፣ መምህሩን ጠይቅ (Ask Teacher) እና ያለፉ ፈተናዎች ተዘጋጅተዋል።' 
-                  : 'Welcome to your academic study cockpit. Your university modules, Ask Teacher AI, and model exams are synchronized.'}
-              </p>
+            <div className="flex items-center gap-3.5">
+              {/* Profile Icon with manual photo - touching opens profile */}
+              <button
+                type="button"
+                onClick={() => {
+                  playClickChime();
+                  onNavigate('profile');
+                }}
+                className="relative group cursor-pointer shrink-0 rounded-full focus:outline-none"
+                title={isAmharic ? "የተማሪ መገለጫን ክፈት / ፎቶ ቀይር" : "Open Student Profile / Change Photo"}
+              >
+                <StudentAvatar 
+                  avatar={profile.avatar} 
+                  name={profile.name} 
+                  size={56} 
+                  className="border-2 border-amber-400 shadow-md group-hover:scale-105 transition-all duration-200"
+                />
+                <div className="absolute -bottom-1 -right-1 bg-amber-500 text-slate-950 rounded-full p-1 border-2 border-slate-900 shadow group-hover:scale-110 transition-transform">
+                  <Camera className="w-3 h-3" />
+                </div>
+              </button>
+
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight flex items-center gap-2">
+                  <span>{isAmharic ? 'የጥናት ማዕከል' : 'Academic Study Hub'}</span>
+                  {profile.name && profile.name !== 'Scholar' && (
+                    <span className="text-amber-400 font-medium text-lg sm:text-xl">({profile.name})</span>
+                  )}
+                </h1>
+                <p className="text-sm text-slate-300 mt-0.5 leading-relaxed">
+                  {isAmharic 
+                    ? `${profile.university || 'የኢትዮጵያ ዩኒቨርሲቲ'} • ${profile.department || profile.year || 'የኮርስ ጥናት'}`
+                    : `${profile.university || 'Ethiopian University'} • ${profile.department || profile.year || 'Course Prep & Department Materials'}`}
+                </p>
+              </div>
             </div>
 
             {/* Quick Metrics Bar (Clean, Non-Trope Horizontal Strip) */}
