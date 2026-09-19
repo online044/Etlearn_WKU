@@ -151,6 +151,11 @@ app.use(express.static(path.join(process.cwd(), 'public'), {
   maxAge: '1d'
 }));
 
+// Basic Health Check Endpoint
+app.get(['/api/health', '/api/health/'], (req: Request, res: Response) => {
+  return res.json({ status: 'ok', service: 'EthioLearn Pro API', timestamp: new Date().toISOString() });
+});
+
 // ============================================================================
 // 2. RATE LIMITERS
 // ============================================================================
