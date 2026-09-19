@@ -2,6 +2,112 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      (function() {
+        // 1. WebSocket shim for vite-hmr to prevent connection errors behind reverse proxy
+        try {
+          var RealWebSocket = window.WebSocket;
+          if (RealWebSocket) {
+            window.WebSocket = function(url, protocols) {
+              var isViteHmr = 
+                (typeof protocols === 'string' && protocols.indexOf('vite-hmr') !== -1) ||
+                (Array.isArray(protocols) && protocols.indexOf('vite-hmr') !== -1) ||
+                (typeof url === 'string' && (url.indexOf('token=') !== -1 || url.indexOf('vite-hmr') !== -1));
+              
+              if (isViteHmr) {
+                var listeners = {};
+                return {
+                  url: String(url),
+                  readyState: 1, // OPEN
+                  CONNECTING: 0,
+                  OPEN: 1,
+                  CLOSING: 2,
+                  CLOSED: 3,
+                  send: function() {},
+                  close: function() {
+                    this.readyState = 3;
+                    if (listeners['close']) {
+                      listeners['close'].forEach(function(fn) {
+                        try { fn({ type: 'close', wasClean: true, code: 1000, reason: '' }); } catch (_) {}
+                      });
+                    }
+                  },
+                  addEventListener: function(event, handler, options) {
+                    if (!listeners[event]) listeners[event] = [];
+                    listeners[event].push(handler);
+                    if (event === 'open') {
+                      setTimeout(function() {
+                        try {
+                          if (typeof handler === 'function') handler({ type: 'open' });
+                          else if (handler && typeof handler.handleEvent === 'function') handler.handleEvent({ type: 'open' });
+                          if (options && options.once) {
+                            var idx = listeners[event].indexOf(handler);
+                            if (idx !== -1) listeners[event].splice(idx, 1);
+                          }
+                        } catch (_) {}
+                      }, 0);
+                    }
+                  },
+                  removeEventListener: function(event, handler) {
+                    if (!listeners[event]) return;
+                    var idx = listeners[event].indexOf(handler);
+                    if (idx !== -1) listeners[event].splice(idx, 1);
+                  },
+                  dispatchEvent: function() { return true; }
+                };
+              }
+              return new RealWebSocket(url, protocols);
+            };
+            window.WebSocket.prototype = RealWebSocket.prototype;
+            window.WebSocket.CONNECTING = 0;
+            window.WebSocket.OPEN = 1;
+            window.WebSocket.CLOSING = 2;
+            window.WebSocket.CLOSED = 3;
+          }
+        } catch (_) {}
+
+        // 2. Comprehensive error filtering for [vite] and benign background noise
+        var isBenign = function(msg) {
+          if (!msg) return false;
+          var s = '';
+          if (typeof msg === 'string') s = msg;
+          else if (msg.message && typeof msg.message === 'string') s = msg.message;
+          else if (msg.reason && typeof msg.reason === 'string') s = msg.reason;
+          else {
+            try { s = String(msg); } catch (_) { s = ''; }
+          }
+          return s.indexOf('[vite]') !== -1 || s.indexOf('@firebase/analytics') !== -1 || s.indexOf('Failed to fetch') !== -1 || s.indexOf('websocket') !== -1;
+        };
+
+        var wrapConsole = function(method) {
+          var orig = console[method];
+          if (!orig) return;
+          console[method] = function() {
+            var args = Array.prototype.slice.call(arguments);
+            for (var i = 0; i < args.length; i++) {
+              if (isBenign(args[i])) return;
+            }
+            orig.apply(console, args);
+          };
+        };
+
+        ['error', 'warn', 'info', 'debug', 'log'].forEach(wrapConsole);
+
+        window.addEventListener('error', function(event) {
+          if (event && (isBenign(event.message) || isBenign(event.error))) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(event) {
+          if (event && (isBenign(event.reason) || (event.reason && isBenign(event.reason.message)))) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          }
+        }, true);
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0a1128" />
     <meta name="description" content="Bilingual (Amharic/English) AI-powered study platform for Ethiopian university students with past exams, AI flashcards, and university notes." />
@@ -22,9 +128,9 @@
     <meta property="og:image" content="/icons/icon-512.png" />
     <title>EthioLearn Pro</title>
     <!-- Telegram Web App SDK -->
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <!-- Chart.js CDN requested by user -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js" defer></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {

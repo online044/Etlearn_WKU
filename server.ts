@@ -80,7 +80,8 @@ const PORT = 3000;
 
 app.use((req: Request, res: Response, next: NextFunction) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  // Allow framing in AI Studio preview iframe and Telegram Web App
+  res.setHeader('Content-Security-Policy', "frame-ancestors 'self' https://*.google.com https://ai.studio https://*.run.app https://web.telegram.org https://*.telegram.org;");
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'geolocation=(), camera=(), microphone=()');
@@ -1666,7 +1667,10 @@ async function startServer() {
     try {
       const { createServer: createViteServer } = await import('vite');
       const vite = await createViteServer({
-        server: { middlewareMode: true },
+        server: { 
+          middlewareMode: true,
+          hmr: false
+        },
         appType: 'spa',
       });
       app.use(vite.middlewares);

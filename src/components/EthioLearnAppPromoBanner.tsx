@@ -70,6 +70,26 @@ const CAMPAIGNS: PromoCampaign[] = [
     actionType: 'install'
   },
   {
+    id: 'telegram',
+    tabLabel: { en: 'Telegram Hub', am: 'ቴሌግራም ቻናል' },
+    badge: { en: 'Official Student Channel • @Et_Learnn', am: 'ኦፊሴላዊ የቴሌግራም ቻናል • @Et_Learnn' },
+    badgeColor: 'bg-sky-500/15 text-sky-400 border-sky-500/30',
+    title: { 
+      en: 'Join 200+ Ethiopian University Scholars on Telegram', 
+      am: 'ከ200+ ተማሪዎች ጋር በቴሌግራም ቻናላችን ይቀላቀሉ' 
+    },
+    description: { 
+      en: 'Receive instant alerts when new university exam keys are released, download high-yield study handout PDFs, and connect with peer study groups.', 
+      am: 'አዳዲስ የፈተና መልሶች ሲወጡ ወዲያውኑ ማሳወቂያዎችን ያግኙ፣ የትምህርት ፒዲኤፍ ማስታወሻዎችን ያውርዱ እና ከሌሎች ተማሪዎች ጋር ይገናኙ።' 
+    },
+    ctaText: { en: 'Join Telegram Channel', am: 'ቴሌግራም ይቀላቀሉ' },
+    icon: Send,
+    statValue: '200+',
+    statLabel: { en: 'Active University Students', am: 'ንቁ ተማሪዎች' },
+    accentColor: '#0EA5E9',
+    actionType: 'telegram'
+  },
+  {
     id: 'study_notes',
     tabLabel: { en: 'Study Notes', am: 'የጥናት ማስታወሻዎች' },
     badge: { en: 'Authentic Faculty Notes • Wolkite & National', am: 'የመምህራን ትክክለኛ ማስታወሻዎች' },
@@ -148,26 +168,6 @@ const CAMPAIGNS: PromoCampaign[] = [
     statLabel: { en: 'Digital Library', am: 'ዲጂታል ቤተ-መጽሐፍት' },
     accentColor: '#A855F7',
     actionType: 'bookstore'
-  },
-  {
-    id: 'telegram',
-    tabLabel: { en: 'Telegram Hub', am: 'ቴሌግራም ቻናል' },
-    badge: { en: 'Official Student Channel • @ethiolearn_wku', am: 'ኦፊሴላዊ የቴሌግራም ቻናል' },
-    badgeColor: 'bg-sky-500/15 text-sky-400 border-sky-500/30',
-    title: { 
-      en: 'Join 200+ Ethiopian University Scholars on Telegram', 
-      am: 'ከ200+ ተማሪዎች ጋር በቴሌግራም ቻናላችን ይቀላቀሉ' 
-    },
-    description: { 
-      en: 'Receive instant alerts when new university exam keys are released, download high-yield study handout PDFs, and connect with peer study groups.', 
-      am: 'አዳዲስ የፈተና መልሶች ሲወጡ ወዲያውኑ ማሳወቂያዎችን ያግኙ፣ የትምህርት ፒዲኤፍ ማስታወሻዎችን ያውርዱ እና ከሌሎች ተማሪዎች ጋር ይገናኙ።' 
-    },
-    ctaText: { en: 'Join Telegram Channel', am: 'ቴሌግራም ይቀላቀሉ' },
-    icon: Send,
-    statValue: '200+',
-    statLabel: { en: 'Active University Students', am: 'ንቁ ተማሪዎች' },
-    accentColor: '#0EA5E9',
-    actionType: 'telegram'
   }
 ];
 
@@ -241,11 +241,10 @@ export default function EthioLearnAppPromoBanner({
         }
         break;
       case 'telegram':
-        window.open('https://t.me/ethiolearn_wku', '_blank', 'noopener,noreferrer');
-        break;
-      case 'bookstore':
-        if (onNavigate) {
-          onNavigate('bookstore');
+        if (typeof window !== 'undefined' && window.Telegram?.WebApp?.openTelegramLink) {
+          window.Telegram.WebApp.openTelegramLink('https://t.me/Et_Learnn');
+        } else {
+          window.open('https://t.me/Et_Learnn', '_blank', 'noopener,noreferrer');
         }
         break;
     }

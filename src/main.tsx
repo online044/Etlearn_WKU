@@ -2,6 +2,22 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { registerSW } from 'virtual:pwa-register';
+
+// Register PWA service worker with automatic background cache update
+try {
+  const updateSW = registerSW({
+    onNeedRefresh() {
+      console.log('[PWA] New version ready, reloading smoothly...');
+      updateSW(true);
+    },
+    onOfflineReady() {
+      console.log('[PWA] EthioLearn Pro is offline ready.');
+    },
+  });
+} catch (e) {
+  console.warn('[PWA] Service worker registration note:', e);
+}
 
 // Monkeypatch alert and confirm to prevent iframe/sandboxing/iOS crashes
 try {

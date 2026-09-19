@@ -13,6 +13,7 @@ import {
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
 import { safeStorage } from '../utils/safeStorage';
 import { getEthiopianDate, toGeezNumeral, ETHIOPIAN_HOLIDAYS } from '../utils/ethiopianCalendar';
+import { INITIAL_CURRICULUM_COURSES } from '../data/coursesCurriculum';
 import { 
   fetchPublishedCourses, fetchAnnouncements, fetchAllStudentCourseProgresses, 
   fetchStudentExamAttempts, fetchStudentTasks, saveStudentTask, 
@@ -66,17 +67,59 @@ export default function HomeDashboard({
   }, [isAmharic]);
 
   // --------------------------------------------------------------------------
-  // REAL DATABASE STATE
+  // REAL DATABASE STATE (Fast-launch zero-latency local initialization)
   // --------------------------------------------------------------------------
   const activeLevel = profile.year === 'University' ? 'University' : 'Grade 12';
   
-  const [courses, setCourses] = useState<CourseRecord[]>([]);
-  const [progressMap, setProgressMap] = useState<{ [courseId: string]: StudentCourseProgress }>({});
-  const [examAttempts, setExamAttempts] = useState<ExamAttemptRecord[]>([]);
-  const [tasks, setTasks] = useState<StudyTask[]>([]);
-  const [announcements, setAnnouncements] = useState<PlatformAnnouncement[]>([]);
+  const [courses, setCourses] = useState<CourseRecord[]>(() => {
+    try {
+      const raw = safeStorage.getItem('ethiolearn_supabase_courses_cache');
+      if (raw) {
+        const parsed: CourseRecord[] = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const filtered = parsed.filter(c => c.status === 'published' && (!activeLevel || c.level === activeLevel));
+          if (filtered.length > 0) return filtered;
+        }
+      }
+    } catch {}
+    const curriculumCourses = INITIAL_CURRICULUM_COURSES.map(c => c.course);
+    return curriculumCourses.filter(c => c.status === 'published' && (!activeLevel || c.level === activeLevel));
+  });
+
+  const [progressMap, setProgressMap] = useState<{ [courseId: string]: StudentCourseProgress }>(() => {
+    try {
+      const raw = safeStorage.getItem(`ethiolearn_student_course_progress_${userId || 'guest'}`);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return {};
+  });
+
+  const [examAttempts, setExamAttempts] = useState<ExamAttemptRecord[]>(() => {
+    try {
+      const raw = safeStorage.getItem(`ethiolearn_student_exam_attempts_${userId || 'guest'}`);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return [];
+  });
+
+  const [tasks, setTasks] = useState<StudyTask[]>(() => {
+    try {
+      const raw = safeStorage.getItem(`ethiolearn_student_study_tasks_${userId || 'guest'}`);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return [];
+  });
+
+  const [announcements, setAnnouncements] = useState<PlatformAnnouncement[]>(() => {
+    try {
+      const raw = safeStorage.getItem('ethiolearn_announcements_cache');
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return [];
+  });
   
-  const [isLoading, setIsLoading] = useState(true);
+  // Instant open: false by default so hero and cockpit render at 0ms!
+  const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -113,11 +156,16 @@ export default function HomeDashboard({
   });
 
   // --------------------------------------------------------------------------
-  // LOAD ALL REAL DATABASE RECORDS (Deduplicated & Synchronized)
+  // LOAD ALL REAL DATABASE RECORDS (Background Sync - Non-blocking for instant hero)
   // --------------------------------------------------------------------------
   const loadDashboardData = useCallback(async (showRefreshIndicator = false) => {
-    if (showRefreshIndicator) setIsRefreshing(true);
-    else setIsLoading(true);
+    if (showRefreshIndicator) {
+      setIsRefreshing(true);
+    }
+    // Only show full loading skeleton if we have zero courses to display
+    if (courses.length === 0) {
+      setIsLoading(true);
+    }
     setLoadError(null);
 
     try {
@@ -146,19 +194,23 @@ export default function HomeDashboard({
         }
       }
 
-      setCourses(uniqueCourses);
+      if (uniqueCourses.length > 0) {
+        setCourses(uniqueCourses);
+      }
       setProgressMap(fetchedProgress || {});
       setExamAttempts(fetchedAttempts || []);
       setTasks(fetchedTasks || []);
       setAnnouncements(fetchedAnnouncements || []);
     } catch (err: any) {
       console.error('Failed to load real dashboard data:', err);
-      setLoadError(isAmharic ? 'የጥናት መረጃን መጫን አልተቻለም። እባክዎ እንደገና ይሞክሩ።' : 'Unable to load your learning data from the server.');
+      if (courses.length === 0) {
+        setLoadError(isAmharic ? 'የጥናት መረጃን መጫን አልተቻለም። እባክዎ እንደገና ይሞክሩ።' : 'Unable to load your learning data from the server.');
+      }
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [activeLevel, userId, isAmharic]);
+  }, [activeLevel, userId, isAmharic, courses.length]);
 
   useEffect(() => {
     loadDashboardData();
@@ -345,9 +397,9 @@ export default function HomeDashboard({
   };
 
   // --------------------------------------------------------------------------
-  // RENDER SKELETON LOADERS
+  // RENDER SKELETON LOADERS (Only when there are zero courses to render)
   // --------------------------------------------------------------------------
-  if (isLoading) {
+  if (isLoading && courses.length === 0) {
     return (
       <div className="w-full space-y-6 animate-pulse text-slate-800 dark:text-slate-100">
         {/* Top Header Skeleton */}

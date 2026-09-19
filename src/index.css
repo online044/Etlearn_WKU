@@ -239,7 +239,7 @@
 .bg-\[\#0D0D0D\], 
 .bg-zinc-950, 
 .bg-slate-950,
-.dark\:bg-[#050508],
+.dark\:bg-\[\#050508\],
 .dark\:bg-slate-950,
 .dark\:bg-black,
 .bg-\[\#060a1a\] {
@@ -390,6 +390,27 @@ select,
 textarea,
 [role="button"] {
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Telegram Mini App & PWA Native App Polish */
+:root {
+  --tg-viewport-height: 100vh;
+  --tg-viewport-stable-height: 100vh;
+}
+
+html, body {
+  overscroll-behavior-y: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tma-container {
+  min-height: var(--tg-viewport-height, 100vh);
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+.pb-tma-nav {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 4.75rem);
 }
 
 

@@ -14,6 +14,7 @@ import {
 import EthioLearnLogo from './EthioLearnLogo';
 import { StudentProfile } from '../types';
 import { playClickChime } from '../utils/audio';
+import { PWAInstallButton } from './PWAInstallButton';
 
 export interface AppSidebarProps {
   isOpen: boolean;
@@ -384,6 +385,47 @@ export default function AppSidebar({
                     </button>
                   </div>
 
+                  {/* Telegram Channel */}
+                  <div className="p-2.5 rounded-xl bg-[#0088cc]/15 border border-[#0088cc]/40 flex items-center justify-between gap-2 shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-[#0088cc]/25 flex items-center justify-center shrink-0 text-[#38bdf8]">
+                        <Send className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-300 font-semibold block">
+                          {isAm ? 'ኦፊሴላዊ የቴሌግራም ቻናል' : 'Official Telegram Channel'}
+                        </span>
+                        <a 
+                          href="https://t.me/Et_Learnn" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="font-mono font-bold text-[#38bdf8] hover:underline text-xs"
+                        >
+                          @Et_Learnn
+                        </a>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <a
+                        href="https://t.me/Et_Learnn"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-2.5 py-1 rounded-lg bg-[#0088cc] hover:bg-[#0088cc]/80 text-white text-[10px] font-bold inline-flex items-center gap-1 shadow-sm transition-all"
+                      >
+                        <span>{isAm ? 'ተቀላቀል' : 'Join'}</span>
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard('https://t.me/Et_Learnn', 'Telegram Channel')}
+                        className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white cursor-pointer"
+                        title="Copy Telegram Channel Link"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Telegram Admin */}
                   <div className="p-2.5 rounded-xl bg-[#0088cc]/10 border border-[#0088cc]/30 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
@@ -421,6 +463,11 @@ export default function AppSidebar({
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* 📲 PWA App Installation Action Card */}
+              <div className="pt-1">
+                <PWAInstallButton language={language} variant="banner" />
               </div>
 
               {/* 📜 ABOUT, TERMS AND CONDITION, PRIVACY ACTIONS */}

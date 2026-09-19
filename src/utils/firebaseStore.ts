@@ -121,13 +121,14 @@ export const auth = (() => {
 })();
 
 export let analytics: Analytics | null = null;
-if (typeof window !== 'undefined' && app) {
+const measurementId = (firebaseConfig as any)?.measurementId;
+if (typeof window !== 'undefined' && app && measurementId && String(measurementId).trim().length > 0) {
   isSupported().then((supported) => {
     if (supported) {
       try {
         analytics = getAnalytics(app);
-      } catch (e) {
-        console.warn('[Firebase Analytics] Initialization skipped:', e);
+      } catch {
+        // Safe fallback when Analytics cannot connect
       }
     }
   }).catch(() => {});

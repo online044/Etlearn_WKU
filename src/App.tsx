@@ -30,6 +30,8 @@ import ExamEngineView from './components/ExamEngineView';
 import EthioLearnAppPromoBanner from './components/EthioLearnAppPromoBanner';
 import AppSidebar from './components/AppSidebar';
 import LegalPrivacyTermsModal from './components/LegalPrivacyTermsModal';
+import { OfflineIndicator } from './components/OfflineIndicator';
+import { TelegramMiniAppHeader } from './components/TelegramMiniAppHeader';
 
 import { 
   testFirestoreConnection, 
@@ -1000,7 +1002,9 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-slate-50 dark:bg-[#050508] text-slate-800 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-200">
+    <div className="min-h-screen w-full bg-slate-50 dark:bg-[#050508] text-slate-800 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-200 tma-container">
+      {/* 🚀 Telegram Mini App Pro Verified Bar (Visible in Telegram Mini App) */}
+      <TelegramMiniAppHeader language={language} />
       
       {/* HEADER BAR FOR TITLE AND ETHIOPIAN CALENDAR */}
       <header 
@@ -1118,18 +1122,6 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Quick Install Button if PWA prompt is ready */}
-            {isInstallable && (
-              <button
-                type="button"
-                onClick={() => { playClickChime(); triggerPWAInstall(); }}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl text-xs shadow-sm cursor-pointer transition-all shrink-0"
-                title={language === 'en' ? 'Install EthioLearn App' : 'የኢትዮለርን አፕሊኬሽን ጫን'}
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>{language === 'en' ? 'Install App' : 'አፑን ጫን'}</span>
-              </button>
-            )}
             {/* Bilingual Quick Selector */}
             <div className="flex bg-slate-100 dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-805 rounded-xl p-0.5">
               <button
@@ -1214,10 +1206,10 @@ export default function App() {
         <AnimatePresence mode="wait">
           <motion.div
             key={currentPage}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12 }}
           >
             {currentPage === 'home' && (
               <HomeDashboard 
@@ -1378,7 +1370,7 @@ export default function App() {
           
           {/* Home Tab */}
           <button
-            onClick={() => { playClickChime(); setCurrentPage('home'); }}
+            onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('home'); }}
             className={`flex flex-col items-center justify-center w-full transition-all cursor-pointer rounded-xl ${
               currentPage === 'home' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
             }`}
@@ -1391,7 +1383,7 @@ export default function App() {
 
           {/* Quizzes Tab */}
           <button
-            onClick={() => { playClickChime(); setCurrentPage('quiz'); }}
+            onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('quiz'); }}
             className={`flex flex-col items-center justify-center w-full transition-all cursor-pointer rounded-xl ${
               currentPage === 'quiz' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
             }`}
@@ -1404,7 +1396,7 @@ export default function App() {
 
           {/* Book Store Tab */}
           <button
-            onClick={() => { playClickChime(); setCurrentPage('bookstore'); }}
+            onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('bookstore'); }}
             className={`flex flex-col items-center justify-center w-full transition-all cursor-pointer rounded-xl ${
               currentPage === 'bookstore' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
             }`}
@@ -1423,7 +1415,7 @@ export default function App() {
 
           {/* University past exams Tab */}
           <button
-            onClick={() => { playClickChime(); setCurrentPage('university'); }}
+            onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('university'); }}
             className={`flex flex-col items-center justify-center w-full transition-all cursor-pointer rounded-xl ${
               currentPage === 'university' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
             }`}
@@ -1437,7 +1429,7 @@ export default function App() {
 
           {/* Profile Tab */}
           <button
-            onClick={() => { playClickChime(); setCurrentPage('profile'); }}
+            onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('profile'); }}
             className={`flex flex-col items-center justify-center w-full transition-all cursor-pointer rounded-xl ${
               currentPage === 'profile' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
             }`}
@@ -1604,6 +1596,9 @@ export default function App() {
         initialTab={legalModalTab}
         onAcceptAndClose={() => setShowLegalModal(false)}
       />
+
+      {/* 📶 PWA Offline Indicator Pill */}
+      <OfflineIndicator language={language} />
     </div>
   );
 }

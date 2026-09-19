@@ -258,6 +258,40 @@ export default function LegalPrivacyTermsModal({
                       </div>
                     </div>
 
+                    {/* Telegram Official Channel */}
+                    <div className="p-2.5 bg-[#0088cc]/10 rounded-lg border border-[#0088cc]/30 flex items-center justify-between col-span-1 sm:col-span-2">
+                      <div>
+                        <span className="text-slate-300 text-[10px] font-semibold block">{isAm ? 'ኦፊሴላዊ የቴሌግራም ቻናል' : 'Official Telegram Channel'}</span>
+                        <a 
+                          href="https://t.me/Et_Learnn" 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="font-mono font-bold text-[#38bdf8] hover:underline"
+                        >
+                          @Et_Learnn
+                        </a>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <a 
+                          href="https://t.me/Et_Learnn" 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="px-2.5 py-1 bg-[#0088cc] hover:bg-[#0088cc]/80 text-white rounded text-[10px] font-bold flex items-center gap-1"
+                        >
+                          <span>{isAm ? 'ተቀላቀል' : 'Join'}</span>
+                          <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => copyText('https://t.me/Et_Learnn', 'Telegram Channel')}
+                          className="p-1 hover:bg-white/10 rounded text-slate-400 hover:text-white cursor-pointer"
+                          title="Copy Telegram Channel Link"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
                     {/* Telegram Admin */}
                     <div className="p-2.5 bg-slate-900/90 rounded-lg border border-[#0088cc]/30 flex items-center justify-between col-span-1 sm:col-span-2">
                       <div>
