@@ -832,52 +832,95 @@ async function sendRealVerificationEmail(
     const isReset = type === 'password_reset';
     const subject = isReset 
       ? `EthioLearn Pro - Password Recovery Security Code: [ ${code} ]`
-      : `EthioLearn Pro - Student Account Activation Code: [ ${code} ]`;
+      : `EthioLearn Pro - Academic Verification Card & Activation Code: [ ${code} ]`;
+
+    const acceptUrl = `http://localhost:3000/?verified_email=${encodeURIComponent(toEmail)}&code=${encodeURIComponent(code)}&action=accept_authorization`;
 
     const htmlContent = `
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0A1128; color: #E2E8F0; margin: 0; padding: 24px; }
-          .card { max-width: 520px; margin: 0 auto; background-color: #1E293B; border-radius: 16px; border: 1px solid rgba(245, 158, 11, 0.3); padding: 32px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-          .logo { color: #F59E0B; font-size: 22px; font-weight: 800; letter-spacing: 0.5px; margin-bottom: 4px; }
-          .sublogo { color: #94A3B8; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 24px; }
-          .title { color: #FFFFFF; font-size: 18px; font-weight: 700; margin-bottom: 12px; }
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0A1128; color: #E2E8F0; margin: 0; padding: 24px 12px; }
+          .card-wrapper { max-width: 540px; margin: 0 auto; }
+          .verification-card { background: linear-gradient(145deg, #162238 0%, #0d1627 100%); border-radius: 18px; border: 1.5px solid #F59E0B; padding: 32px 28px; box-shadow: 0 20px 45px rgba(0,0,0,0.6); position: relative; overflow: hidden; }
+          .card-flag-strip { display: flex; height: 4px; width: 100%; border-radius: 2px; overflow: hidden; margin-bottom: 20px; }
+          .flag-g { flex: 1; background-color: #10B981; }
+          .flag-y { flex: 1; background-color: #F59E0B; }
+          .flag-r { flex: 1; background-color: #EF4444; }
+          .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid rgba(245, 158, 11, 0.25); padding-bottom: 16px; }
+          .logo { color: #F59E0B; font-size: 20px; font-weight: 900; letter-spacing: 0.5px; }
+          .card-badge { background: rgba(245, 158, 11, 0.15); color: #F59E0B; border: 1px solid rgba(245, 158, 11, 0.4); font-size: 10px; font-weight: 800; padding: 4px 10px; border-radius: 9999px; text-transform: uppercase; letter-spacing: 1px; }
+          .title { color: #FFFFFF; font-size: 19px; font-weight: 800; margin-bottom: 14px; }
+          .scholar-details { background: #0b1222; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px 18px; margin-bottom: 22px; font-size: 13px; line-height: 1.6; }
+          .scholar-details strong { color: #F59E0B; }
           .text { color: #CBD5E1; font-size: 14px; line-height: 1.6; margin-bottom: 20px; }
-          .code-container { background: #0F172A; border: 2px dashed #F59E0B; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0; }
-          .code { font-family: 'Courier New', monospace; font-size: 34px; font-weight: 900; letter-spacing: 8px; color: #F59E0B; }
-          .meta { color: #94A3B8; font-size: 12px; text-align: center; margin-top: 8px; }
-          .amharic { color: #E2E8F0; font-size: 13px; line-height: 1.6; border-top: 1px solid #334155; padding-top: 16px; margin-top: 20px; }
-          .footer { color: #64748B; font-size: 11px; text-align: center; margin-top: 24px; line-height: 1.5; }
+          .code-box { background: #060a14; border: 2px dashed #F59E0B; border-radius: 14px; padding: 22px; text-align: center; margin: 24px 0; }
+          .code-label { font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #94A3B8; font-weight: 700; margin-bottom: 8px; display: block; }
+          .code { font-family: 'Courier New', monospace; font-size: 38px; font-weight: 900; letter-spacing: 10px; color: #F59E0B; }
+          .meta { color: #94A3B8; font-size: 12px; text-align: center; margin-top: 10px; }
+          .action-btn { display: block; width: 100%; box-sizing: border-box; text-align: center; background: linear-gradient(90deg, #F59E0B 0%, #EAB308 50%, #D97706 100%); color: #000000; font-weight: 900; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; text-decoration: none; padding: 16px 20px; border-radius: 12px; margin-top: 20px; box-shadow: 0 4px 20px rgba(245, 158, 11, 0.35); }
+          .amharic { color: #E2E8F0; font-size: 13px; line-height: 1.7; border-top: 1px solid #334155; padding-top: 18px; margin-top: 24px; }
+          .footer { color: #64748B; font-size: 11px; text-align: center; margin-top: 24px; line-height: 1.6; }
         </style>
       </head>
       <body>
-        <div class="card">
-          <div class="logo">🇪🇹 EthioLearn Pro</div>
-          <div class="sublogo">Ethiopian University Academic Technology Portal</div>
-          <div class="title">${isReset ? 'Student Password Reset Verification' : 'Student Account Activation Code'}</div>
-          <div class="text">
-            Hello <strong>${name}</strong>,<br><br>
-            ${isReset 
-              ? 'A request was received to reset your student password. Enter the single-use 6-digit recovery code below to verify your identity:' 
-              : 'Thank you for registering on EthioLearn Pro. To activate your university student account and access past exams, notes, and AI tutor, please use your official activation code below:'}
-          </div>
-          <div class="code-container">
-            <div class="code">${code}</div>
-            <div class="meta">Valid for 15 minutes • Single-use security token</div>
-          </div>
-          <div class="amharic">
-            <strong>የአማርኛ ማስታወሻ፡</strong><br>
-            ${isReset 
-              ? `የይለፍ ቃልዎን ለመቀየር ባለ 6-አሃዝ የማረጋገጫ ኮድዎ <strong>[ ${code} ]</strong> ነው። ኮዱን በማስገባት አዲስ የይለፍ ቃል ያዘጋጁ።`
-              : `እንኳን ወደ ኢትዮ ለርን ፕሮ በደህና መጡ! አካውንትዎን ለማረጋገጥና ለማግበር ባለ 6-አሃዝ የማረጋገጫ ኮድዎ <strong>[ ${code} ]</strong> ነው። ለ15 ደቂቃ ብቻ ያገለግላል።`}
-          </div>
-          <div class="footer">
-            If you did not request this security code, please ignore this email.<br>
-            Wolkite University & Ethiopian Higher Education Institutions Academic Network.<br>
-            &copy; ${new Date().getFullYear()} EthioLearn Pro. All rights reserved.
+        <div class="card-wrapper">
+          <div class="verification-card">
+            <div class="card-flag-strip">
+              <div class="flag-g"></div>
+              <div class="flag-y"></div>
+              <div class="flag-r"></div>
+            </div>
+
+            <div class="card-header">
+              <div>
+                <div class="logo">🇪🇹 EthioLearn Pro</div>
+                <div style="color: #94A3B8; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 2px;">Academic Verification Card</div>
+              </div>
+              <div class="card-badge">VERIFICATION CARD</div>
+            </div>
+
+            <div class="title">${isReset ? 'Password Reset Verification Card' : 'Student Academic Authorization Card'}</div>
+            
+            <div class="scholar-details">
+              <div>Scholar: <strong>${name}</strong></div>
+              <div>Authorized Email: <strong>${toEmail}</strong></div>
+              <div>Status: <strong>Awaiting Email Authorization</strong></div>
+            </div>
+
+            <div class="text">
+              ${isReset 
+                ? 'A student password reset was requested. Use the single-use 6-digit recovery code on this verification card, or click the authorization button below:' 
+                : 'Welcome to EthioLearn Pro! To complete your student authorization and unlock your university study portal, use the official verification code on this card, or click the button below to accept authorization:'}
+            </div>
+
+            <div class="code-box">
+              <span class="code-label">6-Digit Authorization Code</span>
+              <div class="code">${code}</div>
+              <div class="meta">Valid for 15 minutes • Single-use authorization token</div>
+            </div>
+
+            ${!isReset ? `
+              <a href="${acceptUrl}" class="action-btn" target="_blank">
+                &check; Accept Authorization in EthioLearn Pro
+              </a>
+            ` : ''}
+
+            <div class="amharic">
+              <strong>የአማርኛ ማስታወሻ (የማረጋገጫ ካርድ)፡</strong><br>
+              ${isReset 
+                ? `የይለፍ ቃልዎን ለመቀየር ባለ 6-አሃዝ የማረጋገጫ ኮድዎ <strong>[ ${code} ]</strong> ነው። ኮዱን በመተየብ አዲስ የይለፍ ቃል ያዘጋጁ።`
+                : `የተማሪ አካውንትዎን በኢሜይል ለማረጋገጥና ለማጽደቅ ባለ 6-አሃዝ የማረጋገጫ ኮድዎ <strong>[ ${code} ]</strong> ነው። ከላይ ያለውን ቢጫ ቁልፍ በመጫን ወይም ኮዱን በማስገባት ምዝገባዎን ያጠናቅቁ።`}
+            </div>
+
+            <div class="footer">
+              This official verification card authorizes university access for student academic records.<br>
+              Wolkite University & Ethiopian Higher Education Institutions Academic Technology Network.<br>
+              &copy; ${new Date().getFullYear()} EthioLearn Pro. All rights reserved.
+            </div>
           </div>
         </div>
       </body>
@@ -1304,6 +1347,122 @@ app.post(['/api/auth/reset-password', '/api/auth/reset-password/'], async (req: 
   } catch (e: any) {
     console.error('[Reset Password Error]:', e);
     return res.status(500).json({ error: e.message || 'Internal error resetting password' });
+  }
+});
+
+// Student Email Login Endpoint (Email + Password Authorization)
+app.post(['/api/auth/login', '/api/auth/login/'], async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Student email and password are required.' });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const cleanPass = password.trim();
+
+    const supabase = getSupabaseAdmin();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('student_profiles')
+          .select('*')
+          .eq('email', cleanEmail)
+          .maybeSingle();
+
+        if (data) {
+          const pd = data.profile_data || {};
+          if (pd.password && pd.password !== cleanPass) {
+            return res.status(401).json({ error: 'Incorrect password for this student account.' });
+          }
+
+          return res.json({
+            success: true,
+            user: {
+              id: data.id || `std_${cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')}`,
+              email: data.email,
+              phone: data.phone || pd.phone,
+              name: pd.name || data.email.split('@')[0],
+              university: pd.university || 'Wolkite University (WKU)',
+              year: pd.year || 'Freshman (1st Year)',
+              subjects: pd.subjects || ['Emerging Technologies', 'Communicative English', 'Mathematics'],
+              role: pd.userRole || (cleanEmail === PRIMARY_ADMIN_EMAIL.toLowerCase() ? 'super_admin' : 'student'),
+              is_pro: Boolean(pd.isPro || pd.is_pro)
+            }
+          });
+        }
+      } catch (dbErr) {
+        console.warn('[Supabase Login Query Warning]:', dbErr);
+      }
+    }
+
+    // Default student user object
+    return res.json({
+      success: true,
+      user: {
+        id: `std_${cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')}`,
+        email: cleanEmail,
+        name: cleanEmail.split('@')[0],
+        university: 'Wolkite University (WKU)',
+        year: 'Freshman (1st Year)',
+        subjects: ['Emerging Technologies', 'Communicative English', 'Mathematics'],
+        role: cleanEmail === PRIMARY_ADMIN_EMAIL.toLowerCase() ? 'super_admin' : 'student',
+        is_pro: false
+      }
+    });
+  } catch (e: any) {
+    console.error('[Login Endpoint Error]:', e);
+    return res.status(500).json({ error: e.message || 'Internal login error' });
+  }
+});
+
+// Endpoint to handle "Accept Authorization" link click from verification email card
+app.get(['/api/auth/accept-verification', '/api/auth/accept-verification/'], (req: Request, res: Response) => {
+  try {
+    const email = (req.query.email || req.query.verified_email || '').toString().toLowerCase().trim();
+    const code = (req.query.code || '').toString().trim();
+
+    if (email) {
+      const storeKey = `${email}:registration`;
+      const item = activeVerificationStore.get(storeKey);
+      if (item) {
+        (item as any).accepted = true;
+      }
+    }
+
+    // Redirect to main app with verified status
+    return res.redirect(`/?verified_email=${encodeURIComponent(email)}&code=${encodeURIComponent(code)}&action=accept_authorization`);
+  } catch (e: any) {
+    return res.redirect(`/?error=verification_failed`);
+  }
+});
+
+// Endpoint to check if email was accepted via verification card link
+app.get(['/api/auth/check-verification-status', '/api/auth/check-verification-status/'], (req: Request, res: Response) => {
+  try {
+    const email = (req.query.email as string || '').toLowerCase().trim();
+    if (!email) {
+      return res.status(400).json({ error: 'Email query parameter is required.' });
+    }
+
+    const storeKey = `${email}:registration`;
+    const item = activeVerificationStore.get(storeKey);
+
+    if (item && (item as any).accepted) {
+      return res.json({
+        success: true,
+        verified: true,
+        message: 'Email authorization has been accepted from verification card!'
+      });
+    }
+
+    return res.json({
+      success: false,
+      verified: false,
+      message: 'Email verification card is awaiting acceptance.'
+    });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message || 'Error checking verification status' });
   }
 });
 
