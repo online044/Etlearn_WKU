@@ -68,6 +68,7 @@ import {
 } from './server/content';
 
 import { handleAIChatStream, generateSingleAIResponse } from './server/ai';
+import { generateAcademicQuiz } from './server/quizGenerator';
 
 dotenv.config();
 
@@ -1623,6 +1624,38 @@ app.post([
   '/ai/chat', 
   '/ai/chat/'
 ], aiChatLimiter, handleAIChatStream);
+
+// Dedicated Subject-Pure Academic Quiz Generation Endpoint (Gemini AI + Curated Fallback)
+app.post(['/api/quiz/generate', '/api/quiz/generate/'], async (req: Request, res: Response) => {
+  try {
+    const { subject, topic, difficulty, qCount, customNeeds, language } = req.body;
+    if (!subject || typeof subject !== 'string' || !subject.trim()) {
+      return res.status(400).json({ success: false, error: 'Subject is required.' });
+    }
+
+    const questions = await generateAcademicQuiz({
+      subject: subject.trim(),
+      topic: typeof topic === 'string' ? topic.trim() : undefined,
+      difficulty: difficulty === 'easy' || difficulty === 'hard' ? difficulty : 'medium',
+      qCount: typeof qCount === 'number' ? qCount : 5,
+      customNeeds: typeof customNeeds === 'string' ? customNeeds.trim() : undefined,
+      language: language === 'am' ? 'am' : 'en'
+    });
+
+    return res.json({
+      success: true,
+      subject: subject.trim(),
+      count: questions.length,
+      questions
+    });
+  } catch (err: any) {
+    console.error('[Quiz Generation API Error]:', err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to generate quiz.'
+    });
+  }
+});
 
 // ============================================================================
 // 9. CENTRALIZED ERROR HANDLING MIDDLEWARE

@@ -198,6 +198,29 @@ export async function generateQuizAI(
   const count = qCount || 5;
   const diffStr = difficulty || 'medium';
 
+  try {
+    const resp = await fetch('/api/quiz/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subject: subject || 'General Studies',
+        topic: topic || undefined,
+        difficulty: diffStr,
+        qCount: count,
+        customNeeds: customNeeds || undefined
+      })
+    });
+
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.success && Array.isArray(data.questions) && data.questions.length > 0) {
+        return data.questions;
+      }
+    }
+  } catch (err) {
+    console.warn('[generateQuizAI API call error, falling back to chat streamer]:', err);
+  }
+
   let promptMessage = `Compile a high-fidelity academic practice quiz of exactly ${count} multiple-choice questions on the topic/chapter: "${topic}" under the subject "${subject}".
 The difficulty tier must be: ${diffStr}.
 
@@ -258,33 +281,22 @@ Each object in the array must contain:
               `D) Independent scalar measurement without dimensions`
             ],
             correctAnswer: `A) Conservation laws and boundary conditions governing ${topic}`,
-            explanation: `In standard Ethiopian university ${subject} coursework, ${topic} is analyzed through core conservation theorems and formal mathematical boundary relationships.`
-          },
-          {
-            question: `When evaluating standard parameters for "${topic}", what is the primary methodology?`,
-            options: [
-              `A) Direct analytical derivation and experimental validation`,
-              `B) Unverified heuristic approximations`,
-              `C) Disregarding SI dimensional consistency`,
-              `D) Random sampling without controls`
-            ],
-            correctAnswer: `A) Direct analytical derivation and experimental validation`,
-            explanation: `Ethiopian National and University exam standards require strict SI dimensional consistency and analytical derivations for ${topic}.`
+            explanation: `In standard university level ${subject}, foundational axioms and theoretical boundary conditions govern the core dynamics of ${topic}.`
           }
         ]);
       },
       onError: () => {
         resolve([
           {
-            question: `What is the key takeaway when revising "${topic}" in ${subject}?`,
+            question: `Which fundamental principle is central to understanding "${topic}" in ${subject}?`,
             options: [
-              `A) Systematic step-by-step problem breakdown and formula application`,
-              `B) Rote memorization of final numbers only`,
-              `C) Skipping prerequisite concepts`,
-              `D) Guessing without analyzing given constraints`
+              `A) Conservation laws and boundary conditions governing ${topic}`,
+              `B) Arbitrary empirical observation without theoretical basis`,
+              `C) Static non-interacting equilibrium states only`,
+              `D) Independent scalar measurement without dimensions`
             ],
-            correctAnswer: `A) Systematic step-by-step problem breakdown and formula application`,
-            explanation: `Standard exam guidance recommends breaking down ${topic} into identified variables and corresponding fundamental laws.`
+            correctAnswer: `A) Conservation laws and boundary conditions governing ${topic}`,
+            explanation: `In standard university level ${subject}, foundational axioms and theoretical boundary conditions govern the core dynamics of ${topic}.`
           }
         ]);
       }

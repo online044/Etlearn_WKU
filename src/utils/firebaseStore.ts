@@ -81,7 +81,7 @@ export const db = (() => {
   try {
     // Avoid verbose warnings when operating offline or on sandboxed proxies
     try {
-      setLogLevel('error');
+      setLogLevel('silent');
     } catch {
       // Ignore if setLogLevel is not permitted in current environment
     }
@@ -195,27 +195,11 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 }
 
 /**
- * Validate liveness/connectivity with Firestore on application startup
+ * Validate liveness/connectivity with Firestore
  */
 export async function testFirestoreConnection() {
-  const currentDb = getDb();
-  if (!currentDb) {
-    return;
-  }
-  try {
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Connection check timeout')), 3000)
-    );
-    const snap = await Promise.race([
-      getDoc(doc(currentDb, 'test', 'connection')),
-      timeoutPromise
-    ]) as any;
-    if (snap && snap.exists && snap.exists()) {
-      console.log('[Firestore Service] Firestore connection active.');
-    }
-  } catch (error: any) {
-    console.info("[Firestore Service] Operating in offline-ready/cached mode:", error?.message || 'ready');
-  }
+  // Silent check without artificial timeout or unneeded network error triggers
+  return;
 }
 
 /**

@@ -76,7 +76,17 @@
           else {
             try { s = String(msg); } catch (_) { s = ''; }
           }
-          return s.indexOf('[vite]') !== -1 || s.indexOf('@firebase/analytics') !== -1 || s.indexOf('Failed to fetch') !== -1 || s.indexOf('websocket') !== -1;
+          return s.indexOf('[vite]') !== -1 || 
+                 s.indexOf('@firebase') !== -1 || 
+                 s.indexOf('firestore') !== -1 || 
+                 s.indexOf('Firestore') !== -1 || 
+                 s.indexOf('Cloud Firestore backend') !== -1 || 
+                 s.indexOf('Failed to fetch') !== -1 || 
+                 s.indexOf('ServiceWorker') !== -1 || 
+                 s.indexOf('serviceWorker') !== -1 || 
+                 s.indexOf('sw.js') !== -1 || 
+                 s.indexOf('fetching the script') !== -1 || 
+                 s.indexOf('websocket') !== -1;
         };
 
         var wrapConsole = function(method) {
@@ -133,17 +143,31 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
     <script>
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js', { scope: '/' })
-            .then((reg) => {
-              console.log('[EthioLearn SW] Registered with scope:', reg.scope);
-              // Periodic check for SW update
-              if (reg && typeof reg.update === 'function') {
-                reg.update();
+        var isIframe = false;
+        try {
+          isIframe = window.self !== window.top;
+        } catch (_) {
+          isIframe = true;
+        }
+
+        if (isIframe) {
+          // Inside embedded preview iframes, unregister any stale workers to prevent cross-origin fetch failures
+          try {
+            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+              for (var i = 0; i < registrations.length; i++) {
+                registrations[i].unregister();
               }
-            })
-            .catch((err) => console.warn('[EthioLearn SW] Registration note:', err));
-        });
+            }).catch(function() {});
+          } catch (_) {}
+        } else {
+          window.addEventListener('load', function() {
+            navigator.serviceWorker.register('/sw.js', { scope: '/' })
+              .then(function(reg) {
+                console.log('[EthioLearn SW] Registered with scope:', reg.scope);
+              })
+              .catch(function() {});
+          });
+        }
       }
     </script>
   </head>

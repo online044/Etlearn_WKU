@@ -508,10 +508,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Firestore connection liveness test
-  useEffect(() => {
-    testFirestoreConnection();
-  }, []);
 
   // Supabase auth state listener & bidirectional data sync
   useEffect(() => {
@@ -1262,6 +1258,9 @@ export default function App() {
                 apiKey={profile.claudeApiKey || ""}
                 enrolledSubjects={profile.subjects}
                 onStudyAction={handleRecordStudyAction}
+                onNavigateBack={() => setCurrentPage('home')}
+                isPro={Boolean(profile.isPro)}
+                onNavigateToUpgrade={() => setCurrentPage('upgrade')}
               />
             )}
 

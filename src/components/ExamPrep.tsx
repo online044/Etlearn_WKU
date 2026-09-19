@@ -1,17 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Compass, Trophy, Zap, Clock, Calendar, ArrowRight, Layers, FileText, CheckCircle, XCircle, HelpCircle, Award, RefreshCw, Plus, X, Star
+  Compass, Trophy, Zap, Clock, Calendar, ArrowRight, Layers, FileText, CheckCircle, XCircle, 
+  HelpCircle, Award, RefreshCw, Plus, X, Star, ArrowLeft, Crown, Lock, Sparkles, AlertTriangle, 
+  Check, BookOpen, RotateCcw, Home, GraduationCap, ChevronRight, ShieldCheck
 } from 'lucide-react';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
 import { safeStorage } from '../utils/safeStorage';
-import { INITIAL_QUESTIONS } from '../data/initialFirestoreContent';
 import { generateRandomExamQuestions } from '../utils/supabaseQuestions';
 
 interface ExamPrepProps {
   apiKey: string;
   enrolledSubjects: string[];
   onStudyAction?: () => void;
+  onNavigateBack?: () => void;
+  isPro?: boolean;
+  onNavigateToUpgrade?: () => void;
 }
 
 interface QuizQuestion {
@@ -21,256 +25,226 @@ interface QuizQuestion {
   explanation?: string;
 }
 
+const DEFAULT_SUBJECTS = [
+  "Mathematics",
+  "General Biology",
+  "Emerging Technologies",
+  "Introduction to Economics",
+  "Communicative English",
+  "Moral and Civic Education",
+  "General Physics",
+  "Chemistry",
+  "Logic and Critical Thinking",
+  "C++ Programming",
+  "Geography of Ethiopia",
+  "History of Ethiopia"
+];
+
 const PAST_EXAM_BANK: { [subject: string]: QuizQuestion[] } = {
-  "Emerging Technologies": [
+  "Mathematics": [
     {
-      question: "Which technology acts as the underlying fabric enabling the secure decentralization of cryptocurrencies without middlemen?",
-      options: ["Centralized cloud clusters", "Blockchain distributed ledgers", "Quantum supercomputing", "Edge mesh nodes"],
-      correctAnswer: "Blockchain distributed ledgers",
-      explanation: "Blockchain technology employs decentralized consensus mechanisms (like Proof of Work/Stake) to secure accounting books without trusting central banks or middlemen."
+      question: "What is the derivative of f(x) = 3x^4 - 5x^2 + 7 with respect to x?",
+      options: ["12x^3 - 10x", "12x^3 - 5x + 7", "7x^3 - 10x", "12x^4 - 10x^2"],
+      correctAnswer: "12x^3 - 10x",
+      explanation: "Using the power rule d/dx(x^n) = n*x^(n-1): d/dx(3x^4) = 12x^3, d/dx(-5x^2) = -10x, and the derivative of constant (7) is 0."
     },
     {
-      question: "What is the primary operational advantage of implementing Edge Computing in remote industrial networks?",
-      options: ["Massive cloud data-center compilation", "Reduced latency by processing closer to host devices", "Infinitely high energy consumption profiles", "Lower overall cryptography overhead"],
-      correctAnswer: "Reduced latency by processing closer to host devices",
-      explanation: "Edge processing handles immediate data local to the collection node, cutting transmission latency to remote servers and saving network bandwidth."
-    }
-  ],
-  "Introduction to Economics": [
-    {
-      question: "Which state of a typical free market represents the stable price-point where consumer demand perfectly equals producer supply?",
-      options: ["Systemic inflation", "Equilibrium price level", "Economic stagnation", "Mercantile deficit"],
-      correctAnswer: "Equilibrium price level",
-      explanation: "Market equilibrium occurs at the intersection of supply and demand curves. No supply surplus or demand deficit forces price adjustments."
+      question: "Evaluate the limit: lim(x -> 0) [sin(5x) / x].",
+      options: ["5", "1", "0", "Does not exist"],
+      correctAnswer: "5",
+      explanation: "Using the standard limit theorem lim(u -> 0) [sin(u)/u] = 1, lim(x -> 0) [sin(5x)/x] = 5 * lim(x -> 0) [sin(5x)/(5x)] = 5 * 1 = 5."
     },
     {
-      question: "What unique Giffen Good feature violates the fundamental 'Law of Demand' in microeconomics?",
-      options: ["An increase in price leads to an increase in demand", "Demand falls to zero immediately upon price adjustments", "Producers refuse to supply items below premium limits", "The substitution effect eclipses real-income restrictions"],
-      correctAnswer: "An increase in price leads to an increase in demand",
-      explanation: "For highly essential inferior foods like staple grains in low-income populations, a high price reduces disposable cash, forcing families to buy more basic grains instead of expensive meats."
+      question: "In linear algebra, if matrix A has a determinant det(A) = 0, which statement is always true?",
+      options: ["Matrix A is singular and non-invertible", "Matrix A is symmetric", "Matrix A is an identity matrix", "The eigenvalues of A are all equal to 1"],
+      correctAnswer: "Matrix A is singular and non-invertible",
+      explanation: "A square matrix is invertible if and only if its determinant is non-zero. When det(A) = 0, the matrix is singular."
+    },
+    {
+      question: "What is the integral ∫ (2x + 3)^4 dx?",
+      options: ["(1/10)(2x + 3)^5 + C", "(1/5)(2x + 3)^5 + C", "(2/5)(2x + 3)^5 + C", "(1/8)(2x + 3)^4 + C"],
+      correctAnswer: "(1/10)(2x + 3)^5 + C",
+      explanation: "Let u = 2x + 3, then du = 2 dx or dx = du/2. The integral becomes (1/2) ∫ u^4 du = (1/10)(2x + 3)^5 + C."
     }
   ],
   "General Biology": [
     {
-      question: "What primary chemical organelle hosts the aerobic Krebs (Citric Acid) Cycle within organic eukaryotic cells?",
-      options: ["Cytosolic ribosomes", "The inner mitochondria matrix", "Nucleolar envelope membranes", "Lysosome digestion bubbles"],
-      correctAnswer: "The inner mitochondria matrix",
+      question: "What primary cellular organelle hosts the aerobic Krebs (Citric Acid) Cycle within eukaryotic cells?",
+      options: ["The inner mitochondrial matrix", "Cytosolic ribosomes", "Nucleolar envelope membranes", "Lysosome digestion vesicles"],
+      correctAnswer: "The inner mitochondrial matrix",
       explanation: "While glycolysis happens in the cytosol, the Citric Acid Cycle occurs inside the mitochondrial matrix to synthesize NADH, FADH2, and ATP precursors."
     },
     {
-      question: "Which cellular cycle phase copies genetic chromatid structures to prepare cells for real mitosis division?",
-      options: ["G0 stagnant resting stage", "S (Synthesis) phase of Interphase", "Prophase spindle convergence", "Telophase cytokinetics split"],
+      question: "Which cellular cycle phase replicates genomic DNA to prepare cells for mitotic division?",
+      options: ["S (Synthesis) phase of Interphase", "G0 stagnant resting stage", "Prophase spindle convergence", "Telophase cytokinesis split"],
       correctAnswer: "S (Synthesis) phase of Interphase",
-      explanation: "DNA replication is completed in the S-Phase (Synthesis Phase) of the cell cycle, ensuring each resulting daughter cell gets a perfect genome duplicate."
+      explanation: "DNA replication is carried out during the S-phase (Synthesis phase) of the cell cycle, ensuring each resulting daughter cell inherits a complete duplicate genome."
+    },
+    {
+      question: "During light-dependent photosynthetic reactions in chloroplasts, where is molecular oxygen (O2) derived from?",
+      options: ["The photolysis (splitting) of water molecules", "Carbon dioxide fixation in the Calvin cycle", "The degradation of glucose monomers", "ATP synthase catalytic activity"],
+      correctAnswer: "The photolysis (splitting) of water molecules",
+      explanation: "Light energy absorbed by Photosystem II oxidizes and splits water (H2O) into protons, electrons, and O2 gas as a byproduct."
+    },
+    {
+      question: "Which enzyme is responsible for synthesizing mRNA from a DNA template during transcription?",
+      options: ["RNA Polymerase II", "DNA Ligase", "DNA Polymerase III", "Peptidyl Transferase"],
+      correctAnswer: "RNA Polymerase II",
+      explanation: "RNA Polymerase binds to the gene promoter region and transcribes the DNA sequence into messenger RNA (mRNA)."
+    }
+  ],
+  "Emerging Technologies": [
+    {
+      question: "Which technology acts as the underlying decentralized fabric enabling verifiable trust without central intermediaries?",
+      options: ["Blockchain distributed ledgers", "Centralized relational databases", "Quantum supercomputing nodes", "Edge mesh radios"],
+      correctAnswer: "Blockchain distributed ledgers",
+      explanation: "Blockchain technology employs decentralized cryptographic consensus mechanisms (PoW/PoS) to secure ledgers without relying on centralized banks or authorities."
+    },
+    {
+      question: "What is the primary operational advantage of implementing Edge Computing in IoT sensor networks?",
+      options: ["Reduced latency by processing data closer to local source devices", "Higher centralization in distant global cloud hubs", "Increased long-haul bandwidth consumption", "Lower computational requirements on microcontrollers"],
+      correctAnswer: "Reduced latency by processing data closer to local source devices",
+      explanation: "Edge processing analyzes data directly at or near the collection node, cutting transmission latency to distant cloud servers and saving precious network bandwidth."
+    },
+    {
+      question: "In Machine Learning, what type of learning paradigm trains algorithms using explicitly labeled input-output pairs?",
+      options: ["Supervised Learning", "Unsupervised Clustering", "Reinforcement Learning", "Self-Organizing Heuristic Learning"],
+      correctAnswer: "Supervised Learning",
+      explanation: "Supervised learning algorithms are provided with pairs of inputs and corresponding ground-truth targets (labels) to learn a mapping function."
+    },
+    {
+      question: "What is the primary purpose of a Smart Contract deployed on the Ethereum virtual machine?",
+      options: ["To automatically execute contractual agreements when predefined conditions are satisfied", "To physically secure hardware mining rigs", "To generate GPU clock speed profiles", "To compress video files for distributed streaming"],
+      correctAnswer: "To automatically execute contractual agreements when predefined conditions are satisfied",
+      explanation: "Smart contracts are autonomous, self-executing code blocks living on a blockchain that execute logic automatically without third-party arbitration."
+    }
+  ],
+  "Introduction to Economics": [
+    {
+      question: "Which state of a competitive market represents the stable price level where quantity demanded equals quantity supplied?",
+      options: ["Equilibrium price level", "Inflationary gap", "Deadweight monopoly surplus", "Mercantile deficit"],
+      correctAnswer: "Equilibrium price level",
+      explanation: "Market equilibrium occurs at the intersection of supply and demand curves, where no excess supply or unmet demand exerts pressure on prices."
+    },
+    {
+      question: "What does the concept of 'Opportunity Cost' measure in economic decision-making?",
+      options: ["The value of the next best alternative forgone when a choice is made", "The total monetary expenditure incurred during production", "The historical sunk cost that cannot be recovered", "The profit margin earned after deducting taxes"],
+      correctAnswer: "The value of the next best alternative forgone when a choice is made",
+      explanation: "Opportunity cost represents the highest-valued alternative sacrificed whenever resources are allocated to one specific choice over another."
+    },
+    {
+      question: "If the cross-price elasticity of demand between good X and good Y is positive, what is the economic relationship between them?",
+      options: ["They are substitute goods", "They are complementary goods", "They are inferior goods", "They are luxury Giffen goods"],
+      correctAnswer: "They are substitute goods",
+      explanation: "A positive cross-price elasticity means that an increase in the price of one good causes an increase in demand for the other, indicating they can substitute for each other."
+    },
+    {
+      question: "Which macroeconomic indicator calculates the total market value of all final goods and services produced within a country's borders in a given year?",
+      options: ["Gross Domestic Product (GDP)", "Gross National Product (GNP)", "Net National Disposable Income", "Consumer Price Index (CPI)"],
+      correctAnswer: "Gross Domestic Product (GDP)",
+      explanation: "GDP measures the monetary value of all finished goods and services produced domestically over a specified period."
     }
   ],
   "Communicative English": [
     {
-      question: "Choose the correct indirect reported statement for: \"I am studying biology tonight,\" said Almaz.",
+      question: "Choose the correct reported speech form: 'I am preparing for the midterm exam now,' said Abebe.",
       options: [
-        "Almaz said she is studying biology tonight.",
-        "Almaz said she was studying biology that night.",
-        "Almaz said I had been studying biology tonight.",
-        "Almaz says she studied biology that night."
+        "Abebe said that he was preparing for the midterm exam then.",
+        "Abebe said that he is preparing for the midterm exam now.",
+        "Abebe told that he will prepare for the midterm exam then.",
+        "Abebe said he had been preparing for the midterm exam today."
       ],
-      correctAnswer: "Almaz said she was studying biology that night.",
-      explanation: "When reporting speech, present continuous shifts to past continuous ('am studying' -> 'was studying'), and time phrases shift ('tonight' -> 'that night')."
+      correctAnswer: "Abebe said that he was preparing for the midterm exam then.",
+      explanation: "In reported speech with a past reporting verb ('said'), present continuous ('am preparing') shifts to past continuous ('was preparing') and 'now' shifts to 'then'."
+    },
+    {
+      question: "Identify the grammatically correct sentence with proper subject-verb agreement:",
+      options: [
+        "The professor, along with her graduate assistants, has published a groundbreaking paper.",
+        "The professor, along with her graduate assistants, have published a groundbreaking paper.",
+        "Neither the students nor the instructor were present at the auditorium.",
+        "A bouquet of fresh yellow roses were placed on the podium."
+      ],
+      correctAnswer: "The professor, along with her graduate assistants, has published a groundbreaking paper.",
+      explanation: "Parenthetical phrases introduced by 'along with' do not change the number of the singular subject ('The professor' -> 'has published')."
     }
   ],
   "Moral and Civic Education": [
     {
-      question: "Which founding document governs the modern federal structure and human rights standards of the Federal Democratic Republic of Ethiopia?",
-      options: ["The 1931 imperial decree", "The 1987 Derg legal template", "The 1995 FDRE Constitution", "The Fetha Nagast historical code"],
+      question: "Which supreme legal document serves as the foundational framework for governance and human rights in modern Ethiopia?",
+      options: ["The 1995 FDRE Constitution", "The 1931 Imperial Constitution", "The 1987 PDRE Constitution", "The Fetha Nagast historical code"],
       correctAnswer: "The 1995 FDRE Constitution",
-      explanation: "The 1995 Constitution of the FDRE established the current ethnic-based federal structure, decentralized administrative powers, and coded core democratic rights."
-    }
-  ],
-  "Mathematics": [
+      explanation: "The 1995 Constitution of the Federal Democratic Republic of Ethiopia establishes the federal state structure, separation of powers, and human and democratic rights."
+    },
     {
-      question: "In vector algebra, what is the dot product of vectors u = [2, 3] and v = [4, -1]?",
-      options: ["5", "11", "14", "-5"],
-      correctAnswer: "5",
-      explanation: "The dot product is calculated as (2*4) + (3*-1) = 8 - 3 = 5."
-    }
-  ],
-  "Inclusive Education": [
-    {
-      question: "Which educational strategy involves modifying the learning environment, instruction, and assessments to support students with diverse learning styles and abilities?",
-      options: ["Differentiated Instruction", "Standardized Isolationism", "Homogenous Grouping", "Unimodal lecturing"],
-      correctAnswer: "Differentiated Instruction",
-      explanation: "Differentiated instruction addresses the individual learning needs of all students within the same classroom setting."
-    }
-  ],
-  "Geography": [
-    {
-      question: "Which morphological feature of East Africa runs completely through Ethiopia from northeast to southwest, dividing its highlands?",
-      options: ["The Great Rift Valley", "The Ethiopian Plateau", "The Ras Dashen Peak", "The Danakil Depression"],
-      correctAnswer: "The Great Rift Valley",
-      explanation: "The East African Rift System divides the Ethiopian highlands into northwestern and southeastern sections, hosting a chain of beautiful lakes."
-    }
-  ],
-  "Logic and Critical Thinking": [
-    {
-      question: "What is the form of a deductive argument that contains exactly two premises and a conclusion?",
-      options: ["A syllogism", "An inductive generalization", "An analogical inference", "A formal fallacy"],
-      correctAnswer: "A syllogism",
-      explanation: "A syllogism is a form of reasoning in which a conclusion is drawn from two given or assumed premises (e.g. categorical syllogism)."
-    }
-  ],
-  "History": [
-    {
-      question: "Which famous Axumite Emperor converted the kingdom to Christianity in the 4th century AD?",
-      options: ["Emperor Ezana", "Emperor Kaleb", "Emperor Lalibela", "Emperor Menelik I"],
-      correctAnswer: "Emperor Ezana",
-      explanation: "Emperor Ezana was the first monarch of Axum to adopt Christianity, establishing it as the state religion around 330 AD."
-    }
-  ],
-  "Chemistry": [
-    {
-      question: "According to Bronsted-Lowry theory, what species is formed when an acid donates a proton to a base?",
-      options: ["Its conjugate base", "Its conjugate acid", "A neutral precipitate", "A hydronium salt"],
-      correctAnswer: "Its conjugate base",
-      explanation: "An acid that has lost its proton becomes its conjugate base, which is capable of accepting a proton in the reverse reaction."
-    }
-  ],
-  "Aptitude": [
-    {
-      question: "A machine can produce 50 widgets in 40 minutes. How many widgets can three identical machines produce working together for 2 hours?",
-      options: ["450 widgets", "150 widgets", "300 widgets", "225 widgets"],
-      correctAnswer: "450 widgets",
-      explanation: "One machine produces 50 widgets per 40 min, which is 150 widgets in 120 min (2 hours). Three machines will produce 150 * 3 = 450 widgets."
+      question: "In philosophical ethics, which normative theory asserts that the morality of an action depends solely on the greatest overall happiness it produces?",
+      options: ["Utilitarianism (Consequentialism)", "Kantian Deontology", "Virtue Ethics", "Ethical Egoism"],
+      correctAnswer: "Utilitarianism (Consequentialism)",
+      explanation: "Utilitarianism judges actions based on their consequences, seeking the greatest good for the greatest number."
     }
   ],
   "General Physics": [
     {
-      question: "What is the work done on an object when a constant force of 15 Newtons moves it 4 meters in the direction of the force?",
-      options: ["60 Joules", "3.75 Joules", "19 Joules", "30 Joules"],
-      correctAnswer: "60 Joules",
-      explanation: "Work is calculated as Force * distance * cos(theta). Here, Work = 15 N * 4 m = 60 Joules."
-    }
-  ],
-  "Entrepreneurship": [
-    {
-      question: "Which component of the Canvas Business Model defines the groups of people or organizations an enterprise aims to reach and serve?",
-      options: ["Customer Segments", "Value Propositions", "Channels", "Key Partnerships"],
-      correctAnswer: "Customer Segments",
-      explanation: "Customer Segments define the specific profiles or cohorts of customers that a business builds products or services for."
-    }
-  ],
-  "Social Anthropology": [
-    {
-      question: "Which of the following is a primary method used by cultural anthropologists that involves living within a community to observe and record daily life firsthand?",
-      options: ["Participant Observation", "Statistical Census Surveying", "Controlled Laboratory Experimentation", "Quantitative Econometrics"],
-      correctAnswer: "Participant Observation",
-      explanation: "Participant observation is the hallmark qualitative research method of anthropology, requiring immersive fieldwork in local communities."
-    }
-  ],
-  "C++ Programming": [
-    {
-      question: "What is the function of the 'destructor' in a C++ class?",
-      options: ["To deallocate memory and clean up resources when an object goes out of scope", "To allocate dynamic pointer blocks on class instantiation", "To copy private member variables to external scopes", "To compile nested header declarations automatically"],
-      correctAnswer: "To deallocate memory and clean up resources when an object goes out of scope",
-      explanation: "Destructors are special member functions called automatically when an object is destroyed or goes out of scope, releasing acquired heap resources."
-    }
-  ],
-  "Civics": [
-    {
-      question: "Which of the following is a key feature of a democratic system?",
-      options: ["Rule of Law and accountability", "Absolute power of the executive branch", "State control of all private property", "Inherited royal leadership"],
-      correctAnswer: "Rule of Law and accountability",
-      explanation: "In a fully democratic system, all citizens and governmental bodies are subject to the Rule of Law, with periodic elections establishing clear accountability."
+      question: "A constant force of 20 N acts upon a 4 kg mass initially at rest. What is the acceleration produced?",
+      options: ["5 m/s²", "80 m/s²", "16 m/s²", "0.2 m/s²"],
+      correctAnswer: "5 m/s²",
+      explanation: "By Newton's Second Law of Motion: F = m * a. Therefore, a = F / m = 20 N / 4 kg = 5 m/s²."
     },
     {
-      question: "What is the primary role of the House of Federation (HoF) in the Federal Democratic Republic of Ethiopia?",
-      options: ["Interpreting the Federal Constitution and resolving regional disputes", "Drafting and enacting national commercial codes", "Serving as the commander-in-chief of defense forces", "Representing Ethiopia in foreign diplomatic missions"],
-      correctAnswer: "Interpreting the Federal Constitution and resolving regional disputes",
-      explanation: "According to the 1995 FDRE Constitution, the House of Federation has the ultimate power of constitutional interpretation and federal dispute resolution."
+      question: "What physical quantity does the area under a Velocity-Time graph represent?",
+      options: ["Displacement", "Instantaneous acceleration", "Kinetic momentum", "Jerk"],
+      correctAnswer: "Displacement",
+      explanation: "The definite integral of velocity with respect to time (∫ v(t) dt) calculates the displacement of the moving body."
     }
   ],
-  "Agriculture": [
+  "Chemistry": [
     {
-      question: "Which soil conservation method involves planting crops across a slope following elevation lines to reduce water erosion?",
-      options: ["Contour ploughing", "Monoculture farming", "Shifting cultivation", "Chemical slash-and-burn"],
-      correctAnswer: "Contour ploughing",
-      explanation: "Contour ploughing creates water break barriers along elevation contours, reducing soil runoff and increasing water infiltration significantly."
+      question: "What is the pH of a 0.001 M hydrochloric acid (HCl) aqueous solution at 25°C?",
+      options: ["3.0", "1.0", "11.0", "7.0"],
+      correctAnswer: "3.0",
+      explanation: "HCl is a strong monoprotic acid that dissociates completely: [H+] = 0.001 M = 10^-3 M. pH = -log10([H+]) = -log10(10^-3) = 3.0."
     },
     {
-      question: "In animal nutrition, what is the primary purpose of adding leguminous forage (like Alfalfa) to livestock feed?",
-      options: ["To provide high protein content and nitrogen-fixing benefits", "To decrease the digestion rate of complex cellulose", "To eliminate the need for minerals and water intake", "To artificialize milk fats production in lactating cows"],
-      correctAnswer: "To provide high protein content and nitrogen-fixing benefits",
-      explanation: "Leguminous plants are rich in digestible proteins, amino acids, and minerals, which drastically improve livestock growth and milk yield."
-    }
-  ],
-  "Business": [
-    {
-      question: "In accounting, what is the fundamental accounting equation that governs double-entry bookkeeping?",
-      options: ["Assets = Liabilities + Owner's Equity", "Assets + Liabilities = Owner's Equity", "Revenues = Expenses + Net Income", "Assets = Current Assets + Non-Current Assets"],
-      correctAnswer: "Assets = Liabilities + Owner's Equity",
-      explanation: "The accounting equation states that a company's total assets are funded by either borrowing (liabilities) or owners' capital contributions (equity)."
-    },
-    {
-      question: "Which form of business ownership offers limited liability to its owners but is subject to double taxation?",
-      options: ["A Share Company (Corporation)", "A Sole Proprietorship", "A General Partnership", "A Joint Venture"],
-      correctAnswer: "A Share Company (Corporation)",
-      explanation: "Corporations (Share Companies) protect owners via limited liability, but face double taxation: once on corporate earnings, and once on individual dividends."
-    }
-  ],
-  "Moral and Civics": [
-    {
-      question: "According to ethical theories, which philosophical view holds that the moral value of an action is determined solely by its ultimate consequences?",
-      options: ["Utilitarianism (Consequentialism)", "Deontological Ethics (Kantian)", "Virtue Ethics (Aristotelian)", "Ethical Relativism"],
-      correctAnswer: "Utilitarianism (Consequentialism)",
-      explanation: "Utilitarianism, popularized by Bentham and Mill, evaluates actions based on their consequences, aiming to maximize the greatest happiness for the greatest number."
-    },
-    {
-      question: "Which type of state structure distributes political and administrative power between a central government and autonomous regional units?",
-      options: ["A Federal State Structure", "A Unitary State Structure", "An Absolute Monarchy", "A Totalitarian Autocracy"],
-      correctAnswer: "A Federal State Structure",
-      explanation: "Federalism divides sovereignty between central and constituent state governments (such as in Ethiopia), safeguarding regional autonomy while preserving national integrity."
-    }
-  ],
-  "Emerging Tech": [
-    {
-      question: "Which concept refers to a system of physical objects embedded with sensors, software, and network connections that exchange data without human intervention?",
-      options: ["Internet of Things (IoT)", "Centralized Batch Mainframe", "Hypertext Transfer Protocol (HTTP)", "Local Area Networking (LAN)"],
-      correctAnswer: "Internet of Things (IoT)",
-      explanation: "IoT describes the network of smart physical items collecting and sharing data in real-time, enabling smart cities and industrial automation (Industry 4.0)."
-    },
-    {
-      question: "What is the main role of a smart contract in a blockchain platform like Ethereum?",
-      options: ["To automatically execute contractual terms when predefined conditions are met", "To encrypt user wallets with secure physical backup hardware", "To generate block hashes using graphics processing units", "To translate Ge'ez characters into binary machine code"],
-      correctAnswer: "To automatically execute contractual terms when predefined conditions are met",
-      explanation: "Smart contracts are self-executing computerized protocols that run directly on blockchain ledgers, automating agreement validation without trusted third parties."
-    }
-  ],
-  "Applied Math": [
-    {
-      question: "What is the derivative of the function f(x) = x * ln(x) with respect to x?",
-      options: ["ln(x) + 1", "ln(x)", "1/x", "x + ln(x)"],
-      correctAnswer: "ln(x) + 1",
-      explanation: "Using the product rule, d/dx[u*v] = u'v + uv'. Thus, d/dx[x*ln(x)] = (1)*ln(x) + x*(1/x) = ln(x) + 1."
-    },
-    {
-      question: "What does the divergence of a vector field physically represent in fluid dynamics?",
-      options: ["The net rate of expansion or contraction of fluid volume at a given point", "The rotational angular velocity or spin of fluid particles", "The maximum rate of directional temperature increases", "The conservative energy path integral over a closed loop"],
-      correctAnswer: "The net rate of expansion or contraction of fluid volume at a given point",
-      explanation: "Mathematically, the divergence (∇·F) measures whether a vector field behaves as a fluid source (positive divergence) or a fluid sink (negative divergence)."
+      question: "According to the Bronsted-Lowry acid-base definition, what is a base?",
+      options: ["A proton (H+) acceptor", "A proton (H+) donor", "An electron pair donor only", "A substance that produces OH- ions in nonpolar solvents"],
+      correctAnswer: "A proton (H+) acceptor",
+      explanation: "In Bronsted-Lowry theory, an acid is a proton donor and a base is a proton acceptor."
     }
   ]
 };
 
-export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: ExamPrepProps) {
+export default function ExamPrep({ 
+  apiKey, 
+  enrolledSubjects, 
+  onStudyAction,
+  onNavigateBack,
+  isPro = false,
+  onNavigateToUpgrade
+}: ExamPrepProps) {
   // Load language settings from safeStorage
   const [language, setLanguage] = useState<'en' | 'am'>(() => {
     const saved = safeStorage.getItem('ethiolearn_language_preference');
     return (saved === 'am' || saved === 'en') ? saved : 'en';
   });
 
+  // Track practiced subjects for Free tier limit (max 3 subjects)
+  const [triedSubjects, setTriedSubjects] = useState<string[]>(() => {
+    try {
+      const stored = safeStorage.getItem('ethiolearn_quiz_tried_subjects');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+
   const [customQuestionBank, setCustomQuestionBank] = useState<{ [subject: string]: QuizQuestion[] }>(() => {
     try {
       const stored = safeStorage.getItem('ethiolearn_custom_exams');
       return stored ? JSON.parse(stored) : {};
-    } catch (e) {
+    } catch {
       return {};
     }
   });
@@ -279,21 +253,15 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
     try {
       const stored = safeStorage.getItem('ethiolearn_custom_exams');
       const customSubjects = stored ? Object.keys(JSON.parse(stored)) : [];
-      return Array.from(new Set([...enrolledSubjects, ...customSubjects]));
-    } catch (e) {
-      return enrolledSubjects;
+      const combined = Array.from(new Set([...DEFAULT_SUBJECTS, ...enrolledSubjects, ...customSubjects]));
+      return combined;
+    } catch {
+      return DEFAULT_SUBJECTS;
     }
   });
 
   const [selectedSubject, setSelectedSubject] = useState(() => {
-    try {
-      const stored = safeStorage.getItem('ethiolearn_custom_exams');
-      const customSubjects = stored ? Object.keys(JSON.parse(stored)) : [];
-      const combined = Array.from(new Set([...enrolledSubjects, ...customSubjects]));
-      return combined[0] || "Emerging Technologies";
-    } catch (e) {
-      return enrolledSubjects[0] || "Emerging Technologies";
-    }
+    return allSubjects[0] || "Mathematics";
   });
 
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
@@ -310,6 +278,69 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
   const [newOptionD, setNewOptionD] = useState('');
   const [newCorrectOption, setNewCorrectOption] = useState<'A' | 'B' | 'C' | 'D'>('A');
   const [newExplanation, setNewExplanation] = useState('');
+
+  // Exam runtime state
+  const [examMode, setExamMode] = useState<'setup' | 'active' | 'results'>('setup');
+  const [examQuestions, setExamQuestions] = useState<QuizQuestion[]>([]);
+  const [activeQIndex, setActiveQIndex] = useState(0);
+  const [userSelections, setUserSelections] = useState<{ [index: number]: string }>({});
+  const [isAnswerRevealed, setIsAnswerRevealed] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState<number>(90);
+  const examTimerRef = useRef<any>(null);
+
+  // Results State
+  const [examScore, setExamScore] = useState<number>(0);
+  const [examGrade, setExamGrade] = useState<string>('A');
+  const [particles, setParticles] = useState<{ id: number; left: number; top: number; color: string; size: number; duration: number }[]>([]);
+
+  // 5-minute revision summaries
+  const [revisionTopic, setRevisionTopic] = useState('');
+  const [revisionOutput, setRevisionOutput] = useState('');
+  const [isSummarizing, setIsSummarizing] = useState(false);
+
+  // Loading state
+  const [loadingText, setLoadingText] = useState<string | null>(null);
+
+  // History & Favorites
+  const [pastSessions, setPastSessions] = useState<any[]>(() => {
+    try {
+      const stored = safeStorage.getItem('ethiolearn_exam_sessions');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [favoriteSessionIds, setFavoriteSessionIds] = useState<string[]>(() => {
+    try {
+      const stored = safeStorage.getItem('ethiolearn_favorite_exam_sessions');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [showFavoriteSessionsOnly, setShowFavoriteSessionsOnly] = useState<boolean>(false);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+
+  // Check if selected subject is permitted under the 3-subject rule
+  const isSubjectPermitted = (sub: string): boolean => {
+    if (isPro) return true;
+    if (triedSubjects.includes(sub)) return true;
+    return triedSubjects.length < 3;
+  };
+
+  const recordSubjectUsage = (sub: string) => {
+    if (!triedSubjects.includes(sub)) {
+      const updated = [...triedSubjects, sub];
+      setTriedSubjects(updated);
+      try {
+        safeStorage.setItem('ethiolearn_quiz_tried_subjects', JSON.stringify(updated));
+      } catch (e) {
+        console.warn('Failed to persist tried subjects', e);
+      }
+    }
+  };
 
   const handleAddCustomQuestion = (e: React.FormEvent) => {
     e.preventDefault();
@@ -346,123 +377,150 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
       safeStorage.setItem('ethiolearn_custom_exams', JSON.stringify(bank));
       setCustomQuestionBank(bank);
       
-      // Update subjects list if it's a brand new subject
       if (!allSubjects.includes(subjectKey)) {
-        setAllSubjects(prev => {
-          const updated = [...prev, subjectKey];
-          return Array.from(new Set(updated));
-        });
+        setAllSubjects(prev => Array.from(new Set([...prev, subjectKey])));
       }
       
       setSelectedSubject(subjectKey);
       playSuccessChime();
       alert(language === 'en' 
-        ? `Successfully added your question to subject "${subjectKey}"! You can now select this subject and take your custom exam.` 
-        : `ጥያቄዎ በ"${subjectKey}" ስር በተሳካ ሁኔታ ተቀምጧል! አሁን መፈተን ይችላሉ።`
+        ? `Successfully added your question to "${subjectKey}"!` 
+        : `ጥያቄዎ ወደ "${subjectKey}" በተሳካ ሁኔታ ተጨምሯል!`
       );
-
-      // Reset
+      
       setNewQuestionText('');
       setNewOptionA('');
       setNewOptionB('');
       setNewOptionC('');
       setNewOptionD('');
       setNewExplanation('');
-      setNewCorrectOption('A');
       setShowAddExamModal(false);
-    } catch (err) {
-      console.error(err);
-      playFailureChime();
+    } catch {
+      alert(language === 'en' ? 'Failed to save custom question.' : 'ጥያቄውን መመዝገብ አልተቻለም።');
     }
   };
 
-  const [examMode, setExamMode] = useState<'setup' | 'active' | 'results'>('setup');
-  const [examQuestions, setExamQuestions] = useState<QuizQuestion[]>([]);
-  const [activeQIndex, setActiveQIndex] = useState<number>(0);
-  
-  // Quiz evaluation states
-  const [userSelections, setUserSelections] = useState<{ [qIndex: number]: string }>({});
-  const [isAnswerRevealed, setIsAnswerRevealed] = useState<boolean>(false);
-  
-  const [examScore, setExamScore] = useState<number>(0);
-  const [examGrade, setExamGrade] = useState<'A' | 'B' | 'C' | 'D' | 'F'>('F');
-  const [pastSessions, setPastSessions] = useState<any[]>(() => {
-    try {
-      const stored = safeStorage.getItem("ethiolearn_exam_sessions_history");
-      return stored ? JSON.parse(stored) : [];
-    } catch (e) {
-      return [];
-    }
-  });
-
-  const [favoriteSessionIds, setFavoriteSessionIds] = useState<string[]>(() => {
-    try {
-      const saved = safeStorage.getItem('ethiolearn_favorite_exams');
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      return [];
-    }
-  });
-
-  const [showFavoriteSessionsOnly, setShowFavoriteSessionsOnly] = useState(false);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const triggerDopaminePop = () => {
+    const newParticles = Array.from({ length: 24 }).map((_, i) => ({
+      id: Date.now() + i,
+      left: Math.random() * 80 + 10,
+      top: Math.random() * 60 + 20,
+      color: ['#078930', '#FCDD09', '#DA121A', '#3B82F6', '#10B981', '#F59E0B'][Math.floor(Math.random() * 6)],
+      size: Math.random() * 8 + 4,
+      duration: Math.random() * 1.5 + 1
+    }));
+    setParticles(newParticles);
+    setTimeout(() => setParticles([]), 2500);
+  };
 
   const toggleFavoriteSession = (sessionId: string) => {
     playClickChime();
     setFavoriteSessionIds(prev => {
-      const updated = prev.includes(sessionId)
-        ? prev.filter(id => id !== sessionId)
-        : [...prev, sessionId];
-      safeStorage.setItem('ethiolearn_favorite_exams', JSON.stringify(updated));
+      let updated: string[];
+      if (prev.includes(sessionId)) {
+        updated = prev.filter(id => id !== sessionId);
+      } else {
+        updated = [...prev, sessionId];
+      }
+      safeStorage.setItem('ethiolearn_favorite_exam_sessions', JSON.stringify(updated));
       return updated;
     });
   };
 
-  const [loadingText, setLoadingText] = useState<string | null>(null);
-  const [timeRemaining, setTimeRemaining] = useState<number>(60);
-  const [particles, setParticles] = useState<{ id: number; left: number; top: number; color: string; duration: number; size: number }[]>([]);
+  const finalizeQuizStart = (questions: QuizQuestion[]) => {
+    recordSubjectUsage(selectedSubject);
+    setExamQuestions(questions);
+    setExamMode('active');
+    setActiveQIndex(0);
+    setUserSelections({});
+    setIsAnswerRevealed(false);
+    setTimeRemaining(90);
+    startQuestionTimer(90);
+    playSuccessChime();
+  };
 
-  // Revision tool
-  const [revisionTopic, setRevisionTopic] = useState('');
-  const [isSummarizing, setIsSummarizing] = useState(false);
-  const [revisionOutput, setRevisionOutput] = useState('');
+  // Generate Authentic Pro AI Quiz
+  const handleGenerateCuratedMock = async () => {
+    // 3-Subject Subscription Check
+    if (!isSubjectPermitted(selectedSubject)) {
+      playFailureChime();
+      setShowUpgradeModal(true);
+      return;
+    }
 
-  const examTimerRef = useRef<any>(null);
+    playClickChime();
+    setLoadingText(language === 'en' 
+      ? `Asgobnyi AI is generating verified ${selectedSubject} questions...` 
+      : `አስጎብኚ AI ትክክለኛ የ${selectedSubject} የፈተና ጥያቄዎችን በማዘጋጀት ላይ...`
+    );
 
-  // Sync language with state changes
-  useEffect(() => {
-    const handleLangChange = () => {
-      const saved = safeStorage.getItem('ethiolearn_language_preference');
-      if (saved === 'am' || saved === 'en') {
-        setLanguage(saved);
+    try {
+      const resp = await fetch('/api/quiz/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject: selectedSubject,
+          topic: revisionTopic || undefined,
+          difficulty,
+          qCount,
+          customNeeds,
+          language
+        })
+      });
+
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.success && Array.isArray(data.questions) && data.questions.length > 0) {
+          setLoadingText(null);
+          finalizeQuizStart(data.questions);
+          return;
+        }
       }
-    };
-    window.addEventListener('storage', handleLangChange);
-    // Interval check for in-app page transfers
-    const interval = setInterval(handleLangChange, 1000);
-    return () => {
-      window.removeEventListener('storage', handleLangChange);
-      clearInterval(interval);
-    };
-  }, []);
+    } catch (e) {
+      console.warn('[Quiz API Error, falling back to dedicated subject bank]:', e);
+    }
 
-  const triggerDopaminePop = () => {
-    const colors = ['#078930', '#FCDD09', '#BE1931', '#2563EB', '#8B5CF6'];
-    const newList = Array.from({ length: 30 }).map((_, i) => ({
-      id: Date.now() + i,
-      left: Math.random() * 85 + 5,
-      top: Math.random() * 30 + 40,
-      color: colors[i % colors.length],
-      duration: 0.8 + Math.random() * 0.7,
-      size: 5 + Math.random() * 7
-    }));
-    setParticles(newList);
-    setTimeout(() => setParticles([]), 2200);
+    // Fallback: strictly query questions for this subject only.
+    // NEVER mix questions from other subjects!
+    const defaultBank = PAST_EXAM_BANK[selectedSubject] || [];
+    const customBankForSubject = customQuestionBank[selectedSubject] || [];
+    let combined: QuizQuestion[] = [...customBankForSubject, ...defaultBank];
+
+    if (combined.length === 0) {
+      combined = [
+        {
+          question: `In Ethiopian university syllabus for ${selectedSubject}, which core concept governs ${customNeeds || 'foundational analysis'}?`,
+          options: [
+            `A) Theoretical axioms and empirical verification in ${selectedSubject}`,
+            `B) Unsubstantiated empirical observation without foundational models`,
+            `C) Isolated scalar approximations disregarding domain boundaries`,
+            `D) Non-reproducible empirical extrapolation`
+          ],
+          correctAnswer: `A) Theoretical axioms and empirical verification in ${selectedSubject}`,
+          explanation: `In standard university level ${selectedSubject}, academic rigor requires proven theoretical frameworks and empirical consistency.`
+        }
+      ];
+    }
+
+    const shuffled = [...combined].sort(() => 0.5 - Math.random());
+    const selected = shuffled.slice(0, Math.min(qCount, shuffled.length));
+    setLoadingText(null);
+    finalizeQuizStart(selected);
   };
 
   const handleStartPastExam = async () => {
+    // 3-Subject Subscription Check
+    if (!isSubjectPermitted(selectedSubject)) {
+      playFailureChime();
+      setShowUpgradeModal(true);
+      return;
+    }
+
     playClickChime();
-    setLoadingText(language === 'en' ? 'Retrieving official questions from Supabase...' : 'ጥያቄዎችን ከሱፓቤዝ ዳታቤዝ በማውጣት ላይ...');
+    setLoadingText(language === 'en' 
+      ? `Retrieving authentic ${selectedSubject} university examination paper...` 
+      : `ኦፊሴላዊ የ${selectedSubject} የዩኒቨርሲቲ ፈተና ጥያቄዎችን በማምጣት ላይ...`
+    );
 
     try {
       const dbQuestions = await generateRandomExamQuestions({
@@ -478,84 +536,20 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
           correctAnswer: q.correct_answer,
           explanation: q.explanation || `${q.course} (${q.unit})`
         }));
-        setExamQuestions(mapped);
-      } else {
-        const defaultBank = PAST_EXAM_BANK[selectedSubject] || PAST_EXAM_BANK["Emerging Technologies"] || [];
-        const customBankForSubject = customQuestionBank[selectedSubject] || [];
-        const bank = [...customBankForSubject, ...defaultBank];
-        setExamQuestions(bank);
+        setLoadingText(null);
+        finalizeQuizStart(mapped);
+        return;
       }
     } catch {
-      const defaultBank = PAST_EXAM_BANK[selectedSubject] || PAST_EXAM_BANK["Emerging Technologies"] || [];
-      const customBankForSubject = customQuestionBank[selectedSubject] || [];
-      const bank = [...customBankForSubject, ...defaultBank];
-      setExamQuestions(bank);
-    } finally {
-      setLoadingText(null);
-      setExamMode('active');
-      setActiveQIndex(0);
-      setUserSelections({});
-      setIsAnswerRevealed(false);
-      setTimeRemaining(90);
-      startQuestionTimer(90);
+      // Fallback below
     }
-  };
 
-  const handleGenerateCuratedMock = async () => {
-    playClickChime();
-    setLoadingText(language === 'en' ? 'Querying pre-generated question bank...' : 'ቀደም ብለው የተዘጋጁ የፈተና ጥያቄዎችን በማሰባሰብ ላይ...');
-
-    try {
-      const dbQuestions = await generateRandomExamQuestions({
-        subject: selectedSubject,
-        totalQuestions: qCount,
-        difficulty: difficulty
-      });
-
-      if (dbQuestions && dbQuestions.length > 0) {
-        const mapped: QuizQuestion[] = dbQuestions.map(q => ({
-          question: q.question_text,
-          options: q.options,
-          correctAnswer: q.correct_answer,
-          explanation: q.explanation || `${q.subject} - ${q.course}`
-        }));
-        setExamQuestions(mapped);
-      } else {
-        const defaultBank = PAST_EXAM_BANK[selectedSubject] || PAST_EXAM_BANK["Emerging Technologies"] || [];
-        const customBankForSubject = customQuestionBank[selectedSubject] || [];
-        const combined: QuizQuestion[] = [...customBankForSubject, ...defaultBank];
-
-        INITIAL_QUESTIONS.forEach(q => {
-          const opts = q.options.map(o => o.text);
-          const correctOpt = q.options.find(o => o.id === q.correctAnswerId);
-          const correctText = correctOpt ? correctOpt.text : opts[0];
-          combined.push({
-            question: q.text,
-            options: opts,
-            correctAnswer: correctText,
-            explanation: q.explanation
-          });
-        });
-
-        const shuffled = [...combined].sort(() => 0.5 - Math.random());
-        const selected = shuffled.slice(0, Math.min(qCount, shuffled.length));
-        setExamQuestions(selected);
-      }
-    } catch {
-      const defaultBank = PAST_EXAM_BANK[selectedSubject] || PAST_EXAM_BANK["Emerging Technologies"] || [];
-      const customBankForSubject = customQuestionBank[selectedSubject] || [];
-      const bank = [...customBankForSubject, ...defaultBank];
-      setExamQuestions(bank);
-    } finally {
-      setLoadingText(null);
-      setExamMode('active');
-      setActiveQIndex(0);
-      setUserSelections({});
-      setIsAnswerRevealed(false);
-      setTimeRemaining(90);
-      startQuestionTimer(90);
-      playSuccessChime();
-    }
+    // Fallback: dedicated subject bank only
+    const defaultBank = PAST_EXAM_BANK[selectedSubject] || PAST_EXAM_BANK["Mathematics"] || [];
+    const customBankForSubject = customQuestionBank[selectedSubject] || [];
+    const bank = [...customBankForSubject, ...defaultBank];
+    setLoadingText(null);
+    finalizeQuizStart(bank);
   };
 
   const startQuestionTimer = (seconds: number) => {
@@ -573,7 +567,7 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
   };
 
   const handleOptionSelect = (option: string) => {
-    if (isAnswerRevealed) return; // Answer locked
+    if (isAnswerRevealed) return;
 
     setUserSelections(prev => ({ ...prev, [activeQIndex]: option }));
     setIsAnswerRevealed(true);
@@ -591,70 +585,72 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
 
   const handleNextQuestion = () => {
     playClickChime();
-    setIsAnswerRevealed(false);
-    
     if (activeQIndex < examQuestions.length - 1) {
-      setActiveQIndex(activeQIndex + 1);
-      const seconds = 60;
-      startQuestionTimer(seconds);
+      setActiveQIndex(prev => prev + 1);
+      setIsAnswerRevealed(false);
+      setTimeRemaining(90);
+      startQuestionTimer(90);
     } else {
-      calculateExamResults();
+      finishExam();
     }
   };
 
-  const calculateExamResults = () => {
+  const finishExam = () => {
+    clearInterval(examTimerRef.current);
+
     let score = 0;
     examQuestions.forEach((q, idx) => {
-      const selected = userSelections[idx];
-      if (selected === q.correctAnswer) {
+      if (userSelections[idx] === q.correctAnswer) {
         score++;
       }
     });
 
-    const percent = Math.round((score / examQuestions.length) * 100);
-    let grade: 'A' | 'B' | 'C' | 'D' | 'F' = 'F';
-    if (percent >= 85) grade = 'A';
-    else if (percent >= 70) grade = 'B';
-    else if (percent >= 55) grade = 'C';
-    else if (percent >= 40) grade = 'D';
-
     setExamScore(score);
+    const percent = Math.round((score / examQuestions.length) * 100);
+
+    let grade = 'F';
+    if (percent >= 90) grade = 'A+';
+    else if (percent >= 85) grade = 'A';
+    else if (percent >= 80) grade = 'A-';
+    else if (percent >= 75) grade = 'B+';
+    else if (percent >= 70) grade = 'B';
+    else if (percent >= 60) grade = 'C';
+    else if (percent >= 50) grade = 'D';
+
     setExamGrade(grade);
     setExamMode('results');
 
-    // Save logs to history
-    const newSession = {
-      id: `session_${Date.now()}`,
+    const newSessionId = `session_${Date.now()}_${selectedSubject}`;
+    setCurrentSessionId(newSessionId);
+
+    const sessionRecord = {
+      id: newSessionId,
       subject: selectedSubject,
-      date: new Date().toLocaleDateString(),
       score: percent,
-      grade
+      grade,
+      correctCount: score,
+      totalCount: examQuestions.length,
+      date: new Date().toLocaleDateString(language === 'en' ? 'en-US' : 'am-ET', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      })
     };
 
-    setCurrentSessionId(newSession.id);
-
-    const updatedSessions = [newSession, ...pastSessions].slice(0, 15);
+    const updatedSessions = [sessionRecord, ...pastSessions].slice(0, 30);
     setPastSessions(updatedSessions);
-    safeStorage.setItem("ethiolearn_exam_sessions_history", JSON.stringify(updatedSessions));
-
-    // Save last score for Dashboard "Continue where left off" helper
-    safeStorage.setItem('ethiolearn_last_subject', selectedSubject);
-    safeStorage.setItem('ethiolearn_last_quiz_score', percent.toString());
-
-    // Update global diagnostics metrics
-    try {
-      const analytics = JSON.parse(safeStorage.getItem("ethiolearn_analytics") || "{}");
-      analytics.examsDone = (analytics.examsDone || 0) + 1;
-      analytics.examHistory = analytics.examHistory || [];
-      analytics.examHistory.push({
-        date: new Date().toLocaleDateString(),
-        score: percent
-      });
-      safeStorage.setItem("ethiolearn_analytics", JSON.stringify(analytics));
-    } catch(e) {}
+    safeStorage.setItem('ethiolearn_exam_sessions', JSON.stringify(updatedSessions));
 
     playSuccessChime();
     triggerDopaminePop();
+  };
+
+  // Exit Quiz cleanly if student changes their mind
+  const handleConfirmExitQuiz = () => {
+    playClickChime();
+    clearInterval(examTimerRef.current);
+    setShowExitConfirm(false);
+    setExamMode('setup');
   };
 
   // Curriculum 5-Minute summaries
@@ -670,17 +666,17 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
 **Topic:** ${revisionTopic}
 
 **Core Curriculum Takeaways:**
-1. **Fundamental Rule:** Review the foundational principles of ${revisionTopic}. State assumptions clearly and verify baseline terminology.
-2. **High-Frequency Matric Formula:** Check standard equations and inverse relationships that frequently appear in university midterm and entrance papers.
-3. **Common Trap to Avoid:** Distractor options often swap variables or omit physical units. Always verify dimensional consistency.
-4. **Active Application:** Connect theoretical concepts directly to Ethiopian engineering, computing, or social science contexts.
-5. **Exam Check:** Before choosing an option, eliminate choices that contradict foundational definitions.
+1. **Fundamental Axiom:** Review the key theorems and definitions of ${revisionTopic} in ${selectedSubject}.
+2. **High-Frequency University Exam Formula:** Verify standard equations, formulas, and relationships used in Ethiopian universities.
+3. **Common Trap to Avoid:** Distractor options often invert variables or drop units. Always verify dimensional consistency.
+4. **Active Application:** Connect theoretical concepts directly to practical exam problem solving.
+5. **Exam Strategy:** Eliminate choices that contradict foundational definitions first.
 
-*Verified Ethiopian University Curriculum Revision Note.*`;
+*Verified Ethiopian Higher Education Curriculum Reference.*`;
       setIsSummarizing(false);
       setRevisionOutput(summaryCard);
       playSuccessChime();
-    }, 200);
+    }, 250);
   };
 
   return (
@@ -693,226 +689,357 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
             initial={{ opacity: 0, scale: 0.99 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0 }}
-            className="grid grid-cols-1 lg:grid-cols-3 gap-6"
+            className="space-y-5"
           >
-            {/* Form configuration panel */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  <Compass className="w-5 h-5 text-emerald-600" />
-                  <h3 className="font-serif font-bold text-base text-slate-900">
-                    {language === 'en' ? 'Start a Quiz' : 'ፈተና ጀምር'}
-                  </h3>
-                </div>
-              </div>
+            {/* Top Navigation & Status Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-1">
+              <button
+                onClick={() => {
+                  playClickChime();
+                  if (onNavigateBack) onNavigateBack();
+                }}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-300 bg-slate-800/90 hover:bg-slate-700 hover:text-white border border-slate-700/80 transition-all cursor-pointer shadow-sm active:scale-95"
+              >
+                <ArrowLeft className="w-4 h-4 text-amber-400" />
+                <span>{language === 'en' ? 'Back to Dashboard' : 'ወደ ዋናው ገጽ ተመለስ'}</span>
+              </button>
 
-              {/* Subject dropdown */}
-              <div className="space-y-1 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                <label>{language === 'en' ? 'Subject / ኮርስ' : 'የትምህርት አይነት'}</label>
-                <select
-                  value={selectedSubject}
-                  onChange={(e) => setSelectedSubject(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 font-sans font-semibold rounded-xl py-3 px-3.5 outline-none cursor-pointer focus:border-emerald-600"
-                >
-                  {allSubjects.map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Question count options */}
-              <div className="space-y-1 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                <label>{language === 'en' ? 'Length / ብዛት' : 'የጥያቄዎች ብዛት'}</label>
-                <div className="grid grid-cols-3 gap-2 bg-slate-50 p-1 rounded-xl border border-slate-200">
-                  {[5, 10, 20].map((count) => (
-                    <button
-                      key={count}
-                      type="button"
-                      onClick={() => { setQCount(count); playClickChime(); }}
-                      className={`py-2 text-xs font-bold rounded-lg cursor-pointer ${
-                        qCount === count ? 'bg-[#078930] text-white shadow-sm' : 'text-slate-500'
-                      }`}
-                    >
-                      {count} {language === 'en' ? 'Qns' : 'ጥያቄ'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Difficulty level selection */}
-              <div className="space-y-1 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                <label>{language === 'en' ? 'Difficulty / ደረጃ' : 'የክብደት ደረጃ'}</label>
-                <div className="grid grid-cols-3 gap-2 bg-slate-50 p-1 rounded-xl border border-slate-200">
-                  {(['easy', 'medium', 'hard'] as const).map((diff) => (
-                    <button
-                      key={diff}
-                      type="button"
-                      onClick={() => { setDifficulty(diff); playClickChime(); }}
-                      className={`py-2 text-xs font-bold rounded-lg cursor-pointer capitalize ${
-                        difficulty === diff ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500'
-                      }`}
-                    >
-                      {language === 'en' ? diff : (diff === 'easy' ? 'ቀላል' : diff === 'medium' ? 'መካከለኛ' : 'ከባድ')}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Custom needs or specific target area */}
-              <div className="space-y-1 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                <label>{language === 'en' ? 'Specific Request / Custom Needs' : 'የተለየ ጥያቄ / የትኩረት ቦታ'}</label>
-                <textarea
-                  value={customNeeds}
-                  onChange={(e) => setCustomNeeds(e.target.value)}
-                  placeholder={language === 'en' ? 'e.g., focus on C++ pointers, conceptual questions, Amharic-English mixed explanations, etc.' : 'ምሳሌ፦ ማብራሪያው በአማርኛ ይሁን፣ በአብዛኛው ጽንሰ-ሀሳቦች ላይ ያተኩር...'}
-                  rows={2}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 font-sans text-xs font-semibold rounded-xl py-2 px-3 outline-none focus:border-emerald-600 resize-none placeholder-slate-400 normal-case"
-                />
-              </div>
-
-              {/* Action Buttons */}
-              <div className="pt-3 space-y-3">
-                <button
-                  onClick={handleGenerateCuratedMock}
-                  className="w-full h-12 min-h-[48px] bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white text-sm font-serif font-extrabold tracking-wide rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md"
-                >
-                  <Layers className="w-4 h-4" />
-                  {language === 'en' ? 'Start Curriculum Practice Drill' : 'የልምምድ ፈተና ጀምር'}
-                </button>
-
-                <button
-                  onClick={handleStartPastExam}
-                  className="w-full h-12 min-h-[48px] bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm font-serif font-extrabold tracking-wide rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-                >
-                  <FileText className="w-4 h-4 text-emerald-600" />
-                  {language === 'en' ? 'Start Official Past Exam Paper' : 'ኦፊሴላዊ የዩኒቨርሲቲ ፈተና ጀምር'}
-                </button>
-              </div>
-
-              {loadingText && (
-                <div className="p-3 bg-emerald-55/30 border border-emerald-500/20 rounded-xl text-center text-xs text-emerald-800 font-bold animate-pulse">
-                  {loadingText}
-                </div>
-              )}
-            </div>
-
-            {/* Topic Revision helper cards */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-              <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
-                <Zap className="w-5 h-5 text-amber-500 animate-bounce" />
-                <h3 className="font-serif font-bold text-base text-slate-900">
-                  {language === 'en' ? '5-Min Topic Summary' : 'ፈጣን ማጠቃለያ'}
-                </h3>
-              </div>
-
-              <div className="space-y-2">
-                <p className="text-xs text-slate-400 font-sans leading-relaxed">
-                  {language === 'en' ? 'Enter any topic and get immediate bullet notes to review before exams!' : 'ያልገባዎትን ርዕስ እዚህ ይጻፉና በአጭር ነጥቦች ተዘጋጅቶ ይከልሱት!'}
-                </p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="e.g. Mitochondria, GDP, FDRE..."
-                    value={revisionTopic}
-                    onChange={(e) => setRevisionTopic(e.target.value)}
-                    className="flex-1 bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl px-3.5 outline-none"
-                  />
-                  <button
-                    onClick={runTopicRevision}
-                    disabled={isSummarizing || !revisionTopic.trim()}
-                    className="h-10 px-4 bg-[#078930] hover:bg-emerald-700 text-white rounded-xl flex items-center justify-center cursor-pointer disabled:opacity-40"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${isSummarizing ? 'animate-spin' : ''}`} />
-                  </button>
-                </div>
-              </div>
-
-              {revisionOutput ? (
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs leading-relaxed max-h-60 overflow-y-auto whitespace-pre-line text-slate-700 font-sans">
-                  {revisionOutput}
+              {isPro ? (
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold shadow-xs">
+                  <Crown className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{language === 'en' ? 'EthioLearn Pro: Unlimited Subjects' : 'ኢትዮለርን ፕሮ፦ ያልተገደቡ ትምህርቶች'}</span>
                 </div>
               ) : (
-                <div className="p-8 border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-400 font-serif">
-                  {language === 'en' ? 'Notes outcome will compile here...' : 'የተዘጋጀው ማጠቃለያ እዚህ ላይ ይወጣል...'}
-                </div>
+                <button
+                  onClick={() => {
+                    playClickChime();
+                    if (onNavigateToUpgrade) onNavigateToUpgrade();
+                  }}
+                  className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-800/90 border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 text-xs font-bold cursor-pointer transition-all shadow-xs"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>
+                    {language === 'en' 
+                      ? `${triedSubjects.length}/3 Free Subjects Tried (Upgrade for All)` 
+                      : `${triedSubjects.length}/3 ነፃ ትምህርቶች ተሞክረዋል (ሙሉ ለማግኘት አሻሽሉ)`}
+                  </span>
+                </button>
               )}
             </div>
 
-            {/* Score logs list */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  <Trophy className="w-5 h-5 text-emerald-600" />
-                  <h3 className="font-serif font-bold text-base text-[#078930]">
-                    {language === 'en' ? 'Performance Logs' : 'የውጤት መዝገብ'}
-                  </h3>
+            {/* Subject Quota Meter for Free Plan */}
+            {!isPro && (
+              <div className="p-4 bg-slate-800/80 border border-slate-700/80 rounded-2xl space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <span className="font-bold text-slate-200">
+                      {language === 'en' ? 'Free Plan Subject Quota' : 'የነፃ እቅድ የትምህርት ገደብ'}
+                    </span>
+                  </div>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                    triedSubjects.length >= 3 
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' 
+                      : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                  }`}>
+                    {triedSubjects.length} / 3 {language === 'en' ? 'Subjects Active' : 'ትምህርቶች ነፃ ተሞክረዋል'}
+                  </span>
                 </div>
-                {pastSessions.length > 0 && (
-                  <button
-                    onClick={() => {
-                      playClickChime();
-                      setShowFavoriteSessionsOnly(!showFavoriteSessionsOnly);
-                    }}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border ${
-                      showFavoriteSessionsOnly 
-                        ? 'bg-amber-500 border-amber-500 text-white shadow-sm'
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+
+                <div className="w-full bg-slate-700/60 rounded-full h-2 overflow-hidden">
+                  <div 
+                    className={`h-full transition-all duration-300 ${
+                      triedSubjects.length >= 3 ? 'bg-amber-400' : 'bg-emerald-400'
                     }`}
+                    style={{ width: `${Math.min(100, (triedSubjects.length / 3) * 100)}%` }}
+                  />
+                </div>
+
+                {triedSubjects.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[10px] text-slate-400">{language === 'en' ? 'Active Unlocked Subjects:' : 'ያገለገሉ ነፃ ትምህርቶች፦'}</span>
+                    {triedSubjects.map(sub => (
+                      <button
+                        key={sub}
+                        type="button"
+                        onClick={() => {
+                          playClickChime();
+                          setSelectedSubject(sub);
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                          selectedSubject === sub 
+                            ? 'bg-amber-400 text-slate-950 font-bold shadow-xs' 
+                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                        }`}
+                      >
+                        ✓ {sub}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 3-Column Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Form configuration panel */}
+              <div className="bg-slate-850 bg-[#141E33] p-6 rounded-2xl border border-slate-700/80 shadow-md space-y-5">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-700/60">
+                  <div className="flex items-center gap-2">
+                    <Compass className="w-5 h-5 text-amber-400" />
+                    <h3 className="font-serif font-bold text-base text-white">
+                      {language === 'en' ? 'Curriculum Practice & Exams' : 'ፈተና እና ልምምድ ጀምር'}
+                    </h3>
+                  </div>
+
+                  <button
+                    onClick={() => { playClickChime(); setShowAddExamModal(true); }}
+                    className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-700/60 rounded-lg transition-colors cursor-pointer"
+                    title={language === 'en' ? 'Add Custom Exam Question' : 'ብጁ ጥያቄ ጨምር'}
                   >
-                    <Star className={`w-3 h-3 ${showFavoriteSessionsOnly ? 'fill-white text-white' : ''}`} />
-                    {language === 'en' ? 'Best Only' : 'ምርጦቹ ብቻ'}
-                    {favoriteSessionIds.length > 0 && ` (${favoriteSessionIds.length})`}
+                    <Plus className="w-4 h-4" />
                   </button>
+                </div>
+
+                {/* Subject dropdown */}
+                <div className="space-y-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  <div className="flex items-center justify-between">
+                    <label>{language === 'en' ? 'Subject / Course' : 'የትምህርት አይነት'}</label>
+                    {!isSubjectPermitted(selectedSubject) && (
+                      <span className="text-[10px] text-amber-400 font-bold uppercase flex items-center gap-1">
+                        <Lock className="w-3 h-3" /> {language === 'en' ? 'Pro Subject' : 'ፕሮ ትምህርት'}
+                      </span>
+                    )}
+                  </div>
+
+                  <select
+                    value={selectedSubject}
+                    onChange={(e) => setSelectedSubject(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 text-slate-100 font-sans font-semibold rounded-xl py-3 px-3.5 outline-none cursor-pointer focus:border-amber-400"
+                  >
+                    {allSubjects.map(s => {
+                      const locked = !isSubjectPermitted(s);
+                      return (
+                        <option key={s} value={s}>
+                          {s} {locked ? '🔒 (Pro)' : (triedSubjects.includes(s) ? '✓' : '')}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                {/* Question count options */}
+                <div className="space-y-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  <label>{language === 'en' ? 'Number of Questions' : 'የጥያቄዎች ብዛት'}</label>
+                  <div className="grid grid-cols-3 gap-2 bg-slate-900 p-1.5 rounded-xl border border-slate-700">
+                    {[5, 10, 20].map((count) => (
+                      <button
+                        key={count}
+                        type="button"
+                        onClick={() => { setQCount(count); playClickChime(); }}
+                        className={`py-2 text-xs font-bold rounded-lg cursor-pointer transition-all ${
+                          qCount === count ? 'bg-amber-500 text-slate-950 shadow-sm font-extrabold' : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {count} {language === 'en' ? 'Qns' : 'ጥያቄ'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Difficulty level selection */}
+                <div className="space-y-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  <label>{language === 'en' ? 'Difficulty Level' : 'የክብደት ደረጃ'}</label>
+                  <div className="grid grid-cols-3 gap-2 bg-slate-900 p-1.5 rounded-xl border border-slate-700">
+                    {(['easy', 'medium', 'hard'] as const).map((diff) => (
+                      <button
+                        key={diff}
+                        type="button"
+                        onClick={() => { setDifficulty(diff); playClickChime(); }}
+                        className={`py-2 text-xs font-bold rounded-lg cursor-pointer capitalize transition-all ${
+                          difficulty === diff ? 'bg-amber-500 text-slate-950 shadow-sm font-extrabold' : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {language === 'en' ? diff : (diff === 'easy' ? 'ቀላል' : diff === 'medium' ? 'መካከለኛ' : 'ከባድ')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Custom needs or specific target area */}
+                <div className="space-y-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  <label>{language === 'en' ? 'Specific Request / Custom Topic' : 'የተለየ ጥያቄ / የትኩረት ምዕራፍ'}</label>
+                  <textarea
+                    value={customNeeds}
+                    onChange={(e) => setCustomNeeds(e.target.value)}
+                    placeholder={language === 'en' 
+                      ? 'e.g., Focus strictly on Chapter 3 integrals, include Amharic solutions, exam-standard calculations...' 
+                      : 'ምሳሌ፦ በምዕራፍ 3 ላይ ብቻ ያተኩር፣ ማብራሪያው በአማርኛ ይሁን፣ የዩኒቨርሲቲ ፈተና ደረጃ ጥያቄዎች...'}
+                    rows={2}
+                    className="w-full bg-slate-900 border border-slate-700 text-slate-200 font-sans text-xs font-semibold rounded-xl py-2 px-3 outline-none focus:border-amber-400 resize-none placeholder-slate-500 normal-case"
+                  />
+                </div>
+
+                {/* Action Buttons */}
+                <div className="pt-2 space-y-3">
+                  <button
+                    onClick={handleGenerateCuratedMock}
+                    className="w-full h-12 min-h-[48px] bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold text-sm tracking-wide rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all active:scale-98"
+                  >
+                    <Layers className="w-4 h-4 text-slate-950" />
+                    {language === 'en' ? 'Start AI Practice Quiz' : 'የልምምድ ፈተና ጀምር'}
+                  </button>
+
+                  <button
+                    onClick={handleStartPastExam}
+                    className="w-full h-12 min-h-[48px] bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-750 hover:text-white text-sm font-bold tracking-wide rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-xs transition-all active:scale-98"
+                  >
+                    <FileText className="w-4 h-4 text-amber-400" />
+                    {language === 'en' ? 'Official Past University Paper' : 'ኦፊሴላዊ የዩኒቨርሲቲ ፈተና ጀምር'}
+                  </button>
+
+                  {/* Change mind / back button */}
+                  {onNavigateBack && (
+                    <button
+                      onClick={() => {
+                        playClickChime();
+                        onNavigateBack();
+                      }}
+                      className="w-full text-center py-1 text-xs text-slate-400 hover:text-amber-400 transition-colors cursor-pointer"
+                    >
+                      {language === 'en' ? 'Changed your mind? Return to Dashboard' : 'ሀሳብዎን ቀየሩ? ወደ ዋናው ዳሽቦርድ ይመለሱ'}
+                    </button>
+                  )}
+                </div>
+
+                {loadingText && (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-center text-xs text-amber-300 font-bold animate-pulse">
+                    {loadingText}
+                  </div>
                 )}
               </div>
 
-              {(() => {
-                const displayedSessions = pastSessions.filter(sess => {
-                  if (!showFavoriteSessionsOnly) return true;
-                  const sessId = sess.id || `session_${sess.subject}_${sess.date}_${sess.score}`;
-                  return favoriteSessionIds.includes(sessId);
-                });
+              {/* Topic Revision helper cards */}
+              <div className="bg-[#141E33] p-6 rounded-2xl border border-slate-700/80 shadow-md space-y-4">
+                <div className="flex items-center gap-2 pb-3 border-b border-slate-700/60">
+                  <Zap className="w-5 h-5 text-amber-400" />
+                  <h3 className="font-serif font-bold text-base text-white">
+                    {language === 'en' ? '5-Min Topic Summary' : 'ፈጣን የርዕስ ማጠቃለያ'}
+                  </h3>
+                </div>
 
-                if (displayedSessions.length === 0) {
+                <div className="space-y-2">
+                  <p className="text-xs text-slate-400 font-sans leading-relaxed">
+                    {language === 'en' 
+                      ? 'Type any difficult chapter or concept to generate high-yield revision notes before taking your quiz!' 
+                      : 'ያልገባዎትን ርዕስ እዚህ ይጻፉና ፈተና ከመውሰድዎ በፊት ፈጣን ማጠቃለያ ይከልሱ!'}
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder={language === 'en' ? "e.g. Mitochondria, GDP, FDRE Constitution..." : "ምሳሌ፦ Mitochondria, GDP, የፌደራል ህገ-መንግስት..."}
+                      value={revisionTopic}
+                      onChange={(e) => setRevisionTopic(e.target.value)}
+                      className="flex-1 bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-xl px-3.5 outline-none focus:border-amber-400"
+                    />
+                    <button
+                      onClick={runTopicRevision}
+                      disabled={isSummarizing || !revisionTopic.trim()}
+                      className="h-10 px-4 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl flex items-center justify-center cursor-pointer disabled:opacity-40 transition-colors"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${isSummarizing ? 'animate-spin' : ''}`} />
+                    </button>
+                  </div>
+                </div>
+
+                {revisionOutput ? (
+                  <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 text-xs leading-relaxed max-h-64 overflow-y-auto whitespace-pre-line text-slate-300 font-sans">
+                    {revisionOutput}
+                  </div>
+                ) : (
+                  <div className="p-8 border border-dashed border-slate-700 rounded-xl text-center text-xs text-slate-500 font-serif">
+                    {language === 'en' ? 'Notes outcome will compile here...' : 'የተዘጋጀው ማጠቃለያ እዚህ ላይ ይወጣል...'}
+                  </div>
+                )}
+              </div>
+
+              {/* Performance Logs list */}
+              <div className="bg-[#141E33] p-6 rounded-2xl border border-slate-700/80 shadow-md space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-700/60">
+                  <div className="flex items-center gap-2">
+                    <Trophy className="w-5 h-5 text-amber-400" />
+                    <h3 className="font-serif font-bold text-base text-white">
+                      {language === 'en' ? 'Performance History' : 'የፈተና ታሪክ እና ውጤት'}
+                    </h3>
+                  </div>
+
+                  {pastSessions.length > 0 && (
+                    <button
+                      onClick={() => {
+                        playClickChime();
+                        setShowFavoriteSessionsOnly(!showFavoriteSessionsOnly);
+                      }}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border ${
+                        showFavoriteSessionsOnly 
+                          ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-xs'
+                          : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                      }`}
+                    >
+                      <Star className={`w-3 h-3 ${showFavoriteSessionsOnly ? 'fill-slate-950 text-slate-950' : ''}`} />
+                      {language === 'en' ? 'Favorites' : 'ምርጦቹ'}
+                      {favoriteSessionIds.length > 0 && ` (${favoriteSessionIds.length})`}
+                    </button>
+                  )}
+                </div>
+
+                {(() => {
+                  const displayedSessions = pastSessions.filter(sess => {
+                    if (!showFavoriteSessionsOnly) return true;
+                    const sessId = sess.id || `session_${sess.subject}_${sess.date}_${sess.score}`;
+                    return favoriteSessionIds.includes(sessId);
+                  });
+
+                  if (displayedSessions.length === 0) {
+                    return (
+                      <div className="p-8 border border-dashed border-slate-700 rounded-xl text-center text-xs text-slate-500 font-serif">
+                        {showFavoriteSessionsOnly 
+                          ? (language === 'en' ? 'No favorited exam logs yet.' : 'ምርጥ ተብለው የተመረጡ ፈተናዎች የሉም።')
+                          : (language === 'en' ? 'Your test grades history is currently empty' : 'የወሰዷቸው ፈተናዎች ውጤት እዚህ ሙሉ ታሪክ ሆኖ ይቀመጣል')}
+                      </div>
+                    );
+                  }
+
                   return (
-                    <div className="p-8 border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-400 font-serif">
-                      {showFavoriteSessionsOnly 
-                        ? (language === 'en' ? 'No favorited exam logs yet.' : 'ምርጥ ተብለው የተመረጡ ፈተናዎች የሉም።')
-                        : (language === 'en' ? 'Your test grades history is currently empty' : 'የወሰዷቸው ፈተናዎች ውጤት እዚህ ሙሉ ታሪክ ሆኖ ይቀመጣል')}
-                    </div>
-                  );
-                }
-
-                return (
-                  <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
-                    {displayedSessions.map((sess, idx) => {
-                      const sessId = sess.id || `session_${sess.subject}_${sess.date}_${sess.score}`;
-                      const isFav = favoriteSessionIds.includes(sessId);
-                      return (
-                        <div key={sessId} className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between text-xs hover:border-slate-300 transition-colors">
-                          <div className="flex items-center gap-2.5">
-                            <button
-                              onClick={() => toggleFavoriteSession(sessId)}
-                              className="p-1 hover:bg-slate-200/60 rounded text-slate-400 hover:text-amber-500 transition-colors shrink-0"
-                              title={language === 'en' ? 'Toggle Favorite' : 'ምርጥ ምርጫ'}
-                            >
-                              <Star className={`w-3.5 h-3.5 transition-all ${isFav ? 'fill-amber-400 text-amber-500 scale-110' : ''}`} />
-                            </button>
-                            <div>
-                              <span className="font-bold text-slate-800 block leading-tight">{sess.subject}</span>
-                              <span className="text-[10px] text-slate-400 mt-0.5 block">{sess.date}</span>
+                    <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                      {displayedSessions.map((sess) => {
+                        const sessId = sess.id || `session_${sess.subject}_${sess.date}_${sess.score}`;
+                        const isFav = favoriteSessionIds.includes(sessId);
+                        return (
+                          <div key={sessId} className="bg-slate-900/90 p-3 rounded-xl border border-slate-700/80 flex items-center justify-between text-xs hover:border-slate-600 transition-colors">
+                            <div className="flex items-center gap-2.5">
+                              <button
+                                onClick={() => toggleFavoriteSession(sessId)}
+                                className="p-1 hover:bg-slate-800 rounded text-slate-500 hover:text-amber-400 transition-colors shrink-0"
+                                title={language === 'en' ? 'Toggle Favorite' : 'ምርጥ ምርጫ'}
+                              >
+                                <Star className={`w-3.5 h-3.5 transition-all ${isFav ? 'fill-amber-400 text-amber-400 scale-110' : ''}`} />
+                              </button>
+                              <div>
+                                <span className="font-bold text-slate-200 block leading-tight">{sess.subject}</span>
+                                <span className="text-[10px] text-slate-400 mt-0.5 block">{sess.date}</span>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className="font-mono font-extrabold text-sm text-emerald-400 block">{sess.score}%</span>
+                              <span className="block text-[10px] font-black uppercase text-amber-400">Grade {sess.grade}</span>
                             </div>
                           </div>
-                          <div className="text-right shrink-0">
-                            <span className="font-mono font-extrabold text-sm text-emerald-600 block">{sess.score}%</span>
-                            <span className="block text-[10px] font-black uppercase text-amber-600">Grade {sess.grade}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
           </motion.div>
         )}
@@ -924,64 +1051,70 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="max-w-xl mx-auto bg-white p-6 rounded-2xl border border-slate-200 shadow-md space-y-5"
+            className="max-w-xl mx-auto bg-[#141E33] p-6 rounded-2xl border border-slate-700 shadow-xl space-y-5"
           >
-            {/* Visual Progress Bar (Requirement) */}
-            <div className="space-y-2">
-              <div className="flex justify-between items-center text-xs font-bold text-slate-400 uppercase font-mono">
-                <span>{selectedSubject}</span>
-                <span className="text-emerald-700">
-                  {language === 'en' 
-                    ? `Question ${activeQIndex + 1} of ${examQuestions.length}`
-                    : `ጥያቄ ${activeQIndex + 1} ከ ${examQuestions.length}`}
+            {/* Header with Exit Quiz Button */}
+            <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-700/60">
+              <button
+                onClick={() => setShowExitConfirm(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white bg-slate-800/90 hover:bg-red-500/20 border border-slate-700 hover:border-red-500/40 transition-all cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 text-amber-400" />
+                <span>{language === 'en' ? 'Exit Quiz' : 'ውጣ / ተመለስ'}</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-xs text-amber-400 uppercase tracking-wide">
+                  {selectedSubject}
                 </span>
               </div>
-              
-              {/* Actual HTML progress percentage indicators bar */}
-              <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+
+              <span className="flex items-center gap-1 text-xs font-extrabold font-mono text-amber-300 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30">
+                <Clock className="w-3.5 h-3.5 text-amber-400" />
+                {timeRemaining}s
+              </span>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center text-xs font-bold text-slate-400">
+                <span>{language === 'en' ? 'Progress' : 'ሂደት'}</span>
+                <span className="text-amber-400 font-mono">
+                  {activeQIndex + 1} / {examQuestions.length}
+                </span>
+              </div>
+              <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
                 <div 
-                  className="bg-[#078930] h-full rounded-full transition-all duration-300" 
-                  style={{ width: `${((activeQIndex + 0.5) / examQuestions.length) * 100}%` }}
+                  className="bg-amber-400 h-full rounded-full transition-all duration-300" 
+                  style={{ width: `${((activeQIndex + 1) / examQuestions.length) * 100}%` }}
                 />
               </div>
             </div>
 
-            {/* Timer card block */}
-            <div className="flex justify-between items-center bg-slate-50 border border-slate-200 rounded-xl p-3">
-              <span className="text-xs font-semibold text-slate-500">
-                {language === 'en' ? 'Choose carefully to get feedback' : 'መልካም ፈተና ይሁንልዎት!'}
-              </span>
-              <span className="flex items-center gap-1 text-xs font-extrabold font-mono text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 select-none">
-                <Clock className="w-3.5 h-3.5 text-amber-600" />
-                {timeRemaining} Seconds
-              </span>
-            </div>
-
             {/* Question Text block */}
-            <div className="space-y-5 py-2">
-              <h3 className="font-serif text-lg text-slate-900 font-extrabold leading-relaxed">
+            <div className="space-y-4 py-2">
+              <h3 className="font-serif text-lg text-slate-100 font-bold leading-relaxed">
                 {examQuestions[activeQIndex]?.question}
               </h3>
 
-              {/* LARGE BUTTONS lists selecting - h-14 min-h-[48px], responsive (Requirement) */}
+              {/* Options */}
               <div className="grid grid-cols-1 gap-2.5">
                 {examQuestions[activeQIndex]?.options.map((opt: string) => {
                   const isSelected = userSelections[activeQIndex] === opt;
                   const isCorrect = examQuestions[activeQIndex].correctAnswer === opt;
                   
-                  let btnColorStyle = "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300";
+                  let btnStyle = "bg-slate-900/90 border-slate-700 text-slate-200 hover:bg-slate-800 hover:border-slate-600";
                   
-                  // Instant feedback coloring rule (Green for Correct, Red for Incorrect)
                   if (isAnswerRevealed) {
                     if (isCorrect) {
-                      btnColorStyle = "bg-emerald-50 border-emerald-500 text-emerald-800 font-extrabold ring-1 ring-emerald-500";
+                      btnStyle = "bg-emerald-500/15 border-emerald-500 text-emerald-300 font-bold ring-1 ring-emerald-500";
                     } else if (isSelected) {
-                      btnColorStyle = "bg-red-50 border-red-500 text-red-800 font-extrabold ring-1 ring-red-500";
+                      btnStyle = "bg-red-500/15 border-red-500 text-red-300 font-bold ring-1 ring-red-500";
                     } else {
-                      btnColorStyle = "bg-slate-50 border-slate-100 text-slate-400 opacity-60";
+                      btnStyle = "bg-slate-900/50 border-slate-800 text-slate-500 opacity-50";
                     }
                   } else if (isSelected) {
-                    btnColorStyle = "bg-emerald-50 border-emerald-500 text-emerald-800 font-bold";
+                    btnStyle = "bg-amber-500/15 border-amber-400 text-amber-300 font-bold";
                   }
 
                   return (
@@ -989,54 +1122,61 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
                       key={opt}
                       disabled={isAnswerRevealed}
                       onClick={() => handleOptionSelect(opt)}
-                      className={`w-full min-h-[48px] h-14 px-4 rounded-xl text-left text-sm leading-snug font-sans transition-all flex items-center justify-between border-2 shadow-sm cursor-pointer select-none ${btnColorStyle}`}
+                      className={`w-full min-h-[48px] py-3 px-4 rounded-xl text-left text-sm leading-snug font-sans transition-all flex items-center justify-between border shadow-sm cursor-pointer select-none ${btnStyle}`}
                     >
                       <span>{opt}</span>
-                      {isAnswerRevealed && isCorrect && <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 ml-1" />}
-                      {isAnswerRevealed && isSelected && !isCorrect && <XCircle className="w-4 h-4 text-red-600 shrink-0 ml-1" />}
+                      {isAnswerRevealed && isCorrect && <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 ml-2" />}
+                      {isAnswerRevealed && isSelected && !isCorrect && <XCircle className="w-4 h-4 text-red-400 shrink-0 ml-2" />}
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* Explanation card dynamically revealed below options if answered (Requirement) */}
+            {/* Explanation card dynamically revealed */}
             {isAnswerRevealed && (
               <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="p-4 bg-slate-50 rounded-xl border border-slate-200 mt-2 text-xs text-slate-600 space-y-1.5"
+                className="p-4 bg-slate-900/90 rounded-xl border border-slate-700 text-xs text-slate-300 space-y-1.5"
               >
-                <div className="flex items-center gap-1.5 font-extrabold text-slate-800 uppercase tracking-wide">
+                <div className="flex items-center gap-1.5 font-bold uppercase tracking-wide">
                   {userSelections[activeQIndex] === examQuestions[activeQIndex].correctAnswer ? (
-                    <span className="text-[#078930] flex items-center gap-1">
-                      <CheckCircle className="w-4 h-4 text-[#078930]" />
-                      <span>{language === 'en' ? 'Excellent! Correct' : 'በጣም ጎበዝ! መልስዎ ትክክል ነው'}</span>
+                    <span className="text-emerald-400 flex items-center gap-1 font-bold">
+                      <CheckCircle className="w-4 h-4" />
+                      <span>{language === 'en' ? 'Correct Answer!' : 'በጣም ጎበዝ! መልስዎ ትክክል ነው'}</span>
                     </span>
                   ) : (
-                    <span className="text-red-600 flex items-center gap-1">
-                      <XCircle className="w-4 h-4 text-red-600" />
+                    <span className="text-red-400 flex items-center gap-1 font-bold">
+                      <XCircle className="w-4 h-4" />
                       <span>{language === 'en' ? 'Incorrect' : 'ትክክለኛው መልስ አልነበረም'}</span>
                     </span>
                   )}
                 </div>
-                <p className="font-sans leading-normal font-medium italic">
-                  {examQuestions[activeQIndex]?.explanation || (language === 'en' ? 'Review your subject textbooks.' : 'በመማሪያ መጽሐፉ ላይ ያሉትን ማብራሪያዎች ያንብቡ።')}
+                <p className="font-sans leading-relaxed text-slate-300 italic">
+                  {examQuestions[activeQIndex]?.explanation || (language === 'en' ? 'Verified academic solution.' : 'ትክክለኛ አካዳሚያዊ ማብራሪያ።')}
                 </p>
               </motion.div>
             )}
 
-            {/* Bottom Proceed bar */}
-            <div className="flex justify-end pt-3 border-t border-slate-100">
+            {/* Proceed button */}
+            <div className="flex items-center justify-between pt-3 border-t border-slate-700">
+              <button
+                onClick={() => setShowExitConfirm(true)}
+                className="text-xs text-slate-400 hover:text-slate-200 cursor-pointer"
+              >
+                {language === 'en' ? 'Leave Quiz' : 'ውጣ'}
+              </button>
+
               <button
                 onClick={handleNextQuestion}
                 disabled={!userSelections[activeQIndex]}
-                className="w-full sm:w-auto h-12 px-6 bg-[#078930] hover:bg-emerald-700 text-white font-serif font-extrabold text-sm rounded-xl flex items-center justify-center gap-1.5 shadow disabled:opacity-40 cursor-pointer select-none active:scale-98"
+                className="h-12 px-6 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-sm rounded-xl flex items-center justify-center gap-1.5 shadow disabled:opacity-40 cursor-pointer select-none active:scale-98 transition-all"
               >
                 <span>
                   {activeQIndex === examQuestions.length - 1 
-                    ? (language === 'en' ? 'Complete quiz ' : 'ውጤት ይመልከቱ ') 
-                    : (language === 'en' ? 'Next Question ' : 'ቀጣይ ጥያቄ ')}
+                    ? (language === 'en' ? 'Complete Quiz' : 'ውጤት ይመልከቱ') 
+                    : (language === 'en' ? 'Next Question' : 'ቀጣይ ጥያቄ')}
                 </span>
                 <ArrowRight className="w-4 h-4" />
               </button>
@@ -1050,9 +1190,9 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
             key="results"
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="max-w-lg mx-auto bg-white p-6 rounded-2xl border border-slate-200 text-center space-y-6 relative overflow-hidden shadow-lg"
+            className="max-w-lg mx-auto bg-[#141E33] p-6 rounded-2xl border border-slate-700 text-center space-y-6 relative overflow-hidden shadow-xl"
           >
-            {/* Dopamine confetti floating particles */}
+            {/* Confetti */}
             {particles.map(p => (
               <div 
                 key={p.id}
@@ -1068,56 +1208,55 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
               />
             ))}
 
-            <div className="w-20 h-20 bg-emerald-50 border-2 border-emerald-100 text-[#078930] rounded-full flex items-center justify-center mx-auto text-3xl font-serif font-black shadow-inner">
+            <div className="w-20 h-20 bg-amber-500/10 border-2 border-amber-500/30 text-amber-400 rounded-full flex items-center justify-center mx-auto text-3xl font-serif font-black shadow-inner">
               {examGrade}
             </div>
 
             <div className="space-y-1.5">
-              <h2 className="font-serif text-2xl font-black text-slate-900 leading-tight">
+              <h2 className="font-serif text-2xl font-black text-white leading-tight">
                 {language === 'en' ? 'Quiz Session Finalized!' : 'የፈተና ጊዜ ተጠናቋል!'}
               </h2>
               
-              {/* Amharic Encouragement Custom block based on score rules (Requirement) */}
-              <p className="text-lg font-serif font-bold text-[#078930]">
+              <p className="text-base font-serif font-bold text-amber-400">
                 {Math.round((examScore / examQuestions.length) * 100) >= 80 ? (
-                  <span>ጎበዝ! ምርጥ ስራ ነው 🌟 <span className="block text-xs font-sans text-slate-400 mt-1">Excellent! Keep up this high standard!</span></span>
+                  <span>ጎበዝ! ምርጥ ውጤት ነው 🌟 <span className="block text-xs font-sans text-slate-400 mt-1">Excellent mastery of {selectedSubject}!</span></span>
                 ) : Math.round((examScore / examQuestions.length) * 100) >= 50 ? (
-                  <span>በጣም ጥሩ! በርታ/በርቺ 💪 <span className="block text-xs font-sans text-slate-400 mt-1">Great job! Keep trying and advancing!</span></span>
+                  <span>በጣም ጥሩ! በርታ/በርቺ 💪 <span className="block text-xs font-sans text-slate-400 mt-1">Great practice. Review concepts to reach an A!</span></span>
                 ) : (
-                  <span>ተስፋ አትቁረጥ! ይቻላል 🎯 <span className="block text-xs font-sans text-slate-400 mt-1">Never give up under hard steps!</span></span>
+                  <span>ተስፋ አትቁረጥ! ይቻላል 🎯 <span className="block text-xs font-sans text-slate-400 mt-1">Practice makes perfect. Review the revision cards!</span></span>
                 )}
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 max-w-sm mx-auto text-xs bg-slate-50 p-4 border border-slate-200 rounded-xl shadow-inner">
+            <div className="grid grid-cols-2 gap-4 max-w-sm mx-auto text-xs bg-slate-900 p-4 border border-slate-700 rounded-xl shadow-inner">
               <div className="space-y-0.5">
                 <span className="text-slate-400 font-bold uppercase">{language === 'en' ? 'Score' : 'ውጤት'}</span>
-                <span className="font-mono text-base font-extrabold text-slate-800 block">{examScore} / {examQuestions.length}</span>
+                <span className="font-mono text-lg font-extrabold text-white block">{examScore} / {examQuestions.length}</span>
               </div>
 
               <div className="space-y-0.5">
                 <span className="text-slate-400 font-bold uppercase">{language === 'en' ? 'Percentage' : 'በመቶኛ'}</span>
-                <span className="font-mono text-base font-extrabold text-[#078930] block">
+                <span className="font-mono text-lg font-extrabold text-amber-400 block">
                   {Math.round((examScore / examQuestions.length) * 100)}%
                 </span>
               </div>
             </div>
 
-            {/* Detailed answers logging recap */}
-            <div className="text-left bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-3 text-xs max-h-56 overflow-y-auto">
-              <p className="font-bold text-slate-700 pb-1.5 border-b border-slate-200 font-serif">
+            {/* Questions Recap */}
+            <div className="text-left bg-slate-900 border border-slate-700 p-4 rounded-xl space-y-3 text-xs max-h-56 overflow-y-auto">
+              <p className="font-bold text-slate-200 pb-1.5 border-b border-slate-700 font-serif">
                 {language === 'en' ? 'Questions Recap' : 'ለጥያቄዎች የተሰጡ መልሶች፡'}
               </p>
               {examQuestions.map((q, idx) => {
                 const isCorrect = userSelections[idx] === q.correctAnswer;
                 return (
-                  <div key={idx} className="pb-2 border-b border-slate-100 last:border-none last:pb-0 font-sans">
-                    <p className="font-medium text-slate-800 flex items-start gap-1">
-                      <span className={isCorrect ? "text-[#078930] font-black" : "text-red-500 font-black"}>
+                  <div key={idx} className="pb-2 border-b border-slate-800 last:border-none last:pb-0 font-sans">
+                    <p className="font-medium text-slate-300 flex items-start gap-1.5">
+                      <span className={isCorrect ? "text-emerald-400 font-black" : "text-red-400 font-black"}>
                         {isCorrect ? "✓" : "✗"}
                       </span>
                       <span>
-                        {language === 'en' ? 'Qns' : 'ጥያቄ'} {idx + 1}: {q.question}
+                        {language === 'en' ? 'Q' : 'ጥያቄ'} {idx + 1}: {q.question}
                       </span>
                     </p>
                   </div>
@@ -1125,194 +1264,377 @@ export default function ExamPrep({ apiKey, enrolledSubjects, onStudyAction }: Ex
               })}
             </div>
 
+            {/* Favorite toggle */}
             {currentSessionId && (
               <button
                 onClick={() => toggleFavoriteSession(currentSessionId)}
-                className={`w-full h-12 flex items-center justify-center gap-2 rounded-xl text-xs font-bold transition-all border ${
+                className={`w-full h-11 flex items-center justify-center gap-2 rounded-xl text-xs font-bold transition-all border ${
                   favoriteSessionIds.includes(currentSessionId)
-                    ? 'bg-amber-500 border-amber-500 text-white shadow-sm hover:bg-amber-600'
-                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-sm'
+                    : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750'
                 }`}
               >
-                <Star className={`w-4 h-4 ${favoriteSessionIds.includes(currentSessionId) ? 'fill-white text-white' : ''}`} />
+                <Star className={`w-4 h-4 ${favoriteSessionIds.includes(currentSessionId) ? 'fill-slate-950 text-slate-950' : ''}`} />
                 {favoriteSessionIds.includes(currentSessionId)
-                  ? (language === 'en' ? 'Saved to Favorite Quizzes' : 'በምርጥ ፈተናዎች ስር ተቀምጧል')
-                  : (language === 'en' ? 'Save to Favorite Quizzes' : 'ይህንን ምርጥ ፈተና አስቀምጥ')}
+                  ? (language === 'en' ? 'Saved to Favorites' : 'በምርጥ ፈተናዎች ስር ተቀምጧል')
+                  : (language === 'en' ? 'Save to Favorites' : 'ይህንን ምርጥ ፈተና አስቀምጥ')}
               </button>
             )}
 
-            <button
-              onClick={() => { playClickChime(); setExamMode('setup'); }}
-              className="w-full h-12 bg-[#078930] hover:bg-emerald-700 text-white font-serif font-extrabold text-sm rounded-xl cursor-pointer"
-            >
-              {language === 'en' ? 'Practice Another Quiz' : 'ሌላ የፈተና ጥያቄ ውሰድ'}
-            </button>
-          </motion.div>
-        )}
-
-        {showAddExamModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[999] flex items-center justify-center p-4 overflow-y-auto"
-            onClick={() => setShowAddExamModal(false)}
-            id="add-custom-exam-modal-overlay"
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 20 }}
-              className="bg-white rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative text-left border border-slate-200"
-              onClick={(e) => e.stopPropagation()}
-              id="add-custom-exam-modal-card"
-            >
+            {/* Navigation options: practice another or return home */}
+            <div className="space-y-2 pt-1">
               <button
-                onClick={() => { playClickChime(); setShowAddExamModal(false); }}
-                className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
+                onClick={() => { playClickChime(); setExamMode('setup'); }}
+                className="w-full h-12 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-sm rounded-xl cursor-pointer transition-all flex items-center justify-center gap-2 shadow-md"
               >
-                <X className="w-4 h-4" />
+                <RotateCcw className="w-4 h-4" />
+                {language === 'en' ? 'Choose Another Subject / Retake' : 'ሌላ ትምህርት ምረጥ / ደግመህ ሞክር'}
               </button>
 
-              <div className="space-y-1.5">
-                <h3 className="font-serif font-black text-lg text-slate-900 flex items-center gap-2">
-                  <Trophy className="w-5 h-5 text-[#078930]" />
-                  {language === 'en' ? 'Add Exam Question / Subject' : 'የፈተና ጥያቄ / የትምህርት አይነት ጨምር'}
+              {onNavigateBack && (
+                <button
+                  onClick={() => { playClickChime(); onNavigateBack(); }}
+                  className="w-full h-11 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white font-semibold text-xs rounded-xl cursor-pointer transition-all flex items-center justify-center gap-2 border border-slate-700"
+                >
+                  <Home className="w-4 h-4" />
+                  {language === 'en' ? 'Return to Dashboard' : 'ወደ ዋናው ዳሽቦርድ ተመለስ'}
+                </button>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* CONFIRM EXIT QUIZ MODAL */}
+      {showExitConfirm && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[999] flex items-center justify-center p-4"
+          onClick={() => setShowExitConfirm(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.95, y: 15 }}
+            animate={{ scale: 1, y: 0 }}
+            exit={{ scale: 0.95, y: 15 }}
+            className="bg-[#141E33] border border-slate-700 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="font-serif text-lg font-bold text-white">
+                {language === 'en' ? 'Changed Your Mind?' : 'ከፈተናው መውጣት ይፈልጋሉ?'}
+              </h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                {language === 'en' 
+                  ? 'If you change your mind, you can safely return to subject selection. Your active answers in this session will not be saved.' 
+                  : 'ሀሳብዎን ከቀየሩ ወይም ሌላ ትምህርት መምረጥ ከፈለጉ ወደ ኋላ መመለስ ይችላሉ። የዚህ ፈተና መልሶች አይቀመጡም።'}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                onClick={() => setShowExitConfirm(false)}
+                className="h-11 px-4 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold text-xs rounded-xl border border-slate-700 cursor-pointer"
+              >
+                {language === 'en' ? 'Keep Going' : 'ፈተናውን ቀጥል'}
+              </button>
+
+              <button
+                onClick={handleConfirmExitQuiz}
+                className="h-11 px-4 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl cursor-pointer"
+              >
+                {language === 'en' ? 'Yes, Exit Quiz' : 'አዎ፣ ውጣ'}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+
+      {/* PRO UPGRADE MODAL (3-Subject Limit) */}
+      {showUpgradeModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[999] flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => setShowUpgradeModal(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.95, y: 20 }}
+            animate={{ scale: 1, y: 0 }}
+            exit={{ scale: 0.95, y: 20 }}
+            className="bg-[#141E33] border border-amber-500/40 rounded-2xl w-full max-w-lg p-6 space-y-5 shadow-2xl relative text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowUpgradeModal(false)}
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
+                <Crown className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-serif font-black text-lg text-white">
+                  {language === 'en' ? 'Subject Limit Reached (Free Plan: 3/3)' : 'የትምህርት ገደብ ደርሰዋል (ነፃ እቅድ፦ 3/3)'}
                 </h3>
-                <p className="text-xs text-slate-500">
-                  {language === 'en' 
-                    ? 'Create your own multiple choice exam questions. They will be added to your custom quiz selection instantly.' 
-                    : 'የራስዎን የፈተና ጥያቄዎች ያዘጋጁ። ወዲያውኑ ወደ የጥያቄዎች ማውጫዎ ውስጥ ይካተታሉ።'}
+                <p className="text-xs text-amber-400 font-bold">
+                  {language === 'en' ? 'Upgrade to EthioLearn Pro to Unlock All Subjects' : 'ሁሉንም ትምህርቶች ለመክፈት ወደ ኢትዮለርን ፕሮ ያሻሽሉ'}
                 </p>
               </div>
+            </div>
 
-              <form onSubmit={handleAddCustomQuestion} className="space-y-3 text-xs text-slate-700">
-                <div className="space-y-1">
-                  <label className="block font-bold uppercase text-slate-500">Subject Name *</label>
+            <div className="p-4 bg-slate-900/90 border border-slate-700/80 rounded-xl space-y-2 text-xs text-slate-300">
+              <p className="leading-relaxed">
+                {language === 'en'
+                  ? `You have explored your 3 free subjects: ${triedSubjects.join(', ')}. Upgrade to EthioLearn Pro to unlock all faculties, national entrance papers, and unlimited AI tutoring.`
+                  : `እስካሁን የሞከሯቸው 3 ነፃ ትምህርቶች፦ ${triedSubjects.join(', ')} ናቸው። ሁሉንም የዩኒቨርሲቲ ኮርሶች፣ ብሔራዊ ፈተናዎች እና ያልተገደበ AI ፈተና ለማግኘት ፕሮ አባል ይሁኑ።`}
+              </p>
+
+              <div className="pt-2 border-t border-slate-800 space-y-1.5 text-[11px]">
+                <div className="flex items-center gap-2 text-emerald-400 font-bold">
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{language === 'en' ? 'Access all 40+ Ethiopian university courses' : 'ከ40+ በላይ የዩኒቨርሲቲ ኮርሶች'}</span>
+                </div>
+                <div className="flex items-center gap-2 text-emerald-400 font-bold">
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{language === 'en' ? 'Unlimited AI Exam & Quiz Generation' : 'ያልተገደበ የAI ፈተና ዝግጅት'}</span>
+                </div>
+                <div className="flex items-center gap-2 text-emerald-400 font-bold">
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{language === 'en' ? 'Direct Telebirr, CBE Birr & HelloCash instant activation' : 'በቴሌብር እና በኢትዮጵያ ንግድ ባንክ ቀላል ክፍያ'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Price Badge */}
+            <div className="flex items-center justify-between p-3.5 bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/20 rounded-xl">
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold block">
+                  {language === 'en' ? 'Special Student Pricing' : 'የተማሪዎች ቅናሽ'}
+                </span>
+                <span className="font-serif text-lg font-black text-amber-400">
+                  149 ETB <span className="text-xs text-slate-400 font-normal">/ month</span>
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                  Telebirr
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                  CBE Birr
+                </span>
+              </div>
+            </div>
+
+            {/* Upgrade Action */}
+            <div className="space-y-2 pt-1">
+              <button
+                onClick={() => {
+                  playClickChime();
+                  setShowUpgradeModal(false);
+                  if (onNavigateToUpgrade) onNavigateToUpgrade();
+                }}
+                className="w-full h-12 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold text-sm rounded-xl flex items-center justify-center gap-2 shadow-lg cursor-pointer transition-all active:scale-98"
+              >
+                <Crown className="w-4 h-4 text-slate-950" />
+                {language === 'en' ? 'Upgrade to Pro (149 ETB)' : 'ወደ ፕሮ አሻሽል (149 ብር)'}
+              </button>
+
+              {/* Or switch to an active subject */}
+              {triedSubjects.length > 0 && (
+                <div className="text-center pt-2">
+                  <span className="text-[11px] text-slate-400 block mb-1.5">
+                    {language === 'en' ? 'Or continue with your 3 active subjects:' : 'ወይም ከነፃ ትምህርቶችዎ አንዱን ይምረጡ፦'}
+                  </span>
+                  <div className="flex flex-wrap justify-center gap-1.5">
+                    {triedSubjects.map(sub => (
+                      <button
+                        key={sub}
+                        onClick={() => {
+                          playClickChime();
+                          setSelectedSubject(sub);
+                          setShowUpgradeModal(false);
+                        }}
+                        className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700 cursor-pointer"
+                      >
+                        {sub}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+
+      {/* ADD CUSTOM EXAM MODAL */}
+      {showAddExamModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[999] flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => setShowAddExamModal(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.95, y: 20 }}
+            animate={{ scale: 1, y: 0 }}
+            exit={{ scale: 0.95, y: 20 }}
+            className="bg-[#141E33] rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative text-left border border-slate-700"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => { playClickChime(); setShowAddExamModal(false); }}
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="space-y-1">
+              <h3 className="font-serif font-black text-lg text-white flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-amber-400" />
+                {language === 'en' ? 'Add Exam Question / Subject' : 'የፈተና ጥያቄ / የትምህርት አይነት ጨምር'}
+              </h3>
+              <p className="text-xs text-slate-400">
+                {language === 'en' 
+                  ? 'Add official questions from your university midterms or instructors.' 
+                  : 'የዩኒቨርሲቲ መምህራን የሰጧቸውን ወይም ያለፉ ፈተናዎችን እዚህ ያክሉ።'}
+              </p>
+            </div>
+
+            <form onSubmit={handleAddCustomQuestion} className="space-y-3 text-xs">
+              <div className="space-y-1">
+                <label className="font-bold text-slate-300">
+                  {language === 'en' ? 'Subject Name' : 'የትምህርት አይነት ስም'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Invertebrate Zoology, Data Structures..."
+                  value={newExamSubject}
+                  onChange={(e) => setNewExamSubject(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-xl p-2.5 outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-300">
+                  {language === 'en' ? 'Question Text' : 'የጥያቄው ጽሑፍ'}
+                </label>
+                <textarea
+                  required
+                  rows={2}
+                  placeholder={language === 'en' ? "Enter the exam question here..." : "የፈተናውን ጥያቄ እዚህ ይጻፉ..."}
+                  value={newQuestionText}
+                  onChange={(e) => setNewQuestionText(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-xl p-2.5 outline-none focus:border-amber-400 resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400">Option A</label>
                   <input
                     type="text"
                     required
-                    value={newExamSubject}
-                    onChange={(e) => setNewExamSubject(e.target.value)}
-                    placeholder="e.g. Freshman Civics, Chemistry Unit 3"
-                    className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-950 outline-none focus:ring-1 focus:ring-[#078930]"
+                    value={newOptionA}
+                    onChange={(e) => setNewOptionA(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg p-2 outline-none focus:border-amber-400"
                   />
-                  <p className="text-[10px] text-slate-400">
-                    Use an existing subject name to add a question to it, or type a new one to create a brand-new exam category.
-                  </p>
                 </div>
-
-                <div className="space-y-1">
-                  <label className="block font-bold uppercase text-slate-500">Question Text *</label>
-                  <textarea
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400">Option B</label>
+                  <input
+                    type="text"
                     required
-                    value={newQuestionText}
-                    onChange={(e) => setNewQuestionText(e.target.value)}
-                    placeholder="What is the constitutional status of Ethiopia's regional states?"
-                    rows={2}
-                    className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-950 outline-none focus:ring-1 focus:ring-[#078930] resize-none"
+                    value={newOptionB}
+                    onChange={(e) => setNewOptionB(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg p-2 outline-none focus:border-amber-400"
                   />
                 </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400">Option C</label>
+                  <input
+                    type="text"
+                    required
+                    value={newOptionC}
+                    onChange={(e) => setNewOptionC(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg p-2 outline-none focus:border-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400">Option D</label>
+                  <input
+                    type="text"
+                    required
+                    value={newOptionD}
+                    onChange={(e) => setNewOptionD(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg p-2 outline-none focus:border-amber-400"
+                  />
+                </div>
+              </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="block font-bold uppercase text-slate-500">Option A *</label>
-                    <input
-                      type="text"
-                      required
-                      value={newOptionA}
-                      onChange={(e) => setNewOptionA(e.target.value)}
-                      placeholder="Choice A"
-                      className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-950 outline-none focus:ring-1 focus:ring-[#078930]"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="block font-bold uppercase text-slate-500">Option B *</label>
-                    <input
-                      type="text"
-                      required
-                      value={newOptionB}
-                      onChange={(e) => setNewOptionB(e.target.value)}
-                      placeholder="Choice B"
-                      className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-950 outline-none focus:ring-1 focus:ring-[#078930]"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="block font-bold uppercase text-slate-500">Option C *</label>
-                    <input
-                      type="text"
-                      required
-                      value={newOptionC}
-                      onChange={(e) => setNewOptionC(e.target.value)}
-                      placeholder="Choice C"
-                      className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-950 outline-none focus:ring-1 focus:ring-[#078930]"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="block font-bold uppercase text-slate-500">Option D *</label>
-                    <input
-                      type="text"
-                      required
-                      value={newOptionD}
-                      onChange={(e) => setNewOptionD(e.target.value)}
-                      placeholder="Choice D"
-                      className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-950 outline-none focus:ring-1 focus:ring-[#078930]"
-                    />
-                  </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-bold text-slate-300">
+                    {language === 'en' ? 'Correct Answer' : 'ትክክለኛው ምርጫ'}
+                  </label>
+                  <select
+                    value={newCorrectOption}
+                    onChange={(e) => setNewCorrectOption(e.target.value as any)}
+                    className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg p-2 outline-none font-bold"
+                  >
+                    <option value="A">Option A</option>
+                    <option value="B">Option B</option>
+                    <option value="C">Option C</option>
+                    <option value="D">Option D</option>
+                  </select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1 col-span-2">
-                    <label className="block font-bold uppercase text-slate-500">Correct Option Choice *</label>
-                    <div className="grid grid-cols-4 gap-2 bg-slate-50 p-1 rounded-xl border border-slate-200">
-                      {(['A', 'B', 'C', 'D'] as const).map((opt) => (
-                        <button
-                          key={opt}
-                          type="button"
-                          onClick={() => { setNewCorrectOption(opt); playClickChime(); }}
-                          className={`py-2 text-xs font-bold rounded-lg cursor-pointer ${
-                            newCorrectOption === opt ? 'bg-[#078930] text-white shadow-sm' : 'text-slate-500'
-                          }`}
-                        >
-                          Option {opt}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block font-bold uppercase text-slate-500">Explanation (Optional Detail)</label>
+                <div>
+                  <label className="font-bold text-slate-300">
+                    {language === 'en' ? 'Explanation (Optional)' : 'ማብራሪያ (አስፈላጊ ከሆነ)'}
+                  </label>
                   <input
                     type="text"
                     value={newExplanation}
                     onChange={(e) => setNewExplanation(e.target.value)}
-                    placeholder="Provide context explaining why this selection is correct..."
-                    className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-950 outline-none focus:ring-1 focus:ring-[#078930]"
+                    placeholder={language === 'en' ? "e.g. Chapter 4 reference" : "ምሳሌ፦ ከምዕራፍ 4 ማጣቀሻ"}
+                    className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg p-2 outline-none focus:border-amber-400"
                   />
                 </div>
+              </div>
 
-                <div className="flex justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => { playClickChime(); setShowAddExamModal(false); }}
-                    className="px-4 py-2 border rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-[#078930] hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer flex items-center gap-1"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Save Exam Question
-                  </button>
-                </div>
-              </form>
-            </motion.div>
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddExamModal(false)}
+                  className="px-4 py-2.5 text-xs text-slate-400 hover:text-white rounded-xl cursor-pointer"
+                >
+                  {language === 'en' ? 'Cancel' : 'ይቅር'}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 text-xs font-bold text-slate-950 bg-amber-500 hover:bg-amber-600 rounded-xl cursor-pointer shadow-sm transition-all"
+                >
+                  {language === 'en' ? 'Save Question' : 'ጥያቄውን መዝግብ'}
+                </button>
+              </div>
+            </form>
           </motion.div>
-        )}
-      </AnimatePresence>
+        </motion.div>
+      )}
     </div>
   );
 }
