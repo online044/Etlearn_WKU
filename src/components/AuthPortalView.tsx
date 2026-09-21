@@ -638,45 +638,13 @@ export default function AuthPortalView({
     setPendingStudentProfile(profile);
     setPendingPasswordString(passwordTrim);
 
-    let dispatchedCode = '';
-    try {
-      const res = await fetch('/api/auth/send-verification-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: emailTrim,
-          phone: cleanedPhone.formatted,
-          name: nameTrim,
-          university: univTrim,
-          year,
-          type: 'registration'
-        })
-      });
-      const data = await res.json();
-      if (data.code) {
-        dispatchedCode = data.code;
-        setDispatchedSecurityCode(data.code);
-      } else if (data.devPreviewCode) {
-        dispatchedCode = data.devPreviewCode;
-        setDispatchedSecurityCode(data.devPreviewCode);
-      }
-      if (data.message) {
-        setDispatchedMessagePreview(lang === 'am' ? data.amharicMessage || data.message : data.message);
-      }
-    } catch (apiErr) {
-      console.warn('[Verification Code API Warning]:', apiErr);
-    }
-
-    // Also persist activation code state in Firebase Firestore
-    if (dispatchedCode) {
-      await saveActivationCodeToFirebase(emailTrim, dispatchedCode, 'registration', cleanedPhone.formatted);
-    }
-
-    // Try creating user in Firebase Auth and dispatch native email verification
+    // 1. Direct Firebase Auth Registration
+    let userUid = '';
     if (auth && passwordTrim) {
       try {
         const cred = await createUserWithEmailAndPassword(auth, emailTrim, passwordTrim);
         if (cred?.user) {
+          userUid = cred.user.uid;
           try {
             await sendEmailVerification(cred.user);
           } catch (e) {}
@@ -684,21 +652,68 @@ export default function AuthPortalView({
         }
       } catch (fbErr: any) {
         console.warn('[Firebase Auth Creation Notice]:', fbErr?.message);
+        if (fbErr?.code === 'auth/email-already-in-use') {
+          try {
+            const cred = await signInWithEmailAndPassword(auth, emailTrim, passwordTrim);
+            if (cred?.user) {
+              userUid = cred.user.uid;
+              await syncProfileToFirestore(cred.user.uid, profile);
+            }
+          } catch (signInErr) {
+            setAuthError(
+              lang === 'am'
+                ? "ይህ ኢሜይል አስቀድሞ ተመዝግቧል። እባክዎ ይግቡ።"
+                : "Email already registered. Please sign in instead."
+            );
+            playFailureChime();
+            setLoading(false);
+            return;
+          }
+        } else if (fbErr?.code === 'auth/weak-password') {
+          setPasswordError(
+            lang === 'am'
+              ? "የይለፍ ቃል ቢያንስ 6 ፊደላት/ቁጥሮች መሆን አለበት።"
+              : "Password should be at least 6 characters."
+          );
+          playFailureChime();
+          setLoading(false);
+          return;
+        } else {
+          setAuthError(fbErr?.message || (lang === 'am' ? "የምዝገባ ስህተት አጋጥሟል።" : "Registration failed."));
+          playFailureChime();
+          setLoading(false);
+          return;
+        }
       }
     }
 
-    setResendTimer(60);
-    setVerificationCodeInput('');
-    setCodeError(null);
-    setAuthError(null);
-    setInfoMessage(
-      lang === 'am'
-        ? `ባለ 6-አሃዝ የማረጋገጫ ኮድ እና ሊንክ ወደ ${emailTrim} ተልኳል።`
-        : `A 6-digit verification code and link were sent to ${emailTrim}.`
-    );
-    setLoading(false);
+    // 2. Persist student account locally & sync session
+    const newAccount: AccountInfo = {
+      email: emailTrim,
+      passwordEncrypted: passwordTrim,
+      rememberMe,
+      profile
+    };
+
+    const updatedAccs = [...registeredAccounts.filter(acc => acc.email.toLowerCase() !== emailTrim), newAccount];
+    setRegisteredAccounts(updatedAccs);
+    safeStorage.setItem('ethiolearn_accounts', JSON.stringify(updatedAccs));
+    safeStorage.setItem('ethiolearn_active_email', emailTrim);
+    safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(profile));
+    safeStorage.setItem('ethiolearn_has_seen_onboarding', 'true');
+
+    try {
+      await syncAuthSessionWithServer({
+        email: emailTrim,
+        uid: userUid,
+        role: isAdministratorEmail(emailTrim) ? 'admin' : 'student',
+        displayName: profile.name
+      });
+    } catch (tokErr) {}
+
     playSuccessChime();
-    setMode('verify_registration');
+    setLoading(false);
+    onComplete(profile);
   };
 
   // Helper to open mailbox directly

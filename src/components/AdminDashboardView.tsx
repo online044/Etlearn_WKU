@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Users, ShieldCheck, CreditCard, Tag, Bell, BookOpen, BarChart3, Search, CheckCircle, 
+  Users, ShieldCheck, ShieldAlert, CreditCard, Tag, Bell, BookOpen, BarChart3, Search, CheckCircle, 
   XCircle, Plus, Trash2, Award, ArrowUpRight, Lock, Key, RefreshCw, AlertCircle, Sparkles, 
   Send, Edit3, Eye, Archive, Check, Database, Copy, ExternalLink, Clock, Layers, FileText,
   HelpCircle
@@ -140,9 +140,7 @@ export default function AdminDashboardView({
   // ADMIN AUTHENTICATION STATE
   // --------------------------------------------------------------------------
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
-    return isAdministratorEmail(currentProfile?.email) || 
-           safeStorage.getItem('ethiolearn_admin_session') === ADMIN_EMAIL ||
-           safeStorage.getItem('ethiolearn_admin_auth') === 'true';
+    return Boolean(currentProfile?.email && isAdministratorEmail(currentProfile.email));
   });
   const [adminAuthInput, setAdminAuthInput] = useState(ADMIN_EMAIL);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -209,12 +207,13 @@ export default function AdminDashboardView({
   }, [userSearch]);
 
   useEffect(() => {
+    if (!isAdministratorEmail(currentProfile?.email)) return;
     loadAllAdminData();
     // Test Supabase connection on open
     testSupabaseConnection().then(res => {
       setDbDiag({ tested: true, ...res });
     });
-  }, [loadAllAdminData]);
+  }, [loadAllAdminData, currentProfile?.email]);
 
   // --------------------------------------------------------------------------
   // COURSE ACTIONS (Duplicate-proof)
@@ -924,68 +923,43 @@ export default function AdminDashboardView({
   });
 
   // Security Guard: Check if administrator is authorized or authenticated
-  const isAuthorized = isAdminAuthenticated || isAdministratorEmail(currentProfile?.email);
+  const isAuthorized = isAdministratorEmail(currentProfile?.email);
   if (!isAuthorized) {
     return (
       <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
         <motion.div 
           initial={{ opacity: 0, scale: 0.92 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="w-full max-w-md bg-slate-950 border border-amber-500/30 rounded-3xl p-6 text-center space-y-5 shadow-2xl relative overflow-hidden"
+          className="w-full max-w-md bg-slate-950 border border-red-500/30 rounded-3xl p-6 text-center space-y-5 shadow-2xl relative overflow-hidden"
         >
           {/* Ambient Glow */}
-          <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-48 h-48 bg-amber-500/10 blur-3xl pointer-events-none rounded-full" />
+          <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-48 h-48 bg-red-500/10 blur-3xl pointer-events-none rounded-full" />
 
-          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto shadow-inner shadow-amber-500/20">
-            <ShieldCheck className="w-8 h-8" />
+          <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 mx-auto shadow-inner shadow-red-500/20">
+            <ShieldAlert className="w-8 h-8" />
           </div>
 
           <div className="space-y-1.5">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-bold uppercase tracking-wider">
-              <Key className="w-3 h-3" />
-              {isAmharic ? 'የአስተዳዳሪ ማረጋገጫ ፖርታል' : 'Administrator Authorization Portal'}
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/15 border border-red-500/30 text-red-300 text-[10px] font-bold uppercase tracking-wider">
+              <Lock className="w-3 h-3" />
+              {isAmharic ? 'የአስተዳዳሪ ብቻ' : 'Restricted Admin Access'}
             </div>
             <h2 className="text-xl font-black text-white tracking-tight">
-              {isAmharic ? 'የአስተዳዳሪ መዳረሻ' : 'EthioLearn Admin Access'}
+              {isAmharic ? 'የተከለከለ መዳረሻ' : 'Access Restricted'}
             </h2>
             <p className="text-xs text-slate-400 leading-relaxed px-2">
               {isAmharic 
-                ? `ይህ ክፍል ለተፈቀደለት አስተዳዳሪ (${ADMIN_EMAIL}) የተወሰነ ነው። ከታች ባለው አዝራር በመጠቀም በቀላሉ ማረጋገጥ ይችላሉ።`
-                : `Management console for platform administration, course creation, and announcement broadcasting. Restricted to administrator (${ADMIN_EMAIL}).`}
+                ? `ይህ የአስተዳዳሪ ማዕከል ለተፈቀደለት አስተዳዳሪ (${ADMIN_EMAIL}) ብቻ የሚሰራ ነው። እባክዎ በአስተዳዳሪ አካውንትዎ ይግቡ።`
+                : `This console is strictly restricted to the platform administrator (${ADMIN_EMAIL}). Your current account does not have administrative permissions.`}
             </p>
           </div>
 
-          {authError && (
-            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs text-left flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{authError}</span>
-            </div>
-          )}
-
-          <div className="space-y-3 pt-2">
-            <button
-              onClick={() => handleAuthenticateAdmin()}
-              disabled={isVerifyingAdmin}
-              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs transition-all shadow-lg shadow-amber-500/20 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              {isVerifyingAdmin ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>{isAmharic ? 'በማረጋገጥ ላይ...' : 'Verifying Ezra Session...'}</span>
-                </>
-              ) : (
-                <>
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>{isAmharic ? `እንደ እዝራ አረጋግጥ (${ADMIN_EMAIL})` : `Authorize as Ezra (${ADMIN_EMAIL})`}</span>
-                </>
-              )}
-            </button>
-
+          <div className="pt-2">
             <button
               onClick={onClose}
-              className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white font-bold text-xs transition-all cursor-pointer"
+              className="w-full py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 hover:text-white font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-2"
             >
-              {isAmharic ? 'ተመለስ' : 'Cancel & Return to App'}
+              <span>{isAmharic ? 'ወደ መተግበሪያው ተመለስ' : 'Return to Application'}</span>
             </button>
           </div>
         </motion.div>

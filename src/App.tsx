@@ -163,14 +163,20 @@ const DEFAULT_STUDENT_PROFILE: StudentProfile = {
 };
 
 export default function App() {
-  // Load profile with multi-layer fallback to reliably remember the student
-  const [profile, setProfile] = useState<StudentProfile>(() => {
-    // 1. Check primary current profile
+  // Load profile with multi-layer fallback to reliably remember registered students
+  const [profile, setProfile] = useState<StudentProfile | null>(() => {
+    // 1. Check primary current profile - must be a registered student with valid credentials
     const saved = safeStorage.getItem('ethiolearn_current_profile');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object') {
+        if (
+          parsed && 
+          typeof parsed === 'object' && 
+          parsed.id !== 'guest-scholar' &&
+          (parsed.email || parsed.phone) &&
+          parsed.isRegistered !== false
+        ) {
           return parsed;
         }
       } catch (e) {}
@@ -185,29 +191,24 @@ export default function App() {
         if (Array.isArray(accounts) && accounts.length > 0) {
           if (activeEmail) {
             const match = accounts.find(a => a.email && a.email.toLowerCase() === activeEmail.toLowerCase());
-            if (match?.profile) {
+            if (match?.profile && match.profile.id !== 'guest-scholar') {
               safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(match.profile));
               return match.profile;
             }
           }
           // If any account has rememberMe active
           const remembered = accounts.find(a => a.rememberMe);
-          if (remembered?.profile) {
+          if (remembered?.profile && remembered.profile.id !== 'guest-scholar') {
             safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(remembered.profile));
             safeStorage.setItem('ethiolearn_active_email', remembered.email);
             return remembered.profile;
           }
-          // If only 1 account exists on device, restore it automatically
-          if (accounts.length === 1 && accounts[0].profile) {
-            safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(accounts[0].profile));
-            safeStorage.setItem('ethiolearn_active_email', accounts[0].email);
-            return accounts[0].profile;
-          }
         }
       } catch (e) {}
     }
-    // 3. Fallback to default scholar profile immediately so student enters the app directly without any front greeting or intro tour
-    return DEFAULT_STUDENT_PROFILE;
+
+    // Student must register or sign in before using the app
+    return null;
   });
 
   // Persistent language preference
@@ -263,12 +264,7 @@ export default function App() {
   const [ethDate, setEthDate] = useState({ day: 1, monthName: "መስከረም", year: 2016, formatted: "መስከረም 1, 2016" });
 
   // Administrator authorization check (Strictly restricted to ezrat2116@gmail.com)
-  const isUserAdmin = Boolean(
-    isAdministratorEmail(profile?.email) || 
-    isAdministratorEmail(supaUser?.email) || 
-    isAdministratorEmail(googleUser?.email) ||
-    safeStorage.getItem('ethiolearn_admin_session') === 'ezrat2116@gmail.com'
-  );
+  const isUserAdmin = Boolean(profile?.email && isAdministratorEmail(profile.email));
 
   // PWA elements
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -534,9 +530,48 @@ export default function App() {
   // Firebase auth sync
   useEffect(() => {
     const unsubscribe = initAuth(
-      (user, token) => {
+      async (user, token) => {
         setGoogleUser(user);
         setGoogleToken(token);
+        if (user && !profile) {
+          try {
+            const firestoreProfile = await fetchProfileFromFirestore(user.uid);
+            if (firestoreProfile) {
+              const fullProfile = { ...firestoreProfile, isRegistered: true };
+              setProfile(fullProfile);
+              safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(fullProfile));
+              if (firestoreProfile.email) {
+                safeStorage.setItem('ethiolearn_active_email', firestoreProfile.email);
+              }
+            } else if (user.email) {
+              const fallbackProfile: StudentProfile = {
+                id: user.uid,
+                name: user.displayName || user.email.split('@')[0],
+                email: user.email,
+                university: 'Wolkite University',
+                year: 'Freshman',
+                grade: 'University',
+                stream: 'Natural',
+                subjects: ["Emerging Technologies", "Communicative English", "Mathematics", "Logic and Critical Thinking"],
+                claudeApiKey: '',
+                dailyGoalHours: 2,
+                theme: 'dark',
+                language: 'both',
+                avatar: 'champion',
+                isPro: isAdministratorEmail(user.email),
+                userRole: isAdministratorEmail(user.email) ? 'super_admin' : 'student',
+                isRegistered: true,
+                unregisteredAICredits: 10
+              };
+              setProfile(fallbackProfile);
+              safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(fallbackProfile));
+              safeStorage.setItem('ethiolearn_active_email', user.email);
+              await syncProfileToFirestore(user.uid, fallbackProfile);
+            }
+          } catch (restoreErr) {
+            console.warn('[Firebase Auth session restore]:', restoreErr);
+          }
+        }
       },
       () => {
         setGoogleUser(null);
@@ -544,7 +579,7 @@ export default function App() {
       }
     );
     return () => unsubscribe();
-  }, []);
+  }, [profile]);
 
 
   // Supabase auth state listener & bidirectional data sync
@@ -812,7 +847,7 @@ export default function App() {
       }
       safeStorage.removeItem('ethiolearn_current_profile');
       safeStorage.removeItem('ethiolearn_active_email');
-      setProfile(DEFAULT_STUDENT_PROFILE);
+      setProfile(null);
     }
   };
 
@@ -832,8 +867,11 @@ export default function App() {
     // 2. Clear local profile and authentication variables
     safeStorage.removeItem('ethiolearn_current_profile');
     safeStorage.removeItem('ethiolearn_active_email');
+    safeStorage.removeItem('ethiolearn_admin_session');
+    safeStorage.removeItem('ethiolearn_admin_auth');
+    setIsAdminOpen(false);
     clearSessionToken();
-    setProfile(DEFAULT_STUDENT_PROFILE);
+    setProfile(null);
     
     // Clear Google Workspace auth session if active
     if (googleUser) {
@@ -1090,7 +1128,7 @@ export default function App() {
                     <span className="text-[#F59E0B] text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-500 ml-1.5 font-sans">PRO</span>
                   )}
                 </div>
-                <span className="text-[10px] text-slate-400 dark:text-zinc-400 font-semibold">{profile.university || 'Learn Smarter. Prepare Better.'}</span>
+                <span className="text-[10px] text-slate-400 dark:text-zinc-400 font-semibold">{profile.university || 'Wolkite University'}</span>
               </div>
             </div>
 
@@ -1124,9 +1162,6 @@ export default function App() {
             >
               <div className="relative flex items-center">
                 <BookOpen className="w-3.5 h-3.5" />
-                <span className="absolute -top-2.5 -right-3 px-1 py-0.2 rounded-full text-[8px] font-black bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 uppercase tracking-tight shadow-xs">
-                  {language === 'en' ? 'Soon' : 'በቅርቡ'}
-                </span>
               </div>
               <span>{language === 'en' ? 'Books' : 'መጻሕፍት'}</span>
             </button>
@@ -1168,10 +1203,7 @@ export default function App() {
           {/* Ethiopian Date Widget */}
           <div className="hidden md:flex items-center gap-2 border border-slate-200 dark:border-zinc-800 px-3 py-1.5 bg-slate-50 dark:bg-zinc-900/60 rounded-xl">
             <span className="text-sm">📅</span>
-            <div className="text-left select-none">
-              <span className="block font-bold text-slate-700 dark:text-zinc-200 text-[11px] leading-tight font-serif">{ethDate.formatted}</span>
-              <span className="block text-[8.5px] text-[#078930] dark:text-emerald-500 font-black uppercase tracking-wider font-sans">Ge'ez Calendar Active</span>
-            </div>
+            <span className="font-bold text-slate-700 dark:text-zinc-200 text-xs font-serif leading-tight">{ethDate.formatted}</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -1214,21 +1246,19 @@ export default function App() {
 
 
 
-            {/* Admin Dashboard Shield Button */}
-            <button
-              onClick={() => { playClickChime(); setIsAdminOpen(true); }}
-              className={`p-2 sm:px-2.5 sm:py-1.5 border rounded-xl cursor-pointer transition-all flex items-center gap-1.5 ${
-                isUserAdmin
-                  ? 'border-amber-500/40 bg-amber-500/15 hover:bg-amber-500/25 text-amber-400'
-                  : 'border-slate-700/60 bg-slate-850 hover:bg-slate-800 text-slate-300 hover:text-amber-400'
-              }`}
-              title="Admin Control Dashboard (ezrat2116@gmail.com)"
-            >
-              <ShieldCheck className={`w-4 h-4 ${isUserAdmin ? 'text-amber-400' : 'text-slate-400'}`} />
-              <span className="hidden sm:inline text-[10px] font-black uppercase tracking-wider">
-                {isUserAdmin ? 'Admin' : 'Admin'}
-              </span>
-            </button>
+            {/* Admin Dashboard Shield Button - Strictly visible ONLY for verified administrator */}
+            {isUserAdmin && (
+              <button
+                onClick={() => { playClickChime(); setIsAdminOpen(true); }}
+                className="p-2 sm:px-2.5 sm:py-1.5 border rounded-xl cursor-pointer transition-all flex items-center gap-1.5 border-amber-500/40 bg-amber-500/15 hover:bg-amber-500/25 text-amber-400"
+                title="Admin Console"
+              >
+                <ShieldCheck className="w-4 h-4 text-amber-400" />
+                <span className="hidden sm:inline text-[10px] font-black uppercase tracking-wider">
+                  Admin
+                </span>
+              </button>
+            )}
 
             {profile.isPro && (
               <div 
@@ -1348,7 +1378,7 @@ export default function App() {
                 triggerPWAInstall={triggerPWAInstall}
                 onSignOut={handleSignOut}
                 onNavigateToUpgrade={() => setCurrentPage('upgrade')}
-                onOpenAdmin={() => setIsAdminOpen(true)}
+                onOpenAdmin={isUserAdmin ? () => setIsAdminOpen(true) : undefined}
               />
             )}
 
@@ -1624,8 +1654,8 @@ export default function App() {
         />
       )}
 
-      {/* Admin Control Dashboard Modal Overlay */}
-      {isAdminOpen && (
+      {/* Admin Control Dashboard Modal Overlay - Strictly restricted to verified admin */}
+      {isUserAdmin && isAdminOpen && (
         <AdminDashboardView
           currentProfile={profile}
           language={language}
@@ -1656,10 +1686,10 @@ export default function App() {
           setShowLegalModal(true);
         }}
         isUserAdmin={isUserAdmin}
-        onOpenAdmin={() => {
+        onOpenAdmin={isUserAdmin ? () => {
           setIsSidebarOpen(false);
           setIsAdminOpen(true);
-        }}
+        } : undefined}
       />
 
       {/* 📜 Legal, Privacy & About EthioLearn Modal */}

@@ -436,236 +436,190 @@ export default function HomeDashboard({
         </div>
       )}
 
-      {/* ─── 1. TOP SUB-BAR (Calendar & Verified Announcements) ─── */}
-      <div className="flex items-center justify-between gap-3 pb-1 border-b border-slate-800/60">
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Ge'ez Academic Calendar Date */}
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-900/80 border border-slate-800 text-xs text-slate-300">
-            <Calendar className="w-3.5 h-3.5 text-amber-400" />
-            <span className="font-medium text-slate-200">
-              {ethDate.monthName} {ethDate.day} ({geezDayNumeral}), {ethDate.year} ዓ.ም.
-            </span>
-            <span className="text-[10px] text-emerald-400 font-semibold px-1.5 py-0.2 rounded bg-emerald-500/10 border border-emerald-500/20">
-              {isAmharic ? 'የአካዳሚክ ቀን' : 'Academic'}
-            </span>
-          </div>
-
-          {/* Holiday notice if active */}
-          {todayHoliday && (
-            <span className="hidden sm:inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/20 font-medium">
-              <Sparkles className="w-3 h-3 text-amber-400" />
-              <span>{isAmharic ? todayHoliday.nameAm : todayHoliday.nameEn}</span>
-            </span>
-          )}
-        </div>
-
-        {/* Action Controls: Refresh & Notification Drawer */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => loadDashboardData(true)}
-            disabled={isRefreshing}
-            className="p-2 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-400 hover:text-amber-400 hover:border-slate-700 transition-all cursor-pointer disabled:opacity-50"
-            title={isAmharic ? 'መረጃ አድስ' : 'Refresh Dashboard'}
-          >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
-          </button>
-
-          {/* Notifications Trigger */}
-          <div className="relative">
+      {/* ─── 1. SCHOLAR COMMAND CENTER ─── */}
+      <section className="p-5 sm:p-6 rounded-2xl bg-[#111C35] border border-slate-800/90 shadow-md">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+          <div className="flex items-start sm:items-center gap-4">
+            {/* Profile Icon with manual photo - touching opens profile */}
             <button
-              onClick={() => { playClickChime(); setShowNotifications(!showNotifications); }}
-              className="p-2 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-300 hover:text-amber-400 hover:border-slate-700 transition-all relative cursor-pointer flex items-center gap-1.5 text-xs font-medium"
-              title={isAmharic ? 'ማስታወቂያዎች' : 'Platform Announcements'}
-            >
-              <Bell className="w-4 h-4 text-amber-400" />
-              <span className="hidden sm:inline text-xs text-slate-300">
-                {isAmharic ? 'ማስታወቂያ' : 'Notices'}
-              </span>
-              {unreadAnnouncementsCount > 0 && (
-                <span className="w-4 h-4 bg-amber-500 text-slate-950 rounded-full text-[9px] font-black flex items-center justify-center">
-                  {unreadAnnouncementsCount}
-                </span>
-              )}
-            </button>
-
-            {/* Notification Drawer Popover */}
-            {showNotifications && (
-              <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-4 z-50 space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-                  <div className="flex items-center gap-2">
-                    <Bell className="w-4 h-4 text-amber-400" />
-                    <span className="text-xs font-bold text-white uppercase tracking-wider">
-                      {isAmharic ? 'የዩኒቨርሲቲ ማስታወቂያዎች' : 'Campus Announcements'}
-                    </span>
-                  </div>
-                  {unreadAnnouncementsCount > 0 && (
-                    <button
-                      onClick={handleMarkAllAnnouncementsRead}
-                      className="text-[11px] text-amber-400 hover:underline cursor-pointer font-medium"
-                    >
-                      {isAmharic ? 'ሁሉንም አንብብ' : 'Mark all read'}
-                    </button>
-                  )}
-                </div>
-
-                <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
-                  {announcements.length === 0 ? (
-                    <div className="py-6 text-center text-xs text-slate-400">
-                      {isAmharic ? 'ምንም አዲስ ማስታወቂያ የለም።' : 'No announcements published at this time.'}
-                    </div>
-                  ) : (
-                    announcements.map(ann => {
-                      const isRead = readAnnouncementIds.includes(ann.id);
-                      return (
-                        <div
-                          key={ann.id}
-                          onClick={() => { 
-                            handleMarkAnnouncementRead(ann.id);
-                            setSelectedAnnouncement(ann); 
-                            setShowNotifications(false); 
-                          }}
-                          className={`p-3 rounded-xl border text-xs cursor-pointer transition-all ${
-                            isRead 
-                              ? 'bg-slate-950/40 border-slate-800 text-slate-400' 
-                              : 'bg-slate-950 border-amber-500/30 text-slate-100 hover:border-amber-400'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2 mb-1">
-                            <span className="font-semibold text-[12px] text-slate-100 line-clamp-1">{ann.title}</span>
-                            <span className="text-[10px] text-slate-400 shrink-0">{ann.date}</span>
-                          </div>
-                          <p className="text-[11px] text-slate-400 line-clamp-2">{ann.message}</p>
-                          {ann.badgeText && (
-                            <span className="inline-block mt-1.5 text-[9px] px-2 py-0.5 rounded bg-slate-800 text-amber-400 font-mono">
-                              {ann.badgeText}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ─── 2. EDITORIAL SCHOLAR HERO COMMAND CENTER ─── */}
-      <section className="p-6 sm:p-7 rounded-2xl bg-[#111C35] border border-slate-800/90 shadow-lg">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-          <div className="space-y-3.5 max-w-2xl">
-            {/* Academic Tags */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-semibold">
-                {profile.year || (activeLevel === 'University' ? 'University Student' : 'Grade 12 Scholar')}
-              </span>
-              {profile.subjects && profile.subjects[0] && (
-                <span className="px-3 py-1 rounded-full bg-slate-800/90 text-slate-300 border border-slate-700/60 text-xs font-medium">
-                  {profile.subjects[0]}
-                </span>
-              )}
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 font-mono font-medium">
-                <Flame className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                <span>{streakCount} {streakCount === 1 ? 'Day Streak' : 'Days Streak'}</span>
-              </div>
-              {profile.isPro && (
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500 text-slate-950">
-                  PRO SCHOLAR
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-center gap-3.5">
-              {/* Profile Icon with manual photo - touching opens profile */}
-              <button
-                type="button"
-                onClick={() => {
-                  playClickChime();
-                  onNavigate('profile');
-                }}
-                className="relative group cursor-pointer shrink-0 rounded-full focus:outline-none"
-                title={isAmharic ? "የተማሪ መገለጫን ክፈት / ፎቶ ቀይር" : "Open Student Profile / Change Photo"}
-              >
-                <StudentAvatar 
-                  avatar={profile.avatar} 
-                  name={profile.name} 
-                  size={56} 
-                  className="border-2 border-amber-400 shadow-md group-hover:scale-105 transition-all duration-200"
-                />
-                <div className="absolute -bottom-1 -right-1 bg-amber-500 text-slate-950 rounded-full p-1 border-2 border-slate-900 shadow group-hover:scale-110 transition-transform">
-                  <Camera className="w-3 h-3" />
-                </div>
-              </button>
-
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight flex items-center gap-2">
-                  <span>{isAmharic ? 'የጥናት ማዕከል' : 'Academic Study Hub'}</span>
-                  {profile.name && profile.name !== 'Scholar' && (
-                    <span className="text-amber-400 font-medium text-lg sm:text-xl">({profile.name})</span>
-                  )}
-                </h1>
-                <p className="text-sm text-slate-300 mt-0.5 leading-relaxed">
-                  {isAmharic 
-                    ? `${profile.university || 'የኢትዮጵያ ዩኒቨርሲቲ'} • ${profile.department || profile.year || 'የኮርስ ጥናት'}`
-                    : `${profile.university || 'Ethiopian University'} • ${profile.department || profile.year || 'Course Prep & Department Materials'}`}
-                </p>
-              </div>
-            </div>
-
-            {/* Quick Metrics Bar (Clean, Non-Trope Horizontal Strip) */}
-            <div className="flex flex-wrap items-center gap-y-2 gap-x-5 pt-1 text-xs text-slate-300">
-              <div className="flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="text-slate-400">{isAmharic ? 'የጥናት ሰዓት: ' : 'Study Log: '}</span>
-                <span className="font-semibold text-slate-100 font-mono">{studyHoursCount} hrs</span>
-                <span className="text-slate-500">({goalProgressPercentage}% of {targetHours}h goal)</span>
-              </div>
-
-              <span className="text-slate-700 hidden sm:inline">•</span>
-
-              <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span className="text-slate-400">{isAmharic ? 'የተጠናቀቁ ኮርሶች: ' : 'Curriculum: '}</span>
-                <span className="font-semibold text-emerald-400 font-mono">{overallProgressPercentage}% completed</span>
-              </div>
-
-              {averageExamScore !== null && (
-                <>
-                  <span className="text-slate-700 hidden sm:inline">•</span>
-                  <div className="flex items-center gap-1.5">
-                    <Award className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <span className="text-slate-400">{isAmharic ? 'የፈተና አማካኝ: ' : 'Avg Exam: '}</span>
-                    <span className="font-semibold text-amber-400 font-mono">{averageExamScore}%</span>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Primary Action Buttons - Instant Direct Access to Books and Exams */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
-            <button
+              type="button"
               onClick={() => {
                 playClickChime();
-                onNavigate('bookstore');
+                onNavigate('profile');
               }}
-              className="px-5 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm transition-all cursor-pointer flex items-center justify-center gap-2 shadow-sm shadow-amber-500/20 active:scale-[0.98]"
+              className="relative group cursor-pointer shrink-0 rounded-full focus:outline-none"
+              title={isAmharic ? "የተማሪ መገለጫ" : "Student Profile"}
             >
-              <BookOpen className="w-4 h-4 text-slate-950" />
-              <span>{isAmharic ? 'መጻሕፍት እና ሞጁሎች' : 'Explore Books & Modules'}</span>
+              <StudentAvatar 
+                avatar={profile.avatar} 
+                name={profile.name} 
+                size={54} 
+                className="border-2 border-amber-400 shadow-md group-hover:scale-105 transition-all duration-200"
+              />
+              <div className="absolute -bottom-1 -right-1 bg-amber-500 text-slate-950 rounded-full p-1 border-2 border-slate-900 shadow group-hover:scale-110 transition-transform">
+                <Camera className="w-2.5 h-2.5" />
+              </div>
             </button>
 
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+                  {profile.name || (isAmharic ? 'ተማሪ' : 'Scholar')}
+                </h1>
+                {profile.isPro && (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-500 text-slate-950">
+                    PRO
+                  </span>
+                )}
+                <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 font-mono font-medium">
+                  <Flame className="w-3 h-3 text-amber-400 fill-amber-400" />
+                  <span>{streakCount}d</span>
+                </div>
+              </div>
+
+              <p className="text-xs sm:text-sm text-slate-300">
+                {profile.university || 'Wolkite University'}{profile.department ? ` • ${profile.department}` : ''}{profile.year ? ` • ${profile.year}` : ''}
+              </p>
+
+              {/* Clean Metrics Strip */}
+              <div className="flex items-center gap-4 pt-1 text-xs text-slate-400 font-mono">
+                <div className="flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="text-slate-100 font-semibold">{studyHoursCount}h</span>
+                  <span className="text-slate-400">{isAmharic ? 'የተጠና' : 'studied'}</span>
+                </div>
+
+                <span className="text-slate-700">•</span>
+
+                <div className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span className="text-emerald-400 font-semibold">{overallProgressPercentage}%</span>
+                  <span className="text-slate-400">{isAmharic ? 'ተጠናቋል' : 'completed'}</span>
+                </div>
+
+                {averageExamScore !== null && (
+                  <>
+                    <span className="text-slate-700">•</span>
+                    <div className="flex items-center gap-1.5">
+                      <Award className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span className="text-amber-400 font-semibold">{averageExamScore}%</span>
+                      <span className="text-slate-400">{isAmharic ? 'ፈተና አማካኝ' : 'avg exam'}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Primary Action Buttons & Controls */}
+          <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
             <button
               onClick={() => {
                 playClickChime();
                 onNavigate('university');
               }}
-              className="px-5 py-3 rounded-xl bg-[#0F172A] hover:bg-slate-800 border border-slate-700 text-slate-200 font-semibold text-sm transition-all cursor-pointer flex items-center justify-center gap-2 hover:border-amber-500/40 active:scale-[0.98]"
+              className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs sm:text-sm transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95 shadow-sm"
             >
-              <GraduationCap className="w-4 h-4 text-amber-400" />
-              <span>{isAmharic ? 'ያለፉ ፈተናዎች እና መልሶች' : 'Past Exams & Solutions'}</span>
+              <GraduationCap className="w-4 h-4 text-slate-950" />
+              <span>{isAmharic ? 'ያለፉ ፈተናዎች' : 'Past Exams'}</span>
             </button>
+
+            <button
+              onClick={() => {
+                playClickChime();
+                onNavigate('bookstore');
+              }}
+              className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 font-medium text-xs sm:text-sm transition-all cursor-pointer flex items-center justify-center gap-2 hover:border-amber-500/40 active:scale-95"
+            >
+              <BookOpen className="w-4 h-4 text-amber-400" />
+              <span>{isAmharic ? 'መጻሕፍት' : 'Books & Notes'}</span>
+            </button>
+
+            {/* Quick Refresh */}
+            <button
+              onClick={() => loadDashboardData(true)}
+              disabled={isRefreshing}
+              className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-400 hover:text-amber-400 transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center"
+              title={isAmharic ? 'መረጃ አድስ' : 'Refresh'}
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
+            </button>
+
+            {/* Notifications Trigger & Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => { playClickChime(); setShowNotifications(!showNotifications); }}
+                className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-amber-400 transition-colors relative cursor-pointer flex items-center justify-center"
+                title={isAmharic ? 'ማስታወቂያዎች' : 'Notices'}
+              >
+                <Bell className="w-4 h-4 text-amber-400" />
+                {unreadAnnouncementsCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-slate-950 rounded-full text-[9px] font-black flex items-center justify-center">
+                    {unreadAnnouncementsCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Notification Drawer Popover */}
+              {showNotifications && (
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-4 z-50 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <Bell className="w-4 h-4 text-amber-400" />
+                      <span className="text-xs font-bold text-white uppercase tracking-wider">
+                        {isAmharic ? 'የዩኒቨርሲቲ ማስታወቂያዎች' : 'Campus Announcements'}
+                      </span>
+                    </div>
+                    {unreadAnnouncementsCount > 0 && (
+                      <button
+                        onClick={handleMarkAllAnnouncementsRead}
+                        className="text-[11px] text-amber-400 hover:underline cursor-pointer font-medium"
+                      >
+                        {isAmharic ? 'ሁሉንም አንብብ' : 'Mark all read'}
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
+                    {announcements.length === 0 ? (
+                      <div className="py-6 text-center text-xs text-slate-400">
+                        {isAmharic ? 'ምንም አዲስ ማስታወቂያ የለም።' : 'No announcements published at this time.'}
+                      </div>
+                    ) : (
+                      announcements.map(ann => {
+                        const isRead = readAnnouncementIds.includes(ann.id);
+                        return (
+                          <div
+                            key={ann.id}
+                            onClick={() => { 
+                              handleMarkAnnouncementRead(ann.id);
+                              setSelectedAnnouncement(ann); 
+                              setShowNotifications(false); 
+                            }}
+                            className={`p-3 rounded-xl border text-xs cursor-pointer transition-all ${
+                              isRead 
+                                ? 'bg-slate-950/40 border-slate-800 text-slate-400' 
+                                : 'bg-slate-950 border-amber-500/30 text-slate-100 hover:border-amber-400'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <span className="font-semibold text-[12px] text-slate-100 line-clamp-1">{ann.title}</span>
+                              <span className="text-[10px] text-slate-400 shrink-0">{ann.date}</span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 line-clamp-2">{ann.message}</p>
+                            {ann.badgeText && (
+                              <span className="inline-block mt-1.5 text-[9px] px-2 py-0.5 rounded bg-slate-800 text-amber-400 font-mono">
+                                {ann.badgeText}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </section>

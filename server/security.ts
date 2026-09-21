@@ -217,21 +217,6 @@ export async function authenticateRequest(req: Request): Promise<VerifiedUser | 
     const authHeader = req.headers.authorization || (req.headers['x-ethiolearn-auth'] as string) || '';
     const telegramInitData = req.headers['x-telegram-init-data'] as string;
     const sessionTokenHeader = req.headers['x-ethiolearn-session-token'] as string;
-    const adminEmailHeader = (req.headers['x-admin-email'] as string || '').toLowerCase().trim();
-
-    // 0. Check direct Administrator verification header for Ezra
-    if (adminEmailHeader === PRIMARY_ADMIN_EMAIL.toLowerCase()) {
-      return {
-        id: 'admin_ezra',
-        email: PRIMARY_ADMIN_EMAIL,
-        name: 'Ezra (Platform Administrator)',
-        user_role: 'super_admin',
-        is_pro: true,
-        is_admin: true,
-        auth_source: 'admin_header'
-      };
-    }
-
     // 1. Check Server Session Token (JWT)
     if (sessionTokenHeader) {
       const { valid, payload } = verifySessionToken(sessionTokenHeader);
