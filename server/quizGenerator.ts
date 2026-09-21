@@ -299,6 +299,124 @@ export const SUBJECT_CURATED_BANKS: Record<string, QuizQuestion[]> = {
       correctAnswer: "Ionic bond",
       explanation: "An ionic bond forms when electrons are transferred from a metal to a nonmetal, creating cations and anions held together by electrostatic forces."
     }
+  ],
+  "General Psychology": [
+    {
+      question: "Which school of thought in psychology, founded by John B. Watson and expanded by B.F. Skinner, emphasizes observable actions over internal mental states?",
+      options: ["Behaviorism", "Structuralism", "Psychoanalysis", "Gestalt Psychology"],
+      correctAnswer: "Behaviorism",
+      explanation: "Behaviorism asserts that psychology should objectively investigate observable behaviors shaped by environmental stimuli and reinforcement, rather than subjective consciousness."
+    },
+    {
+      question: "According to Sigmund Freud's structural model of the psyche, which component operates strictly on the 'reality principle'?",
+      options: ["Ego", "Id", "Superego", "Unconscious archetype"],
+      correctAnswer: "Ego",
+      explanation: "The Ego functions as the realistic mediator between the instinctual desires of the Id and the moralistic constraints of the Superego, governed by the reality principle."
+    },
+    {
+      question: "In classical conditioning demonstrated by Ivan Pavlov, what was the meat powder before conditioning took place?",
+      options: ["Unconditioned Stimulus (UCS)", "Conditioned Stimulus (CS)", "Unconditioned Response (UCR)", "Neutral Operant"],
+      correctAnswer: "Unconditioned Stimulus (UCS)",
+      explanation: "The meat powder naturally and automatically triggered salivation in dogs without prior learning, defining it as an Unconditioned Stimulus (UCS)."
+    },
+    {
+      question: "What is the typical capacity of human short-term memory (working memory) as identified by George Miller's classic study?",
+      options: ["7 ± 2 items (5 to 9 chunks)", "Unlimited capacity", "3 ± 1 items", "15 ± 3 items"],
+      correctAnswer: "7 ± 2 items (5 to 9 chunks)",
+      explanation: "Miller's Law (1956) demonstrated that immediate human working memory can hold approximately 7 plus or minus 2 meaningful chunks of information."
+    }
+  ],
+  "Geography of Ethiopia": [
+    {
+      question: "Which physiographic division encompasses the highest point in Ethiopia, Ras Dejen (4,550 meters)?",
+      options: ["The Northwestern Highlands (Simien Mountains)", "The Southeastern Highlands (Bale Mountains)", "The Rift Valley Depression (Afar Triangle)", "The Western Lowlands"],
+      correctAnswer: "The Northwestern Highlands (Simien Mountains)",
+      explanation: "Ras Dejen, Ethiopia's highest peak at 4,550m, is located in the Simien Mountain massif within the Northwestern Highlands."
+    },
+    {
+      question: "What is the primary factor responsible for the climatic classification of the 'Dega' agro-ecological zone in Ethiopia?",
+      options: ["High elevation between 2,300 and 3,200 meters above sea level", "Direct proximity to the Indian Ocean", "Sub-surface tectonic thermal vents", "Location below sea level in the Afar depression"],
+      correctAnswer: "High elevation between 2,300 and 3,200 meters above sea level",
+      explanation: "In the Ethiopian traditional agro-ecological classification, 'Dega' designates cool highlands located between 2,300m and 3,200m altitude."
+    },
+    {
+      question: "Which river basin in Ethiopia contributes the largest volume of water to the Main Nile river?",
+      options: ["The Abbay (Blue Nile) River Basin", "The Awash River Basin", "The Omo-Gibe River Basin", "The Genale-Dawa River Basin"],
+      correctAnswer: "The Abbay (Blue Nile) River Basin",
+      explanation: "The Abbay (Blue Nile) River originates from Lake Tana in the Ethiopian highlands and provides over 60% of the total water reaching the downstream Nile."
+    },
+    {
+      question: "The Afar Depression (Danakil) lies along which major geological structural system?",
+      options: ["The East African Rift System (EARS)", "The Mid-Atlantic Ridge", "The Ring of Fire", "The Alpine-Himalayan Orogenic Belt"],
+      correctAnswer: "The East African Rift System (EARS)",
+      explanation: "The Afar Triple Junction is a prominent continental rifting zone where the Nubian, Somalian, and Arabian tectonic plates are pulling apart along the East African Rift System."
+    }
+  ],
+  "History of Ethiopia": [
+    {
+      question: "Which ancient Ethiopian kingdom was renowned for minting its own coins, monumental stone stelae, and trading across the Red Sea?",
+      options: ["The Kingdom of Aksum", "The Zagwe Dynasty", "The Damot Kingdom", "The Sultanate of Adal"],
+      correctAnswer: "The Kingdom of Aksum",
+      explanation: "The Aksumite Empire (1st to 8th century AD) minted gold, silver, and bronze coinage, erected monumental granite stelae, and was recognized as one of the four great powers of the ancient world."
+    },
+    {
+      question: "King Lalibela of the Zagwe Dynasty is celebrated in world architectural history for constructing:",
+      options: ["11 monolithic rock-hewn churches in Roha (Lalibela)", "The royal stone castles of Gondar (Fasil Ghebbi)", "The stone defensive wall of Jugol in Harar", "The obelisks of Tiya"],
+      correctAnswer: "11 monolithic rock-hewn churches in Roha (Lalibela)",
+      explanation: "In the 12th-13th centuries, King Gebre Mesqel Lalibela oversaw the carving of 11 monolithic and semi-monolithic churches out of living volcanic tuff."
+    },
+    {
+      question: "On March 1, 1896, Ethiopian forces led by Emperor Menelik II and Empress Taytu Betul decisively defeated European colonial invasion at the Battle of:",
+      options: ["Adwa", "Metemma", "Gura", "Maychew"],
+      correctAnswer: "Adwa",
+      explanation: "The Battle of Adwa in 1896 resulted in a historic victory of Ethiopian forces against the Italian army, safeguarding Ethiopian sovereignty and inspiring Pan-African resistance."
+    },
+    {
+      question: "What historic document or legal code served as the supreme traditional constitution and religious legal basis for Christian Ethiopia from the 15th to 20th centuries?",
+      options: ["Fetha Nagast (The Law of the Kings)", "Kebra Nagast (Glory of the Kings)", "Serata Gebr", "The 1931 Written Constitution"],
+      correctAnswer: "Fetha Nagast (The Law of the Kings)",
+      explanation: "The Fetha Nagast was compiled and translated into Ge'ez under Emperor Zara Yaqob in the 15th century, serving as civil and penal legal authority."
+    }
+  ],
+  "Logic and Critical Thinking": [
+    {
+      question: "In formal deductive logic, if all premises are true and the argument structure guarantees that the conclusion must also be true, the argument is:",
+      options: ["Sound", "Invalid", "Cogent", "Inductively strong"],
+      correctAnswer: "Sound",
+      explanation: "A deductive argument is 'sound' if and only if it is both valid (flawless logical structure) and all of its constituent premises are factually true."
+    },
+    {
+      question: "Which informal fallacy is committed when someone attacks their opponent's personal background or character instead of addressing the substantive argument?",
+      options: ["Argumentum ad Hominem", "Straw Man Fallacy", "Petitio Principii (Begging the Question)", "Appeal to Ignorance (Ad Ignorantiam)"],
+      correctAnswer: "Argumentum ad Hominem",
+      explanation: "Ad Hominem ('against the man') commits a fallacy by dismissing an argument based on personal attributes of the person asserting it rather than examining the logic."
+    },
+    {
+      question: "What is the logical contrapositive of the conditional statement: 'If it rains (P), then the ground is wet (Q)'?",
+      options: ["If the ground is not wet (~Q), then it does not rain (~P)", "If the ground is wet (Q), then it rains (P)", "If it does not rain (~P), then the ground is not wet (~Q)", "It rains and the ground is not wet"],
+      correctAnswer: "If the ground is not wet (~Q), then it does not rain (~P)",
+      explanation: "The contrapositive of 'P -> Q' is '~Q -> ~P', and it is logically equivalent in truth value to the original conditional statement."
+    }
+  ],
+  "C++ Programming": [
+    {
+      question: "In C++, which OOP principle allows a derived class to provide a specific implementation of a method already defined in its base class using dynamic binding?",
+      options: ["Polymorphism (using virtual functions)", "Data encapsulation", "Preprocessor macro expansion", "Namespace isolation"],
+      correctAnswer: "Polymorphism (using virtual functions)",
+      explanation: "Virtual functions enable runtime (dynamic) polymorphism in C++, allowing pointer/reference calls to resolve to derived class implementations."
+    },
+    {
+      question: "What is the operator used in C++ to dynamically deallocate a single object from heap memory allocated with 'new'?",
+      options: ["delete", "free()", "dispose", "drop"],
+      correctAnswer: "delete",
+      explanation: "In C++, 'delete' frees memory allocated by 'new', calling the destructor. For arrays allocated with 'new[]', 'delete[]' must be used."
+    },
+    {
+      question: "What is the purpose of a Copy Constructor in a C++ class that manages raw pointer resources?",
+      options: ["To perform a deep copy so both objects do not point to and double-free the same heap memory", "To convert integers into float representations", "To initialize static member variables at compile time", "To override standard arithmetic operators"],
+      correctAnswer: "To perform a deep copy so both objects do not point to and double-free the same heap memory",
+      explanation: "A custom copy constructor prevents shallow copying (pointer duplication), which causes segmentation faults and double-free errors upon destruction."
+    }
   ]
 };
 
@@ -310,12 +428,17 @@ export function normalizeSubjectKey(raw: string): string {
   const s = raw.trim().toLowerCase();
   if (s.includes('math') || s.includes('calculus') || s.includes('algebra')) return "Mathematics";
   if (s.includes('bio') || s.includes('living')) return "General Biology";
-  if (s.includes('tech') || s.includes('emerging') || s.includes('blockchain') || s.includes('ai')) return "Emerging Technologies";
-  if (s.includes('econ') || s.includes('business')) return "Introduction to Economics";
-  if (s.includes('eng') || s.includes('communicat') || s.includes('grammar')) return "Communicative English";
+  if (s.includes('tech') || s.includes('emerging') || s.includes('blockchain') || s.includes('ai') || s.includes('cloud')) return "Emerging Technologies";
+  if (s.includes('econ') || s.includes('business') || s.includes('micro') || s.includes('macro')) return "Introduction to Economics";
+  if (s.includes('eng') || s.includes('communicat') || s.includes('grammar') || s.includes('writing')) return "Communicative English";
   if (s.includes('civic') || s.includes('moral') || s.includes('ethic')) return "Moral and Civic Education";
-  if (s.includes('physic') || s.includes('mechanic')) return "General Physics";
+  if (s.includes('physic') || s.includes('mechanic') || s.includes('wave')) return "General Physics";
   if (s.includes('chem') || s.includes('organic')) return "Chemistry";
+  if (s.includes('psych') || s.includes('behavior')) return "General Psychology";
+  if (s.includes('geograph') || s.includes('horn of africa')) return "Geography of Ethiopia";
+  if (s.includes('histor') || s.includes('axum') || s.includes('lalibela') || s.includes('adwa')) return "History of Ethiopia";
+  if (s.includes('logic') || s.includes('critical think') || s.includes('fallacy')) return "Logic and Critical Thinking";
+  if (s.includes('c++') || s.includes('program') || s.includes('oop') || s.includes('code')) return "C++ Programming";
   return raw.trim();
 }
 
@@ -339,7 +462,7 @@ export async function generateAcademicQuiz(params: QuizGenerationParams): Promis
   // 1. Attempt AI Generation with Google GenAI SDK if API key is present
   if (process.env.GEMINI_API_KEY) {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    const modelsToTry = ['gemini-3.1-flash-lite', 'gemini-3.8-flash'];
+    const modelsToTry = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
 
     const promptMessage = `You are an official Senior Board Examiner for Ethiopian University Academic Registrars and the National Educational Assessment and Examinations Agency (NEAEA/EUEE).
 Compile an authentic, high-quality, professional academic practice exam of exactly ${targetCount} multiple-choice questions STRICTLY for:
@@ -350,12 +473,13 @@ Language: ${language === 'am' ? 'Bilingual (English questions with detailed Amha
 
 CRITICAL MANDATORY RULES:
 1. SUBJECT INTEGRITY: Every single question must be 100% relevant to "${subject}". NEVER mix questions from other fields (for example, if the subject is Mathematics, do NOT include Biology or Economics questions).
-2. REAL ACADEMIC RIGOR: Write authentic questions formatted like real Ethiopian freshman/midterm/final university exams or national EUEE entrance papers.
-3. If the subject involves formulas (Math, Physics, Chemistry), include clear, accurate notation and SI units.
-4. Each question must have exactly 4 plausible, unambiguous options.
-5. Provide a detailed, step-by-step authoritative explanation for why the correct answer is right.
-6. The "correctAnswer" field MUST exactly match one of the elements in the "options" array.
-7. Return a clean JSON array of objects. Each object must have:
+2. NO FAKE INFO OR PLACEHOLDERS: All questions, answers, options, and explanations must be factually and mathematically accurate. Never output generic template strings or placeholder labels.
+3. REAL ACADEMIC RIGOR: Write authentic questions formatted like real Ethiopian freshman/midterm/final university exams or national EUEE entrance papers.
+4. If the subject involves formulas (Math, Physics, Chemistry), include clear, accurate notation and SI units.
+5. Each question must have exactly 4 plausible, unambiguous options.
+6. Provide a detailed, step-by-step authoritative explanation for why the correct answer is right.
+7. The "correctAnswer" field MUST exactly match one of the elements in the "options" array.
+8. Return a clean JSON array of objects. Each object must have:
    - "question": string
    - "options": [string, string, string, string]
    - "correctAnswer": string
@@ -426,20 +550,31 @@ CRITICAL MANDATORY RULES:
 
   // 2. Curated Subject-Pure Fallback
   // NEVER mix subjects. Get questions from the dedicated bank for this subject only.
-  const subjectBank = SUBJECT_CURATED_BANKS[normalizedSub] || SUBJECT_CURATED_BANKS[subject] || [];
+  let subjectBank = SUBJECT_CURATED_BANKS[normalizedSub] || SUBJECT_CURATED_BANKS[subject];
   
-  if (subjectBank.length > 0) {
+  // If not exact match, search for partial key matches
+  if (!subjectBank || subjectBank.length === 0) {
+    const matchedKey = Object.keys(SUBJECT_CURATED_BANKS).find(k => 
+      k.toLowerCase().includes(subject.toLowerCase()) || 
+      subject.toLowerCase().includes(k.toLowerCase())
+    );
+    if (matchedKey) {
+      subjectBank = SUBJECT_CURATED_BANKS[matchedKey];
+    }
+  }
+
+  if (subjectBank && subjectBank.length > 0) {
     const shuffled = [...subjectBank].sort(() => 0.5 - Math.random());
     const selected = shuffled.slice(0, Math.min(targetCount, shuffled.length));
     
-    // If user requested more than available, clone with slight parameter variations for that same subject
+    // If user requested more than available, duplicate with different order
     if (selected.length < targetCount) {
       const needed = targetCount - selected.length;
       for (let i = 0; i < needed; i++) {
         const base = subjectBank[i % subjectBank.length];
         selected.push({
-          question: `[Practice Review] In the context of ${topic || subject}: ${base.question}`,
-          options: [...base.options],
+          question: base.question,
+          options: [...base.options].reverse(),
           correctAnswer: base.correctAnswer,
           explanation: base.explanation
         });
@@ -449,28 +584,49 @@ CRITICAL MANDATORY RULES:
   }
 
   // 3. Fallback for custom user subjects not in pre-built banks
-  // Synthesizes high-fidelity questions strictly for THAT subject
+  // Synthesizes clear, academically grounded questions for THAT subject
   const customQuestions: QuizQuestion[] = [];
-  const chapters = [
-    "Core Principles and Foundations",
-    "Theoretical Frameworks and Methodologies",
-    "Application and Problem-Solving Scenarios",
-    "Contemporary Developments and Research",
-    "Diagnostic Analysis and Evaluation"
+  const focusAspects = [
+    {
+      concept: "Foundational Definitions & Scope",
+      question: `In university-level studies of ${subject}, which definition best characterizes the core objective of ${topic || subject}?`,
+      correct: `A systematic study analyzing core structures, governing principles, and practical applications within ${subject}`,
+      distractors: [
+        `An informal collection of unrelated descriptive observations without analytical frameworks`,
+        `A purely historical chronicle that excludes contemporary methodologies and problem-solving`,
+        `A speculative methodology that rejects formal validation and verifiable standards`
+      ]
+    },
+    {
+      concept: "Methodology & Analysis",
+      question: `When conducting rigorous academic evaluation in ${subject} regarding "${topic || 'fundamental concepts'}", what is standard practice?`,
+      correct: `Formulating hypotheses, evaluating quantitative or conceptual evidence, and verifying consistency against recognized standards`,
+      distractors: [
+        `Relying exclusively on anecdotal impressions without objective verification`,
+        `Disregarding standard terminology and established academic literature`,
+        `Accepting initial assumptions without testing alternative explanations or boundary conditions`
+      ]
+    },
+    {
+      concept: "Application & Problem Solving",
+      question: `In applied contexts of ${subject}, how are theoretical models of "${topic || subject}" typically validated?`,
+      correct: `Through systematic experimentation, case studies, or empirical testing against real-world observations`,
+      distractors: [
+        `By assuming theoretical models are infallible without testing against observed reality`,
+        `Through arbitrary consensus without reference to empirical or mathematical data`,
+        `By ignoring discrepancies between theoretical predictions and experimental results`
+      ]
+    }
   ];
 
   for (let i = 0; i < targetCount; i++) {
-    const ch = chapters[i % chapters.length];
+    const aspect = focusAspects[i % focusAspects.length];
+    const allOptions = [aspect.correct, ...aspect.distractors].sort(() => 0.5 - Math.random());
     customQuestions.push({
-      question: `In Ethiopian university studies of ${subject}, which factor is central to analyzing "${topic || ch}"?`,
-      options: [
-        `A) Rigorous theoretical axioms and empirical validation governing ${subject}`,
-        `B) Unsubstantiated empirical observation without foundational models`,
-        `C) Isolated scalar approximations disregarding domain boundary conditions`,
-        `D) Discontinuous variable extrapolation without theoretical consistency`
-      ],
-      correctAnswer: `A) Rigorous theoretical axioms and empirical validation governing ${subject}`,
-      explanation: `In the official Ethiopian university syllabus for ${subject}, mastery of ${topic || ch} requires foundational axioms, mathematical or conceptual rigor, and systematic empirical verification.`
+      question: aspect.question,
+      options: allOptions,
+      correctAnswer: aspect.correct,
+      explanation: `In the Ethiopian university curriculum for ${subject}, mastery of ${topic || 'this course'} requires rigorous methodology: ${aspect.correct.toLowerCase()}.`
     });
   }
 

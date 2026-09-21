@@ -544,8 +544,13 @@ export default function ExamPrep({
       // Fallback below
     }
 
-    // Fallback: dedicated subject bank only
-    const defaultBank = PAST_EXAM_BANK[selectedSubject] || PAST_EXAM_BANK["Mathematics"] || [];
+    // Fallback: dedicated subject bank only (strictly matching selected subject)
+    const matchedKey = Object.keys(PAST_EXAM_BANK).find(
+      k => k.toLowerCase() === selectedSubject.toLowerCase() ||
+           k.toLowerCase().includes(selectedSubject.toLowerCase()) ||
+           selectedSubject.toLowerCase().includes(k.toLowerCase())
+    );
+    const defaultBank = matchedKey ? PAST_EXAM_BANK[matchedKey] : (PAST_EXAM_BANK[selectedSubject] || []);
     const customBankForSubject = customQuestionBank[selectedSubject] || [];
     const bank = [...customBankForSubject, ...defaultBank];
     setLoadingText(null);
@@ -1099,22 +1104,28 @@ export default function ExamPrep({
 
               {/* Options */}
               <div className="grid grid-cols-1 gap-2.5">
-                {examQuestions[activeQIndex]?.options.map((opt: string) => {
+                {examQuestions[activeQIndex]?.options.map((opt: string, optIdx: number) => {
                   const isSelected = userSelections[activeQIndex] === opt;
                   const isCorrect = examQuestions[activeQIndex].correctAnswer === opt;
+                  const optionLetter = String.fromCharCode(65 + optIdx);
                   
                   let btnStyle = "bg-slate-900/90 border-slate-700 text-slate-200 hover:bg-slate-800 hover:border-slate-600";
+                  let badgeStyle = "bg-slate-800 text-slate-400 border-slate-700";
                   
                   if (isAnswerRevealed) {
                     if (isCorrect) {
                       btnStyle = "bg-emerald-500/15 border-emerald-500 text-emerald-300 font-bold ring-1 ring-emerald-500";
+                      badgeStyle = "bg-emerald-500 text-slate-950 border-emerald-500 font-black";
                     } else if (isSelected) {
                       btnStyle = "bg-red-500/15 border-red-500 text-red-300 font-bold ring-1 ring-red-500";
+                      badgeStyle = "bg-red-500 text-white border-red-500 font-black";
                     } else {
                       btnStyle = "bg-slate-900/50 border-slate-800 text-slate-500 opacity-50";
+                      badgeStyle = "bg-slate-900 text-slate-600 border-slate-800";
                     }
                   } else if (isSelected) {
                     btnStyle = "bg-amber-500/15 border-amber-400 text-amber-300 font-bold";
+                    badgeStyle = "bg-amber-400 text-slate-950 border-amber-400 font-black";
                   }
 
                   return (
@@ -1122,11 +1133,16 @@ export default function ExamPrep({
                       key={opt}
                       disabled={isAnswerRevealed}
                       onClick={() => handleOptionSelect(opt)}
-                      className={`w-full min-h-[48px] py-3 px-4 rounded-xl text-left text-sm leading-snug font-sans transition-all flex items-center justify-between border shadow-sm cursor-pointer select-none ${btnStyle}`}
+                      className={`w-full min-h-[48px] py-3 px-4 rounded-xl text-left text-sm leading-snug font-sans transition-all flex items-center justify-between border shadow-sm cursor-pointer select-none active:scale-[0.99] ${btnStyle}`}
                     >
-                      <span>{opt}</span>
-                      {isAnswerRevealed && isCorrect && <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 ml-2" />}
-                      {isAnswerRevealed && isSelected && !isCorrect && <XCircle className="w-4 h-4 text-red-400 shrink-0 ml-2" />}
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <span className={`w-7 h-7 rounded-lg border text-xs flex items-center justify-center shrink-0 font-mono transition-colors ${badgeStyle}`}>
+                          {optionLetter}
+                        </span>
+                        <span className="break-words leading-relaxed">{opt}</span>
+                      </div>
+                      {isAnswerRevealed && isCorrect && <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0 ml-2" />}
+                      {isAnswerRevealed && isSelected && !isCorrect && <XCircle className="w-5 h-5 text-red-400 shrink-0 ml-2" />}
                     </button>
                   );
                 })}
@@ -1160,18 +1176,34 @@ export default function ExamPrep({
             )}
 
             {/* Proceed button */}
-            <div className="flex items-center justify-between pt-3 border-t border-slate-700">
-              <button
-                onClick={() => setShowExitConfirm(true)}
-                className="text-xs text-slate-400 hover:text-slate-200 cursor-pointer"
-              >
-                {language === 'en' ? 'Leave Quiz' : 'ውጣ'}
-              </button>
+            <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-700">
+              <div className="flex items-center gap-2">
+                {activeQIndex > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playClickChime();
+                      setActiveQIndex(prev => prev - 1);
+                    }}
+                    className="h-11 px-3.5 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold text-xs rounded-xl flex items-center gap-1 cursor-pointer transition active:scale-95"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>{language === 'en' ? 'Prev' : 'ቀዳሚ'}</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setShowExitConfirm(true)}
+                    className="text-xs text-slate-400 hover:text-slate-200 cursor-pointer px-2"
+                  >
+                    {language === 'en' ? 'Leave' : 'ውጣ'}
+                  </button>
+                )}
+              </div>
 
               <button
                 onClick={handleNextQuestion}
                 disabled={!userSelections[activeQIndex]}
-                className="h-12 px-6 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-sm rounded-xl flex items-center justify-center gap-1.5 shadow disabled:opacity-40 cursor-pointer select-none active:scale-98 transition-all"
+                className="h-11 px-6 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black text-xs sm:text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 disabled:opacity-40 cursor-pointer select-none active:scale-98 transition-all"
               >
                 <span>
                   {activeQIndex === examQuestions.length - 1 

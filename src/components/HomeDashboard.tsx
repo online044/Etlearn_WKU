@@ -20,15 +20,15 @@ import {
   fetchStudentExamAttempts, fetchStudentTasks, saveStudentTask, 
   toggleStudentTaskStatus, deleteStudentTask 
 } from '../utils/supabaseCourses';
+import { QuickAction, ProgressCard, SubjectChip, ProBanner, EmptyState } from './native/NativeComponents';
 
 interface HomeDashboardProps {
   profile: StudentProfile;
   language: 'en' | 'am' | 'both';
-  onNavigate: (page: 'home' | 'tutor' | 'quiz' | 'profile' | 'notes' | 'examprep' | 'bookstore' | 'university' | 'courses' | 'examengine', context?: AITeacherContext) => void;
+  onNavigate: (page: 'home' | 'tutor' | 'quiz' | 'profile' | 'notes' | 'examprep' | 'bookstore' | 'university' | 'examengine', context?: AITeacherContext) => void;
   onUpdateGrade: (grade: string) => void;
   streakCount: number;
   studyHoursCount: number;
-  onSelectCourse?: (courseId: string) => void;
 }
 
 export default function HomeDashboard({
@@ -37,8 +37,7 @@ export default function HomeDashboard({
   onNavigate,
   onUpdateGrade,
   streakCount,
-  studyHoursCount,
-  onSelectCourse
+  studyHoursCount
 }: HomeDashboardProps) {
   const isAmharic = language === 'am';
   const userId = profile.email || profile.name || 'guest_user';
@@ -385,9 +384,9 @@ export default function HomeDashboard({
   };
 
   // --------------------------------------------------------------------------
-  // RENDER SKELETON LOADERS (Only when there are zero courses to render)
+  // RENDER SKELETON LOADERS
   // --------------------------------------------------------------------------
-  if (isLoading && courses.length === 0) {
+  if (isLoading && !profile.name) {
     return (
       <div className="w-full space-y-6 animate-pulse text-slate-800 dark:text-slate-100">
         {/* Top Header Skeleton */}
@@ -416,861 +415,313 @@ export default function HomeDashboard({
     );
   }
 
+  const currentHour = new Date().getHours();
+  const greetingEn = currentHour < 12 ? 'Good morning' : currentHour < 17 ? 'Good afternoon' : 'Good evening';
+  const greetingAm = currentHour < 12 ? 'እንደምን አደሩ' : currentHour < 17 ? 'እንደምን ዋሉ' : 'እንደምን አመሹ';
+
   return (
-    <div id="etlearn-dashboard-root" className="w-full space-y-7 text-slate-100 font-sans">
+    <div id="etlearn-dashboard-root" className="w-full max-w-lg mx-auto space-y-4 text-slate-100 font-sans pb-20 select-none">
       
       {/* ─── ERROR STATE BANNER (If query fails) ─── */}
       {loadError && (
-        <div className="p-4 rounded-xl bg-red-950/40 border border-red-800/50 text-red-300 flex items-center justify-between gap-3 text-sm">
-          <div className="flex items-center gap-2.5">
-            <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
-            <span>{loadError}</span>
+        <div className="p-3.5 rounded-2xl bg-red-950/40 border border-red-800/50 text-red-300 flex items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+            <span className="truncate">{loadError}</span>
           </div>
           <button
             onClick={() => loadDashboardData()}
-            className="px-3 py-1.5 rounded-lg bg-red-900/60 hover:bg-red-800 border border-red-700/60 text-xs font-semibold text-white transition-colors cursor-pointer flex items-center gap-1.5"
+            className="px-2.5 py-1 rounded-lg bg-red-900/60 hover:bg-red-800 border border-red-700/60 text-[11px] font-semibold text-white transition-colors cursor-pointer shrink-0"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>{isAmharic ? 'እንደገና ሞክር' : 'Try Again'}</span>
+            {isAmharic ? 'እንደገና ሞክር' : 'Retry'}
           </button>
         </div>
       )}
 
-      {/* ─── 1. SCHOLAR COMMAND CENTER ─── */}
-      <section className="p-5 sm:p-6 rounded-2xl bg-[#111C35] border border-slate-800/90 shadow-md">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
-          <div className="flex items-start sm:items-center gap-4">
-            {/* Profile Icon with manual photo - touching opens profile */}
-            <button
-              type="button"
-              onClick={() => {
-                playClickChime();
-                onNavigate('profile');
-              }}
-              className="relative group cursor-pointer shrink-0 rounded-full focus:outline-none"
-              title={isAmharic ? "የተማሪ መገለጫ" : "Student Profile"}
-            >
-              <StudentAvatar 
-                avatar={profile.avatar} 
-                name={profile.name} 
-                size={54} 
-                className="border-2 border-amber-400 shadow-md group-hover:scale-105 transition-all duration-200"
-              />
-              <div className="absolute -bottom-1 -right-1 bg-amber-500 text-slate-950 rounded-full p-1 border-2 border-slate-900 shadow group-hover:scale-110 transition-transform">
-                <Camera className="w-2.5 h-2.5" />
-              </div>
-            </button>
-
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-                  {profile.name || (isAmharic ? 'ተማሪ' : 'Scholar')}
-                </h1>
-                {profile.isPro && (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-500 text-slate-950">
-                    PRO
-                  </span>
-                )}
-                <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 font-mono font-medium">
-                  <Flame className="w-3 h-3 text-amber-400 fill-amber-400" />
-                  <span>{streakCount}d</span>
-                </div>
-              </div>
-
-              <p className="text-xs sm:text-sm text-slate-300">
-                {profile.university || 'Wolkite University'}{profile.department ? ` • ${profile.department}` : ''}{profile.year ? ` • ${profile.year}` : ''}
-              </p>
-
-              {/* Clean Metrics Strip */}
-              <div className="flex items-center gap-4 pt-1 text-xs text-slate-400 font-mono">
-                <div className="flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span className="text-slate-100 font-semibold">{studyHoursCount}h</span>
-                  <span className="text-slate-400">{isAmharic ? 'የተጠና' : 'studied'}</span>
-                </div>
-
-                <span className="text-slate-700">•</span>
-
-                <div className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <span className="text-emerald-400 font-semibold">{overallProgressPercentage}%</span>
-                  <span className="text-slate-400">{isAmharic ? 'ተጠናቋል' : 'completed'}</span>
-                </div>
-
-                {averageExamScore !== null && (
-                  <>
-                    <span className="text-slate-700">•</span>
-                    <div className="flex items-center gap-1.5">
-                      <Award className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                      <span className="text-amber-400 font-semibold">{averageExamScore}%</span>
-                      <span className="text-slate-400">{isAmharic ? 'ፈተና አማካኝ' : 'avg exam'}</span>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
+      {/* ─── 1. COMPACT NATIVE ANDROID HEADER ─── */}
+      <section className="space-y-1">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">
+              {isAmharic ? greetingAm : greetingEn}, {profile.name?.split(' ')[0] || (isAmharic ? 'ተማሪ' : 'Scholar')} 👋
+            </span>
+            <h1 className="text-base sm:text-lg font-black text-white tracking-tight truncate">
+              {isAmharic ? 'ትምህርትዎን ለመቀጠል ዝግጁ ነዎት?' : 'Ready to continue learning?'}
+            </h1>
           </div>
 
-          {/* Primary Action Buttons & Controls */}
-          <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
-            <button
-              onClick={() => {
-                playClickChime();
-                onNavigate('university');
-              }}
-              className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs sm:text-sm transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95 shadow-sm"
-            >
-              <GraduationCap className="w-4 h-4 text-slate-950" />
-              <span>{isAmharic ? 'ያለፉ ፈተናዎች' : 'Past Exams'}</span>
-            </button>
-
-            <button
-              onClick={() => {
-                playClickChime();
-                onNavigate('bookstore');
-              }}
-              className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 font-medium text-xs sm:text-sm transition-all cursor-pointer flex items-center justify-center gap-2 hover:border-amber-500/40 active:scale-95"
-            >
-              <BookOpen className="w-4 h-4 text-amber-400" />
-              <span>{isAmharic ? 'መጻሕፍት' : 'Books & Notes'}</span>
-            </button>
-
-            {/* Quick Refresh */}
-            <button
-              onClick={() => loadDashboardData(true)}
-              disabled={isRefreshing}
-              className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-400 hover:text-amber-400 transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center"
-              title={isAmharic ? 'መረጃ አድስ' : 'Refresh'}
-            >
-              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
-            </button>
-
-            {/* Notifications Trigger & Dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => { playClickChime(); setShowNotifications(!showNotifications); }}
-                className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-amber-400 transition-colors relative cursor-pointer flex items-center justify-center"
-                title={isAmharic ? 'ማስታወቂያዎች' : 'Notices'}
-              >
-                <Bell className="w-4 h-4 text-amber-400" />
-                {unreadAnnouncementsCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-slate-950 rounded-full text-[9px] font-black flex items-center justify-center">
-                    {unreadAnnouncementsCount}
-                  </span>
-                )}
-              </button>
-
-              {/* Notification Drawer Popover */}
-              {showNotifications && (
-                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-4 z-50 space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <Bell className="w-4 h-4 text-amber-400" />
-                      <span className="text-xs font-bold text-white uppercase tracking-wider">
-                        {isAmharic ? 'የዩኒቨርሲቲ ማስታወቂያዎች' : 'Campus Announcements'}
-                      </span>
-                    </div>
-                    {unreadAnnouncementsCount > 0 && (
-                      <button
-                        onClick={handleMarkAllAnnouncementsRead}
-                        className="text-[11px] text-amber-400 hover:underline cursor-pointer font-medium"
-                      >
-                        {isAmharic ? 'ሁሉንም አንብብ' : 'Mark all read'}
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
-                    {announcements.length === 0 ? (
-                      <div className="py-6 text-center text-xs text-slate-400">
-                        {isAmharic ? 'ምንም አዲስ ማስታወቂያ የለም።' : 'No announcements published at this time.'}
-                      </div>
-                    ) : (
-                      announcements.map(ann => {
-                        const isRead = readAnnouncementIds.includes(ann.id);
-                        return (
-                          <div
-                            key={ann.id}
-                            onClick={() => { 
-                              handleMarkAnnouncementRead(ann.id);
-                              setSelectedAnnouncement(ann); 
-                              setShowNotifications(false); 
-                            }}
-                            className={`p-3 rounded-xl border text-xs cursor-pointer transition-all ${
-                              isRead 
-                                ? 'bg-slate-950/40 border-slate-800 text-slate-400' 
-                                : 'bg-slate-950 border-amber-500/30 text-slate-100 hover:border-amber-400'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-2 mb-1">
-                              <span className="font-semibold text-[12px] text-slate-100 line-clamp-1">{ann.title}</span>
-                              <span className="text-[10px] text-slate-400 shrink-0">{ann.date}</span>
-                            </div>
-                            <p className="text-[11px] text-slate-400 line-clamp-2">{ann.message}</p>
-                            {ann.badgeText && (
-                              <span className="inline-block mt-1.5 text-[9px] px-2 py-0.5 rounded bg-slate-800 text-amber-400 font-mono">
-                                {ann.badgeText}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+          <div className="text-right shrink-0">
+            <span className="text-[10px] font-mono text-slate-400 block">
+              {ethDate.monthAm} {geezDayNumeral} ({ethDate.year} ዓ.ም)
+            </span>
+            {todayHoliday && (
+              <span className="text-[9.5px] font-bold text-amber-400 truncate block max-w-[130px]">
+                {todayHoliday.nameAm}
+              </span>
+            )}
           </div>
         </div>
       </section>
 
-      {/* ─── 3. TOP QUICK ACCESS WORKSPACE (Placed Prominently Near Top!) ─── */}
-      <section className="space-y-3">
+      {/* ─── 2. QUICK ACTIONS (4 Touch Tiles) ─── */}
+      <section className="space-y-2">
+        <h2 className="text-xs font-black uppercase tracking-wider text-slate-400">
+          {isAmharic ? 'ፈጣን አገልግሎቶች' : 'Quick Actions'}
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          <QuickAction
+            icon={Target}
+            label={isAmharic ? 'ልምምድ' : 'Practice'}
+            sublabel={isAmharic ? 'ጥያቄዎች' : 'Daily Drills'}
+            badge="Qns"
+            colorTheme="amber"
+            onClick={() => onNavigate('quiz')}
+          />
+          <QuickAction
+            icon={GraduationCap}
+            label={isAmharic ? 'ያለፉ ፈተናዎች' : 'Past Exams'}
+            sublabel={isAmharic ? 'WKU ፈተናዎች' : 'WKU & AAU'}
+            badge="Exam"
+            colorTheme="blue"
+            onClick={() => onNavigate('university')}
+          />
+          <QuickAction
+            icon={FileText}
+            label={isAmharic ? 'ማስታወሻዎች' : 'Study Notes'}
+            sublabel={isAmharic ? 'ዲጂታል መጻሕፍት' : 'Summaries'}
+            badge="PDF"
+            colorTheme="emerald"
+            onClick={() => onNavigate('bookstore')}
+          />
+          <QuickAction
+            icon={Bot}
+            label={isAmharic ? 'አስጎብኚ AI' : 'AI Tutor'}
+            sublabel={isAmharic ? 'የግል አስጠኚ' : '24/7 Asgobnyi'}
+            badge="AI"
+            colorTheme="purple"
+            onClick={() => onNavigate('tutor')}
+          />
+        </div>
+      </section>
+
+      {/* ─── 4. SUBJECTS (Horizontal Scrolling Cards) ─── */}
+      <section className="space-y-2">
         <div className="flex items-center justify-between">
-          <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-            <Compass className="w-4 h-4 text-amber-400" />
-            <span>{isAmharic ? 'ፈጣን የጥናት መዳረሻ ክፍሎች' : 'Quick Study Stations'}</span>
+          <h2 className="text-xs font-black uppercase tracking-wider text-slate-400">
+            {isAmharic ? 'የትምህርት አይነቶች' : 'Subjects'}
           </h2>
           <span className="text-[11px] text-slate-500">
-            {isAmharic ? 'ወደ ዋና ዋና የትምህርት ክፍሎች ፈጣን መሸጋገሪያ' : 'Fast-track to core study tools'}
+            {isAmharic ? 'ለመለማመድ አንዱን ይምረጡ' : 'Tap to practice'}
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {/* 1. University Hub */}
-          <button
-            onClick={() => { playClickChime(); onNavigate('university'); }}
-            className="p-4 rounded-xl bg-[#111C35] border border-slate-800 hover:border-amber-500/50 transition-all cursor-pointer text-left group flex flex-col justify-between h-28 shadow-xs"
-          >
-            <div className="flex items-center justify-between">
-              <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform">
-                <GraduationCap className="w-4 h-4" />
-              </div>
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-mono">
-                {isAmharic ? 'ዩኒቨርሲቲ' : 'Uni Exams'}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+          {[
+            { name: 'Mathematics', nameAm: 'ሒሳብ', count: 120, icon: '📐' },
+            { name: 'Emerging Tech', nameAm: 'ኢመርጂንግ ቴክ', count: 85, icon: '🤖' },
+            { name: 'Biology', nameAm: 'ባዮሎጂ', count: 95, icon: '🧬' },
+            { name: 'Economics', nameAm: 'ኢኮኖሚክስ', count: 70, icon: '📈' },
+            { name: 'English', nameAm: 'እንግሊዝኛ', count: 110, icon: '📝' },
+            { name: 'Chemistry', nameAm: 'ኬሚስትሪ', count: 90, icon: '⚗️' },
+            { name: 'Physics', nameAm: 'ፊዚክስ', count: 105, icon: '⚡' },
+            { name: 'Psychology', nameAm: 'ሳይኮሎጂ', count: 60, icon: '🧠' },
+          ].map((sub) => (
+            <button
+              key={sub.name}
+              type="button"
+              onClick={() => {
+                playClickChime();
+                onNavigate('quiz');
+              }}
+              className="p-3 rounded-2xl bg-[#111C35] border border-slate-800 hover:border-amber-400/60 transition flex flex-col items-start min-w-[120px] shrink-0 cursor-pointer active:scale-95 group text-left"
+            >
+              <span className="text-lg mb-1">{sub.icon}</span>
+              <span className="text-xs font-bold text-white group-hover:text-amber-400 transition truncate w-full">
+                {isAmharic ? sub.nameAm : sub.name}
               </span>
-            </div>
-            <div>
-              <span className="block text-xs font-bold text-slate-100 group-hover:text-amber-400 transition-colors">
-                {isAmharic ? 'የዩኒቨርሲቲ ፈተናዎች' : 'University Exams'}
+              <span className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                {sub.count} {isAmharic ? 'ጥያቄዎች' : 'Qns'}
               </span>
-              <span className="block text-[10px] text-slate-400 truncate">WKU & AAU Papers</span>
-            </div>
-          </button>
-
-          {/* 2. Digital Bookstore */}
-          <button
-            onClick={() => { playClickChime(); onNavigate('bookstore'); }}
-            className="p-4 rounded-xl bg-[#111C35] border border-slate-800 hover:border-emerald-500/50 transition-all cursor-pointer text-left group flex flex-col justify-between h-28 shadow-xs"
-          >
-            <div className="flex items-center justify-between">
-              <div className="relative w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
-                <BookOpen className="w-4 h-4" />
-                <span className="absolute -top-2 -right-2 px-1 py-0.2 rounded-full text-[8px] font-black bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 uppercase tracking-tight shadow-xs">
-                  {isAmharic ? 'በቅርቡ' : 'Soon'}
-                </span>
-              </div>
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono">
-                {isAmharic ? 'መጻሕፍት' : 'Books'}
-              </span>
-            </div>
-            <div>
-              <span className="block text-xs font-bold text-slate-100 group-hover:text-emerald-400 transition-colors">
-                {isAmharic ? 'መጻሕፍት ቤት' : 'Digital Books'}
-              </span>
-              <span className="block text-[10px] text-slate-400 truncate">Textbooks & PDFs</span>
-            </div>
-          </button>
-
-          {/* 3. National Matric Exam Prep */}
-          <button
-            onClick={() => { playClickChime(); onNavigate('examprep'); }}
-            className="p-4 rounded-xl bg-[#111C35] border border-slate-800 hover:border-purple-500/50 transition-all cursor-pointer text-left group flex flex-col justify-between h-28 shadow-xs"
-          >
-            <div className="flex items-center justify-between">
-              <div className="w-8 h-8 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 group-hover:scale-105 transition-transform">
-                <Award className="w-4 h-4" />
-              </div>
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
-                Grade 12
-              </span>
-            </div>
-            <div>
-              <span className="block text-xs font-bold text-slate-100 group-hover:text-purple-400 transition-colors">
-                {isAmharic ? 'ብሔራዊ ፈተና' : 'National Matric'}
-              </span>
-              <span className="block text-[10px] text-slate-400 truncate">EUEE Blueprint</span>
-            </div>
-          </button>
-
-          {/* 4. Exam Engine / Timed Quizzes */}
-          <button
-            onClick={() => { playClickChime(); onNavigate('examengine'); }}
-            className="p-4 rounded-xl bg-[#111C35] border border-slate-800 hover:border-amber-500/50 transition-all cursor-pointer text-left group flex flex-col justify-between h-28 shadow-xs"
-          >
-            <div className="flex items-center justify-between">
-              <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform">
-                <Play className="w-4 h-4 fill-amber-400/20" />
-              </div>
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
-                Timed
-              </span>
-            </div>
-            <div>
-              <span className="block text-xs font-bold text-slate-100 group-hover:text-amber-400 transition-colors">
-                {isAmharic ? 'የፈተና ሞተር' : 'Exam Engine'}
-              </span>
-              <span className="block text-[10px] text-slate-400 truncate">Speed Drills & Timer</span>
-            </div>
-          </button>
-
-          {/* 5. Study Notes & Summaries */}
-          <button
-            onClick={() => { playClickChime(); onNavigate('notes'); }}
-            className="p-4 rounded-xl bg-[#111C35] border border-slate-800 hover:border-sky-500/50 transition-all cursor-pointer text-left group flex flex-col justify-between h-28 shadow-xs"
-          >
-            <div className="flex items-center justify-between">
-              <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 group-hover:scale-105 transition-transform">
-                <FileText className="w-4 h-4" />
-              </div>
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400 font-mono">
-                {isAmharic ? 'ማስታወሻ' : 'Notes'}
-              </span>
-            </div>
-            <div>
-              <span className="block text-xs font-bold text-slate-100 group-hover:text-sky-400 transition-colors">
-                {isAmharic ? 'የጥናት ማስታወሻ' : 'Study Notes'}
-              </span>
-              <span className="block text-[10px] text-slate-400 truncate">High-Yield Summaries</span>
-            </div>
-          </button>
-
-          {/* 6. Flashcards Deck */}
-          <button
-            onClick={() => { playClickChime(); onNavigate('notes'); }}
-            className="p-4 rounded-xl bg-[#111C35] border border-slate-800 hover:border-rose-500/50 transition-all cursor-pointer text-left group flex flex-col justify-between h-28 shadow-xs"
-          >
-            <div className="flex items-center justify-between">
-              <div className="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 group-hover:scale-105 transition-transform">
-                <Layers className="w-4 h-4" />
-              </div>
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 font-mono">
-                Cards
-              </span>
-            </div>
-            <div>
-              <span className="block text-xs font-bold text-slate-100 group-hover:text-rose-400 transition-colors">
-                {isAmharic ? 'ፍላሽ ካርዶች' : 'Flashcards'}
-              </span>
-              <span className="block text-[10px] text-slate-400 truncate">Active Recall Decks</span>
-            </div>
-          </button>
+            </button>
+          ))}
         </div>
       </section>
 
-      {/* ─── 4. MAIN TWO-COLUMN DASHBOARD WORKSPACE ─── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        
-        {/* ─── LEFT COLUMN: CORE ACADEMIC MODULES & EXAM HUB (7 COLS / ~60%) ─── */}
-        <div className="lg:col-span-7 space-y-6">
-          
-          {/* Active / Continue Learning Block */}
-          <section className="p-5 sm:p-6 rounded-2xl bg-[#111C35] border border-slate-800/90 space-y-4 shadow-sm">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div>
-                <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                  <BookCheck className="w-4 h-4 text-amber-400" />
-                  <span>{isAmharic ? 'ጥናትዎን ይቀጥሉ' : 'Continue Learning'}</span>
-                </h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {isAmharic ? 'በቅርብ ያጠኗቸው እና በእጅዎ ያሉ የኮርስ ክፍሎች' : 'Pick up exactly where you left off'}
-                </p>
-              </div>
-
-              <button
-                onClick={() => onNavigate('courses')}
-                className="text-xs text-amber-400 hover:underline font-semibold cursor-pointer inline-flex items-center gap-1"
-              >
-                <span>{isAmharic ? 'ሁሉንም ኮርሶች እይ' : 'All Courses'}</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {inProgressCourses.length === 0 ? (
-              <div className="p-6 rounded-xl bg-slate-950/60 border border-slate-800/80 text-center space-y-3">
-                <div className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center mx-auto text-amber-400">
-                  <BookOpen className="w-5 h-5" />
-                </div>
-                <div className="max-w-md mx-auto space-y-1">
-                  <h4 className="text-sm font-bold text-white">
-                    {isAmharic ? 'የተጀመረ ኮርስ የለም' : 'Ready to start your first course'}
-                  </h4>
-                  <p className="text-xs text-slate-400">
-                    {isAmharic 
-                      ? 'ከስርዓተ ትምህርቱ ውስጥ ኮርስ ሲጀምሩ የቀጣይነት እድገትዎ እዚህ ይመዘገባል።' 
-                      : 'Choose a curriculum course to begin structured chapter lessons with AI tutoring.'}
-                  </p>
-                </div>
-                <button
-                  onClick={() => onNavigate('courses')}
-                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-colors cursor-pointer inline-flex items-center gap-1.5"
-                >
-                  <span>{isAmharic ? 'ኮርሶችን ይምረጡ' : 'Browse Courses'}</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {inProgressCourses.slice(0, 3).map(({ course, progressPercentage, completedCount }) => {
-                  const isBookmarked = bookmarkedCourseIds.includes(course.id);
-                  return (
-                    <div
-                      key={course.id}
-                      className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 hover:border-amber-500/40 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-                    >
-                      <div className="space-y-1.5 min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-mono text-amber-400 font-semibold px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
-                            {course.subject}
-                          </span>
-                          <span className="text-xs text-slate-400">
-                            {completedCount} / {course.lessonsCount || 6} lessons done
-                          </span>
-                        </div>
-                        <h3 className="text-sm font-bold text-white truncate">{course.title}</h3>
-                        <div className="w-full max-w-md h-1.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
-                          <div 
-                            className="h-full bg-amber-500 rounded-full transition-all duration-300"
-                            style={{ width: `${progressPercentage}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                        <span className="font-mono text-xs text-amber-400 font-bold mr-1">
-                          {progressPercentage}%
-                        </span>
-                        <button
-                          onClick={() => {
-                            playClickChime();
-                            if (onSelectCourse) onSelectCourse(course.id);
-                            else onNavigate('courses');
-                          }}
-                          className="px-3.5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-all cursor-pointer inline-flex items-center gap-1.5"
-                        >
-                          <span>{isAmharic ? 'ቀጥል' : 'Resume'}</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
-          {/* Curriculum Courses Explorer with Level Switcher */}
-          <section className="p-5 sm:p-6 rounded-2xl bg-[#111C35] border border-slate-800/90 space-y-4 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-800">
-              <div>
-                <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-amber-400" />
-                  <span>{isAmharic ? 'የስርዓተ ትምህርት ኮርሶች' : 'Published Curriculum Modules'}</span>
-                </h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {isAmharic ? 'የተረጋገጡ የዩኒቨርሲቲ እና የ12ኛ ክፍል የትምህርት ክፍሎች' : 'Structured lecture modules with interactive tests'}
-                </p>
-              </div>
-
-              {/* Level Switcher (Grade 12 / University) */}
-              <div className="flex bg-[#0F172A] p-1 rounded-xl border border-slate-800 text-xs font-semibold">
-                <button
-                  onClick={() => { playClickChime(); onUpdateGrade('Grade 12'); }}
-                  className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
-                    activeLevel === 'Grade 12'
-                      ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  Grade 12
-                </button>
-                <button
-                  onClick={() => { playClickChime(); onUpdateGrade('University'); }}
-                  className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
-                    activeLevel === 'University'
-                      ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  University
-                </button>
-              </div>
-            </div>
-
-            {courses.length === 0 ? (
-              <div className="p-6 rounded-xl bg-slate-950/60 border border-slate-800/80 text-center space-y-2">
-                <BookOpen className="w-7 h-7 text-slate-600 mx-auto" />
-                <h4 className="text-xs font-bold text-slate-300">
-                  {isAmharic ? 'ምንም የታተመ ኮርስ አልተገኘም' : `No courses published for ${activeLevel} yet.`}
-                </h4>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                {courses.slice(0, 4).map(course => {
-                  const prog = progressMap[course.id];
-                  const pct = prog?.progressPercentage || 0;
-                  const isBookmarked = bookmarkedCourseIds.includes(course.id);
-
-                  return (
-                    <div
-                      key={course.id}
-                      onClick={() => {
-                        playClickChime();
-                        if (onSelectCourse) onSelectCourse(course.id);
-                        else onNavigate('courses');
-                      }}
-                      className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 hover:border-amber-500/40 transition-all cursor-pointer flex flex-col justify-between space-y-3 group"
-                    >
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[10px] font-mono text-amber-400 font-semibold px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
-                            {course.subject}
-                          </span>
-                          <button
-                            onClick={(e) => handleToggleBookmark(course.id, e)}
-                            className="text-slate-400 hover:text-amber-400 transition-colors p-1 cursor-pointer"
-                          >
-                            <Star className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-amber-400 text-amber-400' : ''}`} />
-                          </button>
-                        </div>
-
-                        <div>
-                          <h4 className="text-xs font-bold text-white group-hover:text-amber-400 transition-colors leading-snug line-clamp-1">
-                            {course.title}
-                          </h4>
-                          <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
-                            {course.instructorName || 'EthioLearn Faculty'} • {course.lessonsCount || 6} Lessons
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
-                        <span className="font-mono text-amber-400 font-semibold">
-                          {pct > 0 ? `${pct}% done` : (isAmharic ? 'አልተጀመረም' : 'Start now')}
-                        </span>
-                        <span className="text-slate-400 group-hover:text-amber-400 font-medium inline-flex items-center gap-1 transition-colors">
-                          <span>{isAmharic ? 'ክፈት' : 'Open'}</span>
-                          <ArrowUpRight className="w-3.5 h-3.5" />
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
-          {/* Model Exam & University Past Exam Hub Banner */}
-          <section className="p-5 sm:p-6 rounded-2xl bg-[#111C35] border border-slate-800/90 space-y-4 shadow-sm">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <Award className="w-4 h-4 text-amber-400" />
-                <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                  {isAmharic ? 'የዩኒቨርሲቲ እና ሞዴል ፈተናዎች' : 'University & Model Exam Papers'}
-                </h2>
-              </div>
-              <button
-                onClick={() => onNavigate('university')}
-                className="text-xs text-amber-400 hover:underline font-semibold cursor-pointer"
-              >
-                {isAmharic ? 'ሁሉንም እይ' : 'View Library'}
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Card 1: University Mid & Final Papers */}
-              <div 
-                onClick={() => { playClickChime(); onNavigate('university'); }}
-                className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 hover:border-amber-500/40 transition-all cursor-pointer space-y-2 group"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 font-mono font-semibold">
-                    WKU • AAU • JU
-                  </span>
-                  <ExternalLink className="w-3.5 h-3.5 text-slate-500 group-hover:text-amber-400" />
-                </div>
-                <h4 className="text-xs font-bold text-white group-hover:text-amber-400 transition-colors">
-                  {isAmharic ? 'የዩኒቨርሲቲ ያለፉ ፈተናዎች' : 'University Past Exam Papers'}
-                </h4>
-                <p className="text-[11px] text-slate-400 line-clamp-2">
-                  Real midterms & final exams with verified answer keys across all departments.
-                </p>
-              </div>
-
-              {/* Card 2: Interactive Exam Engine */}
-              <div 
-                onClick={() => { playClickChime(); onNavigate('examengine'); }}
-                className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 hover:border-emerald-500/40 transition-all cursor-pointer space-y-2 group"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono font-semibold">
-                    Live Timing
-                  </span>
-                  <Play className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400/20" />
-                </div>
-                <h4 className="text-xs font-bold text-white group-hover:text-emerald-400 transition-colors">
-                  {isAmharic ? 'የፈተና ሞተር (Exam Engine)' : 'Timed Mock Exam Engine'}
-                </h4>
-                <p className="text-[11px] text-slate-400 line-clamp-2">
-                  Simulate official exam conditions with countdown timers and instant grading.
-                </p>
-              </div>
-            </div>
-          </section>
-
-        </div>
-
-        {/* ─── RIGHT COLUMN: DAILY STUDY COMPANION & AI PROMPTS (5 COLS / ~40%) ─── */}
-        <div className="lg:col-span-5 space-y-6">
-          
-          {/* 1. Today's Study Planner (Tasks & Daily Goal) */}
-          <section className="p-5 sm:p-6 rounded-2xl bg-[#111C35] border border-slate-800/90 space-y-4 shadow-sm">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <Target className="w-4 h-4 text-amber-400" />
-                <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                  {isAmharic ? 'የእለት የጥናት እቅድ' : "Today's Study Plan"}
-                </h3>
-              </div>
-
-              {/* Goal Adjuster */}
-              <div className="flex items-center gap-1 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800 text-xs">
-                <button
-                  onClick={() => handleUpdateTargetHours(-0.5)}
-                  className="text-slate-400 hover:text-white px-1 font-bold cursor-pointer"
-                  title="Decrease target"
-                >
-                  -
-                </button>
-                <span className="text-[10px] font-mono text-amber-400 font-bold">{targetHours}h goal</span>
-                <button
-                  onClick={() => handleUpdateTargetHours(0.5)}
-                  className="text-slate-400 hover:text-white px-1 font-bold cursor-pointer"
-                  title="Increase target"
-                >
-                  +
-                </button>
-              </div>
-            </div>
-
-            {/* Task list */}
-            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-              {tasks.length === 0 ? (
-                <div className="py-6 text-center text-xs text-slate-400 bg-slate-950/40 rounded-xl border border-slate-800/60 p-4 space-y-2">
-                  <p>{isAmharic ? 'ምንም የታቀደ የጥናት ስራ የለም።' : 'No tasks scheduled for today yet.'}</p>
-                  <button
-                    onClick={() => { playClickChime(); setShowAddTaskModal(true); }}
-                    className="text-amber-400 hover:underline font-semibold cursor-pointer inline-flex items-center gap-1"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>{isAmharic ? 'አዲስ ተግባር አክል' : 'Add First Task'}</span>
-                  </button>
-                </div>
-              ) : (
-                tasks.map(task => (
-                  <div
-                    key={task.id}
-                    onClick={() => handleToggleTask(task)}
-                    className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 text-xs ${
-                      task.isCompleted
-                        ? 'bg-slate-950/40 border-slate-800/60 text-slate-400'
-                        : 'bg-slate-950 border-slate-800 hover:border-amber-500/40 text-slate-200'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <button className="shrink-0 text-amber-400">
-                        {task.isCompleted ? (
-                          <CheckSquare className="w-4 h-4 text-emerald-400" />
-                        ) : (
-                          <Square className="w-4 h-4 text-slate-500" />
-                        )}
-                      </button>
-                      <div className="min-w-0">
-                        <span className={`text-xs block truncate ${task.isCompleted ? 'line-through text-slate-400' : 'font-medium text-slate-100'}`}>
-                          {task.title}
-                        </span>
-                        {task.subject && (
-                          <span className="text-[10px] text-slate-400 block font-mono">
-                            {task.subject}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[10px] font-mono text-slate-400 px-2 py-0.5 rounded bg-slate-900 border border-slate-800">
-                        {task.duration || '25m'}
-                      </span>
-                      <button
-                        onClick={(e) => handleDeleteTask(task.id, e)}
-                        className="text-slate-600 hover:text-red-400 p-1 transition-colors cursor-pointer"
-                        title="Delete task"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
-              <span>
-                {completedTasksCount} of {tasks.length} {isAmharic ? 'ተጠናቋል' : 'completed'}
-              </span>
-
-              <button
-                onClick={() => { playClickChime(); setShowAddTaskModal(true); }}
-                className="px-3 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-colors text-xs font-semibold cursor-pointer inline-flex items-center gap-1"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>{isAmharic ? 'ተግባር አክል' : 'Add Task'}</span>
-              </button>
-            </div>
-          </section>
-
-          {/* 2. Ask Teacher Study Prompts ("ፈጣን የAI መጠየቂያዎች") */}
-          <section className="p-5 sm:p-6 rounded-2xl bg-[#111C35] border border-slate-800/90 space-y-4 shadow-sm">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-amber-400" />
-                <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                  {isAmharic ? 'የጥናትና የፈተና ልምምዶች' : 'Curriculum Practice Drills'}
-                </h3>
-              </div>
-
-              <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 font-mono">
-                Manual Prep
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <button
-                onClick={() => handleOpenStudyTool('quiz')}
-                className="p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-500/40 text-left transition-all cursor-pointer group flex items-start gap-2.5"
-              >
-                <BookCheck className="w-4 h-4 text-amber-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
-                <div>
-                  <span className="text-xs font-bold text-slate-200 group-hover:text-amber-400 transition-colors block">
-                    {isAmharic ? 'የምዕራፍ ምርጫ ጥያቄዎች' : 'Chapter Practice MCQs'}
-                  </span>
-                  <span className="text-[10px] text-slate-400 leading-tight block mt-0.5">
-                    Curriculum questions with faculty steps
-                  </span>
-                </div>
-              </button>
-
-              <button
-                onClick={() => handleOpenStudyTool('exam')}
-                className="p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-emerald-500/40 text-left transition-all cursor-pointer group flex items-start gap-2.5"
-              >
-                <Trophy className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
-                <div>
-                  <span className="text-xs font-bold text-slate-200 group-hover:text-emerald-400 transition-colors block">
-                    {isAmharic ? 'የሞዴል ፈተና ማስጀመሪያ' : 'Timed Model Exam'}
-                  </span>
-                  <span className="text-[10px] text-slate-400 leading-tight block mt-0.5">
-                    Exam engine with score grading
-                  </span>
-                </div>
-              </button>
-
-              <button
-                onClick={() => handleOpenStudyTool('notes')}
-                className="p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-sky-500/40 text-left transition-all cursor-pointer group flex items-start gap-2.5"
-              >
-                <FileText className="w-4 h-4 text-sky-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
-                <div>
-                  <span className="text-xs font-bold text-slate-200 group-hover:text-sky-400 transition-colors block">
-                    {isAmharic ? 'ማስታወሻዎችና ፍላሽ ካርዶች' : 'High-Yield Study Notes'}
-                  </span>
-                  <span className="text-[10px] text-slate-400 leading-tight block mt-0.5">
-                    Comprehensive cheat sheets & cards
-                  </span>
-                </div>
-              </button>
-
-              <button
-                onClick={() => handleOpenStudyTool('uni')}
-                className="p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-purple-500/40 text-left transition-all cursor-pointer group flex items-start gap-2.5"
-              >
-                <GraduationCap className="w-4 h-4 text-purple-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
-                <div>
-                  <span className="text-xs font-bold text-slate-200 group-hover:text-purple-400 transition-colors block">
-                    {isAmharic ? 'የዩኒቨርሲቲ ያለፉ ፈተናዎች' : 'University Past Papers'}
-                  </span>
-                  <span className="text-[10px] text-slate-400 leading-tight block mt-0.5">
-                    WKU, AAU, ASTU Mid & Final exams
-                  </span>
-                </div>
-              </button>
-            </div>
-
-            <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
-              <span className="text-[10px] text-slate-400 truncate max-w-[180px]">
-                {mostRecentCourse ? `Subject: ${mostRecentCourse.subject}` : 'General University'}
-              </span>
-
-              <button
-                onClick={() => {
-                  playClickChime();
-                  onNavigate('quiz');
-                }}
-                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-colors cursor-pointer inline-flex items-center gap-1 shadow-xs"
-              >
-                <span>{isAmharic ? 'ወደ ፈተናዎች ሂድ' : 'Open Quizzes'}</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </section>
-
-          {/* 3. Campus Bulletins (Notice Snippet) */}
-          {announcements.length > 0 && (
-            <section className="p-5 rounded-2xl bg-[#111C35] border border-slate-800/90 space-y-3 shadow-sm">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-                <div className="flex items-center gap-2">
-                  <Bell className="w-4 h-4 text-amber-400" />
-                  <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                    {isAmharic ? 'የቅርብ ማስታወቂያ' : 'Campus Bulletin'}
-                  </h3>
-                </div>
-                <span className="text-[10px] text-slate-500">{announcements[0]?.date}</span>
-              </div>
-
-              <div 
-                onClick={() => {
-                  setSelectedAnnouncement(announcements[0]);
-                }}
-                className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 hover:border-amber-500/40 transition-all cursor-pointer space-y-1"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-bold text-slate-100 line-clamp-1">{announcements[0]?.title}</span>
-                  {announcements[0]?.badgeText && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-mono">
-                      {announcements[0]?.badgeText}
-                    </span>
-                  )}
-                </div>
-                <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
-                  {announcements[0]?.message}
-                </p>
-              </div>
-            </section>
+      {/* ─── 5. RECENT ACTIVITY ─── */}
+      <section className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-black uppercase tracking-wider text-slate-400">
+            {isAmharic ? 'የቅርብ ጊዜ እንቅስቃሴዎች' : 'Recent Activity'}
+          </h2>
+          {examAttempts.length > 0 && (
+            <span className="text-[10px] text-slate-500 font-mono">
+              {examAttempts.length} {isAmharic ? 'ሙከራዎች' : 'attempts'}
+            </span>
           )}
-
         </div>
 
-      </div>
+        {examAttempts.length === 0 ? (
+          <div className="p-3.5 rounded-2xl bg-[#111C35]/70 border border-slate-800 flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5">
+              <Award className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="text-slate-300">
+                {isAmharic ? 'እስካሁን የተወሰደ ፈተና የለም። ራስዎን ይፈትሹ!' : 'No quiz attempts recorded yet.'}
+              </span>
+            </div>
+            <button
+              onClick={() => onNavigate('quiz')}
+              className="px-3 py-1.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-[11px] shrink-0 cursor-pointer active:scale-95"
+            >
+              {isAmharic ? 'ፈተና ጀምር' : 'Start Quiz'}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {examAttempts.slice(0, 3).map((attempt, idx) => (
+              <div
+                key={attempt.id || idx}
+                className="p-3 rounded-2xl bg-[#111C35] border border-slate-800 hover:border-slate-700 transition flex items-center justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-[9.5px] font-black uppercase text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded">
+                      {attempt.subject}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {attempt.date}
+                    </span>
+                  </div>
+                  <h4 className="text-xs font-bold text-slate-200 truncate">
+                    {attempt.examTitle || attempt.subject}
+                  </h4>
+                </div>
+
+                <div className="text-right shrink-0">
+                  <span className="text-sm font-black font-mono text-emerald-400 block leading-tight">
+                    {attempt.percentage || attempt.score}%
+                  </span>
+                  <span className="text-[9.5px] font-bold text-amber-400 uppercase">
+                    Grade {attempt.grade || 'A'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ─── 6. YOUR PROGRESS ─── */}
+      <section className="space-y-2">
+        <h2 className="text-xs font-black uppercase tracking-wider text-slate-400">
+          {isAmharic ? 'የእርስዎ አጠቃላይ ውጤት' : 'Your Progress'}
+        </h2>
+        <ProgressCard
+          streak={streakCount}
+          studyHours={studyHoursCount}
+          completionRate={overallProgressPercentage}
+          language={language}
+        />
+      </section>
+
+      {/* ─── 7. PRO UPGRADE BANNER ─── */}
+      <section>
+        <ProBanner
+          onUpgrade={() => onNavigate('examprep')}
+          language={language}
+        />
+      </section>
+
+      {/* ─── 8. TODAY'S STUDY GOALS & CHECKLIST ─── */}
+      <section className="space-y-2 pt-1">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+            <CheckSquare className="w-3.5 h-3.5 text-amber-400" />
+            <span>{isAmharic ? 'የዛሬ የጥናት ግቦች' : "Today's Study Checklist"}</span>
+          </h2>
+          <button
+            onClick={() => { playClickChime(); setShowAddTaskModal(true); }}
+            className="text-[11px] font-bold text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>{isAmharic ? 'ግብ ጨምር' : 'Add Task'}</span>
+          </button>
+        </div>
+
+        <div className="space-y-1.5">
+          {tasks.slice(0, 4).map((t) => (
+            <div
+              key={t.id}
+              onClick={() => handleToggleTask(t.id)}
+              className="p-3 rounded-xl bg-[#111C35] border border-slate-800 hover:border-slate-700 transition flex items-center justify-between gap-3 cursor-pointer select-none"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                {t.completed ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                ) : (
+                  <Square className="w-4 h-4 text-slate-500 shrink-0" />
+                )}
+                <span className={`text-xs font-medium truncate ${t.completed ? 'line-through text-slate-500' : 'text-slate-200'}`}>
+                  {t.title}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  handleDeleteTask(t.id, e);
+                }}
+                className="text-slate-500 hover:text-red-400 p-1 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ─── 9. ETHIOPIAN UNIVERSITY TELEGRAM COMMUNITY ─── */}
+      <section className="p-3.5 rounded-2xl bg-[#111C35] border border-slate-800 flex items-center justify-between gap-3">
+        <div className="space-y-0.5 min-w-0">
+          <span className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
+            <span>💬</span>
+            <span>{isAmharic ? 'የወልቂጤ ዩኒቨርሲቲ ተማሪዎች ቻናል' : 'WKU Students Telegram'}</span>
+          </span>
+          <p className="text-[10.5px] text-slate-400 truncate">
+            {isAmharic ? 'የጥናት ማስታወሻዎችን እና ዜናዎችን ይጋሩ' : 'Join fellow students for notes & announcements'}
+          </p>
+        </div>
+
+        <a
+          href="https://t.me/WolkiteUniversityCommunity"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="px-3 py-1.5 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-400 text-xs font-bold shrink-0 transition flex items-center gap-1 cursor-pointer active:scale-95"
+        >
+          <span>Join</span>
+          <ArrowUpRight className="w-3.5 h-3.5" />
+        </a>
+      </section>
+
+      {/* ─── 10. CAMPUS ANNOUNCEMENT SPOTLIGHT ─── */}
+      {announcements.length > 0 && (
+        <section className="p-3.5 rounded-2xl bg-[#111C35] border border-slate-800 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Bell className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-xs font-bold text-white truncate max-w-[200px]">
+                {announcements[0]?.title}
+              </span>
+            </div>
+            {announcements[0]?.badgeText && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-mono">
+                {announcements[0]?.badgeText}
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
+            {announcements[0]?.message}
+          </p>
+        </section>
+      )}
 
       {/* ─── MODAL: ADD STUDY TASK ─── */}
       {showAddTaskModal && (

@@ -10,7 +10,7 @@ import {
   Share, X, ShieldCheck, Download, WifiOff, GraduationCap, FileText, Menu
 } from 'lucide-react';
 
-import { StudentProfile, CustomNote, Flashcard, AITeacherContext } from './types';
+import { StudentProfile, CustomNote, Flashcard, AITeacherContext, ExamAttemptRecord } from './types';
 import SplashOnboarding from './components/SplashOnboarding';
 import PWADownloadAssistant from './components/PWADownloadAssistant';
 import ExamPrep from './components/ExamPrep';
@@ -26,13 +26,13 @@ import SupportChatBubble from './components/SupportChatBubble';
 import ExamNotesHubView from './components/ExamNotesHubView';
 import InAppViewerModal from './components/InAppViewerModal';
 import AdminDashboardView from './components/AdminDashboardView';
-import CourseExperienceView from './components/CourseExperienceView';
 import ExamEngineView from './components/ExamEngineView';
 import EthioLearnAppPromoBanner from './components/EthioLearnAppPromoBanner';
 import AppSidebar from './components/AppSidebar';
 import LegalPrivacyTermsModal from './components/LegalPrivacyTermsModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { TelegramMiniAppHeader } from './components/TelegramMiniAppHeader';
+import AppDrawer from './components/native/AppDrawer';
 
 import { 
   testFirestoreConnection, 
@@ -217,7 +217,16 @@ export default function App() {
     return (saved === 'am' || saved === 'en') ? saved : 'en';
   });
 
-  const [currentPage, setCurrentPage] = useState<'home' | 'tutor' | 'quiz' | 'profile' | 'notes' | 'bookstore' | 'university' | 'upgrade' | 'examprep' | 'courses' | 'examengine'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'tutor' | 'quiz' | 'profile' | 'notes' | 'bookstore' | 'university' | 'upgrade' | 'examprep' | 'examengine'>('home');
+
+  const [examAttempts, setExamAttempts] = useState<ExamAttemptRecord[]>(() => {
+    try {
+      const raw = safeStorage.getItem(`ethiolearn_student_exam_attempts_${profile.id || 'guest'}`);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return [];
+  });
+
   const [aiContext, setAiContext] = useState<AITeacherContext | null>(null);
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() => {
     const saved = safeStorage.getItem('ethiolearn_theme');
@@ -1318,24 +1327,6 @@ export default function App() {
                 onUpdateGrade={handleUpdateGrade}
                 streakCount={streak}
                 studyHoursCount={studyHours}
-                onSelectCourse={(courseId) => {
-                  setCurrentPage('courses');
-                }}
-              />
-            )}
-
-            {currentPage === 'courses' && (
-              <CourseExperienceView 
-                profile={profile}
-                apiKey={profile.claudeApiKey || ""}
-                language={language}
-                onNavigate={(page) => setCurrentPage(page as any)}
-                onOpenAITutorWithContext={(ctx) => {
-                  setAiContext(ctx);
-                  setCurrentPage('tutor');
-                }}
-                onStudyAction={handleRecordStudyAction}
-                onOpenInAppViewer={(url, title) => { setInAppViewerUrl(url); setInAppViewerTitle(title); }}
               />
             )}
 
