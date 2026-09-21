@@ -1147,7 +1147,7 @@ export default function AuthPortalView({
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: "easeOut" }}
-        className="w-full bg-[#0e1628]/95 backdrop-blur-xl p-6 sm:p-8 rounded-2xl md:rounded-3xl border border-slate-700/60 relative z-10 shadow-[0_24px_64px_-12px_rgba(0,0,0,0.8)] space-y-6"
+        className="w-full bg-[#0e1628]/95 backdrop-blur-xl p-4 sm:p-6 md:p-8 rounded-2xl md:rounded-3xl border border-slate-700/60 relative z-10 shadow-[0_24px_64px_-12px_rgba(0,0,0,0.8)] space-y-6"
       >
         {/* Glowing Ambient Top Edge Line */}
         <div className="absolute top-0 inset-x-8 h-[2px] bg-gradient-to-r from-transparent via-[#F59E0B]/50 to-transparent" />
@@ -1721,19 +1721,19 @@ export default function AuthPortalView({
                   <label className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider block">
                     {t.academicStanding}
                   </label>
-                  <div className="grid grid-cols-3 gap-1.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                     {ACADEMIC_STANDINGS.map((standing) => (
                       <button
                         key={standing.id}
                         type="button"
                         onClick={() => { playClickChime(); setYear(standing.id); }}
-                        className={`py-1.5 px-2 text-[10px] font-bold rounded-lg border text-center transition-all cursor-pointer truncate ${
+                        className={`min-h-[40px] py-1.5 px-2 text-[10.5px] font-bold rounded-lg border text-center transition-all cursor-pointer flex items-center justify-center ${
                           year === standing.id
                             ? 'bg-amber-500/20 border-[#F59E0B] text-amber-300 shadow-xs'
                             : 'bg-[#090f1d] border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
                         }`}
                       >
-                        {lang === 'am' ? standing.labelAm : standing.labelEn}
+                        <span className="truncate">{lang === 'am' ? standing.labelAm : standing.labelEn}</span>
                       </button>
                     ))}
                   </div>

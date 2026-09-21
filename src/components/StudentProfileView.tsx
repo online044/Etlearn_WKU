@@ -757,53 +757,53 @@ export default function StudentProfileView({
       </div>
 
       {/* 2. PRO CATEGORIZED NAVIGATION TABS */}
-      <div className="flex flex-wrap bg-slate-950 border border-slate-800 p-1 rounded-2xl select-none gap-1">
+      <div className="grid grid-cols-2 sm:grid-cols-4 bg-slate-950 border border-slate-800 p-1.5 rounded-2xl select-none gap-1.5">
         <button
           onClick={() => { playClickChime(); setActiveTab('academic'); }}
-          className={`flex-1 min-w-[130px] py-2.5 px-3 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-2 ${
+          className={`min-h-[44px] py-2 px-3 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-2 ${
             activeTab === 'academic'
               ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-              : 'text-slate-400 hover:text-slate-200'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
           }`}
         >
           <GraduationCap className="w-4 h-4 shrink-0" />
-          <span>{language === 'en' ? 'Academic' : 'አካዳሚክ'}</span>
+          <span className="truncate">{language === 'en' ? 'Academic' : 'አካዳሚክ'}</span>
         </button>
 
         <button
           onClick={() => { playClickChime(); setActiveTab('analytics'); }}
-          className={`flex-1 min-w-[130px] py-2.5 px-3 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-2 ${
+          className={`min-h-[44px] py-2 px-3 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-2 ${
             activeTab === 'analytics'
               ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-              : 'text-slate-400 hover:text-slate-200'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
           }`}
         >
           <BarChart3 className="w-4 h-4 shrink-0" />
-          <span>{language === 'en' ? 'Analytics' : 'መረጃዎች'}</span>
+          <span className="truncate">{language === 'en' ? 'Analytics' : 'መረጃዎች'}</span>
         </button>
 
         <button
           onClick={() => { playClickChime(); setActiveTab('billing'); }}
-          className={`flex-1 min-w-[130px] py-2.5 px-3 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-2 ${
+          className={`min-h-[44px] py-2 px-3 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-2 ${
             activeTab === 'billing'
               ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-              : 'text-slate-400 hover:text-slate-200'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
           }`}
         >
           <CreditCard className="w-4 h-4 shrink-0" />
-          <span>{language === 'en' ? 'Billing' : 'ክፍያ'}</span>
+          <span className="truncate">{language === 'en' ? 'Billing' : 'ክፍያ'}</span>
         </button>
 
         <button
           onClick={() => { playClickChime(); setActiveTab('security'); }}
-          className={`flex-1 min-w-[130px] py-2.5 px-3 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-2 ${
+          className={`min-h-[44px] py-2 px-3 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-2 ${
             activeTab === 'security'
               ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-              : 'text-slate-400 hover:text-slate-200'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
           }`}
         >
           <Settings className="w-4 h-4 shrink-0" />
-          <span>{language === 'en' ? 'Security & Cloud' : 'ደህንነት'}</span>
+          <span className="truncate">{language === 'en' ? 'Security' : 'ደህንነት'}</span>
         </button>
       </div>
 

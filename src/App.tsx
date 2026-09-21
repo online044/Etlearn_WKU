@@ -1353,7 +1353,7 @@ export default function App() {
               />
             )}
 
-            {currentPage === 'quiz' && (
+            {(currentPage === 'quiz' || currentPage === 'tutor') && (
               <ExamPrep 
                 apiKey={profile.claudeApiKey || ""}
                 enrolledSubjects={profile.subjects}
@@ -1453,29 +1453,29 @@ export default function App() {
 
       {/* PERSISTENT BOTTOM NAVIGATION TAB BAR (5-Section Bottom Nav) */}
       <nav 
-        className="fixed bottom-0 left-0 right-0 z-40 bg-[#0A1128]/95 backdrop-blur-md border-t border-slate-800 shadow-xl"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        className="fixed bottom-0 left-0 right-0 z-40 bg-[#0A1128]/95 backdrop-blur-md border-t border-slate-800 shadow-2xl"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}
       >
         {/* Shifting active color bar indicator */}
         <div className="grid grid-cols-5 max-w-xl mx-auto h-[2.5px]">
-          <div className={currentPage === 'home' ? "bg-amber-400 shadow-sm shadow-amber-400/50" : "bg-transparent"} />
-          <div className={currentPage === 'quiz' ? "bg-amber-400 shadow-sm shadow-amber-400/50" : "bg-transparent"} />
-          <div className={currentPage === 'bookstore' ? "bg-amber-400 shadow-sm shadow-amber-400/50" : "bg-transparent"} />
-          <div className={currentPage === 'university' ? "bg-amber-400 shadow-sm shadow-amber-400/50" : "bg-transparent"} />
-          <div className={currentPage === 'profile' ? "bg-amber-400 shadow-sm shadow-amber-400/50" : "bg-transparent"} />
+          <div className={currentPage === 'home' ? "bg-amber-400 shadow-sm shadow-amber-400/80" : "bg-transparent"} />
+          <div className={currentPage === 'quiz' || currentPage === 'tutor' || currentPage === 'examprep' ? "bg-amber-400 shadow-sm shadow-amber-400/80" : "bg-transparent"} />
+          <div className={currentPage === 'bookstore' || currentPage === 'notes' ? "bg-amber-400 shadow-sm shadow-amber-400/80" : "bg-transparent"} />
+          <div className={currentPage === 'university' || currentPage === 'examengine' ? "bg-amber-400 shadow-sm shadow-amber-400/80" : "bg-transparent"} />
+          <div className={currentPage === 'profile' ? "bg-amber-400 shadow-sm shadow-amber-400/80" : "bg-transparent"} />
         </div>
 
-        <div className="grid grid-cols-5 max-w-xl mx-auto px-2 py-1 select-none h-16">
+        <div className="grid grid-cols-5 max-w-xl mx-auto px-1 sm:px-2 py-1 select-none h-16 items-center">
           
           {/* Home Tab */}
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('home'); }}
-            className={`flex flex-col items-center justify-center w-full transition-all cursor-pointer rounded-xl ${
+            className={`flex flex-col items-center justify-center w-full min-h-[44px] transition-all cursor-pointer rounded-xl ${
               currentPage === 'home' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <HomeIcon className="w-5 h-5 shrink-0" />
-            <span className="text-[10px] font-semibold mt-1">
+            <span className="text-[10.5px] font-semibold mt-1">
               {language === 'en' ? 'Home' : 'ቤት'}
             </span>
           </button>
@@ -1483,12 +1483,12 @@ export default function App() {
           {/* Quizzes Tab */}
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('quiz'); }}
-            className={`flex flex-col items-center justify-center w-full transition-all cursor-pointer rounded-xl ${
-              currentPage === 'quiz' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
+            className={`flex flex-col items-center justify-center w-full min-h-[44px] transition-all cursor-pointer rounded-xl ${
+              currentPage === 'quiz' || currentPage === 'tutor' || currentPage === 'examprep' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <Trophy className="w-5 h-5 shrink-0" />
-            <span className="text-[10px] font-semibold mt-1">
+            <span className="text-[10.5px] font-semibold mt-1">
               {language === 'en' ? 'Quizzes' : 'ፈተናዎች'}
             </span>
           </button>
@@ -1496,18 +1496,13 @@ export default function App() {
           {/* Book Store Tab */}
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('bookstore'); }}
-            className={`flex flex-col items-center justify-center w-full transition-all cursor-pointer rounded-xl ${
-              currentPage === 'bookstore' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
+            className={`flex flex-col items-center justify-center w-full min-h-[44px] transition-all cursor-pointer rounded-xl ${
+              currentPage === 'bookstore' || currentPage === 'notes' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
             }`}
-            title="Book Store Modules"
+            title="Curriculum Books & Notes"
           >
-            <div className="relative">
-              <BookOpen className="w-5 h-5 shrink-0" />
-              <span className="absolute -top-1.5 -right-3 px-1 py-0.2 rounded-full text-[8px] font-black bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 uppercase tracking-tight shadow-xs">
-                {language === 'en' ? 'Soon' : 'በቅርቡ'}
-              </span>
-            </div>
-            <span className="text-[10px] font-semibold mt-1">
+            <BookOpen className="w-5 h-5 shrink-0" />
+            <span className="text-[10.5px] font-semibold mt-1">
               {language === 'en' ? 'Books' : 'መጻሕፍት'}
             </span>
           </button>
@@ -1515,13 +1510,13 @@ export default function App() {
           {/* University past exams Tab */}
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('university'); }}
-            className={`flex flex-col items-center justify-center w-full transition-all cursor-pointer rounded-xl ${
-              currentPage === 'university' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
+            className={`flex flex-col items-center justify-center w-full min-h-[44px] transition-all cursor-pointer rounded-xl ${
+              currentPage === 'university' || currentPage === 'examengine' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
             }`}
             title="University Exams"
           >
             <Award className="w-5 h-5 shrink-0" />
-            <span className="text-[10px] font-semibold mt-1">
+            <span className="text-[10.5px] font-semibold mt-1">
               {language === 'en' ? 'Uni Exam' : 'ዩኒቨርሲቲ'}
             </span>
           </button>
@@ -1529,7 +1524,7 @@ export default function App() {
           {/* Profile Tab */}
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('profile'); }}
-            className={`flex flex-col items-center justify-center w-full transition-all cursor-pointer rounded-xl ${
+            className={`flex flex-col items-center justify-center w-full min-h-[44px] transition-all cursor-pointer rounded-xl ${
               currentPage === 'profile' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -1539,7 +1534,7 @@ export default function App() {
               size={24} 
               className={`transition-all ${currentPage === 'profile' ? 'border-2 border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.6)] scale-110' : 'border border-slate-700 opacity-80'}`}
             />
-            <span className="text-[10px] font-semibold mt-1">
+            <span className="text-[10.5px] font-semibold mt-1">
               {language === 'en' ? 'Profile' : 'መገለጫ'}
             </span>
           </button>
