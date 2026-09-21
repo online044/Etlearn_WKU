@@ -15,6 +15,25 @@ CREATE TABLE IF NOT EXISTS public.ethiolearn_sync (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 1b. Create profiles table (Firebase Auth UID Linked Student Accounts)
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  firebase_uid TEXT UNIQUE NOT NULL,
+  full_name TEXT NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  phone TEXT,
+  university TEXT DEFAULT 'Wolkite University (WKU)',
+  department TEXT DEFAULT 'General',
+  year_level TEXT DEFAULT 'Freshman (1st Year)',
+  profile_photo TEXT DEFAULT '',
+  subscription_status TEXT NOT NULL DEFAULT 'free',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_profiles_firebase_uid ON public.profiles (firebase_uid);
+CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles (email);
+
 -- 2. Create student_profiles table (Student Accounts & Persistence)
 CREATE TABLE IF NOT EXISTS public.student_profiles (
   email TEXT PRIMARY KEY,
@@ -208,6 +227,7 @@ CREATE INDEX IF NOT EXISTS idx_questions_university ON public.questions (univers
 CREATE INDEX IF NOT EXISTS idx_questions_composite_filter ON public.questions (course, unit, difficulty, is_published);
 
 -- 12. Enable Row Level Security (RLS) on all tables
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.student_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.courses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.lessons ENABLE ROW LEVEL SECURITY;
@@ -221,6 +241,9 @@ ALTER TABLE public.course_progress ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.questions ENABLE ROW LEVEL SECURITY;
 
 -- 13. Create permissive & security policies
+DROP POLICY IF EXISTS "Allow public all access on profiles" ON public.profiles;
+CREATE POLICY "Allow public all access on profiles" ON public.profiles FOR ALL USING (true) WITH CHECK (true);
+
 DROP POLICY IF EXISTS "Allow public all access on student_profiles" ON public.student_profiles;
 CREATE POLICY "Allow public all access on student_profiles" ON public.student_profiles FOR ALL USING (true) WITH CHECK (true);
 
@@ -759,6 +782,148 @@ export async function syncAuthSessionWithServer(params: {
   }
   return { success: false };
 }
+
+/**
+ * Upsert a user's profile in Supabase table `profiles` using Firebase UID.
+ * Reconnects existing users by email if already registered.
+ */
+export async function saveProfileToSupabase(profile: {
+  firebase_uid: string;
+  full_name: string;
+  email: string;
+  phone?: string;
+  university?: string;
+  department?: string;
+  year_level?: string;
+  profile_photo?: string;
+  subscription_status?: string;
+}): Promise<{ success: boolean; data?: any; error?: string }> {
+  const payload = {
+    firebase_uid: profile.firebase_uid,
+    full_name: profile.full_name || profile.email.split('@')[0],
+    email: profile.email.toLowerCase().trim(),
+    phone: profile.phone || '',
+    university: profile.university || 'Wolkite University (WKU)',
+    department: profile.department || 'General',
+    year_level: profile.year_level || 'Freshman (1st Year)',
+    profile_photo: profile.profile_photo || '',
+    subscription_status: profile.subscription_status || 'free',
+    updated_at: new Date().toISOString()
+  };
+
+  try {
+    const supa = getSupabase();
+    if (supa) {
+      // 1. Check if record with this firebase_uid already exists
+      const { data: existingByUid } = await supa
+        .from('profiles')
+        .select('*')
+        .eq('firebase_uid', payload.firebase_uid)
+        .maybeSingle();
+
+      if (existingByUid) {
+        const { data, error } = await supa
+          .from('profiles')
+          .update(payload)
+          .eq('firebase_uid', payload.firebase_uid)
+          .select()
+          .single();
+        if (!error && data) {
+          return { success: true, data };
+        }
+      } else {
+        // 2. Reconnect existing user by email if they already exist in database
+        const { data: existingByEmail } = await supa
+          .from('profiles')
+          .select('*')
+          .eq('email', payload.email)
+          .maybeSingle();
+
+        if (existingByEmail) {
+          const { data, error } = await supa
+            .from('profiles')
+            .update(payload)
+            .eq('email', payload.email)
+            .select()
+            .single();
+          if (!error && data) {
+            return { success: true, data };
+          }
+        } else {
+          // 3. New user insertion
+          const { data, error } = await supa
+            .from('profiles')
+            .insert(payload)
+            .select()
+            .single();
+          if (!error && data) {
+            return { success: true, data };
+          }
+        }
+      }
+    }
+  } catch (clientErr) {
+    console.warn('[saveProfileToSupabase client-side attempt]:', clientErr);
+  }
+
+  // Fallback / sync via backend server route
+  try {
+    const res = await fetch('/api/user/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      const resJson = await res.json();
+      return { success: true, data: resJson.profile || resJson.data };
+    }
+  } catch (serverErr) {
+    console.warn('[saveProfileToSupabase server proxy notice]:', serverErr);
+  }
+
+  return { success: false, error: 'Saved locally; sync queued.' };
+}
+
+/**
+ * Fetch a profile from Supabase table `profiles` using Firebase UID or email
+ */
+export async function fetchProfileFromSupabase(firebaseUid: string, email?: string): Promise<any | null> {
+  try {
+    const supa = getSupabase();
+    if (supa) {
+      if (firebaseUid) {
+        const { data, error } = await supa
+          .from('profiles')
+          .select('*')
+          .eq('firebase_uid', firebaseUid)
+          .maybeSingle();
+        if (data && !error) return data;
+      }
+      if (email) {
+        const { data, error } = await supa
+          .from('profiles')
+          .select('*')
+          .eq('email', email.toLowerCase().trim())
+          .maybeSingle();
+        if (data && !error) return data;
+      }
+    }
+
+    // Call server endpoint
+    const url = firebaseUid 
+      ? `/api/user/profile/${encodeURIComponent(firebaseUid)}` 
+      : `/api/user/profile?email=${encodeURIComponent(email || '')}`;
+    const res = await fetch(url);
+    if (res.ok) {
+      const json = await res.json();
+      if (json && json.profile) return json.profile;
+    }
+  } catch (err) {
+    console.warn('[fetchProfileFromSupabase warning]:', err);
+  }
+  return null;
+}
+
 
 
 

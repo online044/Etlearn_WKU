@@ -69,6 +69,21 @@ export interface AuthSessionRecord {
   durationMinutes?: number;
 }
 
+export interface SupabaseProfileRecord {
+  id?: string;
+  firebase_uid: string;
+  full_name: string;
+  email: string;
+  phone?: string;
+  university?: string;
+  department?: string;
+  year_level?: string;
+  profile_photo?: string;
+  subscription_status?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface StudentProfile {
   id?: string;
   name: string;
@@ -104,6 +119,8 @@ export interface StudentProfile {
   telegramId?: string;
   telegramUsername?: string;
   department?: string;
+  firebaseUid?: string;
+  emailVerified?: boolean;
   targetGpa?: string;
   bio?: string;
   idCardTheme?: 'gold' | 'emerald' | 'navy' | 'purple';

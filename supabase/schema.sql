@@ -19,7 +19,26 @@ DO $$ BEGIN
     CREATE TYPE payment_status AS ENUM ('pending', 'completed', 'failed', 'refunded');
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
--- 2. STUDENT PROFILES TABLE
+-- 2. USER PROFILES TABLE (Linked with Firebase Authentication UID)
+CREATE TABLE IF NOT EXISTS public.profiles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    firebase_uid TEXT UNIQUE NOT NULL,
+    full_name TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    phone TEXT,
+    university TEXT DEFAULT 'Wolkite University (WKU)',
+    department TEXT DEFAULT 'General',
+    year_level TEXT DEFAULT 'Freshman (1st Year)',
+    profile_photo TEXT DEFAULT '',
+    subscription_status TEXT NOT NULL DEFAULT 'free',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_profiles_firebase_uid ON public.profiles(firebase_uid);
+CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles(email);
+
+-- 2b. STUDENT PROFILES TABLE (Legacy & Campus Progress Backup)
 CREATE TABLE IF NOT EXISTS public.student_profiles (
     email TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -182,6 +201,9 @@ CREATE TRIGGER update_courses_updated_at BEFORE UPDATE ON public.courses FOR EAC
 DROP TRIGGER IF EXISTS update_lessons_updated_at ON public.lessons;
 CREATE TRIGGER update_lessons_updated_at BEFORE UPDATE ON public.lessons FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON public.profiles;
+CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 DROP TRIGGER IF EXISTS update_student_profiles_updated_at ON public.student_profiles;
 CREATE TRIGGER update_student_profiles_updated_at BEFORE UPDATE ON public.student_profiles FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -313,6 +335,50 @@ CREATE POLICY "student_profiles_update"
 CREATE POLICY "student_profiles_delete"
     ON public.student_profiles FOR DELETE
     USING (public.is_admin());
+
+-- 15.3b User Profiles (Firebase Auth UID Linked) RLS
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "profiles_select" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_insert" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_update" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_delete" ON public.profiles;
+
+CREATE POLICY "profiles_select"
+    ON public.profiles FOR SELECT
+    USING (
+        auth.role() = 'service_role' OR
+        auth.role() = 'anon' OR
+        auth.jwt() ->> 'email' = email OR
+        auth.uid()::text = firebase_uid OR
+        public.is_admin()
+    );
+
+CREATE POLICY "profiles_insert"
+    ON public.profiles FOR INSERT
+    WITH CHECK (
+        auth.role() = 'service_role' OR
+        auth.role() = 'anon' OR
+        public.is_admin()
+    );
+
+CREATE POLICY "profiles_update"
+    ON public.profiles FOR UPDATE
+    USING (
+        auth.role() = 'service_role' OR
+        auth.role() = 'anon' OR
+        auth.jwt() ->> 'email' = email OR
+        auth.uid()::text = firebase_uid OR
+        public.is_admin()
+    )
+    WITH CHECK (
+        auth.role() = 'service_role' OR
+        auth.role() = 'anon' OR
+        public.is_admin()
+    );
+
+CREATE POLICY "profiles_delete"
+    ON public.profiles FOR DELETE
+    USING (public.is_admin() OR auth.role() = 'service_role');
 
 -- 15.4 Payments RLS
 ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;

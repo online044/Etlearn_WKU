@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { StudentProfile } from '../types';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
 import { googleSignIn, googleSignInRedirect } from '../utils/workspace';
-import { syncAuthSessionWithServer } from '../utils/supabaseClient';
+import { syncAuthSessionWithServer, saveProfileToSupabase, fetchProfileFromSupabase } from '../utils/supabaseClient';
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
@@ -72,6 +72,21 @@ const ACADEMIC_STANDINGS = [
   { id: 'Junior (3rd Year)', labelEn: 'Junior (3rd)', labelAm: 'ጁኒየር (3ኛ)' },
   { id: 'Senior (4th/5th Year)', labelEn: 'Senior (4th/5th)', labelAm: 'ሲኒየር (4ኛ/5ኛ)' },
   { id: 'Postgraduate / Masters', labelEn: 'Postgrad / Masters', labelAm: 'ማስተርስ / ድህረ-ምረቃ' },
+];
+
+export const POPULAR_DEPARTMENTS = [
+  { id: 'Freshman Common Courses', labelEn: 'Freshman Common Courses', labelAm: 'የፍሬሽማን የጋራ ትምህርቶች' },
+  { id: 'Computer Science & IT', labelEn: 'Computer Science & IT', labelAm: 'ኮምፒውተር ሳይንስ እና አይቲ' },
+  { id: 'Electrical & Computer Engineering', labelEn: 'Electrical & Computer Eng.', labelAm: 'ኤሌክትሪካል እና ኮምፒውተር ምህንድስና' },
+  { id: 'Civil & Environmental Engineering', labelEn: 'Civil & Environmental Eng.', labelAm: 'ሲቪል እና አካባቢ ምህንድስና' },
+  { id: 'Mechanical Engineering', labelEn: 'Mechanical Engineering', labelAm: 'ሜካኒካል ምህንድስና' },
+  { id: 'Medicine & Health Sciences', labelEn: 'Medicine & Health Sciences', labelAm: 'ህክምና እና ጤና ሳይንስ' },
+  { id: 'Nursing & Public Health', labelEn: 'Nursing & Public Health', labelAm: 'ነርስ እና የህብረተሰብ ጤና' },
+  { id: 'Accounting & Finance', labelEn: 'Accounting & Finance', labelAm: 'አካውንቲንግ እና ፋይናንስ' },
+  { id: 'Economics & Management', labelEn: 'Economics & Management', labelAm: 'ኢኮኖሚክስ እና ማኔጅመንት' },
+  { id: 'Law & Governance', labelEn: 'Law & Governance', labelAm: 'ህግ እና አስተዳደር' },
+  { id: 'Natural Sciences', labelEn: 'Natural Sciences', labelAm: 'የተፈጥሮ ሳይንስ' },
+  { id: 'Social Sciences', labelEn: 'Social Sciences', labelAm: 'የማህበራዊ ሳይንስ' },
 ];
 
 export function cleanEthiopianPhone(raw: string): { valid: boolean; formatted: string; national: string; e164: string } {
@@ -156,6 +171,10 @@ export default function AuthPortalView({
   const [university, setUniversity] = useState('Wolkite University (WKU)');
   const [univSearch, setUnivSearch] = useState('');
   const [showUnivDropdown, setShowUnivDropdown] = useState(false);
+  const [department, setDepartment] = useState('Freshman Common Courses');
+  const [deptSearch, setDeptSearch] = useState('');
+  const [showDeptDropdown, setShowDeptDropdown] = useState(false);
+  const [departmentError, setDepartmentError] = useState<string | null>(null);
   const [year, setYear] = useState('Freshman (1st Year)');
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
@@ -374,7 +393,118 @@ export default function AuthPortalView({
       }
     }
 
-    // Call server login endpoint
+    // 1. Primary Authentication: Firebase Auth
+    if (auth) {
+      try {
+        const userCredential = await signInWithEmailAndPassword(auth, emailTrim, passwordTrim);
+        if (userCredential?.user) {
+          const uid = userCredential.user.uid;
+          
+          // Fetch user profile from Supabase where firebase_uid = auth_uid
+          let supaProfile = await fetchProfileFromSupabase(uid, emailTrim);
+
+          // If not in Supabase yet (existing user or first sync), fetch from Firestore or build default & save to Supabase
+          if (!supaProfile) {
+            let firestoreProfile = await fetchProfileFromFirestore(uid);
+            const nameToUse = userCredential.user.displayName || firestoreProfile?.name || localExistingAccount?.profile.name || emailTrim.split('@')[0];
+            const univToUse = firestoreProfile?.university || localExistingAccount?.profile.university || "Wolkite University (WKU)";
+            const deptToUse = firestoreProfile?.department || localExistingAccount?.profile.department || "Freshman Common Courses";
+            const yearToUse = firestoreProfile?.year || localExistingAccount?.profile.year || "Freshman (1st Year)";
+            const phoneToUse = firestoreProfile?.phone || localExistingAccount?.profile.phone || '';
+
+            await saveProfileToSupabase({
+              firebase_uid: uid,
+              full_name: nameToUse,
+              email: emailTrim,
+              phone: phoneToUse,
+              university: univToUse,
+              department: deptToUse,
+              year_level: yearToUse,
+              profile_photo: 'champion',
+              subscription_status: isAdministratorEmail(emailTrim) ? 'pro' : 'free'
+            });
+
+            supaProfile = await fetchProfileFromSupabase(uid, emailTrim);
+          }
+
+          const profileToUse: StudentProfile = {
+            id: uid,
+            firebaseUid: uid,
+            name: supaProfile?.full_name || userCredential.user.displayName || emailTrim.split('@')[0],
+            email: emailTrim,
+            phone: supaProfile?.phone || localExistingAccount?.profile.phone,
+            university: supaProfile?.university || "Wolkite University (WKU)",
+            department: supaProfile?.department || "Freshman Common Courses",
+            year: supaProfile?.year_level || "Freshman (1st Year)",
+            subjects: ["Emerging Technologies", "Communicative English", "Mathematics", "Logic and Critical Thinking"],
+            claudeApiKey: "",
+            dailyGoalHours: 2,
+            theme: 'dark',
+            language: lang,
+            avatar: (supaProfile?.profile_photo as any) || 'champion',
+            isRegistered: true,
+            isPro: supaProfile?.subscription_status === 'pro' || supaProfile?.subscription_status === 'active' || isAdministratorEmail(emailTrim),
+            emailVerified: userCredential.user.emailVerified,
+            unregisteredAICredits: 10
+          };
+
+          const newAccount: AccountInfo = {
+            email: emailTrim,
+            passwordEncrypted: passwordTrim,
+            rememberMe,
+            profile: profileToUse
+          };
+          const updatedAccs = [...registeredAccounts.filter(acc => acc.email.toLowerCase() !== emailTrim), newAccount];
+          setRegisteredAccounts(updatedAccs);
+          safeStorage.setItem('ethiolearn_accounts', JSON.stringify(updatedAccs));
+          safeStorage.setItem('ethiolearn_active_email', emailTrim);
+          safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(profileToUse));
+          safeStorage.setItem('ethiolearn_has_seen_onboarding', 'true');
+
+          if (rememberMe) {
+            safeStorage.setItem('ethiolearn_remember_login', JSON.stringify({
+              email: emailTrim,
+              password: passwordTrim,
+              rememberMe: true
+            }));
+          }
+
+          try {
+            await syncAuthSessionWithServer({
+              email: emailTrim,
+              uid,
+              role: isAdministratorEmail(emailTrim) ? 'admin' : 'student',
+              displayName: profileToUse.name
+            });
+          } catch (tokErr) {}
+
+          playSuccessChime();
+          setLoading(false);
+          onComplete(profileToUse);
+          return;
+        }
+      } catch (fbErr: any) {
+        console.warn('[Firebase Auth Login notice]:', fbErr?.code, fbErr?.message);
+        if (fbErr?.code === 'auth/wrong-password' || fbErr?.code === 'auth/invalid-credential') {
+          setPasswordError(lang === 'am' ? "የይለፍ ቃል ወይም ኢሜይል የተሳሳተ ነው። እባክዎ እንደገና ይሞክሩ ወይም 'የይለፍ ቃል ረሱ?' የሚለውን ይጫኑ።" : "Incorrect password or credentials. Please verify your credentials or reset your password.");
+          playFailureChime();
+          setLoading(false);
+          return;
+        } else if (fbErr?.code === 'auth/user-not-found') {
+          setAuthError(lang === 'am' ? "በዚህ ኢሜይል የተመዘገበ ተማሪ አልተገኘም። እባክዎ 'አካውንት ፍጠር' የሚለውን ይጫኑ።" : "No user found with this email. Switch to 'Create Account' to register.");
+          playFailureChime();
+          setLoading(false);
+          return;
+        } else if (fbErr?.code === 'auth/too-many-requests') {
+          setAuthError(lang === 'am' ? "ተደጋጋሚ ሙከራ ተደርጓል። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ ወይም የይለፍ ቃልዎን ይቀይሩ።" : "Too many failed attempts. Access temporarily restricted. Try resetting your password.");
+          playFailureChime();
+          setLoading(false);
+          return;
+        }
+      }
+    }
+
+    // 2. Server login endpoint fallback
     try {
       const loginRes = await fetch('/api/auth/login', {
         method: 'POST',
@@ -438,69 +568,6 @@ export default function AuthPortalView({
       }
     } catch (serverErr) {
       console.warn('[Server Login Fetch Warning]:', serverErr);
-    }
-
-    // Try Firebase Auth if email available
-    if (auth) {
-      try {
-        const userCredential = await signInWithEmailAndPassword(auth, emailTrim, passwordTrim);
-        if (userCredential?.user) {
-          const uid = userCredential.user.uid;
-          let profile = await fetchProfileFromFirestore(uid);
-          if (!profile) {
-            profile = {
-              name: userCredential.user.displayName || emailTrim.split('@')[0],
-              email: emailTrim,
-              phone: localExistingAccount?.profile.phone,
-              university: "Wolkite University (WKU)",
-              year: "Freshman (1st Year)",
-              subjects: ["Emerging Technologies", "Communicative English", "Mathematics"],
-              claudeApiKey: "",
-              dailyGoalHours: 2,
-              theme: 'dark',
-              language: lang,
-              avatar: 'champion',
-              isRegistered: true,
-              unregisteredAICredits: 5
-            };
-            await syncProfileToFirestore(uid, profile);
-          }
-
-          const newAccount: AccountInfo = {
-            email: emailTrim,
-            passwordEncrypted: passwordTrim,
-            rememberMe,
-            profile
-          };
-          const updatedAccs = [...registeredAccounts.filter(acc => acc.email.toLowerCase() !== emailTrim), newAccount];
-          setRegisteredAccounts(updatedAccs);
-          safeStorage.setItem('ethiolearn_accounts', JSON.stringify(updatedAccs));
-          safeStorage.setItem('ethiolearn_active_email', emailTrim);
-          safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(profile));
-          safeStorage.setItem('ethiolearn_has_seen_onboarding', 'true');
-
-          try {
-            await syncAuthSessionWithServer({
-              email: emailTrim,
-              uid,
-              role: isAdministratorEmail(emailTrim) ? 'admin' : 'student',
-              displayName: profile.name
-            });
-          } catch (tokErr) {}
-
-          playSuccessChime();
-          setLoading(false);
-          onComplete(profile);
-          return;
-        }
-      } catch (fbErr: any) {
-        if (fbErr?.code === 'auth/wrong-password' || fbErr?.code === 'auth/invalid-credential') {
-          setPasswordError(lang === 'am' ? "የይለፍ ቃል የተሳሳተ ነው። እባክዎ እንደገና ይሞክሩ ወይም 'የይለፍ ቃል ረሱ?' የሚለውን ይጫኑ።" : "Incorrect password. Please verify your credentials or reset your password.");
-          playFailureChime();
-          setLoading(false);
-          return;
-        }
-      }
     }
 
     // If local account exists and matches, proceed gracefully
@@ -567,6 +634,7 @@ export default function AuthPortalView({
     setNameError(null);
     setPhoneError(null);
     setUniversityError(null);
+    setDepartmentError(null);
     setEmailError(null);
     setPasswordError(null);
     setConfirmPasswordError(null);
@@ -579,18 +647,17 @@ export default function AuthPortalView({
     const passwordTrim = password.trim();
     const confirmPasswordTrim = confirmPassword.trim();
     const univTrim = university.trim();
+    const deptTrim = department.trim();
 
-    const cleanedPhone = cleanEthiopianPhone(phoneRaw);
+    const cleanedPhone = phoneRaw ? cleanEthiopianPhone(phoneRaw) : { valid: true, formatted: '', national: '', e164: '' };
 
     let hasErrors = false;
     if (!nameTrim) {
       setNameError(t.validationName);
       hasErrors = true;
     }
-    if (!phoneRaw) {
-      setPhoneError(lang === 'am' ? "የስልክ ቁጥርዎን ያስገቡ።" : "Phone number is required.");
-      hasErrors = true;
-    } else if (!cleanedPhone.valid) {
+    // Phone is optional, but if entered, validate it
+    if (phoneRaw && !cleanedPhone.valid) {
       setPhoneError(lang === 'am' ? "እባክዎ ትክክለኛ የኢትዮጵያ ስልክ ቁጥር ያስገቡ (ለምሳሌ 0912 345 678 ወይም 0712 345 678)" : "Please enter a valid Ethiopian phone number (e.g. 0912 345 678 or 0712 345 678).");
       hasErrors = true;
     }
@@ -598,12 +665,16 @@ export default function AuthPortalView({
       setUniversityError(t.validationUniversity);
       hasErrors = true;
     }
+    if (!deptTrim) {
+      setDepartmentError(lang === 'am' ? "እባክዎ የትምህርት ክፍልዎን ያስገቡ ወይም ይምረጡ።" : "Please enter or select your department.");
+      hasErrors = true;
+    }
     if (!emailTrim || !emailTrim.includes('@') || !emailTrim.includes('.')) {
       setEmailError(lang === 'am' ? "እባክዎን ትክክለኛ የኢሜይል አድራሻ ያስገቡ።" : "Please enter a valid email address.");
       hasErrors = true;
     }
-    if (passwordTrim.length < 4) {
-      setPasswordError(t.validationPassword);
+    if (passwordTrim.length < 6) {
+      setPasswordError(lang === 'am' ? "የይለፍ ቃል ቢያንስ 6 ፊደላት/ቁጥሮች መሆን አለበት።" : "Password must be at least 6 characters.");
       hasErrors = true;
     }
     if (passwordTrim !== confirmPasswordTrim) {
@@ -621,8 +692,9 @@ export default function AuthPortalView({
     const profile: StudentProfile = {
       name: nameTrim,
       email: emailTrim,
-      phone: cleanedPhone.formatted,
+      phone: cleanedPhone.formatted || phoneRaw,
       university: univTrim,
+      department: deptTrim,
       year,
       subjects: ["Emerging Technologies", "Communicative English", "Mathematics", "Logic and Critical Thinking"],
       claudeApiKey: "",
@@ -631,24 +703,55 @@ export default function AuthPortalView({
       language: lang,
       avatar: 'champion',
       isRegistered: true,
-      unregisteredAICredits: 5,
-      isPro: false
+      unregisteredAICredits: 10,
+      isPro: false,
+      emailVerified: false
     };
 
     setPendingStudentProfile(profile);
     setPendingPasswordString(passwordTrim);
 
-    // 1. Direct Firebase Auth Registration
+    // 1. Primary: Direct Firebase Auth Registration
     let userUid = '';
     if (auth && passwordTrim) {
       try {
         const cred = await createUserWithEmailAndPassword(auth, emailTrim, passwordTrim);
         if (cred?.user) {
           userUid = cred.user.uid;
+          profile.id = userUid;
+          profile.firebaseUid = userUid;
+          profile.emailVerified = cred.user.emailVerified;
+
+          // Send Firebase Email Verification link
           try {
             await sendEmailVerification(cred.user);
-          } catch (e) {}
-          await syncProfileToFirestore(cred.user.uid, profile);
+          } catch (verErr) {
+            console.warn('[Firebase sendEmailVerification notice]:', verErr);
+          }
+
+          // 2. Create the corresponding user profile in Supabase using that exact Firebase "uid"
+          try {
+            await saveProfileToSupabase({
+              firebase_uid: userUid,
+              full_name: nameTrim,
+              email: emailTrim,
+              phone: cleanedPhone.formatted || phoneRaw,
+              university: univTrim,
+              department: deptTrim,
+              year_level: year,
+              profile_photo: 'champion',
+              subscription_status: 'free'
+            });
+          } catch (supaErr) {
+            console.warn('[Supabase save profile notice]:', supaErr);
+          }
+
+          // 3. Multi-cloud resilience: Sync profile to Firestore
+          try {
+            await syncProfileToFirestore(userUid, profile);
+          } catch (fireErr) {
+            console.warn('[Firestore sync notice]:', fireErr);
+          }
         }
       } catch (fbErr: any) {
         console.warn('[Firebase Auth Creation Notice]:', fbErr?.message);
@@ -657,7 +760,22 @@ export default function AuthPortalView({
             const cred = await signInWithEmailAndPassword(auth, emailTrim, passwordTrim);
             if (cred?.user) {
               userUid = cred.user.uid;
-              await syncProfileToFirestore(cred.user.uid, profile);
+              profile.id = userUid;
+              profile.firebaseUid = userUid;
+              profile.emailVerified = cred.user.emailVerified;
+
+              await saveProfileToSupabase({
+                firebase_uid: userUid,
+                full_name: nameTrim,
+                email: emailTrim,
+                phone: cleanedPhone.formatted || phoneRaw,
+                university: univTrim,
+                department: deptTrim,
+                year_level: year,
+                profile_photo: 'champion',
+                subscription_status: 'free'
+              });
+              await syncProfileToFirestore(userUid, profile);
             }
           } catch (signInErr) {
             setAuthError(
@@ -687,7 +805,7 @@ export default function AuthPortalView({
       }
     }
 
-    // 2. Persist student account locally & sync session
+    // 4. Persist student account locally & sync session
     const newAccount: AccountInfo = {
       email: emailTrim,
       passwordEncrypted: passwordTrim,
@@ -701,6 +819,14 @@ export default function AuthPortalView({
     safeStorage.setItem('ethiolearn_active_email', emailTrim);
     safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(profile));
     safeStorage.setItem('ethiolearn_has_seen_onboarding', 'true');
+
+    if (rememberMe) {
+      safeStorage.setItem('ethiolearn_remember_login', JSON.stringify({
+        email: emailTrim,
+        password: passwordTrim,
+        rememberMe: true
+      }));
+    }
 
     try {
       await syncAuthSessionWithServer({
@@ -1012,11 +1138,19 @@ export default function AuthPortalView({
     } catch (e) {}
 
     // Send Firebase native reset email if auth initialized
-    if (auth && targetEmail.includes('@') && !targetEmail.endsWith('@ethiolearn.edu.et')) {
+    if (auth && targetEmail.includes('@')) {
       try {
         await sendPasswordResetEmail(auth, targetEmail);
-      } catch (fbErr) {}
+      } catch (fbErr: any) {
+        console.warn('[Firebase sendPasswordResetEmail notice]:', fbErr?.message);
+      }
     }
+
+    setInfoMessage(
+      lang === 'am'
+        ? `የይለፍ ቃል መቀየሪያ ሊንክ ወደ ${targetEmail} ተልኳል! እባክዎ ኢሜይልዎን (Inbox/Spam) ወይም ከዚህ በታች ያለውን ኮድ ይጠቀሙ።`
+        : `Password reset instructions sent to ${targetEmail}! Please check your email or enter the recovery code below.`
+    );
 
     setResendTimer(60);
     setLoading(false);
@@ -1597,7 +1731,7 @@ export default function AuthPortalView({
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider block">
-                      {lang === 'am' ? 'የተማሪ ስልክ ቁጥር (ለመዝገብና ለክፍያ)' : 'Mobile Phone Number (Record & Payments)'}
+                      {lang === 'am' ? 'የተማሪ ስልክ ቁጥር (አማራጭ)' : 'Mobile Phone Number (Optional)'}
                     </label>
                     <span className="text-[9.5px] text-amber-400/90 font-mono font-medium">
                       🇪🇹 Telebirr / CBE Birr
@@ -1610,7 +1744,7 @@ export default function AuthPortalView({
                     </div>
                     <input
                       type="tel"
-                      placeholder="0912 345 678"
+                      placeholder="0912 345 678 (Optional)"
                       value={phone}
                       onChange={(e) => {
                         setPhone(e.target.value);
@@ -1626,8 +1760,8 @@ export default function AuthPortalView({
                   ) : (
                     <p className="text-[10px] text-slate-400 pl-1">
                       {lang === 'am'
-                        ? 'ለዩኒቨርሲቲ የተማሪ መዝገብና ለቴሌብር/CBE ክፍያ ብቻ ይቀመጣል። የአካውንት ማረጋገጫ በኢሜይል ብቻ ይከናወናል።'
-                        : 'Recorded for student records & Telebirr/CBE fee payments. Authorization is handled exclusively via Email.'}
+                        ? 'አማራጭ፡ ለቴሌብር/CBE ክፍያ እና ለተማሪ መዝገብ ብቻ ያገለግላል።'
+                        : 'Optional: Used for student records & Telebirr/CBE fee receipts.'}
                     </p>
                   )}
                 </div>
@@ -1713,6 +1847,91 @@ export default function AuthPortalView({
 
                   {universityError && (
                     <p className="text-[11px] text-red-400 font-medium pl-1">{universityError}</p>
+                  )}
+                </div>
+
+                {/* Department / Field of Study Dropdown & Quick Badges */}
+                <div className="space-y-1.5 relative">
+                  <label className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider block">
+                    {lang === 'am' ? 'የትምህርት ክፍል / ዲፓርትመንት' : 'Department / Field of Study'}
+                  </label>
+                  
+                  <div className="relative">
+                    <GraduationCap className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder={lang === 'am' ? "የትምህርት ክፍልዎን ይፈልጉ ወይም ያስገቡ..." : "Search or enter your department..."}
+                      value={deptSearch || department}
+                      onFocus={() => setShowDeptDropdown(true)}
+                      onChange={(e) => {
+                        setDeptSearch(e.target.value);
+                        setDepartment(e.target.value);
+                        if (departmentError) setDepartmentError(null);
+                      }}
+                      className={`w-full bg-[#0a0f1d] border ${
+                        departmentError ? 'border-red-500/80 focus:border-red-500' : 'border-slate-800 focus:border-[#F59E0B]'
+                      } rounded-xl pl-10 pr-10 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-all focus:ring-1 focus:ring-[#F59E0B]/20`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowDeptDropdown(!showDeptDropdown)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Quick Department Chips */}
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    {POPULAR_DEPARTMENTS.slice(0, 4).map((dept) => (
+                      <button
+                        key={dept.id}
+                        type="button"
+                        onClick={() => {
+                          setDepartment(dept.id);
+                          setDeptSearch(dept.id);
+                          setShowDeptDropdown(false);
+                          if (departmentError) setDepartmentError(null);
+                        }}
+                        className={`text-[9.5px] px-2 py-0.5 rounded-md border transition-all cursor-pointer ${
+                          department === dept.id
+                            ? 'bg-amber-500/20 border-[#F59E0B] text-amber-300 font-bold'
+                            : 'bg-[#090f1d] border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                        }`}
+                      >
+                        {lang === 'am' ? dept.labelAm : dept.labelEn}
+                      </button>
+                    ))}
+                  </div>
+
+                  {showDeptDropdown && (
+                    <div className="absolute left-0 right-0 top-full mt-1 bg-[#090f1d] border border-slate-700 rounded-xl shadow-2xl z-50 max-h-48 overflow-y-auto divide-y divide-slate-800/60 scrollbar-thin">
+                      {POPULAR_DEPARTMENTS.filter(d =>
+                        d.labelEn.toLowerCase().includes((deptSearch || '').toLowerCase()) ||
+                        d.labelAm.includes(deptSearch || '')
+                      ).map((dept) => (
+                        <button
+                          key={dept.id}
+                          type="button"
+                          onMouseDown={() => {
+                            setDepartment(dept.id);
+                            setDeptSearch(dept.id);
+                            setShowDeptDropdown(false);
+                            if (departmentError) setDepartmentError(null);
+                          }}
+                          className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
+                            department === dept.id ? 'bg-amber-500/15 text-amber-300 font-bold' : 'text-slate-300 hover:bg-slate-800'
+                          }`}
+                        >
+                          <span className="truncate">{lang === 'am' ? dept.labelAm : dept.labelEn}</span>
+                          {department === dept.id && <Check className="w-3.5 h-3.5 text-[#F59E0B] shrink-0" />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {departmentError && (
+                    <p className="text-[11px] text-red-400 font-medium pl-1">{departmentError}</p>
                   )}
                 </div>
 

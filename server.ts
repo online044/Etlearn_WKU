@@ -392,6 +392,186 @@ app.post(['/api/auth/session', '/api/auth/session/'], authLimiter, async (req: R
 });
 
 /**
+ * Supabase User Profile Management: Create / Update Profile with Firebase UID
+ */
+app.post('/api/user/profile', async (req: Request, res: Response) => {
+  try {
+    const { firebase_uid, full_name, email, phone, university, department, year_level, profile_photo, subscription_status } = req.body;
+    if (!firebase_uid || !email) {
+      return res.status(400).json({ error: 'firebase_uid and email are required.' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const profilePayload = {
+      firebase_uid,
+      full_name: full_name || normalizedEmail.split('@')[0],
+      email: normalizedEmail,
+      phone: phone || '',
+      university: university || 'Wolkite University (WKU)',
+      department: department || 'General',
+      year_level: year_level || 'Freshman (1st Year)',
+      profile_photo: profile_photo || '',
+      subscription_status: subscription_status || 'free',
+      updated_at: new Date().toISOString()
+    };
+
+    const supabase = getSupabaseAdmin();
+    let savedProfile: any = profilePayload;
+
+    if (supabase) {
+      // 1. Check if record with this firebase_uid already exists in `profiles`
+      const { data: existingByUid } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('firebase_uid', firebase_uid)
+        .maybeSingle();
+
+      if (existingByUid) {
+        const { data: updated, error: updateErr } = await supabase
+          .from('profiles')
+          .update(profilePayload)
+          .eq('firebase_uid', firebase_uid)
+          .select()
+          .single();
+        if (!updateErr && updated) {
+          savedProfile = updated;
+        }
+      } else {
+        // 2. Reconnect existing user by email
+        const { data: existingByEmail } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('email', normalizedEmail)
+          .maybeSingle();
+
+        if (existingByEmail) {
+          const { data: updated, error: updateErr } = await supabase
+            .from('profiles')
+            .update(profilePayload)
+            .eq('email', normalizedEmail)
+            .select()
+            .single();
+          if (!updateErr && updated) {
+            savedProfile = updated;
+          }
+        } else {
+          const { data: inserted, error: insertErr } = await supabase
+            .from('profiles')
+            .insert(profilePayload)
+            .select()
+            .single();
+          if (!insertErr && inserted) {
+            savedProfile = inserted;
+          }
+        }
+      }
+
+      // Also mirror/sync to `student_profiles` to maintain full backward compatibility
+      try {
+        await supabase
+          .from('student_profiles')
+          .upsert({
+            email: normalizedEmail,
+            name: profilePayload.full_name,
+            university: profilePayload.university,
+            year: profilePayload.year_level,
+            profile_data: {
+              firebaseUid: firebase_uid,
+              name: profilePayload.full_name,
+              email: normalizedEmail,
+              phone: profilePayload.phone,
+              university: profilePayload.university,
+              department: profilePayload.department,
+              year: profilePayload.year_level,
+              avatar: profilePayload.profile_photo,
+              isPro: profilePayload.subscription_status === 'active' || profilePayload.subscription_status === 'pro'
+            },
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'email' });
+      } catch (mirrorErr) {
+        console.warn('[student_profiles mirror sync warning]:', mirrorErr);
+      }
+    }
+
+    return res.json({
+      success: true,
+      profile: savedProfile
+    });
+  } catch (error: any) {
+    console.error('[Profile API Error]:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error while saving profile.' });
+  }
+});
+
+/**
+ * Supabase User Profile Management: Get Profile by Firebase UID or email
+ */
+app.get(['/api/user/profile/:firebase_uid', '/api/user/profile'], async (req: Request, res: Response) => {
+  try {
+    const firebase_uid = req.params.firebase_uid || req.query.firebase_uid as string;
+    const email = (req.query.email as string || '').toLowerCase().trim();
+
+    if (!firebase_uid && !email) {
+      return res.status(400).json({ error: 'firebase_uid or email query param required.' });
+    }
+
+    const supabase = getSupabaseAdmin();
+    if (!supabase) {
+      return res.json({ success: true, profile: null });
+    }
+
+    let profile = null;
+    if (firebase_uid) {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('firebase_uid', firebase_uid)
+        .maybeSingle();
+      if (!error && data) profile = data;
+    }
+
+    if (!profile && email) {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('email', email)
+        .maybeSingle();
+      if (!error && data) profile = data;
+    }
+
+    // Fallback check on student_profiles if not yet migrated
+    if (!profile && email) {
+      const { data: legacyData } = await supabase
+        .from('student_profiles')
+        .select('*')
+        .eq('email', email)
+        .maybeSingle();
+      if (legacyData) {
+        profile = {
+          firebase_uid: legacyData.profile_data?.firebaseUid || firebase_uid || '',
+          full_name: legacyData.name || legacyData.profile_data?.name || email.split('@')[0],
+          email: legacyData.email,
+          phone: legacyData.profile_data?.phone || '',
+          university: legacyData.university || 'Wolkite University (WKU)',
+          department: legacyData.profile_data?.department || 'General',
+          year_level: legacyData.year || 'Freshman (1st Year)',
+          profile_photo: legacyData.profile_data?.avatar || '',
+          subscription_status: legacyData.is_pro ? 'active' : 'free'
+        };
+      }
+    }
+
+    return res.json({
+      success: true,
+      profile
+    });
+  } catch (error: any) {
+    console.error('[Get Profile API Error]:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error while fetching profile.' });
+  }
+});
+
+/**
  * Telegram Mini App verified auth and session token exchange
  */
 app.post(['/api/telegram/auth', '/api/telegram/auth/'], authLimiter, async (req: Request, res: Response) => {

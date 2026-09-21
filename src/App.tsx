@@ -1465,7 +1465,7 @@ export default function App() {
           <div className={currentPage === 'profile' ? "bg-amber-400 shadow-sm shadow-amber-400/80" : "bg-transparent"} />
         </div>
 
-        <div className="grid grid-cols-5 max-w-xl mx-auto px-1 sm:px-2 py-1 select-none h-16 items-center">
+        <div className="grid grid-cols-5 max-w-xl mx-auto px-1 py-1.5 items-center justify-items-center relative">
           
           {/* Home Tab */}
           <button
@@ -1476,7 +1476,7 @@ export default function App() {
           >
             <HomeIcon className="w-5 h-5 shrink-0" />
             <span className="text-[10.5px] font-semibold mt-1">
-              {language === 'en' ? 'Home' : 'ቤት'}
+              {language === 'en' ? 'Home' : 'ዋና'}
             </span>
           </button>
 
@@ -1499,11 +1499,10 @@ export default function App() {
             className={`flex flex-col items-center justify-center w-full min-h-[44px] transition-all cursor-pointer rounded-xl ${
               currentPage === 'bookstore' || currentPage === 'notes' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
             }`}
-            title="Curriculum Books & Notes"
           >
             <BookOpen className="w-5 h-5 shrink-0" />
             <span className="text-[10.5px] font-semibold mt-1">
-              {language === 'en' ? 'Books' : 'መጻሕፍት'}
+              {language === 'en' ? 'Bookstore' : 'መጽሐፍት'}
             </span>
           </button>
 

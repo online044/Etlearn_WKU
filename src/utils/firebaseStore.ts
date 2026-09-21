@@ -4,7 +4,18 @@
  */
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { 
+  getAuth,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+  sendEmailVerification,
+  signOut,
+  onAuthStateChanged,
+  User as FirebaseUser,
+  setPersistence,
+  browserLocalPersistence
+} from 'firebase/auth';
 import { getAnalytics, isSupported, Analytics } from 'firebase/analytics';
 import { 
   getFirestore, 
@@ -140,6 +151,88 @@ export function getDb() {
 
 export function getAuthInstance() {
   return auth;
+}
+
+/**
+ * Ensure browser local persistence for Firebase Auth sessions
+ */
+export async function ensureLocalAuthPersistence() {
+  if (auth && typeof window !== 'undefined') {
+    try {
+      await setPersistence(auth, browserLocalPersistence);
+    } catch (e) {
+      // Benign if persistence cannot be changed in current environment
+    }
+  }
+}
+
+/**
+ * Register a student account using Firebase Authentication
+ */
+export async function firebaseRegisterUser(email: string, password: string):Promise<{ user: FirebaseUser | null; error?: string }> {
+  if (!auth) {
+    throw new Error('Firebase Authentication is not available in the current environment.');
+  }
+  await ensureLocalAuthPersistence();
+  const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+  return { user: userCredential.user };
+}
+
+/**
+ * Sign in a student account using Firebase Authentication
+ */
+export async function firebaseLoginUser(email: string, password: string): Promise<{ user: FirebaseUser | null; error?: string }> {
+  if (!auth) {
+    throw new Error('Firebase Authentication is not available in the current environment.');
+  }
+  await ensureLocalAuthPersistence();
+  const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+  return { user: userCredential.user };
+}
+
+/**
+ * Send password reset link to user's registered email via Firebase Auth
+ */
+export async function firebaseSendPasswordReset(email: string): Promise<{ success: boolean; error?: string }> {
+  if (!auth) {
+    throw new Error('Firebase Authentication is not available in the current environment.');
+  }
+  await sendPasswordResetEmail(auth, email.trim());
+  return { success: true };
+}
+
+/**
+ * Send email verification link to user via Firebase Auth
+ */
+export async function firebaseSendEmailVerification(targetUser?: FirebaseUser | null): Promise<{ success: boolean; error?: string }> {
+  const userToVerify = targetUser || auth?.currentUser;
+  if (!userToVerify) {
+    throw new Error('No authenticated user found to verify email.');
+  }
+  await sendEmailVerification(userToVerify);
+  return { success: true };
+}
+
+/**
+ * Sign out user from Firebase Auth
+ */
+export async function firebaseLogout(): Promise<void> {
+  if (auth) {
+    await signOut(auth);
+  }
+}
+
+/**
+ * Listen for persistent Firebase Auth state changes across sessions & reloads
+ */
+export function subscribeToAuthChanges(callback: (user: FirebaseUser | null) => void): () => void {
+  if (!auth) {
+    callback(null);
+    return () => {};
+  }
+  return onAuthStateChanged(auth, (user) => {
+    callback(user);
+  });
 }
 
 // Error Operation Enum
