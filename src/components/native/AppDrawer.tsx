@@ -6,6 +6,7 @@ import {
 import StudentAvatar from '../StudentAvatar';
 import { StudentProfile } from '../../types';
 import { playClickChime } from '../../utils/audio';
+import { usePWAInstall, APK_PURE_URL } from '../../utils/usePWAInstall';
 
 interface AppDrawerProps {
   isOpen: boolean;
@@ -33,6 +34,7 @@ export default function AppDrawer({
   isInstallable,
 }: AppDrawerProps) {
   const isAmharic = language === 'am';
+  const { isInstallVisible, hasDownloaded, downloadAndInstall } = usePWAInstall();
 
   // Handle ESC key to close drawer
   useEffect(() => {
@@ -166,14 +168,22 @@ export default function AppDrawer({
             <span className="text-[10px] font-black bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded">ETB</span>
           </button>
 
-          {isInstallable && onInstallPwa && (
-            <button
-              onClick={() => handleItemClick(onInstallPwa)}
+          {isInstallVisible && !hasDownloaded && (
+            <a
+              href={APK_PURE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={async (e) => {
+                e.preventDefault();
+                await downloadAndInstall();
+                onClose();
+              }}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-200 hover:text-white hover:bg-slate-800/80 transition cursor-pointer"
             >
-              <Download className="w-4 h-4 text-teal-400 shrink-0" />
-              <span className="flex-1 text-left">{isAmharic ? 'መተግበሪያውን ጫን' : 'Install Native App'}</span>
-            </button>
+              <Download className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span className="flex-1 text-left">{isAmharic ? 'መተግበሪያውን ጫን (APKPure)' : 'Install App (APKPure)'}</span>
+              <span className="text-[9px] font-bold bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded">APK</span>
+            </a>
           )}
 
           <a

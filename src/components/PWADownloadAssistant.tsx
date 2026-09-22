@@ -14,6 +14,7 @@ import {
   TrendingUp,
   BookOpen
 } from 'lucide-react';
+import { usePWAInstall, APK_PURE_URL } from '../utils/usePWAInstall';
 
 interface PWADownloadAssistantProps {
   isInstallable: boolean;
@@ -21,11 +22,14 @@ interface PWADownloadAssistantProps {
   isOffline: boolean;
 }
 
+export { APK_PURE_URL };
+
 export default function PWADownloadAssistant({ 
   isInstallable, 
   triggerPWAInstall,
   isOffline 
 }: PWADownloadAssistantProps) {
+  const { isInstallVisible, hasDownloaded, downloadAndInstall } = usePWAInstall();
   const [deviceOS, setDeviceOS] = useState<'ios' | 'android' | 'desktop'>('android');
   const [showModal, setShowModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'ios' | 'android' | 'desktop'>('android');
@@ -58,27 +62,9 @@ export default function PWADownloadAssistant({
     setShowModal(false);
   };
 
-  // If already running in Standalone mode, we can show a nice premium badge, no need to install!
-  if (isStandalone) {
-    return (
-      <div id="pwa-badge-box" className="p-4 bg-emerald-950/20 border border-emerald-500/20 rounded-2xl flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-xl">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-[10px] text-emerald-400 uppercase font-black tracking-widest font-mono">Mobile Client Registered</span>
-            <h4 className="text-[13px] font-bold text-zinc-100 font-sans leading-tight">Running Standalone Shell</h4>
-            <p className="text-[11px] text-emerald-500/80 mt-0.5">Offline-first high fidelity database loaded & secured.</p>
-          </div>
-        </div>
-        <div className="text-right">
-          <span className="text-[9px] bg-[#1A7A3C] text-emerald-100 font-bold px-2 py-0.5 rounded-full uppercase font-mono">
-            Pro Active
-          </span>
-        </div>
-      </div>
-    );
+  // Strictly accessible only on web version. Disappears after they download or install!
+  if (!isInstallVisible || hasDownloaded || isStandalone) {
+    return null;
   }
 
   return (
@@ -109,29 +95,28 @@ export default function PWADownloadAssistant({
         </div>
 
         <div className="flex flex-col sm:flex-row md:flex-col lg:flex-row gap-2 md:self-center min-w-[210px] justify-end">
-          {isInstallable ? (
-            <button
-              id="btn-pwa-install-native"
-              type="button"
-              onClick={triggerPWAInstall}
-              className="w-full sm:w-auto py-2.5 px-4 bg-gradient-to-r from-[#1A7A3C] to-emerald-600 hover:opacity-95 text-white font-black rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md shadow-emerald-900/10 shrink-0"
-            >
-              <Download className="w-4 h-4 animate-bounce" /> Install App Directly
-            </button>
-          ) : null}
+          <a
+            id="btn-pwa-install-native"
+            href={APK_PURE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={async (e) => {
+              e.preventDefault();
+              await downloadAndInstall();
+            }}
+            className="w-full sm:w-auto py-2.5 px-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md shadow-amber-500/20 shrink-0"
+          >
+            <Download className="w-4 h-4 animate-bounce" /> Install App (APKPure)
+          </a>
           
           <button
             id="btn-pwa-how-to"
             type="button"
             onClick={handleOpenAssistant}
-            className={`w-full sm:w-auto py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all border shrink-0 ${
-              isInstallable 
-                ? 'bg-[#1e1e1e] hover:bg-[#262626] border-zinc-800 text-zinc-300'
-                : 'bg-[#C8962E]/10 hover:bg-[#C8962E]/20 border-[#C8962E]/30 text-[#C8962E] w-full'
-            }`}
+            className="w-full sm:w-auto py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all border shrink-0 bg-[#1e1e1e] hover:bg-[#262626] border-zinc-800 text-zinc-300"
           >
             <HelpCircle className="w-4 h-4" /> 
-            {isInstallable ? 'Installation Help' : 'How to Download on iOS / Android'}
+            Installation Guide
           </button>
         </div>
       </div>
@@ -275,33 +260,28 @@ export default function PWADownloadAssistant({
                 {/* 🤖 ANDROID FLOW */}
                 {activeTab === 'android' && (
                   <div className="space-y-4">
-                    {isInstallable ? (
-                      <div className="p-4 bg-emerald-950/20 border border-emerald-500/20 rounded-xl space-y-3">
-                        <h4 className="text-[12px] font-bold text-emerald-400 flex items-center gap-1.5">
-                          <Sparkles className="w-4 h-4 animate-pulse" /> Native Installer Active
-                        </h4>
-                        <p className="text-[11px] text-zinc-300 leading-normal">
-                          Your Android browser reports full standalone installation readiness. Tap the button below to trigger the direct system package wizard!
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            handleClose();
-                            triggerPWAInstall();
-                          }}
-                          className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-lg text-xs transition-colors cursor-pointer text-center block"
-                        >
-                          📲 Trigger Android System Install
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="p-3 bg-zinc-900/40 rounded-xl border border-zinc-900 text-[11px] text-zinc-400 leading-normal flex items-start gap-2.5">
-                        <span className="text-lg">ℹ️</span>
-                        <span>
-                          If the system install popup hasn't triggered automatically, you can always install it manually through Chrome or Edge menus.
-                        </span>
-                      </div>
-                    )}
+                    <div className="p-4 bg-amber-950/20 border border-amber-500/20 rounded-xl space-y-3">
+                      <h4 className="text-[12px] font-bold text-amber-400 flex items-center gap-1.5">
+                        <Sparkles className="w-4 h-4 animate-pulse" /> Official APKPure Android Package
+                      </h4>
+                      <p className="text-[11px] text-zinc-300 leading-normal">
+                        Get the official EthioLearn standalone APK package directly from APKPure for fast, offline study.
+                      </p>
+                      <a
+                        href={APK_PURE_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          handleClose();
+                          await downloadAndInstall();
+                        }}
+                        className="w-full py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-extrabold rounded-lg text-xs transition-colors cursor-pointer text-center flex items-center justify-center gap-2"
+                      >
+                        <Download className="w-4 h-4" />
+                        📲 Download on APKPure (com.etlearn.app)
+                      </a>
+                    </div>
 
                     <div className="space-y-3">
                       {/* Step 1 */}

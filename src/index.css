@@ -25,6 +25,35 @@
   --shadow-ambient-purple: var(--shadow-ambient);
 }
 
+/* Responsive Base & Container Safety for Mobile Screens (320px–400px) */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  max-width: 100vw;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+img, video, canvas, svg, iframe {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Fluid Typography and Scaling Adjustments for Narrow Viewports (<= 400px) */
+@media screen and (max-width: 400px) {
+  :root {
+    font-size: 14.5px;
+  }
+}
+
+@media screen and (max-width: 360px) {
+  :root {
+    font-size: 13.5px;
+  }
+}
+
 :root {
   --bg-main: #F1F5F9; /* Clean, modern slate blue-grey page background */
   --bg-surface: #FFFFFF; /* Crisp white card surface */

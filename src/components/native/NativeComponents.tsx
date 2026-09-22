@@ -30,7 +30,7 @@ export function SubjectChip({
         playClickChime();
         onClick();
       }}
-      className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-all cursor-pointer border select-none ${
+      className={`px-2.5 min-[360px]:px-3 py-1.5 min-[360px]:py-2 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-all cursor-pointer border select-none ${
         isSelected
           ? 'bg-amber-400 text-slate-950 border-amber-300 font-bold shadow-sm shadow-amber-400/20'
           : 'bg-slate-850 bg-[#131D33] text-slate-300 border-slate-700/80 hover:bg-slate-800 hover:text-white'
@@ -39,7 +39,7 @@ export function SubjectChip({
       {icon && <span className="shrink-0">{icon}</span>}
       <span className="truncate">{label}</span>
       {typeof count === 'number' && (
-        <span className={`text-[10px] px-1.5 py-0.2 rounded-md ${
+        <span className={`text-[9px] min-[360px]:text-[10px] px-1.5 py-0.2 rounded-md ${
           isSelected ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
         }`}>
           {count}
@@ -82,25 +82,25 @@ export function QuickAction({
         playClickChime();
         onClick();
       }}
-      className="p-3 rounded-2xl bg-[#111C35] border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between items-start text-left cursor-pointer group active:scale-[0.98] min-h-[90px] relative overflow-hidden"
+      className="p-2 min-[360px]:p-2.5 sm:p-3 rounded-xl sm:rounded-2xl bg-[#111C35] border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between items-start text-left cursor-pointer group active:scale-[0.98] min-h-[76px] min-[360px]:min-h-[82px] sm:min-h-[90px] relative overflow-hidden w-full"
     >
-      <div className="flex items-center justify-between w-full mb-2">
-        <div className={`w-9 h-9 rounded-xl flex items-center justify-center border transition-colors ${colorMap[colorTheme]}`}>
-          <Icon className="w-4 h-4" />
+      <div className="flex items-center justify-between w-full mb-1.5 sm:mb-2">
+        <div className={`w-7 h-7 min-[360px]:w-8 min-[360px]:h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center border transition-colors ${colorMap[colorTheme]}`}>
+          <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
         </div>
         {badge && (
-          <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-400 border border-amber-400/30">
+          <span className="text-[8px] min-[360px]:text-[9px] font-black uppercase px-1 min-[360px]:px-1.5 py-0.2 rounded bg-amber-400/15 text-amber-400 border border-amber-400/30">
             {badge}
           </span>
         )}
       </div>
 
-      <div>
-        <h4 className="text-xs font-bold text-slate-100 group-hover:text-amber-400 transition-colors leading-tight">
+      <div className="w-full">
+        <h4 className="text-[11px] min-[360px]:text-xs font-bold text-slate-100 group-hover:text-amber-400 transition-colors leading-tight truncate w-full">
           {label}
         </h4>
         {sublabel && (
-          <p className="text-[10px] text-slate-400 mt-0.5 leading-none">
+          <p className="text-[9px] min-[360px]:text-[10px] text-slate-400 mt-0.5 leading-none truncate w-full">
             {sublabel}
           </p>
         )}
@@ -193,31 +193,31 @@ export function ProgressCard({
   const isAmharic = language === 'am';
 
   return (
-    <div className="p-3.5 rounded-2xl bg-[#111C35] border border-slate-800 grid grid-cols-3 gap-2 text-center select-none">
-      <div className="p-2 rounded-xl bg-slate-900/60 border border-slate-800/60">
-        <span className="text-base sm:text-lg font-black text-amber-400 block leading-tight font-mono">
+    <div className="p-2 min-[360px]:p-3 rounded-xl sm:rounded-2xl bg-[#111C35] border border-slate-800 grid grid-cols-3 gap-1.5 min-[360px]:gap-2 text-center select-none w-full">
+      <div className="p-1.5 min-[360px]:p-2 rounded-lg sm:rounded-xl bg-slate-900/60 border border-slate-800/60 flex flex-col justify-center">
+        <span className="text-sm min-[360px]:text-base sm:text-lg font-black text-amber-400 block leading-tight font-mono">
           🔥 {streak}
         </span>
-        <span className="text-[10px] text-slate-400 font-medium mt-0.5 block">
-          {isAmharic ? 'የቀን ተከታታይነት' : 'Day Streak'}
+        <span className="text-[8.5px] min-[360px]:text-[9.5px] sm:text-[10px] text-slate-400 font-medium mt-0.5 block truncate leading-tight">
+          {isAmharic ? 'ተከታታይነት' : 'Day Streak'}
         </span>
       </div>
 
-      <div className="p-2 rounded-xl bg-slate-900/60 border border-slate-800/60">
-        <span className="text-base sm:text-lg font-black text-blue-400 block leading-tight font-mono">
+      <div className="p-1.5 min-[360px]:p-2 rounded-lg sm:rounded-xl bg-slate-900/60 border border-slate-800/60 flex flex-col justify-center">
+        <span className="text-sm min-[360px]:text-base sm:text-lg font-black text-blue-400 block leading-tight font-mono">
           ⏱️ {studyHours}h
         </span>
-        <span className="text-[10px] text-slate-400 font-medium mt-0.5 block">
+        <span className="text-[8.5px] min-[360px]:text-[9.5px] sm:text-[10px] text-slate-400 font-medium mt-0.5 block truncate leading-tight">
           {isAmharic ? 'የጥናት ሰዓት' : 'Study Time'}
         </span>
       </div>
 
-      <div className="p-2 rounded-xl bg-slate-900/60 border border-slate-800/60">
-        <span className="text-base sm:text-lg font-black text-emerald-400 block leading-tight font-mono">
+      <div className="p-1.5 min-[360px]:p-2 rounded-lg sm:rounded-xl bg-slate-900/60 border border-slate-800/60 flex flex-col justify-center">
+        <span className="text-sm min-[360px]:text-base sm:text-lg font-black text-emerald-400 block leading-tight font-mono">
           📊 {completionRate}%
         </span>
-        <span className="text-[10px] text-slate-400 font-medium mt-0.5 block">
-          {isAmharic ? 'የካሪኩለም ማጠናቀቂያ' : 'Completed'}
+        <span className="text-[8.5px] min-[360px]:text-[9.5px] sm:text-[10px] text-slate-400 font-medium mt-0.5 block truncate leading-tight">
+          {isAmharic ? 'የተጠናቀቀ' : 'Completed'}
         </span>
       </div>
     </div>
@@ -247,23 +247,23 @@ export function ExamRow({
   const isAmharic = language === 'am';
 
   return (
-    <div className="p-3 rounded-2xl bg-[#111C35] border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-between gap-3 group">
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
-          <Award className="w-5 h-5" />
+    <div className="p-2.5 min-[360px]:p-3 rounded-xl sm:rounded-2xl bg-[#111C35] border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-between gap-2 sm:gap-3 group w-full">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <div className="w-8 h-8 min-[360px]:w-10 min-[360px]:h-10 rounded-lg sm:rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+          <Award className="w-4 h-4 min-[360px]:w-5 min-[360px]:h-5" />
         </div>
 
         <div className="min-w-0">
           <h4 className="text-xs sm:text-sm font-bold text-slate-100 group-hover:text-amber-400 transition-colors truncate">
             {title}
           </h4>
-          <p className="text-[10.5px] text-slate-400 truncate mt-0.5">
+          <p className="text-[9.5px] min-[360px]:text-[10.5px] text-slate-400 truncate mt-0.5">
             {university} • {year}
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
         {questionCount > 0 && (
           <span className="hidden sm:inline-block text-[10px] text-slate-400 font-mono bg-slate-900 px-2 py-1 rounded-lg">
             {questionCount} {isAmharic ? 'ጥያቄዎች' : 'Qns'}
@@ -276,7 +276,7 @@ export function ExamRow({
             playClickChime();
             onOpen();
           }}
-          className="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold text-xs transition cursor-pointer active:scale-95 flex items-center gap-1 shadow-sm"
+          className="px-2.5 min-[360px]:px-3 py-1.5 rounded-lg sm:rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold text-[11px] sm:text-xs transition cursor-pointer active:scale-95 flex items-center gap-1 shadow-sm shrink-0"
         >
           {isPro && <Lock className="w-3 h-3 text-slate-950" />}
           <span>{isAmharic ? 'ክፈት' : 'Open'}</span>
@@ -401,16 +401,16 @@ export function ProBanner({ onUpgrade, language }: ProBannerProps) {
   const isAmharic = language === 'am';
 
   return (
-    <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-[#111C35] to-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md">
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center shrink-0 shadow-md">
-          <Star className="w-5 h-5 fill-slate-950" />
+    <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-gradient-to-r from-amber-500/15 via-[#111C35] to-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md w-full">
+      <div className="flex items-start gap-2.5 sm:gap-3">
+        <div className="w-8 h-8 min-[360px]:w-10 min-[360px]:h-10 rounded-lg sm:rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center shrink-0 shadow-md">
+          <Star className="w-4 h-4 min-[360px]:w-5 min-[360px]:h-5 fill-slate-950" />
         </div>
         <div>
           <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
             ET_LEARN <span className="text-amber-400 font-extrabold">PRO</span>
           </h4>
-          <p className="text-[11px] text-slate-300 mt-0.5 leading-snug">
+          <p className="text-[10px] min-[360px]:text-[11px] text-slate-300 mt-0.5 leading-snug">
             {isAmharic
               ? 'የሁሉም ዩኒቨርሲቲ ፈተናዎች፣ ማስታወሻዎች እና ያልተገደበ ልምምድ ያግኙ!'
               : 'Unlock all university past exams, notes & unlimited practice.'}
@@ -424,7 +424,7 @@ export function ProBanner({ onUpgrade, language }: ProBannerProps) {
           playClickChime();
           onUpgrade();
         }}
-        className="w-full sm:w-auto px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black transition cursor-pointer active:scale-95 shrink-0 text-center shadow-sm"
+        className="w-full sm:w-auto px-3.5 min-[360px]:px-4 py-2 rounded-lg sm:rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black transition cursor-pointer active:scale-95 shrink-0 text-center shadow-sm"
       >
         {isAmharic ? 'ወደ PRO አሳድግ' : 'Upgrade to PRO'}
       </button>

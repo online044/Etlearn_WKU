@@ -20,8 +20,11 @@ import StudentAvatar from './StudentAvatar';
 import StudentAvatarSelector from './StudentAvatarSelector';
 import PWADownloadAssistant from './PWADownloadAssistant';
 import BillingAccountSection from './BillingAccountSection';
+import ProfileCustomizerModal from './ProfileCustomizerModal';
 import { safeStorage } from '../utils/safeStorage';
 import { isAdministratorEmail } from '../utils/adminAuth';
+import { getProfilePreferences, ACCENT_THEMES, BANNER_PRESETS } from '../utils/profileCustomization';
+import { ProfileCustomizationPreferences, ProfileSectionKey, ProfileQuickActionKey } from '../types';
 
 interface StudentProfileViewProps {
   profile: StudentProfile;
@@ -66,6 +69,8 @@ export default function StudentProfileView({
 
   // Edit Mode Toggle
   const [isEditing, setIsEditing] = useState(false);
+  const [isCustomizing, setIsCustomizing] = useState(false);
+  const [isModulesCollapsed, setIsModulesCollapsed] = useState(false);
 
   // Form Field States
   const [formName, setFormName] = useState('');
@@ -389,6 +394,42 @@ export default function StudentProfileView({
     }
   };
 
+  // Update Customization Preferences in real-time
+  const handleUpdateCustomPreferences = async (updatedPrefs: ProfileCustomizationPreferences) => {
+    const updatedProfile: StudentProfile = {
+      ...activeProfileData,
+      profilePreferences: updatedPrefs
+    };
+
+    // Immediate local and state update
+    onUpdateProfile(updatedProfile);
+    setDbProfile(updatedProfile);
+    safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(updatedProfile));
+
+    try {
+      // Async persist to Supabase if connected
+      const supa = getSupabase();
+      if (supa && activeProfileData.email) {
+        const email = activeProfileData.email.toLowerCase().trim();
+        await supa
+          .from('student_profiles')
+          .update({
+            profile_data: updatedProfile,
+            updated_at: new Date().toISOString()
+          })
+          .eq('email', email);
+      }
+
+      // Async persist to Firestore if connected
+      const firebaseAuth = getAuthInstance();
+      if (firebaseAuth?.currentUser) {
+        await syncProfileToFirestore(firebaseAuth.currentUser.uid, updatedProfile);
+      }
+    } catch (prefErr) {
+      console.warn('[Profile Preferences Sync Notice]:', prefErr);
+    }
+  };
+
   // Save Supabase credentials
   const handleSaveKeys = async () => {
     if (!supabaseUrl.trim() || !supabaseKey.trim()) {
@@ -601,9 +642,24 @@ export default function StudentProfileView({
   }
 
   const activeProfileData = dbProfile || profile;
+  const prefs = getProfilePreferences(activeProfileData.profilePreferences);
+  const currentTheme = ACCENT_THEMES[prefs.accentColor] || ACCENT_THEMES.gold;
+  const activeBanner = BANNER_PRESETS.find(b => b.id === prefs.coverBannerUrl);
+
+  // Background style calculation for cover
+  const bannerBackground = activeBanner ? activeBanner.css : (prefs.coverBannerUrl?.startsWith('data:image') ? `url("${prefs.coverBannerUrl}") center/cover no-repeat` : undefined);
+
+  // Active badge display title logic
+  const displayBadge = prefs.selectedBadgeTitle || (activeProfileData.isPro ? "PRO MEMBER" : "STANDARD");
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto px-1 pb-safe">
+    <div className={`space-y-6 max-w-5xl mx-auto px-1 pb-safe ${
+      prefs.renderMode === 'light' 
+        ? 'bg-slate-900/50 p-3 sm:p-5 rounded-3xl border border-slate-700/50 shadow-2xl' 
+        : prefs.renderMode === 'dark' 
+          ? 'bg-[#050B1A] p-2 sm:p-4 rounded-3xl' 
+          : ''
+    }`}>
       {/* Hidden manual photo input */}
       <input 
         type="file" 
@@ -612,205 +668,369 @@ export default function StudentProfileView({
         accept="image/*"
         className="hidden"
       />
-      
-      {/* 1. HERO HEADER PROFILE CARD */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 md:p-6 shadow-xl relative overflow-hidden">
-        {/* Top Accent Line */}
-        <div className="absolute top-0 inset-x-0 h-1 flex">
-          <div className="bg-emerald-500 h-full w-1/3" />
-          <div className="bg-amber-400 h-full w-1/3" />
-          <div className="bg-red-500 h-full w-1/3" />
-        </div>
 
-        <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-6 pt-2">
-          
-          {/* Avatar & Key Metadata */}
-          <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
-            <div 
-              className="relative group cursor-pointer shrink-0"
-              onClick={() => directPhotoInputRef.current?.click()}
-              title={language === 'am' ? "የራስዎን ፎቶ ለመስቀል ይጫኑ" : "Click to upload student manual photo"}
-            >
-              <StudentAvatar 
-                avatar={activeProfileData.avatar} 
-                name={activeProfileData.name} 
-                size={84} 
-                className="border-2 border-amber-400 shadow-md group-hover:scale-105 transition-all duration-200"
-              />
-              <div className="absolute inset-0 bg-black/65 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center rounded-full transition-opacity text-white text-[9px] font-bold gap-0.5">
-                <Camera className="w-4 h-4 text-amber-400" />
-                <span>{isUploadingDirectPhoto ? "..." : (language === 'am' ? "ፎቶ ቀይር" : "Change")}</span>
+      {/* Profile Customizer Modal */}
+      <ProfileCustomizerModal
+        isOpen={isCustomizing}
+        onClose={() => setIsCustomizing(false)}
+        preferences={prefs}
+        onUpdatePreferences={handleUpdateCustomPreferences}
+        profile={activeProfileData}
+        language={language}
+        subjectsList={subjectsList}
+      />
+      
+      {/* 1. HERO HEADER PROFILE CARD (Customizable: Compact vs Detailed) */}
+      {prefs.cardLayout === 'compact' ? (
+        /* COMPACT CARD VIEW */
+        <div 
+          className="bg-slate-900/95 border rounded-2xl p-4 sm:p-5 shadow-xl relative overflow-hidden transition-all duration-300"
+          style={{ borderColor: `${currentTheme.hex}50` }}
+        >
+          {/* Top Accent Line */}
+          <div className="absolute top-0 inset-x-0 h-1" style={{ backgroundColor: currentTheme.hex }} />
+
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-1">
+            <div className="flex items-center gap-3.5 min-w-0 text-center sm:text-left flex-col sm:flex-row">
+              <div 
+                className="relative group cursor-pointer shrink-0"
+                onClick={() => directPhotoInputRef.current?.click()}
+                title={language === 'am' ? "የራስዎን ፎቶ ለመስቀል ይጫኑ" : "Click to upload student manual photo"}
+              >
+                <StudentAvatar 
+                  avatar={activeProfileData.avatar} 
+                  name={activeProfileData.name} 
+                  size={58} 
+                  className="shadow-md group-hover:scale-105 transition-all duration-200 border-2"
+                  ringColor={currentTheme.hex}
+                />
+                <div className="absolute inset-0 bg-black/65 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center rounded-full transition-opacity text-white text-[8px] font-bold">
+                  <Camera className="w-3.5 h-3.5 text-white" />
+                </div>
               </div>
-              <div className="absolute -bottom-1 -right-1 bg-amber-500 text-slate-950 rounded-full p-1 border-2 border-slate-900 shadow group-hover:scale-110 transition-transform">
-                <Camera className="w-3.5 h-3.5" />
+
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                  <h2 className="text-lg font-black text-white tracking-tight truncate max-w-xs">
+                    {activeProfileData.name}
+                  </h2>
+                  <span 
+                    className="px-2 py-0.5 rounded-full text-[9.5px] font-black tracking-wider uppercase border shadow-sm"
+                    style={{
+                      backgroundColor: currentTheme.badgeBg,
+                      color: currentTheme.badgeText,
+                      borderColor: currentTheme.badgeBorder
+                    }}
+                  >
+                    {displayBadge}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-3 gap-y-0.5 text-xs text-slate-300">
+                  {prefs.visibleFields.institution && (
+                    <span className="flex items-center gap-1 font-medium">
+                      <GraduationCap className="w-3.5 h-3.5 shrink-0" style={{ color: currentTheme.hex }} />
+                      <span>{activeProfileData.university}</span>
+                    </span>
+                  )}
+                  {prefs.visibleFields.department && activeProfileData.department && (
+                    <>
+                      <span className="text-slate-600 hidden sm:inline">&bull;</span>
+                      <span className="text-slate-200 font-semibold truncate max-w-[180px]">
+                        {activeProfileData.department}
+                      </span>
+                    </>
+                  )}
+                  {prefs.visibleFields.targetGpa && activeProfileData.targetGpa && (
+                    <>
+                      <span className="text-slate-600 hidden sm:inline">&bull;</span>
+                      <span className="font-mono text-emerald-400 font-bold text-[11px]">
+                        GPA: {activeProfileData.targetGpa}
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
-            
-            <div className="space-y-1.5 min-w-0">
-              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight truncate max-w-xs">
-                  {activeProfileData.name}
-                </h2>
-                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wider uppercase border ${
-                  activeProfileData.isPro 
-                    ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' 
-                    : 'bg-slate-800 text-slate-400 border-slate-700'
-                }`}>
-                  {activeProfileData.isPro ? "PRO MEMBER" : "STANDARD"}
-                </span>
-                {(activeProfileData.telegramUsername || activeProfileData.telegramId) && (
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-sky-500/20 text-sky-400 border border-sky-500/30 flex items-center gap-1">
-                    <Send className="w-2.5 h-2.5" />
-                    <span>Telegram Linked</span>
-                  </span>
-                )}
-              </div>
 
-              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-4 gap-y-1 text-xs text-slate-300">
-                <span className="flex items-center gap-1.5">
-                  <GraduationCap className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>{activeProfileData.university}</span>
-                </span>
-                {activeProfileData.department && (
-                  <>
-                    <span className="text-slate-600 hidden sm:inline">&bull;</span>
-                    <span className="text-amber-300 font-semibold">
-                      {activeProfileData.department}
-                    </span>
-                  </>
-                )}
-                <span className="text-slate-600 hidden sm:inline">&bull;</span>
-                <span className="text-slate-400 font-medium">
-                  {activeProfileData.year}
-                </span>
-                {activeProfileData.targetGpa && (
-                  <>
-                    <span className="text-slate-600 hidden sm:inline">&bull;</span>
-                    <span className="text-emerald-400 font-bold font-mono">
-                      Target GPA: {activeProfileData.targetGpa}
-                    </span>
-                  </>
-                )}
-              </div>
+            {/* Action Buttons */}
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap justify-center sm:justify-end w-full sm:w-auto">
+              <button
+                onClick={() => { playClickChime(); setIsCustomizing(true); }}
+                className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-slate-950 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95 hover:border-slate-500"
+                title={language === 'en' ? "Customize Page" : "ገጹን አብጅ"}
+              >
+                <Settings className="w-3.5 h-3.5" style={{ color: currentTheme.hex }} />
+                <span className="hidden md:inline">{language === 'en' ? "Customize" : "አብጅ"}</span>
+              </button>
 
-              {activeProfileData.bio && (
-                <p className="text-xs text-slate-300 italic max-w-lg line-clamp-2 pt-0.5">
-                  "{activeProfileData.bio}"
-                </p>
+              {isAdministratorEmail(activeProfileData.email) && onOpenAdmin && (
+                <button
+                  onClick={onOpenAdmin}
+                  className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-md active:scale-95"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden sm:inline">Admin</span>
+                </button>
               )}
 
-              <p className="text-xs font-mono text-slate-400 truncate max-w-sm">
-                {activeProfileData.email}
-              </p>
+              <button
+                onClick={handleStartEdit}
+                className="px-3 sm:px-3.5 py-1.5 sm:py-2 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-md active:scale-95"
+                style={{ backgroundColor: currentTheme.hex, color: '#0A1128' }}
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>{language === 'en' ? "Edit" : "አስተካክል"}</span>
+              </button>
+
+              {onSignOut && (
+                <button
+                  onClick={() => {
+                    const confirmSignOut = window.confirm(
+                      language === 'en'
+                        ? 'Sign out of EthioLearn? Your sign-in and sign-out timestamps will be safely recorded.'
+                        : 'እርግጠኛ ነዎት መውጣት ይፈልጋሉ? የመግቢያና የመውጫ ሰዓትዎ በደህንነት ተመዝግቦ ይቀመጣል።'
+                    );
+                    if (confirmSignOut) onSignOut();
+                  }}
+                  className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
+                  title={language === 'en' ? "Sign Out" : "ውጣ"}
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline uppercase tracking-wider text-[11px] font-bold">
+                    {language === 'en' ? "Sign Out" : "ውጣ"}
+                  </span>
+                </button>
+              )}
             </div>
           </div>
-
-          {/* Action Triggers: Admin Dashboard, Edit Profile & Sign Out */}
-          <div className="flex items-center gap-2.5 shrink-0 flex-wrap justify-end">
-            {isAdministratorEmail(activeProfileData.email) && onOpenAdmin && (
-              <button
-                onClick={onOpenAdmin}
-                className="px-3.5 py-2.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-md active:scale-95"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                <span>Admin Console</span>
-              </button>
-            )}
-
+        </div>
+      ) : (
+        /* DETAILED / EXPANDED VIEW WITH BANNER BEHIND AVATAR */
+        <div 
+          className="bg-slate-900/90 border rounded-2xl shadow-xl relative overflow-hidden transition-all duration-300"
+          style={{ borderColor: `${currentTheme.hex}40` }}
+        >
+          {/* Cover / Banner behind Avatar */}
+          <div 
+            className="w-full h-28 sm:h-36 relative transition-all duration-300"
+            style={{
+              background: bannerBackground || 'linear-gradient(135deg, #0A1128 0%, #1E293B 40%, #D97706 100%)'
+            }}
+          >
+            {/* Quick banner edit shortcut */}
             <button
-              onClick={handleStartEdit}
-              className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-md active:scale-95"
+              onClick={() => { playClickChime(); setIsCustomizing(true); }}
+              className="absolute top-3 right-3 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/20 text-white rounded-lg text-[10px] font-bold flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
             >
-              <Edit3 className="w-3.5 h-3.5" />
-              <span>{language === 'en' ? "Edit Profile" : "መገለጫ አስተካክል"}</span>
+              <Camera className="w-3 h-3" />
+              <span>{language === 'en' ? "Change Banner" : "ባነር ቀይር"}</span>
             </button>
+          </div>
 
-            {onSignOut && (
-              <button
-                onClick={() => {
-                  const confirmSignOut = window.confirm(
-                    language === 'en'
-                      ? 'Sign out of EthioLearn? Your sign-in and sign-out timestamps will be safely recorded.'
-                      : 'እርግጠኛ ነዎት መውጣት ይፈልጋሉ? የመግቢያና የመውጫ ሰዓትዎ በደህንነት ተመዝግቦ ይቀመጣል።'
-                  );
-                  if (confirmSignOut) onSignOut();
-                }}
-                className="px-3 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
-                title={language === 'en' ? "Sign Out" : "ውጣ"}
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline font-bold uppercase tracking-wider">
-                  {language === 'en' ? "Sign Out" : "ውጣ"}
-                </span>
-              </button>
-            )}
+          <div className="p-5 md:p-6 pt-0 relative">
+            <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-6 -mt-12 sm:-mt-14">
+              
+              {/* Avatar & Key Metadata */}
+              <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
+                <div 
+                  className="relative group cursor-pointer shrink-0"
+                  onClick={() => directPhotoInputRef.current?.click()}
+                  title={language === 'am' ? "የራስዎን ፎቶ ለመስቀል ይጫኑ" : "Click to upload student manual photo"}
+                >
+                  <StudentAvatar 
+                    avatar={activeProfileData.avatar} 
+                    name={activeProfileData.name} 
+                    size={92} 
+                    className="border-4 shadow-2xl group-hover:scale-105 transition-all duration-200"
+                    ringColor={currentTheme.hex}
+                  />
+                  <div className="absolute inset-0 bg-black/65 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center rounded-full transition-opacity text-white text-[9px] font-bold gap-0.5">
+                    <Camera className="w-4 h-4" style={{ color: currentTheme.hex }} />
+                    <span>{isUploadingDirectPhoto ? "..." : (language === 'am' ? "ፎቶ ቀይር" : "Change Photo")}</span>
+                  </div>
+                  <div 
+                    className="absolute -bottom-1 -right-1 text-slate-950 rounded-full p-1.5 border-2 border-slate-900 shadow group-hover:scale-110 transition-transform"
+                    style={{ backgroundColor: currentTheme.hex }}
+                  >
+                    <Camera className="w-3.5 h-3.5 text-slate-950" />
+                  </div>
+                </div>
+                
+                <div className="space-y-1.5 min-w-0 pt-2 sm:pt-14">
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                    <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight truncate max-w-xs">
+                      {activeProfileData.name}
+                    </h2>
+                    <span 
+                      className="px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wider uppercase border shadow-sm"
+                      style={{
+                        backgroundColor: currentTheme.badgeBg,
+                        color: currentTheme.badgeText,
+                        borderColor: currentTheme.badgeBorder
+                      }}
+                    >
+                      {displayBadge}
+                    </span>
+                    {(activeProfileData.telegramUsername || activeProfileData.telegramId) && (
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-sky-500/20 text-sky-400 border border-sky-500/30 flex items-center gap-1">
+                        <Send className="w-2.5 h-2.5" />
+                        <span>Telegram Linked</span>
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-4 gap-y-1 text-xs text-slate-300">
+                    {prefs.visibleFields.institution && (
+                      <span className="flex items-center gap-1.5">
+                        <GraduationCap className="w-4 h-4 shrink-0" style={{ color: currentTheme.hex }} />
+                        <span>{activeProfileData.university}</span>
+                      </span>
+                    )}
+                    {prefs.visibleFields.department && activeProfileData.department && (
+                      <>
+                        <span className="text-slate-600 hidden sm:inline">&bull;</span>
+                        <span className="font-semibold" style={{ color: currentTheme.badgeText }}>
+                          {activeProfileData.department}
+                        </span>
+                      </>
+                    )}
+                    <span className="text-slate-600 hidden sm:inline">&bull;</span>
+                    <span className="text-slate-400 font-medium">
+                      {activeProfileData.year}
+                    </span>
+                    {prefs.visibleFields.targetGpa && activeProfileData.targetGpa && (
+                      <>
+                        <span className="text-slate-600 hidden sm:inline">&bull;</span>
+                        <span className="text-emerald-400 font-bold font-mono">
+                          Target GPA: {activeProfileData.targetGpa}
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  {prefs.visibleFields.bio && activeProfileData.bio && (
+                    <p className="text-xs text-slate-300 italic max-w-lg line-clamp-2 pt-0.5">
+                      "{activeProfileData.bio}"
+                    </p>
+                  )}
+
+                  {prefs.visibleFields.email && (
+                    <p className="text-xs font-mono text-slate-400 truncate max-w-sm">
+                      {activeProfileData.email}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Triggers: Customize, Admin, Edit Profile & Sign Out */}
+              <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0 flex-wrap justify-center md:justify-end pt-2 sm:pt-14 w-full md:w-auto">
+                {/* Customize Page Trigger Button (Gear Icon) */}
+                <button
+                  onClick={() => { playClickChime(); setIsCustomizing(true); }}
+                  className="px-2.5 sm:px-3.5 py-2 sm:py-2.5 bg-slate-950 hover:bg-slate-800 border border-slate-700 hover:border-slate-500 text-slate-200 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-md active:scale-95"
+                  title={language === 'en' ? "Customize Profile Page" : "የመገለጫ ገጽ አብጅ"}
+                >
+                  <Settings className="w-3.5 h-3.5" style={{ color: currentTheme.hex }} />
+                  <span>{language === 'en' ? "Customize" : "አብጅ"}</span>
+                </button>
+
+                {isAdministratorEmail(activeProfileData.email) && onOpenAdmin && (
+                  <button
+                    onClick={onOpenAdmin}
+                    className="px-2.5 sm:px-3.5 py-2 sm:py-2.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-md active:scale-95"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Admin</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={handleStartEdit}
+                  className="px-3 sm:px-4 py-2 sm:py-2.5 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-md active:scale-95"
+                  style={{ backgroundColor: currentTheme.hex, color: '#0A1128' }}
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>{language === 'en' ? "Edit Profile" : "መገለጫ አስተካክል"}</span>
+                </button>
+
+                {onSignOut && (
+                  <button
+                    onClick={() => {
+                      const confirmSignOut = window.confirm(
+                        language === 'en'
+                          ? 'Sign out of EthioLearn? Your sign-in and sign-out timestamps will be safely recorded.'
+                          : 'እርግጠኛ ነዎት መውጣት ይፈልጋሉ? የመግቢያና የመውጫ ሰዓትዎ በደህንነት ተመዝግቦ ይቀመጣል።'
+                      );
+                      if (confirmSignOut) onSignOut();
+                    }}
+                    className="px-2.5 sm:px-3 py-2 sm:py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
+                    title={language === 'en' ? "Sign Out" : "ውጣ"}
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline font-bold uppercase tracking-wider">
+                      {language === 'en' ? "Sign Out" : "ውጣ"}
+                    </span>
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Global Save Notifier */}
-        {saveSuccess && (
-          <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-xl text-xs flex items-center gap-2 animate-fade-in font-medium">
-            <Check className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>{saveSuccess}</span>
-          </div>
-        )}
-      </div>
+      {/* Global Save Notifier */}
+      {saveSuccess && (
+        <div 
+          className="p-3 border rounded-xl text-xs flex items-center gap-2 animate-fade-in font-medium"
+          style={{
+            backgroundColor: currentTheme.badgeBg,
+            borderColor: currentTheme.badgeBorder,
+            color: currentTheme.badgeText
+          }}
+        >
+          <Check className="w-4 h-4 shrink-0" />
+          <span>{saveSuccess}</span>
+        </div>
+      )}
 
-      {/* 2. PRO CATEGORIZED NAVIGATION TABS */}
+      {/* 2. CUSTOMIZABLE QUICK ACTION NAVIGATION TABS (User Order & Visibility) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 bg-slate-950 border border-slate-800 p-1.5 rounded-2xl select-none gap-1.5">
-        <button
-          onClick={() => { playClickChime(); setActiveTab('academic'); }}
-          className={`min-h-[44px] py-2 px-3 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-2 ${
-            activeTab === 'academic'
-              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-          }`}
-        >
-          <GraduationCap className="w-4 h-4 shrink-0" />
-          <span className="truncate">{language === 'en' ? 'Academic' : 'አካዳሚክ'}</span>
-        </button>
+        {prefs.quickActionsOrder
+          .filter(actionKey => prefs.quickActionsVisibility[actionKey] !== false)
+          .map(actionKey => {
+            const isActive = activeTab === actionKey;
+            const actionConfigs: Record<ProfileQuickActionKey, { en: string; am: string; icon: any }> = {
+              academic: { en: 'Academic', am: 'አካዳሚክ', icon: GraduationCap },
+              analytics: { en: 'Analytics', am: 'መረጃዎች', icon: BarChart3 },
+              billing: { en: 'Billing', am: 'ክፍያ', icon: CreditCard },
+              security: { en: 'Security', am: 'ደህንነት', icon: Settings }
+            };
+            const config = actionConfigs[actionKey];
+            const Icon = config.icon;
 
-        <button
-          onClick={() => { playClickChime(); setActiveTab('analytics'); }}
-          className={`min-h-[44px] py-2 px-3 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-2 ${
-            activeTab === 'analytics'
-              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-          }`}
-        >
-          <BarChart3 className="w-4 h-4 shrink-0" />
-          <span className="truncate">{language === 'en' ? 'Analytics' : 'መረጃዎች'}</span>
-        </button>
-
-        <button
-          onClick={() => { playClickChime(); setActiveTab('billing'); }}
-          className={`min-h-[44px] py-2 px-3 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-2 ${
-            activeTab === 'billing'
-              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-          }`}
-        >
-          <CreditCard className="w-4 h-4 shrink-0" />
-          <span className="truncate">{language === 'en' ? 'Billing' : 'ክፍያ'}</span>
-        </button>
-
-        <button
-          onClick={() => { playClickChime(); setActiveTab('security'); }}
-          className={`min-h-[44px] py-2 px-3 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-2 ${
-            activeTab === 'security'
-              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-          }`}
-        >
-          <Settings className="w-4 h-4 shrink-0" />
-          <span className="truncate">{language === 'en' ? 'Security' : 'ደህንነት'}</span>
-        </button>
+            return (
+              <button
+                key={actionKey}
+                onClick={() => { playClickChime(); setActiveTab(actionKey as any); }}
+                className={`min-h-[44px] py-2 px-3 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-2 ${
+                  isActive
+                    ? 'font-black shadow-md'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                }`}
+                style={isActive ? { backgroundColor: currentTheme.hex, color: '#0A1128' } : {}}
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                <span className="truncate">{language === 'en' ? config.en : config.am}</span>
+              </button>
+            );
+          })}
       </div>
 
       {/* 3. TAB PANELS CONTENT */}
 
       {/* TAB 1: ACADEMIC PROFILE */}
-      {activeTab === 'academic' && (
+      {activeTab === 'academic' && prefs.sectionVisibility.academic !== false && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           
           {/* Digital Student ID Card */}
@@ -1159,62 +1379,114 @@ export default function StudentProfileView({
                     <p className="text-sm font-semibold text-white">{activeProfileData.name}</p>
                   </div>
 
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{language === 'en' ? "Email" : "ኢሜይል"}</span>
-                    <p className="text-sm font-mono text-slate-300">{activeProfileData.email}</p>
-                  </div>
+                  {prefs.visibleFields.email && (
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{language === 'en' ? "Email" : "ኢሜይል"}</span>
+                      <p className="text-sm font-mono text-slate-300">{activeProfileData.email}</p>
+                    </div>
+                  )}
 
                   <div className="space-y-1">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{language === 'en' ? "Academic Level" : "ደረጃ"}</span>
                     <p className="text-sm font-semibold text-white">{activeProfileData.year}</p>
                   </div>
 
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{language === 'en' ? "Institution" : "ተቋም / ትምህርት ቤት"}</span>
-                    <p className="text-sm font-semibold text-amber-400">{activeProfileData.university}</p>
-                  </div>
+                  {prefs.visibleFields.institution && (
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{language === 'en' ? "Institution" : "ተቋም / ትምህርት ቤት"}</span>
+                      <p className="text-sm font-semibold" style={{ color: currentTheme.hex }}>{activeProfileData.university}</p>
+                    </div>
+                  )}
 
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{language === 'en' ? "Department / Field" : "የትምህርት ክፍል"}</span>
-                    <p className="text-sm font-semibold text-amber-300">{activeProfileData.department || (language === 'en' ? 'Not specified' : 'አልተገለጸም')}</p>
-                  </div>
+                  {prefs.visibleFields.department && (
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{language === 'en' ? "Department / Field" : "የትምህርት ክፍል"}</span>
+                      <p className="text-sm font-semibold" style={{ color: currentTheme.badgeText }}>{activeProfileData.department || (language === 'en' ? 'Not specified' : 'አልተገለጸም')}</p>
+                    </div>
+                  )}
 
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{language === 'en' ? "Target GPA" : "የታለመ ውጤት (GPA)"}</span>
-                    <p className="text-sm font-mono font-bold text-emerald-400">{activeProfileData.targetGpa || (language === 'en' ? 'Not set' : 'አልተመዘገበም')}</p>
-                  </div>
+                  {prefs.visibleFields.targetGpa && (
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{language === 'en' ? "Target GPA" : "የታለመ ውጤት (GPA)"}</span>
+                      <p className="text-sm font-mono font-bold text-emerald-400">{activeProfileData.targetGpa || (language === 'en' ? 'Not set' : 'አልተመዘገበም')}</p>
+                    </div>
+                  )}
                 </div>
 
-                {activeProfileData.bio && (
+                {prefs.visibleFields.bio && activeProfileData.bio && (
                   <div className="space-y-1 p-3.5 bg-slate-950/80 rounded-xl border border-slate-800">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{language === 'en' ? "Academic Motto / Bio" : "የግል መሪ ቃል"}</span>
                     <p className="text-xs italic text-slate-200">"{activeProfileData.bio}"</p>
                   </div>
                 )}
 
-                <div className="space-y-2.5 pt-4 border-t border-slate-800">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                    {language === 'en' ? "Enrolled Focus Modules" : "የተመዘገቡ የትምህርት ሞጁሎች"}
-                  </span>
-                  
-                  {activeProfileData.subjects && activeProfileData.subjects.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {activeProfileData.subjects.map((subj) => (
-                        <div 
-                          key={subj}
-                          className="px-3 py-1.5 bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-xl font-medium flex items-center gap-1.5"
-                        >
-                          <div className="w-1.5 h-1.5 bg-amber-400 rounded-full" />
-                          <span>{subj}</span>
-                        </div>
-                      ))}
+                {prefs.sectionVisibility.modules !== false && (
+                  <div className="space-y-2.5 pt-4 border-t border-slate-800">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                        {language === 'en' ? "Enrolled Focus Modules" : "የተመዘገቡ የትምህርት ሞጁሎች"}
+                        {activeProfileData.subjects?.length ? ` (${activeProfileData.subjects.length})` : ''}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsModulesCollapsed(!isModulesCollapsed)}
+                        className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1 font-semibold transition-colors cursor-pointer"
+                      >
+                        <span>{isModulesCollapsed ? (language === 'en' ? "Expand" : "ዘርጋ") : (language === 'en' ? "Collapse" : "አሳንስ")}</span>
+                      </button>
                     </div>
-                  ) : (
-                    <p className="text-xs text-slate-400">
-                      {language === 'en' ? "No focus modules selected yet." : "እስካሁን የተመረጠ የጥናት ሞጁል የለም።"}
-                    </p>
-                  )}
-                </div>
+                    
+                    {!isModulesCollapsed && (
+                      activeProfileData.subjects && activeProfileData.subjects.length > 0 ? (
+                        prefs.modulesDisplayMode === 'list' ? (
+                          <div className="space-y-2">
+                            {activeProfileData.subjects.map((subj) => (
+                              <div 
+                                key={subj}
+                                className="px-3.5 py-2 bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-xl font-medium flex items-center justify-between"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: currentTheme.hex }} />
+                                  <span>{subj}</span>
+                                </div>
+                                <span className="text-[10px] font-mono text-slate-500 uppercase">Active</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : prefs.modulesDisplayMode === 'grid' ? (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {activeProfileData.subjects.map((subj) => (
+                              <div 
+                                key={subj}
+                                className="p-3 bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-xl font-medium flex flex-col justify-between gap-2 hover:border-slate-700 transition-colors"
+                              >
+                                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: currentTheme.hex }} />
+                                <span className="font-semibold text-xs text-white line-clamp-2">{subj}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          /* Tag cloud mode (default) */
+                          <div className="flex flex-wrap gap-2">
+                            {activeProfileData.subjects.map((subj) => (
+                              <div 
+                                key={subj}
+                                className="px-3 py-1.5 bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-xl font-medium flex items-center gap-1.5"
+                              >
+                                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: currentTheme.hex }} />
+                                <span>{subj}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      ) : (
+                        <p className="text-xs text-slate-400">
+                          {language === 'en' ? "No focus modules selected yet." : "እስካሁን የተመረጠ የጥናት ሞጁል የለም።"}
+                        </p>
+                      )
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1222,7 +1494,7 @@ export default function StudentProfileView({
       )}
 
       {/* TAB 2: ANALYTICS & STATS */}
-      {activeTab === 'analytics' && (
+      {activeTab === 'analytics' && prefs.sectionVisibility.analytics !== false && (
         <div className="space-y-6">
           <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-6 space-y-6">
             <div className="flex items-center gap-2 border-b border-slate-800 pb-4">
@@ -1302,7 +1574,7 @@ export default function StudentProfileView({
       )}
 
       {/* TAB 3: BILLING & PLAN */}
-      {activeTab === 'billing' && (
+      {activeTab === 'billing' && prefs.sectionVisibility.billing !== false && (
         <div className="space-y-6">
           <PWADownloadAssistant 
             isInstallable={isInstallable || false} 
@@ -1320,7 +1592,7 @@ export default function StudentProfileView({
       )}
 
       {/* TAB 4: SECURITY & CLOUD */}
-      {activeTab === 'security' && (
+      {activeTab === 'security' && prefs.sectionVisibility.security !== false && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
           
           {/* Change Password Card */}

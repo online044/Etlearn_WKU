@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Home as HomeIcon, Bot, Trophy, Award, Sparkles, Calendar, Sun, Moon, User as UserIcon, BookOpen, CheckCircle,
-  Share, X, ShieldCheck, Download, WifiOff, GraduationCap, FileText, Menu
+  Share, X, ShieldCheck, Download, WifiOff, GraduationCap, FileText, Menu, MoreVertical
 } from 'lucide-react';
 
 import { StudentProfile, CustomNote, Flashcard, AITeacherContext, ExamAttemptRecord } from './types';
@@ -33,6 +33,7 @@ import LegalPrivacyTermsModal from './components/LegalPrivacyTermsModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { TelegramMiniAppHeader } from './components/TelegramMiniAppHeader';
 import AppDrawer from './components/native/AppDrawer';
+import { PWAInstallButton } from './components/PWAInstallButton';
 
 import { 
   testFirestoreConnection, 
@@ -287,6 +288,7 @@ export default function App() {
 
   // App Sidebar & Legal/Privacy/Terms States
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isHeaderOverflowOpen, setIsHeaderOverflowOpen] = useState(false);
   const [showLegalModal, setShowLegalModal] = useState(false);
   const [legalModalTab, setLegalModalTab] = useState<'about' | 'terms' | 'privacy'>('about');
 
@@ -821,13 +823,18 @@ export default function App() {
   }, []);
 
   const triggerPWAInstall = async () => {
+    window.open('https://apkpure.com/p/com.etlearn.app', '_blank', 'noopener,noreferrer');
     if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
-        setIsInstallable(false);
+      try {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          setIsInstallable(false);
+        }
+        setDeferredPrompt(null);
+      } catch (err) {
+        console.warn('PWA install prompt error:', err);
       }
-      setDeferredPrompt(null);
     }
   };
 
@@ -1111,9 +1118,9 @@ export default function App() {
         className="sticky top-0 z-50 bg-white/95 dark:bg-[#0c0d12]/95 backdrop-blur-md border-b border-slate-200 dark:border-zinc-800/85 shadow-sm select-none"
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
       >
-        <div className="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center gap-4">
+        <div className="w-full max-w-7xl mx-auto px-2 min-[360px]:px-3 sm:px-4 h-14 sm:h-16 flex justify-between items-center gap-1.5 sm:gap-4 relative">
           
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 min-[360px]:gap-2 sm:gap-3 min-w-0">
             {/* 📱 App Sidebar & Info Menu Toggle Button */}
             <button
               type="button"
@@ -1121,29 +1128,38 @@ export default function App() {
                 playClickChime();
                 setIsSidebarOpen(true);
               }}
-              className="p-2 -ml-1 rounded-xl text-slate-600 dark:text-zinc-300 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-zinc-900 border border-transparent hover:border-slate-200 dark:hover:border-zinc-800 transition-all cursor-pointer flex items-center justify-center shrink-0"
+              className="p-1.5 sm:p-2 rounded-xl text-slate-600 dark:text-zinc-300 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-zinc-900 border border-transparent hover:border-slate-200 dark:hover:border-zinc-800 transition-all cursor-pointer flex items-center justify-center shrink-0"
               title={language === 'en' ? 'Open App Menu & Info' : 'የአፕሊኬሽን ሜኑ እና መረጃ'}
               aria-label="Toggle App Sidebar"
             >
-              <Menu className="w-5 h-5" />
+              <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
 
-            <div className="flex items-center gap-2">
-              <EthioLearnLogo size={42} showCardBackground={true} iconOnly={true} className="hover:rotate-6 duration-300 transition-all shrink-0 cursor-pointer" onClick={() => { playClickChime(); setIsSidebarOpen(true); }} />
-              <div className="leading-none text-left">
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+              <div className="shrink-0 cursor-pointer" onClick={() => { playClickChime(); setIsSidebarOpen(true); }}>
+                <span className="hidden sm:inline-block">
+                  <EthioLearnLogo size={40} showCardBackground={true} iconOnly={true} className="hover:rotate-6 duration-300 transition-all" />
+                </span>
+                <span className="sm:hidden inline-block">
+                  <EthioLearnLogo size={32} showCardBackground={true} iconOnly={true} className="hover:rotate-6 duration-300 transition-all" />
+                </span>
+              </div>
+              <div className="leading-none text-left min-w-0">
                 <div className="flex items-center">
-                  <span className="font-serif font-black text-slate-900 dark:text-white text-lg tracking-tight">ET_LEARN</span>
+                  <span className="font-serif font-black text-slate-900 dark:text-white text-base sm:text-lg tracking-tight">ET_LEARN</span>
                   {profile.isPro && (
-                    <span className="text-[#F59E0B] text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-500 ml-1.5 font-sans">PRO</span>
+                    <span className="text-[#F59E0B] text-[9px] sm:text-[10px] font-extrabold px-1 sm:px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-500 ml-1 font-sans">PRO</span>
                   )}
                 </div>
-                <span className="text-[10px] text-slate-400 dark:text-zinc-400 font-semibold">{profile.university || 'Wolkite University'}</span>
+                <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-zinc-400 font-semibold truncate max-w-[80px] min-[360px]:max-w-[120px] sm:max-w-none block">
+                  {profile.university || 'Wolkite University'}
+                </span>
               </div>
             </div>
 
             {isOffline && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-500 text-[10px] font-bold uppercase tracking-wider animate-pulse">
-                <WifiOff className="w-3 h-3" />
+              <span className="inline-flex items-center gap-1 px-1.5 min-[360px]:px-2.5 py-0.5 sm:py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-500 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider animate-pulse shrink-0">
+                <WifiOff className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                 <span className="hidden xs:inline">{language === 'en' ? 'Offline' : 'ከመስመር ውጭ'}</span>
               </span>
             )}
@@ -1215,12 +1231,12 @@ export default function App() {
             <span className="font-bold text-slate-700 dark:text-zinc-200 text-xs font-serif leading-tight">{ethDate.formatted}</span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 min-[360px]:gap-1.5 sm:gap-2 shrink-0">
             {/* Bilingual Quick Selector */}
-            <div className="flex bg-slate-100 dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-805 rounded-xl p-0.5">
+            <div className="flex bg-slate-100 dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-800 rounded-lg sm:rounded-xl p-0.5 shrink-0">
               <button
                 onClick={() => { setLanguage('en'); playClickChime(); }}
-                className={`text-[10.5px] font-extrabold px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                className={`text-[9.5px] min-[360px]:text-[10px] sm:text-[10.5px] font-extrabold px-1.5 min-[360px]:px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg transition-colors cursor-pointer ${
                   language === 'en' ? 'bg-[#078930] text-white shadow-sm' : 'text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200'
                 }`}
               >
@@ -1228,7 +1244,7 @@ export default function App() {
               </button>
               <button
                 onClick={() => { setLanguage('am'); playClickChime(); }}
-                className={`text-[10.5px] font-extrabold px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                className={`text-[9.5px] min-[360px]:text-[10px] sm:text-[10.5px] font-extrabold px-1.5 min-[360px]:px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg transition-colors cursor-pointer ${
                   language === 'am' ? 'bg-[#078930] text-white shadow-sm' : 'text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200'
                 }`}
               >
@@ -1236,49 +1252,141 @@ export default function App() {
               </button>
             </div>
 
-            {/* Interactive Theme Mode Toggle with Pro Lighting */}
-            <button
-              onClick={() => {
-                const newTheme = themeMode === 'dark' ? 'light' : 'dark';
-                setThemeMode(newTheme);
-                playClickChime();
-              }}
-              className="p-2.5 border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-850 text-slate-500 dark:text-zinc-400 cursor-pointer transition-colors"
-              title={themeMode === 'dark' ? "Switch to Light Mode" : "Switch to Dark Mode"}
-            >
-              {themeMode === 'dark' ? (
-                <Sun className="w-4 h-4 text-amber-500" />
-              ) : (
-                <Moon className="w-4 h-4 text-slate-500" />
-              )}
-            </button>
+            {/* Desktop / Tablet Controls (Visible on sm screens and up) */}
+            <div className="hidden sm:flex items-center gap-2">
+              {/* Mobile App Install Button (APKPure - Visible only on web version, disappears after download) */}
+              <PWAInstallButton language={language} variant="header" />
 
-
-
-            {/* Admin Dashboard Shield Button - Strictly visible ONLY for verified administrator */}
-            {isUserAdmin && (
+              {/* Interactive Theme Mode Toggle */}
               <button
-                onClick={() => { playClickChime(); setIsAdminOpen(true); }}
-                className="p-2 sm:px-2.5 sm:py-1.5 border rounded-xl cursor-pointer transition-all flex items-center gap-1.5 border-amber-500/40 bg-amber-500/15 hover:bg-amber-500/25 text-amber-400"
-                title="Admin Console"
+                onClick={() => {
+                  const newTheme = themeMode === 'dark' ? 'light' : 'dark';
+                  setThemeMode(newTheme);
+                  playClickChime();
+                }}
+                className="p-2 sm:p-2.5 border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-500 dark:text-zinc-400 cursor-pointer transition-colors"
+                title={themeMode === 'dark' ? "Switch to Light Mode" : "Switch to Dark Mode"}
               >
-                <ShieldCheck className="w-4 h-4 text-amber-400" />
-                <span className="hidden sm:inline text-[10px] font-black uppercase tracking-wider">
-                  Admin
-                </span>
+                {themeMode === 'dark' ? (
+                  <Sun className="w-4 h-4 text-amber-500" />
+                ) : (
+                  <Moon className="w-4 h-4 text-slate-500" />
+                )}
               </button>
-            )}
 
-            {profile.isPro && (
-              <div 
-                onClick={() => { playClickChime(); setCurrentPage('upgrade'); }}
-                className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-600 dark:text-blue-400 text-xs font-bold leading-none cursor-pointer"
-                title="Verified Pro Scholar"
+              {/* Admin Dashboard Shield Button */}
+              {isUserAdmin && (
+                <button
+                  onClick={() => { playClickChime(); setIsAdminOpen(true); }}
+                  className="p-2 sm:px-2.5 sm:py-1.5 border rounded-xl cursor-pointer transition-all flex items-center gap-1.5 border-amber-500/40 bg-amber-500/15 hover:bg-amber-500/25 text-amber-400"
+                  title="Admin Console"
+                >
+                  <ShieldCheck className="w-4 h-4 text-amber-400" />
+                  <span className="hidden sm:inline text-[10px] font-black uppercase tracking-wider">
+                    Admin
+                  </span>
+                </button>
+              )}
+
+              {profile.isPro && (
+                <div 
+                  onClick={() => { playClickChime(); setCurrentPage('upgrade'); }}
+                  className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-600 dark:text-blue-400 text-xs font-bold leading-none cursor-pointer"
+                  title="Verified Pro Scholar"
+                >
+                  <CheckCircle className="w-3.5 h-3.5 fill-blue-500 text-white dark:text-[#050508]" />
+                  <span className="text-[10px] uppercase font-black tracking-wider">Pro</span>
+                </div>
+              )}
+            </div>
+
+            {/* Mobile Overflow Menu Toggle (< sm screens) */}
+            <div className="relative sm:hidden">
+              <button
+                type="button"
+                onClick={() => {
+                  playClickChime();
+                  setIsHeaderOverflowOpen(!isHeaderOverflowOpen);
+                }}
+                className="p-1.5 rounded-lg border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 text-slate-600 dark:text-zinc-300 hover:text-amber-500 cursor-pointer transition-colors"
+                title="More options"
+                aria-label="More options"
               >
-                <CheckCircle className="w-3.5 h-3.5 fill-blue-500 text-white dark:text-[#050508]" />
-                <span className="text-[10px] uppercase font-black tracking-wider">Pro User</span>
-              </div>
-            )}
+                <MoreVertical className="w-4 h-4" />
+              </button>
+
+              {/* Overflow dropdown */}
+              {isHeaderOverflowOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsHeaderOverflowOpen(false)}
+                  />
+                  <div className="absolute right-0 top-full mt-2 w-52 bg-white dark:bg-[#0c0d12] border border-slate-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-2 z-50 space-y-1 text-slate-800 dark:text-zinc-200 text-xs">
+                    {/* Theme Toggle */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newTheme = themeMode === 'dark' ? 'light' : 'dark';
+                        setThemeMode(newTheme);
+                        playClickChime();
+                        setIsHeaderOverflowOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800/80 cursor-pointer font-medium"
+                    >
+                      {themeMode === 'dark' ? (
+                        <>
+                          <Sun className="w-4 h-4 text-amber-500" />
+                          <span>{language === 'am' ? 'ወደ ብሩህ ገጽታ ቀይር' : 'Light Mode'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Moon className="w-4 h-4 text-slate-500" />
+                          <span>{language === 'am' ? 'ወደ ጨለማ ገጽታ ቀይር' : 'Dark Mode'}</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* APKPure App Install */}
+                    <div onClick={() => setIsHeaderOverflowOpen(false)} className="w-full">
+                      <PWAInstallButton language={language} variant="header" />
+                    </div>
+
+                    {/* Admin Dashboard if authorized */}
+                    {isUserAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playClickChime();
+                          setIsAdminOpen(true);
+                          setIsHeaderOverflowOpen(false);
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-amber-500/10 text-amber-500 cursor-pointer font-bold"
+                      >
+                        <ShieldCheck className="w-4 h-4 text-amber-400" />
+                        <span>Admin Console</span>
+                      </button>
+                    )}
+
+                    {/* Pro status */}
+                    {profile.isPro && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playClickChime();
+                          setCurrentPage('upgrade');
+                          setIsHeaderOverflowOpen(false);
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-blue-500 hover:bg-blue-500/10 cursor-pointer font-bold"
+                      >
+                        <CheckCircle className="w-4 h-4 fill-blue-500 text-white" />
+                        <span>Verified Pro</span>
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
 
             {/* Student Profile Icon with manual photo - opens profile on touch/click */}
             <button
@@ -1287,15 +1395,25 @@ export default function App() {
                 playClickChime();
                 setCurrentPage('profile');
               }}
-              className="p-1 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 rounded-xl hover:border-amber-400/60 hover:scale-105 active:scale-95 transition-all cursor-pointer flex items-center gap-2 group"
+              className="p-0.5 sm:p-1 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 rounded-lg sm:rounded-xl hover:border-amber-400/60 hover:scale-105 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5 sm:gap-2 group shrink-0"
               title={language === 'am' ? "የተማሪ መገለጫ ይክፈቱ" : "Open Student Profile"}
             >
-              <StudentAvatar 
-                avatar={profile.avatar} 
-                name={profile.name} 
-                size={34} 
-                className="border border-amber-400/60 shadow-sm group-hover:border-amber-400"
-              />
+              <div className="sm:hidden">
+                <StudentAvatar 
+                  avatar={profile.avatar} 
+                  name={profile.name} 
+                  size={28} 
+                  className="border border-amber-400/60 shadow-sm group-hover:border-amber-400"
+                />
+              </div>
+              <div className="hidden sm:block">
+                <StudentAvatar 
+                  avatar={profile.avatar} 
+                  name={profile.name} 
+                  size={34} 
+                  className="border border-amber-400/60 shadow-sm group-hover:border-amber-400"
+                />
+              </div>
               <span className="hidden md:inline text-xs font-semibold text-slate-700 dark:text-slate-200 group-hover:text-amber-400 max-w-[110px] truncate pr-1">
                 {profile.name || 'Scholar'}
               </span>
@@ -1306,7 +1424,7 @@ export default function App() {
       </header>
 
       {/* CORE PAGES RENDER STAGE */}
-      <main className="flex-grow w-full max-w-7xl mx-auto px-4 py-6 md:py-8 pb-28">
+      <main className="flex-grow w-full max-w-7xl mx-auto px-2 min-[360px]:px-3 sm:px-4 py-4 sm:py-6 md:py-8 pb-24 sm:pb-28">
         
         <AnimatePresence mode="wait">
           <motion.div
@@ -1445,10 +1563,10 @@ export default function App() {
       {/* PERSISTENT BOTTOM NAVIGATION TAB BAR (5-Section Bottom Nav) */}
       <nav 
         className="fixed bottom-0 left-0 right-0 z-40 bg-[#0A1128]/95 backdrop-blur-md border-t border-slate-800 shadow-2xl"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 6px)' }}
       >
         {/* Shifting active color bar indicator */}
-        <div className="grid grid-cols-5 max-w-xl mx-auto h-[2.5px]">
+        <div className="grid grid-cols-5 max-w-xl mx-auto h-[2px] sm:h-[2.5px]">
           <div className={currentPage === 'home' ? "bg-amber-400 shadow-sm shadow-amber-400/80" : "bg-transparent"} />
           <div className={currentPage === 'quiz' || currentPage === 'tutor' || currentPage === 'examprep' ? "bg-amber-400 shadow-sm shadow-amber-400/80" : "bg-transparent"} />
           <div className={currentPage === 'bookstore' || currentPage === 'notes' ? "bg-amber-400 shadow-sm shadow-amber-400/80" : "bg-transparent"} />
@@ -1456,17 +1574,17 @@ export default function App() {
           <div className={currentPage === 'profile' ? "bg-amber-400 shadow-sm shadow-amber-400/80" : "bg-transparent"} />
         </div>
 
-        <div className="grid grid-cols-5 max-w-xl mx-auto px-1 py-1.5 items-center justify-items-center relative">
+        <div className="grid grid-cols-5 max-w-xl mx-auto px-0.5 min-[360px]:px-1 py-1 min-[360px]:py-1.5 items-center justify-items-center relative">
           
           {/* Home Tab */}
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('home'); }}
-            className={`flex flex-col items-center justify-center w-full min-h-[44px] transition-all cursor-pointer rounded-xl ${
+            className={`flex flex-col items-center justify-center w-full min-h-[44px] transition-all cursor-pointer rounded-xl px-0.5 ${
               currentPage === 'home' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <HomeIcon className="w-5 h-5 shrink-0" />
-            <span className="text-[10.5px] font-semibold mt-1">
+            <HomeIcon className="w-4 h-4 min-[360px]:w-5 min-[360px]:h-5 shrink-0" />
+            <span className="text-[9px] min-[360px]:text-[10px] sm:text-[10.5px] font-semibold mt-0.5 sm:mt-1 truncate max-w-[56px] min-[360px]:max-w-[66px] text-center">
               {language === 'en' ? 'Home' : 'ዋና'}
             </span>
           </button>
@@ -1474,12 +1592,12 @@ export default function App() {
           {/* Quizzes Tab */}
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('quiz'); }}
-            className={`flex flex-col items-center justify-center w-full min-h-[44px] transition-all cursor-pointer rounded-xl ${
+            className={`flex flex-col items-center justify-center w-full min-h-[44px] transition-all cursor-pointer rounded-xl px-0.5 ${
               currentPage === 'quiz' || currentPage === 'tutor' || currentPage === 'examprep' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Trophy className="w-5 h-5 shrink-0" />
-            <span className="text-[10.5px] font-semibold mt-1">
+            <Trophy className="w-4 h-4 min-[360px]:w-5 min-[360px]:h-5 shrink-0" />
+            <span className="text-[9px] min-[360px]:text-[10px] sm:text-[10.5px] font-semibold mt-0.5 sm:mt-1 truncate max-w-[56px] min-[360px]:max-w-[66px] text-center">
               {language === 'en' ? 'Quizzes' : 'ፈተናዎች'}
             </span>
           </button>
@@ -1487,26 +1605,26 @@ export default function App() {
           {/* Book Store Tab */}
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('bookstore'); }}
-            className={`flex flex-col items-center justify-center w-full min-h-[44px] transition-all cursor-pointer rounded-xl ${
+            className={`flex flex-col items-center justify-center w-full min-h-[44px] transition-all cursor-pointer rounded-xl px-0.5 ${
               currentPage === 'bookstore' || currentPage === 'notes' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <BookOpen className="w-5 h-5 shrink-0" />
-            <span className="text-[10.5px] font-semibold mt-1">
-              {language === 'en' ? 'Bookstore' : 'መጽሐፍት'}
+            <BookOpen className="w-4 h-4 min-[360px]:w-5 min-[360px]:h-5 shrink-0" />
+            <span className="text-[9px] min-[360px]:text-[10px] sm:text-[10.5px] font-semibold mt-0.5 sm:mt-1 truncate max-w-[56px] min-[360px]:max-w-[66px] text-center">
+              {language === 'en' ? 'Books' : 'መጽሐፍት'}
             </span>
           </button>
 
           {/* University past exams Tab */}
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('university'); }}
-            className={`flex flex-col items-center justify-center w-full min-h-[44px] transition-all cursor-pointer rounded-xl ${
+            className={`flex flex-col items-center justify-center w-full min-h-[44px] transition-all cursor-pointer rounded-xl px-0.5 ${
               currentPage === 'university' || currentPage === 'examengine' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
             }`}
             title="University Exams"
           >
-            <Award className="w-5 h-5 shrink-0" />
-            <span className="text-[10.5px] font-semibold mt-1">
+            <Award className="w-4 h-4 min-[360px]:w-5 min-[360px]:h-5 shrink-0" />
+            <span className="text-[9px] min-[360px]:text-[10px] sm:text-[10.5px] font-semibold mt-0.5 sm:mt-1 truncate max-w-[56px] min-[360px]:max-w-[66px] text-center">
               {language === 'en' ? 'Uni Exam' : 'ዩኒቨርሲቲ'}
             </span>
           </button>
@@ -1514,17 +1632,17 @@ export default function App() {
           {/* Profile Tab */}
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('profile'); }}
-            className={`flex flex-col items-center justify-center w-full min-h-[44px] transition-all cursor-pointer rounded-xl ${
+            className={`flex flex-col items-center justify-center w-full min-h-[44px] transition-all cursor-pointer rounded-xl px-0.5 ${
               currentPage === 'profile' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <StudentAvatar 
               avatar={profile.avatar} 
               name={profile.name} 
-              size={24} 
+              size={22} 
               className={`transition-all ${currentPage === 'profile' ? 'border-2 border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.6)] scale-110' : 'border border-slate-700 opacity-80'}`}
             />
-            <span className="text-[10.5px] font-semibold mt-1">
+            <span className="text-[9px] min-[360px]:text-[10px] sm:text-[10.5px] font-semibold mt-0.5 sm:mt-1 truncate max-w-[56px] min-[360px]:max-w-[66px] text-center">
               {language === 'en' ? 'Profile' : 'መገለጫ'}
             </span>
           </button>

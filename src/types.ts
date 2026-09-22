@@ -127,12 +127,43 @@ export interface StudentProfile {
   referralCode?: string;
   referredBy?: string;
   userRole?: 'student' | 'instructor' | 'admin' | 'super_admin';
+  // Profile View Customization Preferences
+  profilePreferences?: ProfileCustomizationPreferences;
   // Session audit trail - Never forget when students sign in and sign out
   lastSignInAt?: string;
   lastSignOutAt?: string;
   firstSignInAt?: string;
   signInCount?: number;
   lastSessionDurationMinutes?: number;
+}
+
+export type ProfileCardLayoutStyle = 'compact' | 'detailed';
+export type ProfileAccentTheme = 'gold' | 'emerald' | 'blue' | 'purple' | 'rose' | 'amber';
+export type ProfileRenderMode = 'system' | 'dark' | 'light';
+export type ModulesDisplayMode = 'cloud' | 'list' | 'grid';
+export type ProfileSectionKey = 'academic' | 'modules' | 'analytics' | 'billing' | 'security';
+export type ProfileQuickActionKey = 'academic' | 'analytics' | 'billing' | 'security';
+
+export interface ProfileCustomizationPreferences {
+  cardLayout: ProfileCardLayoutStyle;
+  coverBannerUrl?: string; // Preset key or custom data URL / image URL
+  accentColor: ProfileAccentTheme;
+  renderMode: ProfileRenderMode;
+  selectedBadgeTitle?: string; // Custom or tier-based chosen badge
+  visibleFields: {
+    email: boolean;
+    institution: boolean;
+    department: boolean;
+    targetGpa: boolean;
+    bio: boolean;
+  };
+  sectionOrder: ProfileSectionKey[];
+  sectionVisibility: Record<ProfileSectionKey, boolean>;
+  collapsedSections: Record<string, boolean>; // section id -> collapsed
+  modulesDisplayMode: ModulesDisplayMode;
+  pinnedModules: string[]; // Subject names pinned to top
+  quickActionsOrder: ProfileQuickActionKey[];
+  quickActionsVisibility: Record<ProfileQuickActionKey, boolean>;
 }
 
 export interface CouponCode {

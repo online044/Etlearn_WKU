@@ -420,18 +420,18 @@ export default function HomeDashboard({
   const greetingAm = currentHour < 12 ? 'እንደምን አደሩ' : currentHour < 17 ? 'እንደምን ዋሉ' : 'እንደምን አመሹ';
 
   return (
-    <div id="etlearn-dashboard-root" className="w-full max-w-lg mx-auto space-y-4 text-slate-100 font-sans pb-20 select-none">
+    <div id="etlearn-dashboard-root" className="w-full max-w-lg mx-auto space-y-3.5 sm:space-y-4 text-slate-100 font-sans pb-20 select-none px-0.5">
       
       {/* ─── ERROR STATE BANNER (If query fails) ─── */}
       {loadError && (
-        <div className="p-3.5 rounded-2xl bg-red-950/40 border border-red-800/50 text-red-300 flex items-center justify-between gap-3 text-xs">
+        <div className="p-3 rounded-xl sm:rounded-2xl bg-red-950/40 border border-red-800/50 text-red-300 flex items-center justify-between gap-2.5 text-xs">
           <div className="flex items-center gap-2 min-w-0">
             <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
             <span className="truncate">{loadError}</span>
           </div>
           <button
             onClick={() => loadDashboardData()}
-            className="px-2.5 py-1 rounded-lg bg-red-900/60 hover:bg-red-800 border border-red-700/60 text-[11px] font-semibold text-white transition-colors cursor-pointer shrink-0"
+            className="px-2.5 py-1 rounded-lg bg-red-900/60 hover:bg-red-800 border border-red-700/60 text-[10px] sm:text-[11px] font-semibold text-white transition-colors cursor-pointer shrink-0"
           >
             {isAmharic ? 'እንደገና ሞክር' : 'Retry'}
           </button>
@@ -439,23 +439,23 @@ export default function HomeDashboard({
       )}
 
       {/* ─── 1. COMPACT NATIVE ANDROID HEADER ─── */}
-      <section className="space-y-1">
-        <div className="flex items-center justify-between gap-2">
+      <section className="space-y-0.5 sm:space-y-1">
+        <div className="flex items-center justify-between gap-1.5 sm:gap-2">
           <div className="min-w-0 flex-1">
-            <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">
+            <span className="text-[10px] min-[360px]:text-[11px] font-bold text-amber-400 uppercase tracking-wider block truncate">
               {isAmharic ? greetingAm : greetingEn}, {profile.name?.split(' ')[0] || (isAmharic ? 'ተማሪ' : 'Scholar')} 👋
             </span>
-            <h1 className="text-base sm:text-lg font-black text-white tracking-tight truncate">
+            <h1 className="text-sm min-[360px]:text-base sm:text-lg font-black text-white tracking-tight truncate">
               {isAmharic ? 'ትምህርትዎን ለመቀጠል ዝግጁ ነዎት?' : 'Ready to continue learning?'}
             </h1>
           </div>
 
           <div className="text-right shrink-0">
-            <span className="text-[10px] font-mono text-slate-400 block">
+            <span className="text-[9px] min-[360px]:text-[10px] font-mono text-slate-400 block">
               {ethDate.monthAm} {geezDayNumeral} ({ethDate.year} ዓ.ም)
             </span>
             {todayHoliday && (
-              <span className="text-[9.5px] font-bold text-amber-400 truncate block max-w-[130px]">
+              <span className="text-[8.5px] min-[360px]:text-[9.5px] font-bold text-amber-400 truncate block max-w-[110px] sm:max-w-[130px]">
                 {todayHoliday.nameAm}
               </span>
             )}
@@ -464,11 +464,11 @@ export default function HomeDashboard({
       </section>
 
       {/* ─── 2. QUICK ACTIONS (4 Touch Tiles) ─── */}
-      <section className="space-y-2">
-        <h2 className="text-xs font-black uppercase tracking-wider text-slate-400">
+      <section className="space-y-1.5 sm:space-y-2">
+        <h2 className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-400">
           {isAmharic ? 'ፈጣን አገልግሎቶች' : 'Quick Actions'}
         </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 min-[360px]:gap-2.5">
           <QuickAction
             icon={Target}
             label={isAmharic ? 'ልምምድ' : 'Practice'}
@@ -505,17 +505,17 @@ export default function HomeDashboard({
       </section>
 
       {/* ─── 4. SUBJECTS (Horizontal Scrolling Cards) ─── */}
-      <section className="space-y-2">
+      <section className="space-y-1.5 sm:space-y-2">
         <div className="flex items-center justify-between">
-          <h2 className="text-xs font-black uppercase tracking-wider text-slate-400">
+          <h2 className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-400">
             {isAmharic ? 'የትምህርት አይነቶች' : 'Subjects'}
           </h2>
-          <span className="text-[11px] text-slate-500">
+          <span className="text-[10px] min-[360px]:text-[11px] text-slate-500">
             {isAmharic ? 'ለመለማመድ አንዱን ይምረጡ' : 'Tap to practice'}
           </span>
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+        <div className="flex items-center gap-1.5 min-[360px]:gap-2 overflow-x-auto pb-1 no-scrollbar">
           {[
             { name: 'Mathematics', nameAm: 'ሒሳብ', count: 120, icon: '📐' },
             { name: 'Emerging Tech', nameAm: 'ኢመርጂንግ ቴክ', count: 85, icon: '🤖' },
@@ -533,13 +533,13 @@ export default function HomeDashboard({
                 playClickChime();
                 onNavigate('quiz');
               }}
-              className="p-3 rounded-2xl bg-[#111C35] border border-slate-800 hover:border-amber-400/60 transition flex flex-col items-start min-w-[120px] shrink-0 cursor-pointer active:scale-95 group text-left"
+              className="p-2 min-[360px]:p-2.5 sm:p-3 rounded-xl sm:rounded-2xl bg-[#111C35] border border-slate-800 hover:border-amber-400/60 transition flex flex-col items-start min-w-[95px] min-[360px]:min-w-[110px] sm:min-w-[120px] shrink-0 cursor-pointer active:scale-95 group text-left"
             >
-              <span className="text-lg mb-1">{sub.icon}</span>
-              <span className="text-xs font-bold text-white group-hover:text-amber-400 transition truncate w-full">
+              <span className="text-base min-[360px]:text-lg mb-0.5 sm:mb-1">{sub.icon}</span>
+              <span className="text-[11px] min-[360px]:text-xs font-bold text-white group-hover:text-amber-400 transition truncate w-full">
                 {isAmharic ? sub.nameAm : sub.name}
               </span>
-              <span className="text-[10px] text-slate-400 mt-0.5 font-mono">
+              <span className="text-[9px] min-[360px]:text-[10px] text-slate-400 mt-0.5 font-mono">
                 {sub.count} {isAmharic ? 'ጥያቄዎች' : 'Qns'}
               </span>
             </button>

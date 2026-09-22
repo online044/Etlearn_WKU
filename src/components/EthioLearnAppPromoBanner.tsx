@@ -18,6 +18,7 @@ import {
   BookOpen
 } from 'lucide-react';
 import { StudentProfile } from '../types';
+import { usePWAInstall, APK_PURE_URL } from '../utils/usePWAInstall';
 
 export interface EthioLearnAppPromoProps {
   profile?: StudentProfile | null;
@@ -187,36 +188,43 @@ export default function EthioLearnAppPromoBanner({
 
   const isAmharic = language === 'am';
   const isProUser = Boolean(profile?.isPro || profile?.proStatus === 'active');
+  const { isInstallVisible, hasDownloaded, downloadAndInstall } = usePWAInstall();
+
+  // If not on web version or already downloaded/installed, hide the mobile app install campaign!
+  const availableCampaigns = CAMPAIGNS.filter((c) => {
+    if (c.actionType === 'install') {
+      return isInstallVisible && !hasDownloaded;
+    }
+    return true;
+  });
 
   // Auto-rotate every 7.5 seconds unless paused by user interaction
   useEffect(() => {
-    if (isPaused || isMinimized) {
+    if (isPaused || isMinimized || availableCampaigns.length === 0) {
       if (timerRef.current) clearInterval(timerRef.current);
       return;
     }
 
     timerRef.current = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % CAMPAIGNS.length);
+      setCurrentIndex((prev) => (prev + 1) % availableCampaigns.length);
     }, 7500);
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isPaused, isMinimized]);
+  }, [isPaused, isMinimized, availableCampaigns.length]);
 
-  const activeCampaign = CAMPAIGNS[currentIndex];
+  const safeIndex = availableCampaigns.length > 0 ? currentIndex % availableCampaigns.length : 0;
+  const activeCampaign = availableCampaigns[safeIndex] || CAMPAIGNS[0];
   const IconComponent = activeCampaign.icon;
 
-  const handleAction = (campaign: PromoCampaign) => {
+  const handleAction = async (campaign: PromoCampaign) => {
     switch (campaign.actionType) {
       case 'install':
         if (onInstallClick) {
           onInstallClick();
-        } else if (onNavigate) {
-          onNavigate('profile');
-        } else {
-          window.location.href = '#pwa-download-section';
         }
+        await downloadAndInstall();
         break;
       case 'notes':
         if (onNavigate) {
@@ -367,8 +375,8 @@ export default function EthioLearnAppPromoBanner({
 
         {/* Quick Campaign Nav Pills */}
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
-          {CAMPAIGNS.map((camp, idx) => {
-            const isActive = idx === currentIndex;
+          {availableCampaigns.map((camp, idx) => {
+            const isActive = idx === safeIndex;
             return (
               <button
                 key={camp.id}
@@ -479,14 +487,14 @@ export default function EthioLearnAppPromoBanner({
         {/* Carousel Slide Indicators & Prev/Next Arrows */}
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 mr-1">
-            {CAMPAIGNS.map((c, i) => (
+            {availableCampaigns.map((c, i) => (
               <button
                 key={c.id}
                 type="button"
                 onClick={() => setCurrentIndex(i)}
                 aria-label={`Go to slide ${i + 1}`}
                 className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                  i === currentIndex ? 'w-5 bg-amber-400' : 'w-1.5 bg-white/20 hover:bg-white/40'
+                  i === safeIndex ? 'w-5 bg-amber-400' : 'w-1.5 bg-white/20 hover:bg-white/40'
                 }`}
               />
             ))}
@@ -494,7 +502,7 @@ export default function EthioLearnAppPromoBanner({
 
           <button
             type="button"
-            onClick={() => setCurrentIndex((prev) => (prev === 0 ? CAMPAIGNS.length - 1 : prev - 1))}
+            onClick={() => setCurrentIndex((prev) => (prev === 0 ? availableCampaigns.length - 1 : prev - 1))}
             className="p-1 rounded-md hover:bg-white/10 text-zinc-300 hover:text-white transition-colors cursor-pointer"
             aria-label="Previous Feature"
           >
@@ -502,7 +510,7 @@ export default function EthioLearnAppPromoBanner({
           </button>
           <button
             type="button"
-            onClick={() => setCurrentIndex((prev) => (prev + 1) % CAMPAIGNS.length)}
+            onClick={() => setCurrentIndex((prev) => (prev + 1) % availableCampaigns.length)}
             className="p-1 rounded-md hover:bg-white/10 text-zinc-300 hover:text-white transition-colors cursor-pointer"
             aria-label="Next Feature"
           >

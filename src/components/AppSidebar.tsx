@@ -235,6 +235,9 @@ export default function AppSidebar({
                   <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-amber-400 group-hover:translate-x-0.5 transition-all" />
                 </button>
 
+                {/* Mobile APKPure App Install Button (Visible only on web version, disappears after download) */}
+                <PWAInstallButton language={language} variant="compact" />
+
                 <button
                   type="button"
                   onClick={() => handleNavClick('upgrade')}

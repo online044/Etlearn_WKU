@@ -19,9 +19,10 @@ interface StudentAvatarProps {
   name: string;
   size?: number;
   className?: string;
+  ringColor?: string;
 }
 
-export default function StudentAvatar({ avatar, name, size = 48, className = '' }: StudentAvatarProps) {
+export default function StudentAvatar({ avatar, name, size = 48, className = '', ringColor }: StudentAvatarProps) {
   // Clean default fallback letter initial
   const initial = name ? name.substring(0, 1).toUpperCase() : 'ኤ';
 
@@ -175,7 +176,13 @@ export default function StudentAvatar({ avatar, name, size = 48, className = '' 
   return (
     <div 
       className={`relative rounded-full select-none flex items-center justify-center overflow-hidden shrink-0 transition-transform duration-200 border bg-[#0F172A] shadow-md ${className}`}
-      style={{ width: size, height: size, minWidth: size, minHeight: size }}
+      style={{ 
+        width: size, 
+        height: size, 
+        minWidth: size, 
+        minHeight: size,
+        ...(ringColor ? { borderColor: ringColor } : {})
+      }}
     >
       {avatar && isPhoto && !imageError ? (
         <img 
