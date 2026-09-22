@@ -25,7 +25,7 @@ export function getTelegramPlatform(): string {
 
 export function initTelegramWebApp() {
   const tg = getTelegramWebApp();
-  if (!tg) return;
+  if (!tg || !isTelegramWebApp()) return;
 
   try {
     tg.ready();

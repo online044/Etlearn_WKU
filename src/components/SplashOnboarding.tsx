@@ -1951,10 +1951,10 @@ export default function SplashOnboarding({ onComplete, initialProfile }: SplashO
   };
 
   return (
-    <div className="fixed inset-0 bg-main-bg z-50 flex flex-col items-center justify-center overflow-y-auto overflow-x-hidden px-4 py-8 select-none relative transition-colors duration-200">
+    <div className="fixed inset-0 bg-main-bg z-50 overflow-y-auto overflow-x-clip px-3 min-[360px]:px-4 py-6 sm:py-10 relative transition-colors duration-200">
       
       {/* Dynamic Cinematic Motion Graphics Background Canvas */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#C8962E]/10 via-transparent to-transparent">
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#C8962E]/10 via-transparent to-transparent">
         {/* Floating star nodes with drifting cinematic loops */}
         {starNodes.map((star) => (
           <motion.div
@@ -2010,15 +2010,17 @@ export default function SplashOnboarding({ onComplete, initialProfile }: SplashO
         <div className="absolute bottom-0 inset-x-0 h-[2px] bg-gradient-to-r from-emerald-500 via-[#C8962E] to-red-500 opacity-60" />
       </div>
 
-      <AnimatePresence mode="wait">
-        {/* Direct Authentication Portal (Sign In, Sign Up, Campus Selection) */}
-        <AuthPortalView
-          initialMode={mode === "signup" ? "signup" : "signin"}
-          onComplete={onComplete}
-          preferredLanguage={preferredLanguage === "am" ? "am" : "en"}
-          onLanguageChange={(newLang) => setPreferredLanguage(newLang)}
-        />
-      </AnimatePresence>
+      <div className="min-h-full w-full flex flex-col items-center justify-center my-auto relative z-10">
+        <AnimatePresence mode="wait">
+          {/* Direct Authentication Portal (Sign In, Sign Up, Campus Selection) */}
+          <AuthPortalView
+            initialMode={mode === "signup" ? "signup" : "signin"}
+            onComplete={onComplete}
+            preferredLanguage={preferredLanguage === "am" ? "am" : "en"}
+            onLanguageChange={(newLang) => setPreferredLanguage(newLang)}
+          />
+        </AnimatePresence>
+      </div>
 
       {/* Privacy Policy & Terms of Service Full Modal */}
       <LegalPrivacyTermsModal
