@@ -4,7 +4,7 @@ import {
   Flame, Calendar, Target, CheckSquare, Square, TrendingUp, ArrowRight, 
   ShieldCheck, X, ChevronRight, Bookmark, Award, Plus, Trash2, RefreshCw,
   AlertCircle, Sparkles, BookCheck, HelpCircle, Layers, CheckCircle, BarChart3,
-  ExternalLink, Compass, Lightbulb, BrainCircuit, ArrowUpRight, Trophy, Camera
+  ExternalLink, Compass, Lightbulb, BrainCircuit, ArrowUpRight, Trophy, Camera, Send
 } from 'lucide-react';
 import StudentAvatar from './StudentAvatar';
 import { 
@@ -420,7 +420,7 @@ export default function HomeDashboard({
   const greetingAm = currentHour < 12 ? 'እንደምን አደሩ' : currentHour < 17 ? 'እንደምን ዋሉ' : 'እንደምን አመሹ';
 
   return (
-    <div id="etlearn-dashboard-root" className="w-full max-w-lg mx-auto space-y-3.5 sm:space-y-4 text-slate-100 font-sans pb-20 select-none px-0.5">
+    <div id="etlearn-dashboard-root" className="w-full max-w-6xl mx-auto space-y-4 text-slate-100 font-sans pb-20 px-2 sm:px-4">
       
       {/* ─── ERROR STATE BANNER (If query fails) ─── */}
       {loadError && (
@@ -438,290 +438,359 @@ export default function HomeDashboard({
         </div>
       )}
 
-      {/* ─── 1. COMPACT NATIVE ANDROID HEADER ─── */}
-      <section className="space-y-0.5 sm:space-y-1">
-        <div className="flex items-center justify-between gap-1.5 sm:gap-2">
-          <div className="min-w-0 flex-1">
-            <span className="text-[10px] min-[360px]:text-[11px] font-bold text-amber-400 uppercase tracking-wider block truncate">
-              {isAmharic ? greetingAm : greetingEn}, {profile.name?.split(' ')[0] || (isAmharic ? 'ተማሪ' : 'Scholar')} 👋
-            </span>
-            <h1 className="text-sm min-[360px]:text-base sm:text-lg font-black text-white tracking-tight truncate">
-              {isAmharic ? 'ትምህርትዎን ለመቀጠል ዝግጁ ነዎት?' : 'Ready to continue learning?'}
-            </h1>
-          </div>
+      {/* Responsive Grid: 2 columns on desktop (8 col main / 4 col sidebar), clean flow on mobile */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-start">
 
-          <div className="text-right shrink-0">
-            <span className="text-[9px] min-[360px]:text-[10px] font-mono text-slate-400 block">
-              {ethDate.monthAm} {geezDayNumeral} ({ethDate.year} ዓ.ም)
-            </span>
-            {todayHoliday && (
-              <span className="text-[8.5px] min-[360px]:text-[9.5px] font-bold text-amber-400 truncate block max-w-[110px] sm:max-w-[130px]">
-                {todayHoliday.nameAm}
-              </span>
-            )}
-          </div>
-        </div>
-      </section>
+        {/* ─── LEFT / MAIN COLUMN (8 cols on lg) ─── */}
+        <div className="lg:col-span-8 space-y-4">
+          {/* 1. Header */}
+          <section className="space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block truncate">
+                  {isAmharic ? greetingAm : greetingEn}, {profile.name?.split(' ')[0] || (isAmharic ? 'ተማሪ' : 'Scholar')} 👋
+                </span>
+                <h1 className="text-base sm:text-xl font-black text-white tracking-tight truncate">
+                  {isAmharic ? 'ትምህርትዎን ለመቀጠል ዝግጁ ነዎት?' : 'Ready to continue learning?'}
+                </h1>
+              </div>
 
-      {/* ─── 2. QUICK ACTIONS (4 Touch Tiles) ─── */}
-      <section className="space-y-1.5 sm:space-y-2">
-        <h2 className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-400">
-          {isAmharic ? 'ፈጣን አገልግሎቶች' : 'Quick Actions'}
-        </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 min-[360px]:gap-2.5">
-          <QuickAction
-            icon={Target}
-            label={isAmharic ? 'ልምምድ' : 'Practice'}
-            sublabel={isAmharic ? 'ጥያቄዎች' : 'Daily Drills'}
-            badge="Qns"
-            colorTheme="amber"
-            onClick={() => onNavigate('quiz')}
-          />
-          <QuickAction
-            icon={GraduationCap}
-            label={isAmharic ? 'ያለፉ ፈተናዎች' : 'Past Exams'}
-            sublabel={isAmharic ? 'WKU ፈተናዎች' : 'WKU & AAU'}
-            badge="Exam"
-            colorTheme="blue"
-            onClick={() => onNavigate('university')}
-          />
-          <QuickAction
-            icon={FileText}
-            label={isAmharic ? 'ማስታወሻዎች' : 'Study Notes'}
-            sublabel={isAmharic ? 'ዲጂታል መጻሕፍት' : 'Summaries'}
-            badge="PDF"
-            colorTheme="emerald"
-            onClick={() => onNavigate('bookstore')}
-          />
-          <QuickAction
-            icon={Bot}
-            label={isAmharic ? 'አስጎብኚ AI' : 'AI Tutor'}
-            sublabel={isAmharic ? 'የግል አስጠኚ' : '24/7 Asgobnyi'}
-            badge="AI"
-            colorTheme="purple"
-            onClick={() => onNavigate('tutor')}
-          />
-        </div>
-      </section>
+              {/* Mobile Ethiopian date ticker */}
+              <div className="text-right shrink-0 lg:hidden">
+                <span className="text-[10px] font-mono text-slate-400 block">
+                  {ethDate.monthAm || ethDate.monthName || 'መስከረም'} {geezDayNumeral} ({ethDate.year} ዓ.ም)
+                </span>
+                {todayHoliday && (
+                  <span className="text-[9.5px] font-bold text-amber-400 truncate block max-w-[130px]">
+                    {todayHoliday.nameAm}
+                  </span>
+                )}
+              </div>
+            </div>
+          </section>
 
-      {/* ─── 4. SUBJECTS (Horizontal Scrolling Cards) ─── */}
-      <section className="space-y-1.5 sm:space-y-2">
-        <div className="flex items-center justify-between">
-          <h2 className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-400">
-            {isAmharic ? 'የትምህርት አይነቶች' : 'Subjects'}
-          </h2>
-          <span className="text-[10px] min-[360px]:text-[11px] text-slate-500">
-            {isAmharic ? 'ለመለማመድ አንዱን ይምረጡ' : 'Tap to practice'}
-          </span>
-        </div>
+          {/* 2. Quick Actions (4 Touch Tiles) */}
+          <section className="space-y-2">
+            <h2 className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-400">
+              {isAmharic ? 'ፈጣን አገልግሎቶች' : 'Quick Actions'}
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 min-[360px]:gap-2.5">
+              <QuickAction
+                icon={Target}
+                label={isAmharic ? 'ልምምድ' : 'Practice'}
+                sublabel={isAmharic ? 'ጥያቄዎች' : 'Daily Drills'}
+                badge="Qns"
+                colorTheme="amber"
+                onClick={() => onNavigate('quiz')}
+              />
+              <QuickAction
+                icon={GraduationCap}
+                label={isAmharic ? 'ያለፉ ፈተናዎች' : 'Past Exams'}
+                sublabel={isAmharic ? 'WKU ፈተናዎች' : 'WKU & AAU'}
+                badge="Exam"
+                colorTheme="blue"
+                onClick={() => onNavigate('university')}
+              />
+              <QuickAction
+                icon={FileText}
+                label={isAmharic ? 'ማስታወሻዎች' : 'Study Notes'}
+                sublabel={isAmharic ? 'ዲጂታል መጻሕፍት' : 'Summaries'}
+                badge="PDF"
+                colorTheme="emerald"
+                onClick={() => onNavigate('bookstore')}
+              />
+              <QuickAction
+                icon={Bot}
+                label={isAmharic ? 'አስጎብኚ AI' : 'AI Tutor'}
+                sublabel={isAmharic ? 'የግል አስጠኚ' : '24/7 Asgobnyi'}
+                badge="AI"
+                colorTheme="purple"
+                onClick={() => onNavigate('tutor')}
+              />
+            </div>
+          </section>
 
-        <div className="flex items-center gap-1.5 min-[360px]:gap-2 overflow-x-auto pb-1 no-scrollbar">
-          {[
-            { name: 'Mathematics', nameAm: 'ሒሳብ', count: 120, icon: '📐' },
-            { name: 'Emerging Tech', nameAm: 'ኢመርጂንግ ቴክ', count: 85, icon: '🤖' },
-            { name: 'Biology', nameAm: 'ባዮሎጂ', count: 95, icon: '🧬' },
-            { name: 'Economics', nameAm: 'ኢኮኖሚክስ', count: 70, icon: '📈' },
-            { name: 'English', nameAm: 'እንግሊዝኛ', count: 110, icon: '📝' },
-            { name: 'Chemistry', nameAm: 'ኬሚስትሪ', count: 90, icon: '⚗️' },
-            { name: 'Physics', nameAm: 'ፊዚክስ', count: 105, icon: '⚡' },
-            { name: 'Psychology', nameAm: 'ሳይኮሎጂ', count: 60, icon: '🧠' },
-          ].map((sub) => (
-            <button
-              key={sub.name}
-              type="button"
-              onClick={() => {
-                playClickChime();
-                onNavigate('quiz');
-              }}
-              className="p-2 min-[360px]:p-2.5 sm:p-3 rounded-xl sm:rounded-2xl bg-[#111C35] border border-slate-800 hover:border-amber-400/60 transition flex flex-col items-start min-w-[95px] min-[360px]:min-w-[110px] sm:min-w-[120px] shrink-0 cursor-pointer active:scale-95 group text-left"
-            >
-              <span className="text-base min-[360px]:text-lg mb-0.5 sm:mb-1">{sub.icon}</span>
-              <span className="text-[11px] min-[360px]:text-xs font-bold text-white group-hover:text-amber-400 transition truncate w-full">
-                {isAmharic ? sub.nameAm : sub.name}
-              </span>
-              <span className="text-[9px] min-[360px]:text-[10px] text-slate-400 mt-0.5 font-mono">
-                {sub.count} {isAmharic ? 'ጥያቄዎች' : 'Qns'}
-              </span>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {/* ─── 5. RECENT ACTIVITY ─── */}
-      <section className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs font-black uppercase tracking-wider text-slate-400">
-            {isAmharic ? 'የቅርብ ጊዜ እንቅስቃሴዎች' : 'Recent Activity'}
-          </h2>
-          {examAttempts.length > 0 && (
-            <span className="text-[10px] text-slate-500 font-mono">
-              {examAttempts.length} {isAmharic ? 'ሙከራዎች' : 'attempts'}
-            </span>
-          )}
-        </div>
-
-        {examAttempts.length === 0 ? (
-          <div className="p-3.5 rounded-2xl bg-[#111C35]/70 border border-slate-800 flex items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2.5">
-              <Award className="w-4 h-4 text-amber-400 shrink-0" />
-              <span className="text-slate-300">
-                {isAmharic ? 'እስካሁን የተወሰደ ፈተና የለም። ራስዎን ይፈትሹ!' : 'No quiz attempts recorded yet.'}
+          {/* 3. Subjects (Horizontal Practice Tiles) */}
+          <section className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h2 className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-400">
+                {isAmharic ? 'የትምህርት አይነቶች' : 'Subjects'}
+              </h2>
+              <span className="text-[10px] min-[360px]:text-[11px] text-slate-500">
+                {isAmharic ? 'ለመለማመድ አንዱን ይምረጡ' : 'Tap to practice'}
               </span>
             </div>
-            <button
-              onClick={() => onNavigate('quiz')}
-              className="px-3 py-1.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-[11px] shrink-0 cursor-pointer active:scale-95"
-            >
-              {isAmharic ? 'ፈተና ጀምር' : 'Start Quiz'}
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {examAttempts.slice(0, 3).map((attempt, idx) => (
-              <div
-                key={attempt.id || idx}
-                className="p-3 rounded-2xl bg-[#111C35] border border-slate-800 hover:border-slate-700 transition flex items-center justify-between gap-3"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-[9.5px] font-black uppercase text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded">
-                      {attempt.subject}
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[
+                { name: 'Mathematics', nameAm: 'ሒሳብ', count: 120, icon: '📐' },
+                { name: 'Emerging Tech', nameAm: 'ኢመርጂንግ ቴክ', count: 85, icon: '🤖' },
+                { name: 'Biology', nameAm: 'ባዮሎጂ', count: 95, icon: '🧬' },
+                { name: 'Economics', nameAm: 'ኢኮኖሚክስ', count: 70, icon: '📈' },
+                { name: 'English', nameAm: 'እንግሊዝኛ', count: 110, icon: '📝' },
+                { name: 'Chemistry', nameAm: 'ኬሚስትሪ', count: 90, icon: '⚗️' },
+                { name: 'Physics', nameAm: 'ፊዚክስ', count: 105, icon: '⚡' },
+                { name: 'Psychology', nameAm: 'ሳይኮሎጂ', count: 60, icon: '🧠' },
+              ].map((sub) => (
+                <button
+                  key={sub.name}
+                  type="button"
+                  onClick={() => {
+                    playClickChime();
+                    onNavigate('quiz');
+                  }}
+                  className="p-2.5 sm:p-3 rounded-xl bg-[#111C35] border border-slate-800/90 hover:border-amber-400/50 transition flex items-center gap-2.5 text-left cursor-pointer active:scale-98 group"
+                >
+                  <span className="text-lg shrink-0">{sub.icon}</span>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-xs font-bold text-white group-hover:text-amber-400 transition truncate block">
+                      {isAmharic ? sub.nameAm : sub.name}
                     </span>
-                    <span className="text-[10px] text-slate-400 font-mono">
-                      {attempt.date}
+                    <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
+                      {sub.count} {isAmharic ? 'ጥያቄዎች' : 'Qns'}
                     </span>
                   </div>
-                  <h4 className="text-xs font-bold text-slate-200 truncate">
-                    {attempt.examTitle || attempt.subject}
-                  </h4>
-                </div>
+                </button>
+              ))}
+            </div>
+          </section>
 
-                <div className="text-right shrink-0">
-                  <span className="text-sm font-black font-mono text-emerald-400 block leading-tight">
-                    {attempt.percentage || attempt.score}%
-                  </span>
-                  <span className="text-[9.5px] font-bold text-amber-400 uppercase">
-                    Grade {attempt.grade || 'A'}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* ─── 6. YOUR PROGRESS ─── */}
-      <section className="space-y-2">
-        <h2 className="text-xs font-black uppercase tracking-wider text-slate-400">
-          {isAmharic ? 'የእርስዎ አጠቃላይ ውጤት' : 'Your Progress'}
-        </h2>
-        <ProgressCard
-          streak={streakCount}
-          studyHours={studyHoursCount}
-          completionRate={overallProgressPercentage}
-          language={language}
-        />
-      </section>
-
-      {/* ─── 7. PRO UPGRADE BANNER ─── */}
-      <section>
-        <ProBanner
-          onUpgrade={() => onNavigate('examprep')}
-          language={language}
-        />
-      </section>
-
-      {/* ─── 8. TODAY'S STUDY GOALS & CHECKLIST ─── */}
-      <section className="space-y-2 pt-1">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-            <CheckSquare className="w-3.5 h-3.5 text-amber-400" />
-            <span>{isAmharic ? 'የዛሬ የጥናት ግቦች' : "Today's Study Checklist"}</span>
-          </h2>
-          <button
-            onClick={() => { playClickChime(); setShowAddTaskModal(true); }}
-            className="text-[11px] font-bold text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>{isAmharic ? 'ግብ ጨምር' : 'Add Task'}</span>
-          </button>
-        </div>
-
-        <div className="space-y-1.5">
-          {tasks.slice(0, 4).map((t) => (
-            <div
-              key={t.id}
-              onClick={() => handleToggleTask(t.id)}
-              className="p-3 rounded-xl bg-[#111C35] border border-slate-800 hover:border-slate-700 transition flex items-center justify-between gap-3 cursor-pointer select-none"
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                {t.completed ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                ) : (
-                  <Square className="w-4 h-4 text-slate-500 shrink-0" />
-                )}
-                <span className={`text-xs font-medium truncate ${t.completed ? 'line-through text-slate-500' : 'text-slate-200'}`}>
-                  {t.title}
-                </span>
-              </div>
+          {/* 4. Today's Study Goals & Checklist */}
+          <section className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <CheckSquare className="w-3.5 h-3.5 text-amber-400" />
+                <span>{isAmharic ? 'የዛሬ የጥናት ግቦች' : "Today's Study Checklist"}</span>
+              </h2>
               <button
-                type="button"
-                onClick={(e) => {
-                  handleDeleteTask(t.id, e);
-                }}
-                className="text-slate-500 hover:text-red-400 p-1 cursor-pointer"
+                onClick={() => { playClickChime(); setShowAddTaskModal(true); }}
+                className="text-[11px] font-bold text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Plus className="w-3.5 h-3.5" />
+                <span>{isAmharic ? 'ግብ ጨምር' : 'Add Task'}</span>
               </button>
             </div>
-          ))}
+
+            <div className="space-y-1.5">
+              {tasks.length === 0 ? (
+                <div className="p-3.5 rounded-xl bg-[#111C35]/60 border border-dashed border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                  <span>{isAmharic ? 'እስካሁን የታቀደ ግብ የለም። አዲስ ግብ ያክሉ!' : 'No tasks planned for today. Add one to track your focus.'}</span>
+                  <button
+                    onClick={() => { playClickChime(); setShowAddTaskModal(true); }}
+                    className="text-amber-400 font-bold hover:underline"
+                  >
+                    {isAmharic ? 'አክል' : 'Add'}
+                  </button>
+                </div>
+              ) : (
+                (tasks || []).slice(0, 4).map((t) => (
+                  <div
+                    key={t.id}
+                    onClick={() => handleToggleTask(t.id)}
+                    className="p-3 rounded-xl bg-[#111C35] border border-slate-800 hover:border-slate-700 transition flex items-center justify-between gap-3 cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {t.completed ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      ) : (
+                        <Square className="w-4 h-4 text-slate-500 shrink-0" />
+                      )}
+                      <span className={`text-xs font-medium truncate ${t.completed ? 'line-through text-slate-500' : 'text-slate-200'}`}>
+                        {t.title}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        handleDeleteTask(t.id, e);
+                      }}
+                      className="text-slate-500 hover:text-red-400 p-1 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+
+          {/* 5. Recent Activity */}
+          <section className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-black uppercase tracking-wider text-slate-400">
+                {isAmharic ? 'የቅርብ ጊዜ እንቅስቃሴዎች' : 'Recent Activity'}
+              </h2>
+              {examAttempts.length > 0 && (
+                <span className="text-[10px] text-slate-500 font-mono">
+                  {examAttempts.length} {isAmharic ? 'ሙከራዎች' : 'attempts'}
+                </span>
+              )}
+            </div>
+
+            {examAttempts.length === 0 ? (
+              <div className="p-3.5 rounded-xl bg-[#111C35]/70 border border-slate-800 flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <Award className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="text-slate-300">
+                    {isAmharic ? 'እስካሁን የተወሰደ ፈተና የለም። ራስዎን ይፈትሹ!' : 'No quiz attempts recorded yet.'}
+                  </span>
+                </div>
+                <button
+                  onClick={() => onNavigate('quiz')}
+                  className="px-3 py-1.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-[11px] shrink-0 cursor-pointer active:scale-95"
+                >
+                  {isAmharic ? 'ፈተና ጀምር' : 'Start Quiz'}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {(examAttempts || []).slice(0, 3).map((attempt, idx) => (
+                  <div
+                    key={attempt.id || idx}
+                    className="p-3 rounded-xl bg-[#111C35] border border-slate-800 hover:border-slate-700 transition flex items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-[9.5px] font-black uppercase text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded">
+                          {attempt.subject}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          {attempt.date}
+                        </span>
+                      </div>
+                      <h4 className="text-xs font-bold text-slate-200 truncate">
+                        {attempt.examTitle || attempt.subject}
+                      </h4>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <span className="text-sm font-black font-mono text-emerald-400 block leading-tight">
+                        {attempt.percentage || attempt.score}%
+                      </span>
+                      <span className="text-[9.5px] font-bold text-amber-400 uppercase">
+                        Grade {attempt.grade || 'A'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
-      </section>
 
-      {/* ─── 9. ETHIOPIAN UNIVERSITY TELEGRAM COMMUNITY ─── */}
-      <section className="p-3.5 rounded-2xl bg-[#111C35] border border-slate-800 flex items-center justify-between gap-3">
-        <div className="space-y-0.5 min-w-0">
-          <span className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
-            <span>💬</span>
-            <span>{isAmharic ? 'የወልቂጤ ዩኒቨርሲቲ ተማሪዎች ቻናል' : 'WKU Students Telegram'}</span>
-          </span>
-          <p className="text-[10.5px] text-slate-400 truncate">
-            {isAmharic ? 'የጥናት ማስታወሻዎችን እና ዜናዎችን ይጋሩ' : 'Join fellow students for notes & announcements'}
-          </p>
-        </div>
-
-        <a
-          href="https://t.me/WolkiteUniversityCommunity"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="px-3 py-1.5 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-400 text-xs font-bold shrink-0 transition flex items-center gap-1 cursor-pointer active:scale-95"
-        >
-          <span>Join</span>
-          <ArrowUpRight className="w-3.5 h-3.5" />
-        </a>
-      </section>
-
-      {/* ─── 10. CAMPUS ANNOUNCEMENT SPOTLIGHT ─── */}
-      {announcements.length > 0 && (
-        <section className="p-3.5 rounded-2xl bg-[#111C35] border border-slate-800 space-y-1.5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <Bell className="w-3.5 h-3.5 text-amber-400" />
-              <span className="text-xs font-bold text-white truncate max-w-[200px]">
-                {announcements[0]?.title}
+        {/* ─── RIGHT / SIDEBAR COLUMN (4 cols on lg) ─── */}
+        <div className="lg:col-span-4 space-y-4">
+          
+          {/* Authentic Ethiopian Ge'ez Calendar Card */}
+          <section className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-[#111C35] to-[#0D1527] border border-slate-800 space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-amber-400" />
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                  {isAmharic ? 'የኢትዮጵያ ቀን አቆጣጠር' : 'Ethiopian Calendar'}
+                </h3>
+              </div>
+              <span className="text-[10px] font-mono font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
+                {ethDate.year} ዓ.ም
               </span>
             </div>
-            {announcements[0]?.badgeText && (
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-mono">
-                {announcements[0]?.badgeText}
-              </span>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-xs font-medium text-slate-400 block">
+                  {ethDate.dayOfWeekAm || 'ሰኞ'}
+                </span>
+                <span className="text-lg font-black text-white">
+                  {ethDate.monthAm || ethDate.monthName || 'መስከረም'} {geezDayNumeral}
+                </span>
+                <span className="text-[11px] text-slate-400 font-mono block">
+                  {ethDate.monthEn || 'Meskerem'} {ethDate.day}
+                </span>
+              </div>
+
+              <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex flex-col items-center justify-center text-amber-400">
+                <span className="text-base font-black font-mono leading-none">{geezDayNumeral}</span>
+                <span className="text-[8.5px] font-semibold uppercase mt-0.5">{(ethDate?.monthAm || ethDate?.monthName || 'መስከ').slice(0, 3)}</span>
+              </div>
+            </div>
+
+            {todayHoliday && (
+              <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-300 flex items-center gap-2">
+                <Flame className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="truncate font-semibold">{todayHoliday.nameAm}</span>
+              </div>
             )}
-          </div>
-          <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
-            {announcements[0]?.message}
-          </p>
-        </section>
-      )}
+
+            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10.5px] text-slate-400">
+              <span>{isAmharic ? 'የትምህርት ዘመን' : 'Academic Session'}</span>
+              <span className="font-semibold text-slate-300">{isAmharic ? '1ኛ ሴሚስተር · 2018 ዓ.ም' : 'Semester I · 2018 E.C.'}</span>
+            </div>
+          </section>
+
+          {/* Your Progress */}
+          <section className="space-y-2">
+            <h2 className="text-xs font-black uppercase tracking-wider text-slate-400">
+              {isAmharic ? 'የእርስዎ አጠቃላይ ውጤት' : 'Your Progress'}
+            </h2>
+            <ProgressCard
+              streak={streakCount}
+              studyHours={studyHoursCount}
+              completionRate={overallProgressPercentage}
+              language={language}
+            />
+          </section>
+
+          {/* Ethiopian University Telegram Community */}
+          <section className="p-3.5 rounded-2xl bg-[#111C35] border border-slate-800 flex items-center justify-between gap-3">
+            <div className="space-y-0.5 min-w-0">
+              <span className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
+                <Send className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                <span>{isAmharic ? 'የተማሪዎች ቴሌግራም ቻናል' : 'Student Telegram Hub'}</span>
+              </span>
+              <p className="text-[10.5px] text-slate-400 truncate">
+                {isAmharic ? '@Et_Learnn · ፈተናዎችን እና ኖቶችን ያግኙ' : '@Et_Learnn · Instant keys & handouts'}
+              </p>
+            </div>
+
+            <a
+              href="https://t.me/Et_Learnn"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-1.5 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-400 text-xs font-bold shrink-0 transition flex items-center gap-1 cursor-pointer active:scale-95"
+            >
+              <span>Join</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </a>
+          </section>
+
+          {/* Campus Announcement Spotlight */}
+          {announcements.length > 0 && (
+            <section 
+              onClick={() => setSelectedAnnouncement(announcements[0])}
+              className="p-3.5 rounded-2xl bg-[#111C35] border border-slate-800 hover:border-slate-700 transition space-y-1.5 cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Bell className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="text-xs font-bold text-white truncate">
+                    {announcements[0]?.title}
+                  </span>
+                </div>
+                {announcements[0]?.badgeText && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-mono shrink-0">
+                    {announcements[0]?.badgeText}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
+                {announcements[0]?.message}
+              </p>
+            </section>
+          )}
+
+        </div>
+
+      </div>
 
       {/* ─── MODAL: ADD STUDY TASK ─── */}
       {showAddTaskModal && (

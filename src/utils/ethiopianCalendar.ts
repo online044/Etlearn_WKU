@@ -3,15 +3,28 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export interface EthiopianDate {
+  day: number;
+  monthName: string;
+  monthAm: string;
+  monthEn: string;
+  year: number;
+  monthIndex: number;
+  formatted: string;
+  dayOfWeekAm: string;
+  dayOfWeekEn: string;
+}
+
 // A high-fidelity Gregorian to Ethiopian Calendar Converter
 // Reference points are adjusted for modern years (2020-2030)
-export function getEthiopianDate(date: Date): { day: number; monthName: string; year: number; monthIndex: number; formatted: string } {
+export function getEthiopianDate(date: Date = new Date()): EthiopianDate {
   // Extract local date fields
   const gYear = date.getFullYear();
   const gMonth = date.getMonth();
   const gDay = date.getDate();
+  const dayOfWeekIndex = date.getDay(); // 0 = Sunday, 1 = Monday, ...
 
-  const ethMonths = [
+  const ethMonthsAm = [
     "መስከረም", // Meskerem (1) - Sep
     "ጥቅምት",  // Tikimt (2) - Oct
     "ህዳር",    // Hidar (3) - Nov
@@ -26,6 +39,25 @@ export function getEthiopianDate(date: Date): { day: number; monthName: string; 
     "ነሐሴ",    // Nehase (12) - Aug
     "ጳጉሜ"    // Pagume (13) - Sep (Short month)
   ];
+
+  const ethMonthsEn = [
+    "Meskerem",
+    "Tikimt",
+    "Hidar",
+    "Tahsas",
+    "Tir",
+    "Yekatit",
+    "Megabit",
+    "Miyazya",
+    "Ginbot",
+    "Sene",
+    "Hamle",
+    "Nehase",
+    "Pagume"
+  ];
+
+  const dayOfWeekAmMap = ["እሑድ", "ሰኞ", "ማክሰኞ", "ረቡዕ", "ሐሙስ", "አርብ", "ቅዳሜ"];
+  const dayOfWeekEnMap = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
   // In the modern era (1900-2100), Ethiopian New Year (Meskerem 1) falls on Sep 12 if the previous Gregorian year % 4 === 3. Otherwise, it falls on Sep 11.
   const isPrecursor = (gYear % 4 === 3);
@@ -48,28 +80,28 @@ export function getEthiopianDate(date: Date): { day: number; monthName: string; 
     diffDays = Math.round((currentLocalDate.getTime() - prevMeskerem1.getTime()) / (24 * 60 * 60 * 1000));
   }
 
-  const ethMonthIndex = Math.floor(diffDays / 30);
+  const ethMonthIndex = Math.max(0, Math.min(12, Math.floor(diffDays / 30)));
   const ethDay = (diffDays % 30) + 1;
-  const monthName = ethMonths[ethMonthIndex] || "ጳጉሜ";
+  const monthAm = ethMonthsAm[ethMonthIndex] || "ጳጉሜ";
+  const monthEn = ethMonthsEn[ethMonthIndex] || "Pagume";
+  const dayOfWeekAm = dayOfWeekAmMap[dayOfWeekIndex] || "እሑድ";
+  const dayOfWeekEn = dayOfWeekEnMap[dayOfWeekIndex] || "Sunday";
 
   return {
     day: ethDay,
-    monthName,
+    monthName: monthAm,
+    monthAm,
+    monthEn,
     year: ethYear,
     monthIndex: ethMonthIndex,
-    formatted: `${monthName} ${ethDay} ቀን ${ethYear} ዓ.ም.`
+    formatted: `${monthAm} ${ethDay} ቀን ${ethYear} ዓ.ም.`,
+    dayOfWeekAm,
+    dayOfWeekEn
   };
 }
 
 // Convert numbers to Ge'ez numerals
 export function toGeezNumeral(num: number): string {
-  const geezNumerals: { [key: number]: string } = {
-    1: '፩', 2: '፪', 3: '፫', 4: '፬', 5: '፭', 6: '፮', 7: '፯', 8: '፰', 9: '፱',
-    10: '፲', 20: '፳', 30: '፴', 40: '四十', // Ge'ez does not have Chinese characters! Let's write them properly:
-  };
-  // Ge'ez numbers exact mapping:
-  // 1=፩, 2=፪, 3=፫, 4=፬, 5=፭, 6=፮, 7=፯, 8=፰, 9=፱
-  // 10=፲, 20=፳, 30=፴, 40=፵, 50=፶, 60=፷, 75=፸, 80=፹, 90=፺, 100=፻
   const baseGeez: { [key: number]: string } = {
     1: '፩', 2: '፪', 3: '፫', 4: '፬', 5: '፭', 6: '፮', 7: '፯', 8: '፰', 9: '፱',
     10: '፲', 20: '፳', 30: '፴', 40: '፵', 50: '፶', 60: '፷', 70: '፸', 80: '፹', 90: '፺',

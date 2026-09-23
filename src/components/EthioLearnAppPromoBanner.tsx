@@ -2,23 +2,22 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Smartphone, 
-  Sparkles, 
   Crown, 
   GraduationCap, 
-  Download, 
   Send, 
   ChevronLeft, 
   ChevronRight, 
   ArrowRight, 
-  Zap, 
-  ShieldCheck, 
   CheckCircle2, 
-  Minimize2, 
-  Maximize2,
-  BookOpen
+  X,
+  BookOpen,
+  Sparkles,
+  ExternalLink
 } from 'lucide-react';
 import { StudentProfile } from '../types';
-import { usePWAInstall, APK_PURE_URL } from '../utils/usePWAInstall';
+import { usePWAInstall } from '../utils/usePWAInstall';
+import { playClickChime } from '../utils/audio';
+import { safeStorage } from '../utils/safeStorage';
 
 export interface EthioLearnAppPromoProps {
   profile?: StudentProfile | null;
@@ -28,7 +27,7 @@ export interface EthioLearnAppPromoProps {
   onNavigate?: (page: any) => void;
   onInstallClick?: () => void;
   positionContext?: string;
-  // Legacy props from GoogleAdBanner for 100% backward compatibility
+  // Legacy props from GoogleAdBanner for backward compatibility
   slotId?: string;
   format?: string;
   layoutKey?: string;
@@ -36,15 +35,11 @@ export interface EthioLearnAppPromoProps {
 
 interface PromoCampaign {
   id: string;
-  tabLabel: { en: string; am: string };
-  badge: { en: string; am: string };
-  badgeColor: string;
+  tag: { en: string; am: string };
   title: { en: string; am: string };
-  description: { en: string; am: string };
+  highlight: { en: string; am: string };
   ctaText: { en: string; am: string };
   icon: React.ComponentType<{ className?: string }>;
-  statValue: string;
-  statLabel: { en: string; am: string };
   accentColor: string;
   actionType: 'install' | 'notes' | 'exams' | 'upgrade' | 'telegram' | 'bookstore';
 }
@@ -52,123 +47,68 @@ interface PromoCampaign {
 const CAMPAIGNS: PromoCampaign[] = [
   {
     id: 'app_download',
-    tabLabel: { en: 'Mobile App', am: 'አንድሮይድ አፕ' },
-    badge: { en: 'Official Client • 0 MB Offline Data', am: 'ኦፊሴላዊ አፕ • ያለ ኢንተርኔት ይሰራል' },
-    badgeColor: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+    tag: { en: 'Android App', am: 'አንድሮይድ አፕ' },
     title: { 
-      en: 'Install EthioLearn on Your Android Phone', 
-      am: 'የኢትዮለርን አፕሊኬሽን በስልክዎ ላይ ይጫኑ' 
+      en: '0 MB Offline Mode: Install EthioLearn on your phone', 
+      am: 'ያለ ኢንተርኔት ዳታ ይጠቀሙ፦ የኢትዮለርን አፕ በስልክዎ ላይ ይጫኑ' 
     },
-    description: { 
-      en: 'Access 1,000+ past university exams and lecture notes offline without using mobile internet data. Fast, lightweight, and built for Ethiopian students.', 
-      am: 'ከ1,000+ በላይ የዩኒቨርሲቲ ፈተናዎችን እና ኖቶችን ያለ ኢንተርኔት ዳታ በነፃ ይጠቀሙ። ፈጣን እና ለኢትዮጵያ ተማሪዎች የተዘጋጀ።' 
-    },
-    ctaText: { en: 'Install / Download App', am: 'አፑን በነፃ ጫን' },
+    highlight: { en: 'Free Offline Study', am: 'ያለ ዳታ ይሰራል' },
+    ctaText: { en: 'Install App', am: 'አፑን ጫን' },
     icon: Smartphone,
-    statValue: '100% Free',
-    statLabel: { en: 'Offline Study Mode', am: 'ያለ ዳታ ይሰራል' },
     accentColor: '#10B981',
     actionType: 'install'
   },
   {
     id: 'telegram',
-    tabLabel: { en: 'Telegram Hub', am: 'ቴሌግራም ቻናል' },
-    badge: { en: 'Official Student Channel • @Et_Learnn', am: 'ኦፊሴላዊ የቴሌግራም ቻናል • @Et_Learnn' },
-    badgeColor: 'bg-sky-500/15 text-sky-400 border-sky-500/30',
+    tag: { en: 'Telegram Hub', am: 'ቴሌግራም' },
     title: { 
-      en: 'Join 200+ Ethiopian University Scholars on Telegram', 
-      am: 'ከ200+ ተማሪዎች ጋር በቴሌግራም ቻናላችን ይቀላቀሉ' 
+      en: 'Join 200+ university scholars on @Et_Learnn for exam keys & PDFs', 
+      am: 'ከ200+ ተማሪዎች ጋር በቴሌግራም የፈተና ጥያቄዎችን እና ፒዲኤፍ ይጋሩ (@Et_Learnn)' 
     },
-    description: { 
-      en: 'Receive instant alerts when new university exam keys are released, download high-yield study handout PDFs, and connect with peer study groups.', 
-      am: 'አዳዲስ የፈተና መልሶች ሲወጡ ወዲያውኑ ማሳወቂያዎችን ያግኙ፣ የትምህርት ፒዲኤፍ ማስታወሻዎችን ያውርዱ እና ከሌሎች ተማሪዎች ጋር ይገናኙ።' 
-    },
-    ctaText: { en: 'Join Telegram Channel', am: 'ቴሌግራም ይቀላቀሉ' },
+    highlight: { en: '@Et_Learnn', am: '@Et_Learnn' },
+    ctaText: { en: 'Join Channel', am: 'ቴሌግራም' },
     icon: Send,
-    statValue: '200+',
-    statLabel: { en: 'Active University Students', am: 'ንቁ ተማሪዎች' },
     accentColor: '#0EA5E9',
     actionType: 'telegram'
   },
   {
-    id: 'study_notes',
-    tabLabel: { en: 'Study Notes', am: 'የጥናት ማስታወሻዎች' },
-    badge: { en: 'Authentic Faculty Notes • Wolkite & National', am: 'የመምህራን ትክክለኛ ማስታወሻዎች' },
-    badgeColor: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-    title: { 
-      en: 'Course Summaries & Lecture Notes Authored by Faculty', 
-      am: 'በዩኒቨርሲቲ መምህራን የተዘጋጁ የተሟሉ የኮርስ ማጠቃለያዎች' 
-    },
-    description: { 
-      en: 'Master freshman and departmental courses with structured lecture notes, essential formulas, and chapter summaries published directly by university educators.', 
-      am: 'የመጀመሪያ ዓመት እና የዲፓርትመንት ኮርሶችን በአስተማሪዎች በተዘጋጁ ግልጽ ማስታወሻዎች እና የቀመሮች ማጠቃለያዎች በቀላሉ ይረዱ።' 
-    },
-    ctaText: { en: 'Read Study Notes', am: 'ማስታወሻዎችን አንብብ' },
-    icon: BookOpen,
-    statValue: 'Verified',
-    statLabel: { en: 'Curriculum-Aligned', am: 'ከስርዓተ ትምህርቱ ጋር የተጣጣመ' },
-    accentColor: '#F59E0B',
-    actionType: 'notes'
-  },
-  {
     id: 'exam_bank',
-    tabLabel: { en: 'Past Exams', am: 'የፈተና ባንክ' },
-    badge: { en: 'Wolkite, AAU & National Exam Bank', am: 'የወልቂጤ እና የኢትዮጵያ ዩኒቨርሲቲ ፈተናዎች' },
-    badgeColor: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+    tag: { en: 'Past Exams', am: 'ያለፉ ፈተናዎች' },
     title: { 
-      en: 'Practice 1,000+ Real University Midterm & Final Exams', 
-      am: 'ከ1,000+ በላይ ትክክለኛ የዩኒቨርሲቲ ፈተናዎችን ይለማመዱ' 
+      en: 'Wolkite, AAU & National Exam Archives with verified answer keys', 
+      am: 'የወልቂጤ እና የኢትዮጵያ ዩኒቨርሲቲ ፈተናዎች ከተሟሉ መልሶች ጋር' 
     },
-    description: { 
-      en: 'Master freshman and departmental examinations with genuine past exam sheets, verified answer keys, detailed explanations, and timed simulation modes.', 
-      am: 'የወልቂጤ፣ አዲስ አበባ፣ አዳማ እና ሌሎች ዩኒቨርሲቲዎች ፈተናዎችን ከነሙሉ ትክክለኛ መልሶቻቸው እና ገላጭ ማብራሪያዎቻቸው ጋር ይለማመዱ።' 
-    },
-    ctaText: { en: 'Browse Exam Bank', am: 'ፈተናዎችን ጀምር' },
+    highlight: { en: '1,000+ Exams', am: '1,000+ ፈተናዎች' },
+    ctaText: { en: 'Open Exams', am: 'ፈተናዎች' },
     icon: GraduationCap,
-    statValue: '1,000+',
-    statLabel: { en: 'Authentic Exam Papers', am: 'ትክክለኛ የፈተና ወረቀቶች' },
     accentColor: '#3B82F6',
     actionType: 'exams'
   },
   {
-    id: 'pro_upgrade',
-    tabLabel: { en: 'EthioLearn Pro', am: 'ኢትዮለርን ፕሮ' },
-    badge: { en: 'Telebirr & CBE Birr • Instant Activation', am: 'በቴሌብር እና በንግድ ባንክ • ፈጣን ማረጋገጫ' },
-    badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+    id: 'study_notes',
+    tag: { en: 'Faculty Notes', am: 'የመምህራን ማስታወሻ' },
     title: { 
-      en: 'Upgrade to EthioLearn Pro — Only 99 ETB / Month', 
-      am: 'በቴሌብር እና በንግድ ባንክ ወደ ፕሮ ያሳድጉ — በወር 99 ብር ብቻ' 
+      en: 'Structured lecture handouts & formula sheets for freshman courses', 
+      am: 'የመጀመሪያ ዓመት እና የዲፓርትመንት ኮርሶች የተሟሉ ማጠቃለያዎች' 
     },
-    description: { 
-      en: 'Access complete curriculum textbooks, verified exam solution archives, and downloadable lecture notes for offline study. 100% Ethiopian local payment.', 
-      am: 'የተሟሉ የዲጂታል መጽሐፍት ምዕራፎች፣ የፈተና መልሶች እና የወረዱ ማስታወሻዎችን ያለ ገደብ ለመጠቀም በቴሌብር ወይም በንግድ ባንክ በቀላሉ ይክፈሉ።' 
-    },
-    ctaText: { en: 'Get Pro with Telebirr / CBE', am: 'በቴሌብር ፕሮ ይግዙ' },
-    icon: Crown,
-    statValue: '99 ETB',
-    statLabel: { en: 'Affordable Student Pass', am: 'ተመጣጣኝ የተማሪዎች ክፍያ' },
-    accentColor: '#EAB308',
-    actionType: 'upgrade'
+    highlight: { en: 'Curriculum Certified', am: 'የተረጋገጡ ማስታወሻዎች' },
+    ctaText: { en: 'Read Notes', am: 'ማስታወሻዎች' },
+    icon: BookOpen,
+    accentColor: '#F59E0B',
+    actionType: 'notes'
   },
   {
-    id: 'bookstore',
-    tabLabel: { en: 'Textbooks', am: 'የመማሪያ መጽሐፍት' },
-    badge: { en: 'National University Curriculum', am: 'የኢትዮጵያ ዩኒቨርሲቲ ስርዓተ-ትምህርት' },
-    badgeColor: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
+    id: 'pro_upgrade',
+    tag: { en: 'EthioLearn Pro', am: 'ኢትዮለርን ፕሮ' },
     title: { 
-      en: 'Official Ethiopian University Modules & Textbooks', 
-      am: 'ኦፊሴላዊ የዩኒቨርሲቲ ሞጁሎች እና የመማሪያ መጽሐፍት' 
+      en: 'Telebirr & CBE Birr student pass: Unlimited AI tutor & full books', 
+      am: 'በቴሌብር እና በንግድ ባንክ ያልተገደበ የአስጎብኚ AI እና የመጻሕፍት አገልግሎት' 
     },
-    description: { 
-      en: 'Read full textbooks with offline chapter access, page bookmarks, night reading mode, and downloadable chapter PDFs.', 
-      am: 'ሙሉ የትምህርት ሞጁሎችን በዲጂታል ንባብ፣ በምዕራፍ ማውረድ እና ያለ ዳታ በፈለጉት ሰዓት ያንብቡ።' 
-    },
-    ctaText: { en: 'Browse Bookstore', am: 'መጽሐፍትን ክፈት' },
-    icon: BookOpen,
-    statValue: 'Official',
-    statLabel: { en: 'Digital Library', am: 'ዲጂታል ቤተ-መጽሐፍት' },
-    accentColor: '#A855F7',
-    actionType: 'bookstore'
+    highlight: { en: 'From 80 ETB', am: 'ከ80 ብር ጀምሮ' },
+    ctaText: { en: 'Upgrade Pro', am: 'ወደ ፕሮ አሳድግ' },
+    icon: Crown,
+    accentColor: '#EAB308',
+    actionType: 'upgrade'
   }
 ];
 
@@ -183,63 +123,65 @@ export default function EthioLearnAppPromoBanner({
 }: EthioLearnAppPromoProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(() => {
+    try {
+      return safeStorage.getItem('ethiolearn_promobar_dismissed') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const timerRef = useRef<any>(null);
 
   const isAmharic = language === 'am';
   const isProUser = Boolean(profile?.isPro || profile?.proStatus === 'active');
   const { isInstallVisible, hasDownloaded, downloadAndInstall } = usePWAInstall();
 
-  // If not on web version or already downloaded/installed, hide the mobile app install campaign!
+  // Filter campaigns depending on platform & install status
   const availableCampaigns = CAMPAIGNS.filter((c) => {
     if (c.actionType === 'install') {
       return isInstallVisible && !hasDownloaded;
     }
+    if (c.actionType === 'upgrade' && isProUser) {
+      return false;
+    }
     return true;
   });
 
-  // Auto-rotate every 7.5 seconds unless paused by user interaction
+  // Auto-rotate every 6.5 seconds unless hovered or paused
   useEffect(() => {
-    if (isPaused || isMinimized || availableCampaigns.length === 0) {
+    if (isPaused || isDismissed || availableCampaigns.length <= 1) {
       if (timerRef.current) clearInterval(timerRef.current);
       return;
     }
 
     timerRef.current = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % availableCampaigns.length);
-    }, 7500);
+    }, 6500);
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isPaused, isMinimized, availableCampaigns.length]);
+  }, [isPaused, isDismissed, availableCampaigns.length]);
 
   const safeIndex = availableCampaigns.length > 0 ? currentIndex % availableCampaigns.length : 0;
   const activeCampaign = availableCampaigns[safeIndex] || CAMPAIGNS[0];
   const IconComponent = activeCampaign.icon;
 
   const handleAction = async (campaign: PromoCampaign) => {
+    playClickChime();
     switch (campaign.actionType) {
       case 'install':
-        if (onInstallClick) {
-          onInstallClick();
-        }
+        if (onInstallClick) onInstallClick();
         await downloadAndInstall();
         break;
       case 'notes':
-        if (onNavigate) {
-          onNavigate('notes');
-        }
+        if (onNavigate) onNavigate('notes');
         break;
       case 'exams':
-        if (onNavigate) {
-          onNavigate('university');
-        }
+        if (onNavigate) onNavigate('university');
         break;
       case 'bookstore':
-        if (onNavigate) {
-          onNavigate('bookstore');
-        }
+        if (onNavigate) onNavigate('bookstore');
         break;
       case 'upgrade':
         if (onUpgradeClick) {
@@ -258,266 +200,201 @@ export default function EthioLearnAppPromoBanner({
     }
   };
 
-  // If user is already on Pro Tier, show an unobtrusive Pro Scholar recognition banner
+  const handleDismiss = () => {
+    playClickChime();
+    setIsDismissed(true);
+    try {
+      safeStorage.setItem('ethiolearn_promobar_dismissed', 'true');
+    } catch {}
+  };
+
+  const handleRestore = () => {
+    playClickChime();
+    setIsDismissed(false);
+    try {
+      safeStorage.removeItem('ethiolearn_promobar_dismissed');
+    } catch {}
+  };
+
+  // If dismissed, render a microscopic unobtrusive pill so the student can reopen it if desired
+  if (isDismissed) {
+    return (
+      <div className="flex justify-end my-1 px-1">
+        <button
+          type="button"
+          onClick={handleRestore}
+          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium text-slate-400 hover:text-amber-400 bg-slate-900/60 hover:bg-slate-900 border border-slate-800 transition-colors cursor-pointer"
+          title={isAmharic ? 'የኢትዮለርን ማስታወቂያ አሳይ' : 'Show EthioLearn updates'}
+        >
+          <Sparkles className="w-3 h-3 text-amber-400" />
+          <span>{isAmharic ? 'ጠቃሚ ማስታወቂያ' : 'Updates'}</span>
+        </button>
+      </div>
+    );
+  }
+
+  // If Pro Scholar is active, render a refined, quiet status strip
   if (isProUser) {
     return (
-      <div 
+      <aside 
         id="ethiolearn-pro-member-banner"
-        className={`my-4 w-full rounded-2xl bg-[#0A1128]/90 border border-amber-500/25 p-3 sm:p-4 text-zinc-200 shadow-md backdrop-blur-md ${className}`}
+        aria-label="Pro Scholar Status"
+        className={`my-2 sm:my-3 w-full rounded-xl bg-slate-900/80 border border-amber-500/20 px-3 py-1.5 sm:px-3.5 sm:py-2 text-slate-200 shadow-xs backdrop-blur-md ${className}`}
         data-context={positionContext}
       >
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
-              <Crown className="w-5 h-5 fill-amber-400/20" />
+        <div className="flex items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-6 h-6 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+              <Crown className="w-3.5 h-3.5 fill-amber-400/20" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-black tracking-widest text-amber-400 uppercase font-mono bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
-                  {isAmharic ? 'የፕሮ አባል' : 'Pro Scholar Active'}
-                </span>
-                <span className="text-[11px] text-emerald-400 flex items-center gap-1 font-semibold">
-                  <CheckCircle2 className="w-3 h-3" />
-                  {isAmharic ? 'ማስታወቂያ-አልባ ጥናት' : 'Ad-Free Experience'}
-                </span>
-              </div>
-              <p className="text-xs font-bold text-white mt-0.5">
+            <div className="flex items-center gap-2 truncate text-[11px] sm:text-xs">
+              <span className="font-bold text-amber-400">
+                {isAmharic ? 'የፕሮ አባል' : 'EthioLearn Pro'}
+              </span>
+              <span className="text-slate-400 hidden sm:inline" aria-hidden="true">·</span>
+              <span className="text-slate-300 truncate">
                 {isAmharic 
-                  ? 'የኢትዮለርን ያልተገደበ የ AI እና የፈተናዎች አገልግሎት ንቁ ነው' 
-                  : 'Unlimited AI Tutor & Full Exam Archives Unlocked'}
-              </p>
+                  ? 'ያልተገደበ የAI አስጎብኚና የፈተናዎች አገልግሎት ንቁ ነው' 
+                  : 'Ad-free study & unlimited AI Tutor unlocked'}
+              </span>
             </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
             {onNavigate && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => onNavigate('tutor')}
-                  className="px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>{isAmharic ? 'አስጎብኚ' : 'AI Tutor'}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onNavigate('university')}
-                  className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                >
-                  <GraduationCap className="w-3.5 h-3.5" />
-                  <span>{isAmharic ? 'ፈተናዎች' : 'Exams'}</span>
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={() => {
+                  playClickChime();
+                  onNavigate('tutor');
+                }}
+                className="text-[11px] font-bold text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-1 cursor-pointer"
+              >
+                <span>{isAmharic ? 'አስጎብኚን ክፈት' : 'AI Tutor'}</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
             )}
+            <button
+              type="button"
+              onClick={handleDismiss}
+              className="p-1 text-slate-400 hover:text-slate-200 rounded-md transition-colors cursor-pointer"
+              title={isAmharic ? 'ዝጋ' : 'Close'}
+            >
+              <X className="w-3 h-3" />
+            </button>
           </div>
         </div>
-      </div>
+      </aside>
     );
   }
 
-  // If collapsed/minimized by student
-  if (isMinimized) {
-    return (
-      <div 
-        className={`my-3 w-full rounded-xl bg-[#0A1128]/95 border border-amber-500/30 px-3 py-2 flex items-center justify-between text-zinc-200 shadow-sm ${className}`}
-      >
-        <div className="flex items-center gap-2 text-xs">
-          <div className="w-6 h-6 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
-            <Sparkles className="w-3.5 h-3.5" />
-          </div>
-          <span className="font-bold text-amber-400">EthioLearn:</span>
-          <span className="text-zinc-300 text-[11px] truncate max-w-[200px] sm:max-w-md">
-            {isAmharic ? activeCampaign.title.am : activeCampaign.title.en}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => handleAction(activeCampaign)}
-            className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-all"
-          >
-            <span>{isAmharic ? activeCampaign.ctaText.am : activeCampaign.ctaText.en}</span>
-            <ArrowRight className="w-3 h-3" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsMinimized(false)}
-            className="p-1 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 cursor-pointer"
-            title={isAmharic ? "አስፋ" : "Expand"}
-          >
-            <Maximize2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
-    );
-  }
-
+  // ─── HIGH-CRAFT MINI PROMO BAR ───
   return (
-    <section
-      id="ethiolearn-app-showcase-banner"
-      aria-label="EthioLearn App Feature Showcase"
-      className={`my-5 w-full rounded-2xl overflow-hidden border border-white/10 bg-gradient-to-b from-[#0A1128] via-[#0F172A] to-[#1E293B] shadow-xl text-zinc-100 transition-all ${className}`}
+    <aside
+      id="ethiolearn-mini-promobar"
+      aria-label="EthioLearn Highlights"
+      className={`my-2 sm:my-3 w-full rounded-xl bg-slate-900/90 border border-amber-500/25 px-2.5 py-1.5 sm:px-3 sm:py-2 text-slate-200 shadow-sm backdrop-blur-md transition-all ${className}`}
       data-context={positionContext}
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
       onTouchStart={() => setIsPaused(true)}
       onTouchEnd={() => setIsPaused(false)}
     >
-      {/* Top Header Bar: App Identity & Campaign Switcher Tabs */}
-      <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 bg-[#060B1A]/80 border-b border-white/5 text-[11px]">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-          <span className="font-extrabold uppercase tracking-wider text-amber-400 font-mono text-[10px]">
-            {isAmharic ? 'የኢትዮለርን ይፋዊ ማስታወቂያ' : 'Official EthioLearn Showcase'}
+      <div className="flex items-center justify-between gap-2.5 sm:gap-3 text-xs">
+        
+        {/* Left: Tag + Icon + Animated Message */}
+        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
+          {/* Micro Tag */}
+          <span className="text-[9px] sm:text-[10px] font-mono font-bold uppercase tracking-wider text-amber-400 bg-amber-400/10 border border-amber-400/25 px-1.5 py-0.5 rounded shrink-0 hidden min-[400px]:inline-block">
+            {isAmharic ? activeCampaign.tag.am : activeCampaign.tag.en}
           </span>
-        </div>
 
-        {/* Quick Campaign Nav Pills */}
-        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
-          {availableCampaigns.map((camp, idx) => {
-            const isActive = idx === safeIndex;
-            return (
-              <button
-                key={camp.id}
-                type="button"
-                onClick={() => setCurrentIndex(idx)}
-                className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all shrink-0 cursor-pointer ${
-                  isActive 
-                    ? 'bg-amber-500 text-slate-950 shadow-sm' 
-                    : 'bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-zinc-200'
-                }`}
-              >
-                {isAmharic ? camp.tabLabel.am : camp.tabLabel.en}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Controls: Minimize */}
-        <div className="flex items-center gap-1 text-zinc-400">
-          <button
-            type="button"
-            onClick={() => setIsMinimized(true)}
-            className="p-1 text-zinc-400 hover:text-zinc-200 rounded hover:bg-white/5 cursor-pointer"
-            title={isAmharic ? "አሳንስ" : "Minimize"}
+          {/* Micro Icon */}
+          <div 
+            className="w-6 h-6 rounded-lg bg-slate-800/80 border border-slate-700/80 flex items-center justify-center shrink-0"
+            style={{ color: activeCampaign.accentColor }}
           >
-            <Minimize2 className="w-3 h-3" />
-          </button>
-        </div>
-      </div>
-
-      {/* Main Feature Slide Stage */}
-      <div className="relative p-4 sm:p-5">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeCampaign.id}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.22, ease: 'easeOut' }}
-            className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4"
-          >
-            {/* Left: Icon & Core Value Message */}
-            <div className="flex items-start gap-3.5 sm:gap-4 max-w-2xl">
-              <div 
-                className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 flex items-center justify-center shrink-0 shadow-inner"
-                style={{ color: activeCampaign.accentColor }}
-              >
-                <IconComponent className="w-6 h-6 sm:w-7 sm:h-7" />
-              </div>
-
-              <div className="space-y-1.5">
-                {/* Badge Tag */}
-                <div className="flex items-center gap-2">
-                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase tracking-wider border ${activeCampaign.badgeColor}`}>
-                    {isAmharic ? activeCampaign.badge.am : activeCampaign.badge.en}
-                  </span>
-                </div>
-
-                {/* Main Headline */}
-                <h3 className="text-base sm:text-lg font-bold text-white tracking-tight leading-snug font-sans">
-                  {isAmharic ? activeCampaign.title.am : activeCampaign.title.en}
-                </h3>
-
-                {/* Subtitle Description */}
-                <p className="text-xs sm:text-[13px] text-zinc-300 leading-relaxed max-w-xl font-normal">
-                  {isAmharic ? activeCampaign.description.am : activeCampaign.description.en}
-                </p>
-              </div>
-            </div>
-
-            {/* Right: Social Proof Metric & Primary CTA Button */}
-            <div className="w-full lg:w-auto flex flex-row lg:flex-col items-center lg:items-end justify-between lg:justify-center gap-3 pt-2 lg:pt-0 border-t lg:border-t-0 border-white/5 shrink-0">
-              {/* Highlight Stat Pill */}
-              <div className="text-left lg:text-right">
-                <div className="text-sm font-black text-amber-400 font-mono">
-                  {activeCampaign.statValue}
-                </div>
-                <div className="text-[10px] text-zinc-400">
-                  {isAmharic ? activeCampaign.statLabel.am : activeCampaign.statLabel.en}
-                </div>
-              </div>
-
-              {/* Action Button */}
-              <button
-                type="button"
-                onClick={() => handleAction(activeCampaign)}
-                className="px-4 py-2.5 sm:px-5 sm:py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs sm:text-sm tracking-wide shadow-md hover:shadow-amber-500/20 transition-all flex items-center gap-2 cursor-pointer shrink-0"
-              >
-                <span>{isAmharic ? activeCampaign.ctaText.am : activeCampaign.ctaText.en}</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </motion.div>
-        </AnimatePresence>
-      </div>
-
-      {/* Bottom Footer: Navigation Arrows, Progress Indicator & Ethiopian Student Trust Signal */}
-      <div className="px-4 py-2 bg-[#060B1A]/90 border-t border-white/5 flex items-center justify-between text-[11px] text-zinc-400">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span className="font-medium text-[10px] sm:text-[11px] text-zinc-300">
-            {isAmharic 
-              ? 'የወልቂጤ እና የኢትዮጵያ ዩኒቨርሲቲዎች ኦፊሴላዊ የጥናት ፕላትፎርም' 
-              : 'Wolkite University & Ethiopian Higher Education Verified Platform'}
-          </span>
-        </div>
-
-        {/* Carousel Slide Indicators & Prev/Next Arrows */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 mr-1">
-            {availableCampaigns.map((c, i) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setCurrentIndex(i)}
-                aria-label={`Go to slide ${i + 1}`}
-                className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                  i === safeIndex ? 'w-5 bg-amber-400' : 'w-1.5 bg-white/20 hover:bg-white/40'
-                }`}
-              />
-            ))}
+            <IconComponent className="w-3.5 h-3.5" />
           </div>
 
+          {/* Animated Message Headline */}
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeCampaign.id}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+                className="flex items-center gap-1.5 truncate text-[11px] sm:text-xs"
+              >
+                <span className="font-semibold text-white truncate">
+                  {isAmharic ? activeCampaign.title.am : activeCampaign.title.en}
+                </span>
+                <span className="text-amber-400/80 font-mono text-[10px] hidden md:inline shrink-0">
+                  ({isAmharic ? activeCampaign.highlight.am : activeCampaign.highlight.en})
+                </span>
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {/* Right: Direct Action CTA + Controls */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Action Button */}
           <button
             type="button"
-            onClick={() => setCurrentIndex((prev) => (prev === 0 ? availableCampaigns.length - 1 : prev - 1))}
-            className="p-1 rounded-md hover:bg-white/10 text-zinc-300 hover:text-white transition-colors cursor-pointer"
-            aria-label="Previous Feature"
+            onClick={() => handleAction(activeCampaign)}
+            className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[10.5px] sm:text-[11px] flex items-center gap-1 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0"
           >
-            <ChevronLeft className="w-3.5 h-3.5" />
+            <span>{isAmharic ? activeCampaign.ctaText.am : activeCampaign.ctaText.en}</span>
+            <ArrowRight className="w-3 h-3" />
           </button>
+
+          {/* Carousel Stepper (Arrows) */}
+          {availableCampaigns.length > 1 && (
+            <div className="hidden sm:flex items-center gap-0.5 text-slate-400">
+              <button
+                type="button"
+                onClick={() => {
+                  playClickChime();
+                  setCurrentIndex((prev) => (prev === 0 ? availableCampaigns.length - 1 : prev - 1));
+                }}
+                className="p-1 hover:text-white rounded hover:bg-slate-800 transition-colors cursor-pointer"
+                aria-label="Previous update"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <span className="text-[9px] font-mono text-slate-400 px-0.5">
+                {safeIndex + 1}/{availableCampaigns.length}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  playClickChime();
+                  setCurrentIndex((prev) => (prev + 1) % availableCampaigns.length);
+                }}
+                className="p-1 hover:text-white rounded hover:bg-slate-800 transition-colors cursor-pointer"
+                aria-label="Next update"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Dismiss Button */}
           <button
             type="button"
-            onClick={() => setCurrentIndex((prev) => (prev + 1) % availableCampaigns.length)}
-            className="p-1 rounded-md hover:bg-white/10 text-zinc-300 hover:text-white transition-colors cursor-pointer"
-            aria-label="Next Feature"
+            onClick={handleDismiss}
+            className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors cursor-pointer"
+            title={isAmharic ? 'ዝጋ' : 'Dismiss'}
+            aria-label="Dismiss banner"
           >
-            <ChevronRight className="w-3.5 h-3.5" />
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
+
       </div>
-    </section>
+    </aside>
   );
 }

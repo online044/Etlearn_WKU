@@ -1424,8 +1424,20 @@ export default function App() {
       </header>
 
       {/* CORE PAGES RENDER STAGE */}
-      <main className="flex-grow w-full max-w-7xl mx-auto px-2 min-[360px]:px-3 sm:px-4 py-4 sm:py-6 md:py-8 pb-24 sm:pb-28">
+      <main className="flex-grow w-full max-w-7xl mx-auto px-2 min-[360px]:px-3 sm:px-4 py-2 sm:py-4 pb-24 sm:pb-28">
         
+        {/* EthioLearn Native Mini Highlight / Announcement Bar */}
+        {currentPage !== 'upgrade' && currentPage !== 'bookstore' && currentPage !== 'university' && (
+          <EthioLearnAppPromoBanner 
+            profile={profile}
+            language={language}
+            onUpgradeClick={() => setCurrentPage('upgrade')}
+            onNavigate={(page) => setCurrentPage(page as any)}
+            onInstallClick={triggerPWAInstall}
+            positionContext={`app-${currentPage}-top`}
+          />
+        )}
+
         <AnimatePresence mode="wait">
           <motion.div
             key={currentPage}
@@ -1546,18 +1558,6 @@ export default function App() {
             )}
           </motion.div>
         </AnimatePresence>
-
-        {/* EthioLearn Native In-App Showcase & Official Promo Banner */}
-        {currentPage !== 'upgrade' && currentPage !== 'bookstore' && currentPage !== 'university' && (
-          <EthioLearnAppPromoBanner 
-            profile={profile}
-            language={language}
-            onUpgradeClick={() => setCurrentPage('upgrade')}
-            onNavigate={(page) => setCurrentPage(page as any)}
-            onInstallClick={triggerPWAInstall}
-            positionContext={`app-${currentPage}-footer`}
-          />
-        )}
       </main>
 
       {/* PERSISTENT BOTTOM NAVIGATION TAB BAR (5-Section Bottom Nav) */}
