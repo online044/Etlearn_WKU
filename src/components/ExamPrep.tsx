@@ -697,130 +697,74 @@ export default function ExamPrep({
             className="space-y-5"
           >
             {/* Top Navigation & Status Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pb-1">
+            {/* Top Bar: Back button and Quota */}
+            <div className="flex items-center justify-between gap-3 pb-1">
               <button
                 onClick={() => {
                   playClickChime();
                   if (onNavigateBack) onNavigateBack();
                 }}
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-300 bg-slate-800/90 hover:bg-slate-700 hover:text-white border border-slate-700/80 transition-all cursor-pointer shadow-sm active:scale-95"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 bg-[#111C35] hover:bg-[#17233D] border border-slate-800 transition cursor-pointer"
               >
                 <ArrowLeft className="w-4 h-4 text-amber-400" />
-                <span>{language === 'en' ? 'Back to Dashboard' : 'ወደ ዋናው ገጽ ተመለስ'}</span>
+                <span>{language === 'en' ? 'Back' : 'ተመለስ'}</span>
               </button>
 
               {isPro ? (
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold shadow-xs">
-                  <Crown className="w-3.5 h-3.5 text-amber-400" />
-                  <span>{language === 'en' ? 'EthioLearn Pro: Unlimited Subjects' : 'ኢትዮለርን ፕሮ፦ ያልተገደቡ ትምህርቶች'}</span>
-                </div>
+                <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                  <Crown className="w-3.5 h-3.5" />
+                  <span>{language === 'en' ? 'Pro: Unlimited' : 'ፕሮ፦ ያልተገደበ'}</span>
+                </span>
               ) : (
-                <button
-                  onClick={() => {
-                    playClickChime();
-                    if (onNavigateToUpgrade) onNavigateToUpgrade();
-                  }}
-                  className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-800/90 border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 text-xs font-bold cursor-pointer transition-all shadow-xs"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>
-                    {language === 'en' 
-                      ? `${triedSubjects.length}/3 Free Subjects Tried (Upgrade for All)` 
-                      : `${triedSubjects.length}/3 ነፃ ትምህርቶች ተሞክረዋል (ሙሉ ለማግኘት አሻሽሉ)`}
+                <div className="text-right">
+                  <span className="text-xs font-medium text-slate-300">
+                    {language === 'en' ? 'Free subjects: ' : 'ነፃ ትምህርቶች፦ '}
+                    <strong className="text-amber-400 font-bold">{triedSubjects.length} / 3</strong> active
                   </span>
-                </button>
+                </div>
               )}
             </div>
 
-            {/* Subject Quota Meter for Free Plan */}
+            {/* Simple Quota Progress Indicator */}
             {!isPro && (
-              <div className="p-4 bg-slate-800/80 border border-slate-700/80 rounded-2xl space-y-2.5">
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-amber-400" />
-                    <span className="font-bold text-slate-200">
-                      {language === 'en' ? 'Free Plan Subject Quota' : 'የነፃ እቅድ የትምህርት ገደብ'}
-                    </span>
-                  </div>
-                  <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                    triedSubjects.length >= 3 
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' 
-                      : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                  }`}>
-                    {triedSubjects.length} / 3 {language === 'en' ? 'Subjects Active' : 'ትምህርቶች ነፃ ተሞክረዋል'}
-                  </span>
-                </div>
-
-                <div className="w-full bg-slate-700/60 rounded-full h-2 overflow-hidden">
-                  <div 
-                    className={`h-full transition-all duration-300 ${
-                      triedSubjects.length >= 3 ? 'bg-amber-400' : 'bg-emerald-400'
-                    }`}
-                    style={{ width: `${Math.min(100, (triedSubjects.length / 3) * 100)}%` }}
-                  />
-                </div>
-
-                {triedSubjects.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                    <span className="text-[10px] text-slate-400">{language === 'en' ? 'Active Unlocked Subjects:' : 'ያገለገሉ ነፃ ትምህርቶች፦'}</span>
-                    {triedSubjects.map(sub => (
-                      <button
-                        key={sub}
-                        type="button"
-                        onClick={() => {
-                          playClickChime();
-                          setSelectedSubject(sub);
-                        }}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
-                          selectedSubject === sub 
-                            ? 'bg-amber-400 text-slate-950 font-bold shadow-xs' 
-                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                        }`}
-                      >
-                        ✓ {sub}
-                      </button>
-                    ))}
-                  </div>
-                )}
+              <div className="w-full bg-[#111C35] rounded-full h-1.5 overflow-hidden">
+                <div 
+                  className={`h-full transition-all duration-300 ${
+                    triedSubjects.length >= 3 ? 'bg-amber-400' : 'bg-emerald-400'
+                  }`}
+                  style={{ width: `${Math.min(100, (triedSubjects.length / 3) * 100)}%` }}
+                />
               </div>
             )}
 
             {/* 3-Column Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-1">
               {/* Form configuration panel */}
-              <div className="bg-slate-850 bg-[#141E33] p-6 rounded-2xl border border-slate-700/80 shadow-md space-y-5">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-700/60">
-                  <div className="flex items-center gap-2">
-                    <Compass className="w-5 h-5 text-amber-400" />
-                    <h3 className="font-serif font-bold text-base text-white">
-                      {language === 'en' ? 'Curriculum Practice & Exams' : 'ፈተና እና ልምምድ ጀምር'}
-                    </h3>
-                  </div>
+              <div className="bg-[#111C35] p-5 rounded-2xl border border-slate-800 space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+                  <h3 className="font-bold text-sm text-white">
+                    {language === 'en' ? 'Curriculum Practice & Exams' : 'ፈተና እና ልምምድ'}
+                  </h3>
 
                   <button
                     onClick={() => { playClickChime(); setShowAddExamModal(true); }}
-                    className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-700/60 rounded-lg transition-colors cursor-pointer"
-                    title={language === 'en' ? 'Add Custom Exam Question' : 'ብጁ ጥያቄ ጨምር'}
+                    className="p-1 text-slate-400 hover:text-amber-400 transition-colors cursor-pointer"
+                    title={language === 'en' ? 'Add Custom Question' : 'ጥያቄ ጨምር'}
                   >
                     <Plus className="w-4 h-4" />
                   </button>
                 </div>
 
-                {/* Subject dropdown */}
-                <div className="space-y-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  <div className="flex items-center justify-between">
-                    <label>{language === 'en' ? 'Subject / Course' : 'የትምህርት አይነት'}</label>
-                    {!isSubjectPermitted(selectedSubject) && (
-                      <span className="text-[10px] text-amber-400 font-bold uppercase flex items-center gap-1">
-                        <Lock className="w-3 h-3" /> {language === 'en' ? 'Pro Subject' : 'ፕሮ ትምህርት'}
-                      </span>
-                    )}
-                  </div>
+                {/* Subject select */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                    {language === 'en' ? 'Subject' : 'የትምህርት አይነት'}
+                  </label>
 
                   <select
                     value={selectedSubject}
                     onChange={(e) => setSelectedSubject(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 text-slate-100 font-sans font-semibold rounded-xl py-3 px-3.5 outline-none cursor-pointer focus:border-amber-400"
+                    className="w-full bg-[#0B1228] border border-slate-800 text-slate-100 font-sans text-xs font-semibold rounded-xl py-2.5 px-3 outline-none cursor-pointer focus:border-amber-400"
                   >
                     {allSubjects.map(s => {
                       const locked = !isSubjectPermitted(s);
@@ -833,36 +777,40 @@ export default function ExamPrep({
                   </select>
                 </div>
 
-                {/* Question count options */}
-                <div className="space-y-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  <label>{language === 'en' ? 'Number of Questions' : 'የጥያቄዎች ብዛት'}</label>
-                  <div className="grid grid-cols-3 gap-2 bg-slate-900 p-1.5 rounded-xl border border-slate-700">
+                {/* Number of questions: native mobile segmented control */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                    {language === 'en' ? 'Number of questions' : 'የጥያቄዎች ብዛት'}
+                  </label>
+                  <div className="grid grid-cols-3 gap-1.5 bg-[#0B1228] p-1 rounded-xl border border-slate-800">
                     {[5, 10, 20].map((count) => (
                       <button
                         key={count}
                         type="button"
                         onClick={() => { setQCount(count); playClickChime(); }}
                         className={`py-2 text-xs font-bold rounded-lg cursor-pointer transition-all ${
-                          qCount === count ? 'bg-amber-500 text-slate-950 shadow-sm font-extrabold' : 'text-slate-400 hover:text-slate-200'
+                          qCount === count ? 'bg-amber-500 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-slate-200'
                         }`}
                       >
-                        {count} {language === 'en' ? 'Qns' : 'ጥያቄ'}
+                        {count}
                       </button>
                     ))}
                   </div>
                 </div>
 
-                {/* Difficulty level selection */}
-                <div className="space-y-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  <label>{language === 'en' ? 'Difficulty Level' : 'የክብደት ደረጃ'}</label>
-                  <div className="grid grid-cols-3 gap-2 bg-slate-900 p-1.5 rounded-xl border border-slate-700">
+                {/* Difficulty: native mobile segmented control */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                    {language === 'en' ? 'Difficulty' : 'የክብደት ደረጃ'}
+                  </label>
+                  <div className="grid grid-cols-3 gap-1.5 bg-[#0B1228] p-1 rounded-xl border border-slate-800">
                     {(['easy', 'medium', 'hard'] as const).map((diff) => (
                       <button
                         key={diff}
                         type="button"
                         onClick={() => { setDifficulty(diff); playClickChime(); }}
                         className={`py-2 text-xs font-bold rounded-lg cursor-pointer capitalize transition-all ${
-                          difficulty === diff ? 'bg-amber-500 text-slate-950 shadow-sm font-extrabold' : 'text-slate-400 hover:text-slate-200'
+                          difficulty === diff ? 'bg-amber-500 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-slate-200'
                         }`}
                       >
                         {language === 'en' ? diff : (diff === 'easy' ? 'ቀላል' : diff === 'medium' ? 'መካከለኛ' : 'ከባድ')}
@@ -871,36 +819,36 @@ export default function ExamPrep({
                   </div>
                 </div>
 
-                {/* Custom needs or specific target area */}
-                <div className="space-y-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  <label>{language === 'en' ? 'Specific Request / Custom Topic' : 'የተለየ ጥያቄ / የትኩረት ምዕራፍ'}</label>
-                  <textarea
+                {/* Specific topic input */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                    {language === 'en' ? 'Specific topic' : 'የትኩረት ርዕስ'}
+                  </label>
+                  <input
+                    type="text"
                     value={customNeeds}
                     onChange={(e) => setCustomNeeds(e.target.value)}
-                    placeholder={language === 'en' 
-                      ? 'e.g., Focus strictly on Chapter 3 integrals, include Amharic solutions, exam-standard calculations...' 
-                      : 'ምሳሌ፦ በምዕራፍ 3 ላይ ብቻ ያተኩር፣ ማብራሪያው በአማርኛ ይሁን፣ የዩኒቨርሲቲ ፈተና ደረጃ ጥያቄዎች...'}
-                    rows={2}
-                    className="w-full bg-slate-900 border border-slate-700 text-slate-200 font-sans text-xs font-semibold rounded-xl py-2 px-3 outline-none focus:border-amber-400 resize-none placeholder-slate-500 normal-case"
+                    placeholder={language === 'en' ? 'Enter topic...' : 'ርዕስ ያስገቡ...'}
+                    className="w-full bg-[#0B1228] border border-slate-800 text-slate-200 font-sans text-xs font-medium rounded-xl py-2 px-3 outline-none focus:border-amber-400 placeholder-slate-500"
                   />
                 </div>
 
-                {/* Action Buttons */}
-                <div className="pt-2 space-y-3">
+                {/* Action Buttons: Prominent Start Practice Quiz */}
+                <div className="pt-2 space-y-2">
                   <button
                     onClick={handleGenerateCuratedMock}
-                    className="w-full h-12 min-h-[48px] bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold text-sm tracking-wide rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all active:scale-98"
+                    className="w-full h-11 min-h-[44px] bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all active:scale-98"
                   >
                     <Layers className="w-4 h-4 text-slate-950" />
-                    {language === 'en' ? 'Start AI Practice Quiz' : 'የልምምድ ፈተና ጀምር'}
+                    <span>{language === 'en' ? 'Start Practice Quiz' : 'የልምምድ ፈተና ጀምር'}</span>
                   </button>
 
                   <button
                     onClick={handleStartPastExam}
-                    className="w-full h-12 min-h-[48px] bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-750 hover:text-white text-sm font-bold tracking-wide rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-xs transition-all active:scale-98"
+                    className="w-full h-10 min-h-[40px] bg-[#17233D] hover:bg-[#1E2D4E] border border-slate-700 text-slate-200 text-xs font-semibold rounded-xl flex items-center justify-center gap-2 cursor-pointer transition active:scale-98"
                   >
-                    <FileText className="w-4 h-4 text-amber-400" />
-                    {language === 'en' ? 'Official Past University Paper' : 'ኦፊሴላዊ የዩኒቨርሲቲ ፈተና ጀምር'}
+                    <FileText className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{language === 'en' ? 'Official Past University Paper' : 'ኦፊሴላዊ የዩኒቨርሲቲ ፈተና'}</span>
                   </button>
 
                   {/* Change mind / back button */}

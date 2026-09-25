@@ -479,7 +479,6 @@ export default function HomeDashboard({
                 icon={Target}
                 label={isAmharic ? 'ልምምድ' : 'Practice'}
                 sublabel={isAmharic ? 'ጥያቄዎች' : 'Daily Drills'}
-                badge="Qns"
                 colorTheme="amber"
                 onClick={() => onNavigate('quiz')}
               />
@@ -487,7 +486,6 @@ export default function HomeDashboard({
                 icon={GraduationCap}
                 label={isAmharic ? 'ያለፉ ፈተናዎች' : 'Past Exams'}
                 sublabel={isAmharic ? 'WKU ፈተናዎች' : 'WKU & AAU'}
-                badge="Exam"
                 colorTheme="blue"
                 onClick={() => onNavigate('university')}
               />
@@ -495,7 +493,6 @@ export default function HomeDashboard({
                 icon={FileText}
                 label={isAmharic ? 'ማስታወሻዎች' : 'Study Notes'}
                 sublabel={isAmharic ? 'ዲጂታል መጻሕፍት' : 'Summaries'}
-                badge="PDF"
                 colorTheme="emerald"
                 onClick={() => onNavigate('bookstore')}
               />
@@ -503,14 +500,13 @@ export default function HomeDashboard({
                 icon={Bot}
                 label={isAmharic ? 'አስጎብኚ AI' : 'AI Tutor'}
                 sublabel={isAmharic ? 'የግል አስጠኚ' : '24/7 Asgobnyi'}
-                badge="AI"
                 colorTheme="purple"
                 onClick={() => onNavigate('tutor')}
               />
             </div>
           </section>
 
-          {/* 3. Subjects (Horizontal Practice Tiles) */}
+          {/* 3. Subjects (Clean 2-Column Grid) */}
           <section className="space-y-2">
             <div className="flex items-center justify-between">
               <h2 className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-400">
@@ -521,16 +517,16 @@ export default function HomeDashboard({
               </span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 gap-2.5">
               {[
-                { name: 'Mathematics', nameAm: 'ሒሳብ', count: 120, icon: '📐' },
-                { name: 'Emerging Tech', nameAm: 'ኢመርጂንግ ቴክ', count: 85, icon: '🤖' },
-                { name: 'Biology', nameAm: 'ባዮሎጂ', count: 95, icon: '🧬' },
-                { name: 'Economics', nameAm: 'ኢኮኖሚክስ', count: 70, icon: '📈' },
-                { name: 'English', nameAm: 'እንግሊዝኛ', count: 110, icon: '📝' },
-                { name: 'Chemistry', nameAm: 'ኬሚስትሪ', count: 90, icon: '⚗️' },
-                { name: 'Physics', nameAm: 'ፊዚክስ', count: 105, icon: '⚡' },
-                { name: 'Psychology', nameAm: 'ሳይኮሎጂ', count: 60, icon: '🧠' },
+                { name: 'Mathematics', nameAm: 'ሒሳብ', count: 120 },
+                { name: 'Biology', nameAm: 'ባዮሎጂ', count: 95 },
+                { name: 'Emerging Tech', nameAm: 'ኢመርጂንግ ቴክ', count: 85 },
+                { name: 'Economics', nameAm: 'ኢኮኖሚክስ', count: 70 },
+                { name: 'English', nameAm: 'እንግሊዝኛ', count: 110 },
+                { name: 'Physics', nameAm: 'ፊዚክስ', count: 105 },
+                { name: 'Chemistry', nameAm: 'ኬሚስትሪ', count: 90 },
+                { name: 'Psychology', nameAm: 'ሳይኮሎጂ', count: 60 },
               ].map((sub) => (
                 <button
                   key={sub.name}
@@ -539,17 +535,14 @@ export default function HomeDashboard({
                     playClickChime();
                     onNavigate('quiz');
                   }}
-                  className="p-2.5 sm:p-3 rounded-xl bg-[#111C35] border border-slate-800/90 hover:border-amber-400/50 transition flex items-center gap-2.5 text-left cursor-pointer active:scale-98 group"
+                  className="p-3 rounded-xl bg-[#111C35] border border-slate-800/90 hover:border-slate-700 transition flex flex-col justify-between text-left cursor-pointer active:scale-98 min-h-[64px] group"
                 >
-                  <span className="text-lg shrink-0">{sub.icon}</span>
-                  <div className="min-w-0 flex-1">
-                    <span className="text-xs font-bold text-white group-hover:text-amber-400 transition truncate block">
-                      {isAmharic ? sub.nameAm : sub.name}
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
-                      {sub.count} {isAmharic ? 'ጥያቄዎች' : 'Qns'}
-                    </span>
-                  </div>
+                  <span className="text-xs font-bold text-white group-hover:text-amber-400 transition truncate block">
+                    {isAmharic ? sub.nameAm : sub.name}
+                  </span>
+                  <span className="text-[11px] text-slate-400 mt-1 block">
+                    {sub.count} {isAmharic ? 'ጥያቄዎች' : 'questions'}
+                  </span>
                 </button>
               ))}
             </div>

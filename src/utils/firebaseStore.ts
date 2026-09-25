@@ -6,6 +6,11 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
   getAuth,
+  initializeAuth,
+  browserLocalPersistence,
+  indexedDBLocalPersistence,
+  inMemoryPersistence,
+  browserPopupRedirectResolver,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
@@ -13,8 +18,7 @@ import {
   signOut,
   onAuthStateChanged,
   User as FirebaseUser,
-  setPersistence,
-  browserLocalPersistence
+  setPersistence
 } from 'firebase/auth';
 import { getAnalytics, isSupported, Analytics } from 'firebase/analytics';
 import { 
@@ -58,28 +62,52 @@ import {
 } from '../data/initialFirestoreContent';
 import { compressImageToBase64 } from './imageCompressor';
 
+/**
+ * Resolve active Firebase configuration with the following precedence:
+ * 1. Explicit Vite environment variables (VITE_FIREBASE_*) configured on Vercel
+ * 2. Automatic production fallback for etlearn2.vercel.app (using etlearn-7b27d project)
+ * 3. Local applet preview configuration (firebase-applet-config.json)
+ */
+export function getActiveFirebaseConfig(): any {
+  const env = typeof import.meta !== 'undefined' && (import.meta as any).env ? (import.meta as any).env : {};
+
+  // Priority 1: Vercel production environment variables
+  if (env.VITE_FIREBASE_API_KEY && env.VITE_FIREBASE_PROJECT_ID) {
+    return {
+      apiKey: env.VITE_FIREBASE_API_KEY,
+      authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || `${env.VITE_FIREBASE_PROJECT_ID}.firebaseapp.com`,
+      projectId: env.VITE_FIREBASE_PROJECT_ID,
+      storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || `${env.VITE_FIREBASE_PROJECT_ID}.firebasestorage.app`,
+      messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
+      appId: env.VITE_FIREBASE_APP_ID || GOOGLE_SERVICES_PROJECT.webAppId,
+      measurementId: env.VITE_FIREBASE_MEASUREMENT_ID || ""
+    };
+  }
+
+  // Priority 2: etlearn-7b27d project credentials (user's target Firebase project)
+  if (GOOGLE_SERVICES_PROJECT && GOOGLE_SERVICES_PROJECT.projectId === 'etlearn-7b27d') {
+    return {
+      projectId: GOOGLE_SERVICES_PROJECT.projectId,
+      apiKey: env.VITE_FIREBASE_API_KEY || GOOGLE_SERVICES_PROJECT.apiKey,
+      authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || GOOGLE_SERVICES_PROJECT.authDomain,
+      storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || GOOGLE_SERVICES_PROJECT.storageBucket,
+      messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || GOOGLE_SERVICES_PROJECT.projectNumber,
+      appId: env.VITE_FIREBASE_APP_ID || GOOGLE_SERVICES_PROJECT.webAppId,
+      measurementId: env.VITE_FIREBASE_MEASUREMENT_ID || ""
+    };
+  }
+
+  // Priority 3: Fallback configuration from firebase-applet-config.json
+  return firebaseConfig;
+}
+
 // Safe initialization to prevent "duplicate default app" warnings and missing service crashes
 export const app = (() => {
   try {
-    let activeConfig: any = firebaseConfig;
-    if (typeof window !== 'undefined') {
-      const hostname = window.location.hostname.toLowerCase();
-      // If running on user's Vercel domains specified in google-services.json
-      if (hostname.includes('etlearn') || hostname.includes('vercel.app')) {
-        activeConfig = {
-          projectId: GOOGLE_SERVICES_PROJECT.projectId,
-          appId: GOOGLE_SERVICES_PROJECT.clients[0].appId,
-          apiKey: GOOGLE_SERVICES_PROJECT.apiKey,
-          authDomain: GOOGLE_SERVICES_PROJECT.authDomain,
-          storageBucket: GOOGLE_SERVICES_PROJECT.storageBucket,
-          messagingSenderId: GOOGLE_SERVICES_PROJECT.projectNumber,
-          measurementId: ""
-        };
-      }
-    }
+    const activeConfig = getActiveFirebaseConfig();
     return getApps().length === 0 ? initializeApp(activeConfig) : getApp();
   } catch (err) {
-    console.warn('[Firebase App] Initialization failed:', err);
+    console.error('[Firebase App] Initialization failed:', err);
     return null as any;
   }
 })();
@@ -124,10 +152,24 @@ export const db = (() => {
 export const auth = (() => {
   if (!app) return null;
   try {
+    if (typeof window !== 'undefined') {
+      try {
+        return initializeAuth(app, {
+          persistence: [indexedDBLocalPersistence, browserLocalPersistence, inMemoryPersistence],
+          popupRedirectResolver: browserPopupRedirectResolver,
+        });
+      } catch (initErr) {
+        return getAuth(app);
+      }
+    }
     return getAuth(app);
   } catch (err) {
-    console.warn('[Firebase Auth] Service is not available:', err);
-    return null;
+    console.warn('[Firebase Auth] Service initialization fallback:', err);
+    try {
+      return getAuth(app);
+    } catch {
+      return null;
+    }
   }
 })();
 
@@ -154,14 +196,111 @@ export function getAuthInstance() {
 }
 
 /**
+ * Format any Firebase Auth error into user-friendly message for students
+ */
+export function formatFirebaseAuthError(err: any, lang: 'en' | 'am' = 'en'): string {
+  const code = err?.code || '';
+  const msg = String(err?.message || '');
+
+  // Log detailed error for developers and debuggers
+  console.error('[Firebase Auth Error Detail]:', { code, message: msg, raw: err });
+
+  if (code === 'auth/network-request-failed' || msg.includes('network-request-failed') || msg.includes('network')) {
+    return lang === 'am'
+      ? 'የኢንተርኔት ግንኙነት ችግር አጋጥሟል። እባክዎን ግንኙነትዎን ፈትሸው እንደገና ይሞክሩ።'
+      : 'Internet connection problem. Please check your connection and try again.';
+  }
+
+  if (code === 'auth/popup-closed-by-user' || msg.includes('popup-closed')) {
+    return lang === 'am'
+      ? 'የGoogle መግቢያ ተሰርዟል።'
+      : 'Google sign-in was cancelled.';
+  }
+
+  if (code === 'auth/popup-blocked' || msg.includes('popup-blocked') || msg.includes('blocked')) {
+    return lang === 'am'
+      ? 'የGoogle መግቢያ ፖፕአፕ በብሮውዘርዎ ታግዷል። እባክዎን ፖፕአፕ ፈቅደው እንደገና ይሞክሩ።'
+      : 'Google sign-in popup was blocked by your browser. Please allow popups for this site and try again.';
+  }
+
+  if (code === 'auth/email-already-in-use') {
+    return lang === 'am'
+      ? 'ይህ ኢሜይል አስቀድሞ ተመዝግቧል። እባክዎ ይግቡ።'
+      : 'This email is already registered. Please sign in instead.';
+  }
+
+  if (code === 'auth/wrong-password' || code === 'auth/invalid-credential' || code === 'auth/user-not-found') {
+    return lang === 'am'
+      ? 'የተሳሳተ ኢሜይል ወይም የይለፍ ቃል።'
+      : 'Invalid email or password.';
+  }
+
+  if (code === 'auth/weak-password') {
+    return lang === 'am'
+      ? 'የይለፍ ቃል በጣም ደካማ ነው። እባክዎን ቢያንስ 6 ፊደላት/ቁጥሮች ይጠቀሙ።'
+      : 'Password is too weak. Please choose at least 6 characters.';
+  }
+
+  if (code === 'auth/invalid-email') {
+    return lang === 'am'
+      ? 'እባክዎን ትክክለኛ የኢሜይል አድራሻ ያስገቡ።'
+      : 'Please enter a valid email address.';
+  }
+
+  if (code === 'auth/unauthorized-domain') {
+    return lang === 'am'
+      ? 'ይህ ዶሜይን በFirebase ኮንሶል አልተፈቀደም። እባክዎ በFirebase Console Authorized Domains ውስጥ ያክሉ።'
+      : 'This domain is not authorized for Google sign-in in Firebase Console. Please add your domain to Authorized Domains.';
+  }
+
+  if (code === 'auth/operation-not-allowed') {
+    return lang === 'am'
+      ? 'ይህ የመግቢያ ዘዴ በFirebase ኮንሶል አልነቃም።'
+      : 'This sign-in method is not enabled in Firebase Console. Please enable it in Authentication > Sign-in method.';
+  }
+
+  if (code === 'auth/invalid-api-key' || code === 'auth/app-deleted' || code === 'auth/configuration-not-found') {
+    return lang === 'am'
+      ? 'የFirebase ማረጋገጫ በትክክል አልተዋቀረም። እባክዎ የFirebase API ቁልፍን ያረጋግጡ።'
+      : 'Google sign-in is not configured correctly. Please check Firebase configuration.';
+  }
+
+  if (code === 'auth/account-exists-with-different-credential') {
+    return lang === 'am'
+      ? 'በዚህ ኢሜይል በሌላ መንገድ የተፈጠረ አካውንት አለ። እባክዎ በይለፍ ቃልዎ ይግቡ።'
+      : 'An account already exists with this email using a different sign-in method. Please sign in with your password.';
+  }
+
+  if (code === 'auth/too-many-requests') {
+    return lang === 'am'
+      ? 'ተደጋጋሚ ሙከራ ተደርጓል። ለደህንነት ሲባል ለጊዜው ታግዷል። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።'
+      : 'Too many failed attempts. Access temporarily restricted. Please try again later.';
+  }
+
+  if (code === 'auth/user-disabled') {
+    return lang === 'am'
+      ? 'ይህ የተጠቃሚ አካውንት ታግዷል። እባክዎ ድጋፍ ሰጪን ያነጋግሩ።'
+      : 'This user account has been disabled. Please contact support.';
+  }
+
+  return lang === 'am'
+    ? 'የማረጋገጫ አገልግሎት ለጊዜው አይገኝም። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።'
+    : 'Authentication service is temporarily unavailable. Please try again.';
+}
+
+/**
  * Ensure browser local persistence for Firebase Auth sessions
  */
 export async function ensureLocalAuthPersistence() {
   if (auth && typeof window !== 'undefined') {
     try {
-      await setPersistence(auth, browserLocalPersistence);
-    } catch (e) {
-      // Benign if persistence cannot be changed in current environment
+      await setPersistence(auth, indexedDBLocalPersistence);
+    } catch {
+      try {
+        await setPersistence(auth, browserLocalPersistence);
+      } catch (e) {
+        // Benign if persistence cannot be changed in current environment
+      }
     }
   }
 }
@@ -423,7 +562,8 @@ export async function fetchProfileFromFirestore(userId: string): Promise<Student
     }
     return null;
   } catch (error) {
-    handleFirestoreError(error, OperationType.GET, path);
+    console.warn('[Firestore fetchProfileFromFirestore notice]:', error);
+    return null;
   }
 }
 

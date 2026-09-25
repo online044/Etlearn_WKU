@@ -8,12 +8,11 @@ import { getSupabase } from './supabaseClient';
 import { 
   GoogleAuthProvider, 
   signInWithPopup, 
-  signInWithRedirect, 
   onAuthStateChanged, 
   signOut, 
   User 
 } from 'firebase/auth';
-import { auth } from './firebaseStore';
+import { auth, ensureLocalAuthPersistence } from './firebaseStore';
 
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;
@@ -32,9 +31,9 @@ export const initAuth = (
   onAuthSuccess: (user: any, accessToken: string) => void,
   onAuthFailure: () => void
 ) => {
-  // 1. Firebase Auth listener (Primary)
+  // Firebase Auth listener (Primary, single source of truth for authentication)
   if (auth) {
-    const unsubscribeFirebase = onAuthStateChanged(auth, async (user: User | null) => {
+    return onAuthStateChanged(auth, async (user: User | null) => {
       if (user) {
         let token = cachedAccessToken;
         if (!token) {
@@ -46,70 +45,6 @@ export const initAuth = (
         }
         onAuthSuccess(user, token || '');
       } else {
-        // Only trigger failure if Supabase is also inactive
-        const supabase = getSupabase();
-        if (!supabase) {
-          cachedAccessToken = null;
-          try {
-            sessionStorage.removeItem('ethiolearn_google_token');
-          } catch (e) {}
-          onAuthFailure();
-        }
-      }
-    });
-
-    // 2. Supabase listener as fallback
-    const supabase = getSupabase();
-    if (supabase) {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: any) => {
-        if (session?.user) {
-          const token = session.provider_token || session.access_token || '';
-          cachedAccessToken = token;
-          try {
-            sessionStorage.setItem('ethiolearn_google_token', token);
-          } catch (e) {}
-          onAuthSuccess(session.user, token);
-        } else if (event === 'SIGNED_OUT' && !auth?.currentUser) {
-          cachedAccessToken = null;
-          try {
-            sessionStorage.removeItem('ethiolearn_google_token');
-          } catch (e) {}
-          onAuthFailure();
-        }
-      });
-
-      return () => {
-        unsubscribeFirebase();
-        subscription.unsubscribe();
-      };
-    }
-
-    return unsubscribeFirebase;
-  }
-
-  // If Firebase Auth is not available, check Supabase
-  const supabase = getSupabase();
-  if (supabase) {
-    supabase.auth.getSession().then(({ data }: any) => {
-      if (data?.session?.user) {
-        const token = data.session.provider_token || data.session.access_token || '';
-        cachedAccessToken = token;
-        try {
-          sessionStorage.setItem('ethiolearn_google_token', token);
-        } catch (e) {}
-        onAuthSuccess(data.session.user, token);
-      }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: any) => {
-      if (session?.user) {
-        const token = session.provider_token || session.access_token || '';
-        cachedAccessToken = token;
-        try {
-          sessionStorage.setItem('ethiolearn_google_token', token);
-        } catch (e) {}
-        onAuthSuccess(session.user, token);
-      } else if (event === 'SIGNED_OUT') {
         cachedAccessToken = null;
         try {
           sessionStorage.removeItem('ethiolearn_google_token');
@@ -117,26 +52,28 @@ export const initAuth = (
         onAuthFailure();
       }
     });
-
-    return () => subscription.unsubscribe();
   }
 
+  // If Firebase Auth instance is not available yet
+  onAuthFailure();
   return () => {};
 };
 
 /**
- * Trigger Sign-In with Google Auth Popup (Firebase Auth primary, Supabase fallback)
+ * Trigger Sign-In with Google Auth Popup (Firebase Auth primary, production-ready)
  */
 export const googleSignIn = async (): Promise<{ user: any; accessToken: string } | null> => {
   if (isSigningIn) return null;
   isSigningIn = true;
 
   try {
-    // 1. Firebase Google Auth (Primary for AI Studio environment)
+    // 1. Firebase Google Auth (Primary, robust popup authentication)
     if (auth) {
+      await ensureLocalAuthPersistence();
+
       const provider = new GoogleAuthProvider();
-      provider.addScope('https://www.googleapis.com/auth/spreadsheets');
-      provider.addScope('https://www.googleapis.com/auth/docs');
+      // Only request standard user identity scopes (email, profile, openid)
+      // Do NOT attach workspace (docs/sheets) scopes to prevent consent errors
       provider.setCustomParameters({ prompt: 'select_account' });
 
       try {
@@ -151,16 +88,19 @@ export const googleSignIn = async (): Promise<{ user: any; accessToken: string }
         }
         return { user: result.user, accessToken: token };
       } catch (fbErr: any) {
-        console.warn('[Firebase Google Sign-In] Popup issue or cancellation:', fbErr);
-        // If Supabase is available, attempt fallback, otherwise rethrow
-        const supabase = getSupabase();
-        if (!supabase) {
-          throw fbErr;
+        console.error('[Firebase Google Sign-In notice]:', fbErr?.code, fbErr?.message);
+
+        // Normalize popup blocked error
+        if (fbErr?.code === 'auth/popup-blocked' || fbErr?.message?.includes('popup-blocked') || fbErr?.message?.includes('popup')) {
+          fbErr.isPopupBlocked = true;
         }
+
+        // Re-throw so UI can handle error cleanly without unhandled redirects
+        throw fbErr;
       }
     }
 
-    // 2. Supabase fallback if configured
+    // 2. Supabase fallback if configured and Firebase not available
     const supabase = getSupabase();
     if (supabase) {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -173,8 +113,7 @@ export const googleSignIn = async (): Promise<{ user: any; accessToken: string }
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin,
-          scopes: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/docs'
+          redirectTo: window.location.origin
         }
       });
 
@@ -192,16 +131,11 @@ export const googleSignIn = async (): Promise<{ user: any; accessToken: string }
 };
 
 /**
- * Trigger Sign-In with Google Redirect
+ * Trigger Sign-In with Google (Safe popup execution, avoids broken redirect flow)
  */
 export const googleSignInRedirect = async (): Promise<void> => {
-  if (auth) {
-    const provider = new GoogleAuthProvider();
-    provider.addScope('https://www.googleapis.com/auth/spreadsheets');
-    provider.addScope('https://www.googleapis.com/auth/docs');
-    await signInWithRedirect(auth, provider);
-    return;
-  }
+  // Rather than redirecting through /__/auth/handler which fails with "missing initial state"
+  // on cross-origin Vercel deployments, execute the proven popup flow directly.
   await googleSignIn();
 };
 
@@ -285,6 +219,9 @@ export async function exportNoteToGoogleDoc(
 
   if (!createResponse.ok) {
     const errorText = await createResponse.text();
+    if (createResponse.status === 401 || createResponse.status === 403 || errorText.includes('insufficient') || errorText.includes('auth')) {
+      throw new Error("Google Docs API access requires Workspace permissions in your Google Cloud Console.");
+    }
     throw new Error(`Google Docs Creation failed: ${errorText}`);
   }
 
@@ -348,6 +285,9 @@ export async function exportNotesToGoogleSheets(
 
   if (!createResponse.ok) {
     const err = await createResponse.text();
+    if (createResponse.status === 401 || createResponse.status === 403 || err.includes('insufficient') || err.includes('auth')) {
+      throw new Error("Google Sheets API access requires Workspace permissions in your Google Cloud Console.");
+    }
     throw new Error(`Failed to create Google Sheet: ${err}`);
   }
 

@@ -653,13 +653,7 @@ export default function StudentProfileView({
   const displayBadge = prefs.selectedBadgeTitle || (activeProfileData.isPro ? "PRO MEMBER" : "STANDARD");
 
   return (
-    <div className={`space-y-6 max-w-5xl mx-auto px-1 pb-safe ${
-      prefs.renderMode === 'light' 
-        ? 'bg-slate-900/50 p-3 sm:p-5 rounded-3xl border border-slate-700/50 shadow-2xl' 
-        : prefs.renderMode === 'dark' 
-          ? 'bg-[#050B1A] p-2 sm:p-4 rounded-3xl' 
-          : ''
-    }`}>
+    <div className="space-y-4 max-w-5xl mx-auto px-2 sm:px-4 pb-28 font-sans">
       {/* Hidden manual photo input */}
       <input 
         type="file" 
@@ -680,16 +674,12 @@ export default function StudentProfileView({
         subjectsList={subjectsList}
       />
       
-      {/* 1. HERO HEADER PROFILE CARD (Customizable: Compact vs Detailed) */}
+      {/* 1. HERO HEADER PROFILE CARD */}
       {prefs.cardLayout === 'compact' ? (
         /* COMPACT CARD VIEW */
         <div 
-          className="bg-slate-900/95 border rounded-2xl p-4 sm:p-5 shadow-xl relative overflow-hidden transition-all duration-300"
-          style={{ borderColor: `${currentTheme.hex}50` }}
+          className="bg-[#111C35] border border-slate-800 rounded-2xl p-4 sm:p-5 relative overflow-hidden transition-all duration-300"
         >
-          {/* Top Accent Line */}
-          <div className="absolute top-0 inset-x-0 h-1" style={{ backgroundColor: currentTheme.hex }} />
-
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-1">
             <div className="flex items-center gap-3.5 min-w-0 text-center sm:text-left flex-col sm:flex-row">
               <div 
@@ -995,7 +985,7 @@ export default function StudentProfileView({
       )}
 
       {/* 2. CUSTOMIZABLE QUICK ACTION NAVIGATION TABS (User Order & Visibility) */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 bg-slate-950 border border-slate-800 p-1.5 rounded-2xl select-none gap-1.5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 bg-[#111C35] border border-slate-800 p-1.5 rounded-2xl select-none gap-1.5">
         {prefs.quickActionsOrder
           .filter(actionKey => prefs.quickActionsVisibility[actionKey] !== false)
           .map(actionKey => {
@@ -1015,10 +1005,9 @@ export default function StudentProfileView({
                 onClick={() => { playClickChime(); setActiveTab(actionKey as any); }}
                 className={`min-h-[44px] py-2 px-3 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-2 ${
                   isActive
-                    ? 'font-black shadow-md'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                    ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#17233D]'
                 }`}
-                style={isActive ? { backgroundColor: currentTheme.hex, color: '#0A1128' } : {}}
               >
                 <Icon className="w-4 h-4 shrink-0" />
                 <span className="truncate">{language === 'en' ? config.en : config.am}</span>
@@ -1504,40 +1493,40 @@ export default function StudentProfileView({
               </h3>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl text-center">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+              <div className="p-3.5 sm:p-4 bg-[#111C35] border border-slate-800 rounded-2xl text-center">
                 <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                   {language === 'en' ? "Focus Courses" : "ሞጁሎች"}
                 </span>
-                <span className="text-2xl font-black text-amber-400 block">
+                <span className="text-xl sm:text-2xl font-black text-amber-400 block">
                   {activeProfileData.subjects ? activeProfileData.subjects.length : 0}
                 </span>
               </div>
 
-              <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl text-center">
+              <div className="p-3.5 sm:p-4 bg-[#111C35] border border-slate-800 rounded-2xl text-center">
                 <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                   {language === 'en' ? "Study Streak" : "ቀጣይነት"}
                 </span>
-                <span className="text-2xl font-black text-amber-400 block flex items-center justify-center gap-1">
+                <span className="text-xl sm:text-2xl font-black text-amber-400 block flex items-center justify-center gap-1">
                   <Flame className="w-5 h-5 text-amber-400 shrink-0 fill-amber-400/20" />
                   <span>{streakCount}d</span>
                 </span>
               </div>
 
-              <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl text-center">
+              <div className="p-3.5 sm:p-4 bg-[#111C35] border border-slate-800 rounded-2xl text-center">
                 <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                   {language === 'en' ? "Total Hours" : "አጠቃላይ ሰዓት"}
                 </span>
-                <span className="text-2xl font-black text-amber-400 block">
+                <span className="text-xl sm:text-2xl font-black text-amber-400 block">
                   {studyHoursCount.toFixed(1)}h
                 </span>
               </div>
 
-              <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl text-center">
+              <div className="p-3.5 sm:p-4 bg-[#111C35] border border-slate-800 rounded-2xl text-center">
                 <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                   {language === 'en' ? "Quiz Average" : "የፈተና አቬሬጅ"}
                 </span>
-                <span className="text-2xl font-black text-amber-400 block">
+                <span className="text-xl sm:text-2xl font-black text-amber-400 block">
                   {quizHistory.length > 0 ? `${averageScore}%` : "—"}
                 </span>
               </div>

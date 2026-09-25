@@ -462,7 +462,8 @@ export async function generateAcademicQuiz(params: QuizGenerationParams): Promis
   // 1. Attempt AI Generation with Google GenAI SDK if API key is present
   if (process.env.GEMINI_API_KEY) {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    const modelsToTry = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
+    // Prioritize high-availability and lite models during high-demand periods, falling back cleanly
+    const modelsToTry = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
 
     const promptMessage = `You are an official Senior Board Examiner for Ethiopian University Academic Registrars and the National Educational Assessment and Examinations Agency (NEAEA/EUEE).
 Compile an authentic, high-quality, professional academic practice exam of exactly ${targetCount} multiple-choice questions STRICTLY for:
@@ -487,7 +488,8 @@ CRITICAL MANDATORY RULES:
 
     for (const modelName of modelsToTry) {
       try {
-        const response = await ai.models.generateContent({
+        // Run with a 12-second timeout to prevent stalling during high-demand surges
+        const apiPromise = ai.models.generateContent({
           model: modelName,
           contents: promptMessage,
           config: {
@@ -496,7 +498,13 @@ CRITICAL MANDATORY RULES:
           }
         });
 
-        const rawText = response.text ? response.text.trim() : '';
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('AI generation timeout')), 12000)
+        );
+
+        const response: any = await Promise.race([apiPromise, timeoutPromise]);
+
+        const rawText = response?.text ? response.text.trim() : '';
         if (rawText) {
           let cleanJson = rawText;
           if (cleanJson.startsWith('```json')) cleanJson = cleanJson.substring(7);
@@ -541,8 +549,10 @@ CRITICAL MANDATORY RULES:
             }
           }
         }
-      } catch (err) {
-        console.warn(`[Quiz Generator] Model ${modelName} failed or unavailable:`, err);
+      } catch (err: any) {
+        // Gracefully log transient API issues (503 high demand spikes, rate limits, timeouts) without dumping raw stack traces
+        const statusOrCode = err?.status || err?.code || (err?.message?.includes('503') ? 503 : 'transient_issue');
+        console.log(`[Quiz Generator] Model ${modelName} encountered (${statusOrCode}). Gracefully falling back...`);
         // Continue to try next model or fallback
       }
     }

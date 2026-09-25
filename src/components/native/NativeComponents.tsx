@@ -69,10 +69,10 @@ export function QuickAction({
   onClick,
 }: QuickActionProps) {
   const colorMap = {
-    amber: 'bg-amber-500/10 text-amber-400 border-amber-500/30 group-hover:bg-amber-500/20',
-    blue: 'bg-blue-500/10 text-blue-400 border-blue-500/30 group-hover:bg-blue-500/20',
-    emerald: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 group-hover:bg-emerald-500/20',
-    purple: 'bg-purple-500/10 text-purple-400 border-purple-500/30 group-hover:bg-purple-500/20',
+    amber: 'bg-amber-500/10 text-amber-400',
+    blue: 'bg-blue-500/10 text-blue-400',
+    emerald: 'bg-emerald-500/10 text-emerald-400',
+    purple: 'bg-purple-500/10 text-purple-400',
   };
 
   return (
@@ -82,25 +82,25 @@ export function QuickAction({
         playClickChime();
         onClick();
       }}
-      className="p-2 min-[360px]:p-2.5 sm:p-3 rounded-xl sm:rounded-2xl bg-[#111C35] border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between items-start text-left cursor-pointer group active:scale-[0.98] min-h-[76px] min-[360px]:min-h-[82px] sm:min-h-[90px] relative overflow-hidden w-full"
+      className="p-3 rounded-xl bg-[#111C35] border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between items-start text-left cursor-pointer group active:scale-[0.98] min-h-[80px] w-full"
     >
-      <div className="flex items-center justify-between w-full mb-1.5 sm:mb-2">
-        <div className={`w-7 h-7 min-[360px]:w-8 min-[360px]:h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center border transition-colors ${colorMap[colorTheme]}`}>
-          <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+      <div className="flex items-center justify-between w-full mb-2">
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${colorMap[colorTheme]}`}>
+          <Icon className="w-4 h-4" />
         </div>
         {badge && (
-          <span className="text-[8px] min-[360px]:text-[9px] font-black uppercase px-1 min-[360px]:px-1.5 py-0.2 rounded bg-amber-400/15 text-amber-400 border border-amber-400/30">
+          <span className="text-[9px] font-semibold text-slate-400">
             {badge}
           </span>
         )}
       </div>
 
       <div className="w-full">
-        <h4 className="text-[11px] min-[360px]:text-xs font-bold text-slate-100 group-hover:text-amber-400 transition-colors leading-tight truncate w-full">
+        <h4 className="text-xs font-bold text-slate-100 group-hover:text-amber-400 transition-colors leading-tight truncate w-full">
           {label}
         </h4>
         {sublabel && (
-          <p className="text-[9px] min-[360px]:text-[10px] text-slate-400 mt-0.5 leading-none truncate w-full">
+          <p className="text-[10px] text-slate-400 mt-0.5 leading-tight truncate w-full">
             {sublabel}
           </p>
         )}

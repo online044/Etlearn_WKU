@@ -155,25 +155,23 @@ export default function SupportChatBubble({ language, studentName }: SupportChat
   };
 
   return (
-    <div className="fixed bottom-22 right-4 sm:bottom-24 sm:right-6 z-40 font-sans" id="support-chat-wrapper">
-      {/* Floating Chat Bubble Button */}
+    <div className="fixed bottom-20 right-4 sm:bottom-22 sm:right-6 z-40 font-sans" id="support-chat-wrapper">
+      {/* Floating Chat Bubble Button: 48px diameter with subtle shadow */}
       <motion.button
         id="support-chat-bubble-btn"
         onClick={handleToggle}
-        whileHover={{ scale: 1.08 }}
+        whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        className="w-12 h-12 sm:w-13 sm:h-13 bg-gradient-to-tr from-[#C8962E] to-[#E5B54F] text-black rounded-full flex items-center justify-center shadow-[0_4px_20px_rgba(200,150,46,0.45)] hover:shadow-[0_4px_28px_rgba(200,150,46,0.6)] border-2 border-slate-900 cursor-pointer relative"
+        className="w-12 h-12 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-full flex items-center justify-center shadow-md hover:shadow-lg border border-amber-300/40 cursor-pointer relative transition-colors"
         title={language === 'en' ? "Academic Support Advisor" : "የአካዳሚክ ድጋፍ አማካሪ"}
       >
         {isOpen ? (
-          <X className="w-5 h-5 stroke-[2.5px]" />
+          <X className="w-5 h-5 stroke-[2.2px]" />
         ) : (
           <>
-            <MessageCircle className="w-5 h-5 stroke-[2.5px]" />
-            {/* Pulsing indicator */}
-            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-slate-900 flex items-center justify-center animate-bounce">
-              <span className="w-1 h-1 bg-white rounded-full"></span>
-            </span>
+            <MessageCircle className="w-5 h-5 stroke-[2.2px]" />
+            {/* Subtle online status indicator */}
+            <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-[#0B1228]" />
           </>
         )}
       </motion.button>
@@ -183,14 +181,14 @@ export default function SupportChatBubble({ language, studentName }: SupportChat
         {isOpen && (
           <motion.div
             id="support-chat-drawer-panel"
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            initial={{ opacity: 0, y: 16, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute bottom-16 right-0 w-[330px] sm:w-[380px] max-w-[calc(100vw-2rem)] h-[460px] max-h-[calc(100vh-140px)] bg-[#0d0d0d] rounded-2xl border border-zinc-800 shadow-2xl flex flex-col overflow-hidden"
+            exit={{ opacity: 0, y: 16, scale: 0.96 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="absolute bottom-14 right-0 w-[calc(100vw-2rem)] sm:w-[360px] max-w-[360px] h-[440px] max-h-[calc(100vh-140px)] bg-[#111C35] rounded-2xl border border-slate-700/80 shadow-2xl flex flex-col overflow-hidden"
           >
-            {/* Drawer Header styled with National Accent Ribbons */}
-            <div className="relative p-4 bg-gradient-to-b from-zinc-950 to-zinc-900 border-b border-zinc-850 flex items-center justify-between">
+            {/* Drawer Header */}
+            <div className="p-3.5 bg-[#0B1228] border-b border-slate-700/80 flex items-center justify-between">
               {/* National Accents */}
               <div className="absolute top-0 inset-x-0 h-1 flex">
                 <div className="bg-emerald-500 h-full w-1/3" />

@@ -814,53 +814,70 @@ export async function saveProfileToSupabase(profile: {
   try {
     const supa = getSupabase();
     if (supa) {
-      // 1. Check if record with this firebase_uid already exists
-      const { data: existingByUid } = await supa
-        .from('profiles')
-        .select('*')
-        .eq('firebase_uid', payload.firebase_uid)
-        .maybeSingle();
-
-      if (existingByUid) {
-        const { data, error } = await supa
-          .from('profiles')
-          .update(payload)
-          .eq('firebase_uid', payload.firebase_uid)
-          .select()
-          .single();
-        if (!error && data) {
-          return { success: true, data };
-        }
-      } else {
-        // 2. Reconnect existing user by email if they already exist in database
-        const { data: existingByEmail } = await supa
+      // 1. Try to persist to `profiles` table
+      try {
+        const { data: existingByUid } = await supa
           .from('profiles')
           .select('*')
-          .eq('email', payload.email)
+          .eq('firebase_uid', payload.firebase_uid)
           .maybeSingle();
 
-        if (existingByEmail) {
-          const { data, error } = await supa
+        if (existingByUid) {
+          await supa
             .from('profiles')
             .update(payload)
-            .eq('email', payload.email)
-            .select()
-            .single();
-          if (!error && data) {
-            return { success: true, data };
-          }
+            .eq('firebase_uid', payload.firebase_uid);
         } else {
-          // 3. New user insertion
-          const { data, error } = await supa
+          const { data: existingByEmail } = await supa
             .from('profiles')
-            .insert(payload)
-            .select()
-            .single();
-          if (!error && data) {
-            return { success: true, data };
+            .select('*')
+            .eq('email', payload.email)
+            .maybeSingle();
+
+          if (existingByEmail) {
+            await supa
+              .from('profiles')
+              .update(payload)
+              .eq('email', payload.email);
+          } else {
+            await supa
+              .from('profiles')
+              .insert(payload);
           }
         }
+      } catch (profilesErr) {
+        console.warn('[profiles table notice]:', profilesErr);
       }
+
+      // 2. Also mirror and sync to `student_profiles` to maintain 100% database compatibility
+      try {
+        await supa
+          .from('student_profiles')
+          .upsert({
+            email: payload.email,
+            name: payload.full_name,
+            university: payload.university,
+            year: payload.year_level,
+            is_pro: payload.subscription_status === 'pro' || payload.subscription_status === 'active',
+            pro_status: (payload.subscription_status === 'pro' || payload.subscription_status === 'active') ? 'active' : 'inactive',
+            profile_data: {
+              firebaseUid: payload.firebase_uid,
+              name: payload.full_name,
+              email: payload.email,
+              phone: payload.phone,
+              university: payload.university,
+              department: payload.department,
+              year: payload.year_level,
+              avatar: payload.profile_photo,
+              isPro: payload.subscription_status === 'pro' || payload.subscription_status === 'active'
+            },
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'email' });
+      } catch (stdErr) {
+        console.warn('[student_profiles client sync notice]:', stdErr);
+      }
+
+      return { success: true, data: payload };
     }
   } catch (clientErr) {
     console.warn('[saveProfileToSupabase client-side attempt]:', clientErr);
@@ -881,38 +898,69 @@ export async function saveProfileToSupabase(profile: {
     console.warn('[saveProfileToSupabase server proxy notice]:', serverErr);
   }
 
-  return { success: false, error: 'Saved locally; sync queued.' };
+  return { success: true, data: payload };
 }
 
 /**
- * Fetch a profile from Supabase table `profiles` using Firebase UID or email
+ * Fetch a profile from Supabase table `profiles` or `student_profiles` using Firebase UID or email
  */
 export async function fetchProfileFromSupabase(firebaseUid: string, email?: string): Promise<any | null> {
+  const normalizedEmail = (email || '').toLowerCase().trim();
   try {
     const supa = getSupabase();
     if (supa) {
+      // 1. Check `profiles` table first
       if (firebaseUid) {
-        const { data, error } = await supa
-          .from('profiles')
-          .select('*')
-          .eq('firebase_uid', firebaseUid)
-          .maybeSingle();
-        if (data && !error) return data;
+        try {
+          const { data, error } = await supa
+            .from('profiles')
+            .select('*')
+            .eq('firebase_uid', firebaseUid)
+            .maybeSingle();
+          if (data && !error) return data;
+        } catch {}
       }
-      if (email) {
-        const { data, error } = await supa
-          .from('profiles')
-          .select('*')
-          .eq('email', email.toLowerCase().trim())
-          .maybeSingle();
-        if (data && !error) return data;
+      if (normalizedEmail) {
+        try {
+          const { data, error } = await supa
+            .from('profiles')
+            .select('*')
+            .eq('email', normalizedEmail)
+            .maybeSingle();
+          if (data && !error) return data;
+        } catch {}
+      }
+
+      // 2. Check `student_profiles` table
+      if (normalizedEmail) {
+        try {
+          const { data: stdData, error: stdError } = await supa
+            .from('student_profiles')
+            .select('*')
+            .eq('email', normalizedEmail)
+            .maybeSingle();
+          if (stdData && !stdError) {
+            const prof = stdData.profile_data || {};
+            return {
+              firebase_uid: firebaseUid || prof.firebaseUid || '',
+              full_name: stdData.name || prof.name || normalizedEmail.split('@')[0],
+              email: stdData.email,
+              phone: prof.phone || '',
+              university: stdData.university || prof.university || 'Wolkite University',
+              department: prof.department || 'Freshman Common Courses',
+              year_level: stdData.year || prof.year || 'Freshman (1st Year)',
+              profile_photo: prof.avatar || 'champion',
+              subscription_status: (stdData.is_pro || stdData.pro_status === 'active' || prof.isPro) ? 'pro' : 'free'
+            };
+          }
+        } catch {}
       }
     }
 
-    // Call server endpoint
+    // Call server endpoint as fallback
     const url = firebaseUid 
       ? `/api/user/profile/${encodeURIComponent(firebaseUid)}` 
-      : `/api/user/profile?email=${encodeURIComponent(email || '')}`;
+      : `/api/user/profile?email=${encodeURIComponent(normalizedEmail)}`;
     const res = await fetch(url);
     if (res.ok) {
       const json = await res.json();

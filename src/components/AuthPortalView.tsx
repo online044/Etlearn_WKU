@@ -22,7 +22,9 @@ import {
   syncProfileToFirestore, 
   fetchProfileFromFirestore,
   saveActivationCodeToFirebase,
-  verifyActivationCodeWithFirebase
+  verifyActivationCodeWithFirebase,
+  formatFirebaseAuthError,
+  ensureLocalAuthPersistence
 } from '../utils/firebaseStore';
 import { 
   Key, User, Landmark, GraduationCap, ArrowRight, Eye, EyeOff, 
@@ -267,32 +269,65 @@ export default function AuthPortalView({
       if (res?.user && res.user.email) {
         const emailTrim = res.user.email.toLowerCase().trim();
         const displayName = res.user.displayName || emailTrim.split('@')[0];
+        const uid = res.user.uid;
         
-        // Fetch existing or initialize
+        // 1. Check Supabase profiles / student_profiles table for existing user profile
+        let supaProfile = null;
+        try {
+          supaProfile = await fetchProfileFromSupabase(uid, emailTrim);
+        } catch (e) {
+          console.warn('[Supabase profile lookup in handleGoogleAuth]:', e);
+        }
+
+        let firestoreProfile: any = null;
+        try {
+          firestoreProfile = await fetchProfileFromFirestore(uid);
+        } catch (e) {}
+
+        const nameToUse = supaProfile?.full_name || supaProfile?.name || firestoreProfile?.name || displayName;
+        const univToUse = supaProfile?.university || firestoreProfile?.university || "Wolkite University (WKU)";
+        const deptToUse = supaProfile?.department || firestoreProfile?.department || "Freshman Common Courses";
+        const yearToUse = supaProfile?.year_level || supaProfile?.year || firestoreProfile?.year || "Freshman (1st Year)";
+        const phoneToUse = supaProfile?.phone || firestoreProfile?.phone || '';
+
+        // Build composite profile
         let profile: StudentProfile = {
-          name: displayName,
+          id: uid,
+          firebaseUid: uid,
+          name: nameToUse,
           email: emailTrim,
-          university: "Wolkite University (WKU)",
-          year: "Freshman (1st Year)",
+          phone: phoneToUse,
+          university: univToUse,
+          department: deptToUse,
+          year: yearToUse,
           subjects: ["Emerging Technologies", "Communicative English", "Mathematics", "Logic and Critical Thinking"],
           claudeApiKey: "",
           dailyGoalHours: 2,
           theme: 'dark',
           language: lang,
-          avatar: 'champion',
+          avatar: (supaProfile?.profile_photo as any) || (supaProfile?.avatar as any) || 'champion',
           isRegistered: true,
-          unregisteredAICredits: 5,
-          isPro: false
+          unregisteredAICredits: 10,
+          isPro: supaProfile?.subscription_status === 'pro' || supaProfile?.subscription_status === 'active' || isAdministratorEmail(emailTrim),
+          emailVerified: res.user.emailVerified
         };
 
-        if (auth) {
+        // Asynchronously persist to Supabase in background
+        saveProfileToSupabase({
+          firebase_uid: uid,
+          full_name: profile.name,
+          email: emailTrim,
+          phone: profile.phone,
+          university: profile.university,
+          department: profile.department,
+          year_level: profile.year,
+          profile_photo: profile.avatar,
+          subscription_status: profile.isPro ? 'pro' : 'free'
+        }).catch(err => console.warn('[saveProfileToSupabase notice]:', err));
+
+        if (auth && !firestoreProfile) {
           try {
-            const remoteProfile = await fetchProfileFromFirestore(res.user.uid);
-            if (remoteProfile) {
-              profile = { ...profile, ...remoteProfile, isRegistered: true };
-            } else {
-              await syncProfileToFirestore(res.user.uid, profile);
-            }
+            syncProfileToFirestore(uid, profile).catch(() => {});
           } catch (e) {}
         }
 
@@ -313,7 +348,7 @@ export default function AuthPortalView({
         try {
           await syncAuthSessionWithServer({
             email: emailTrim,
-            uid: res.user.uid,
+            uid,
             role: isAdministratorEmail(emailTrim) ? 'admin' : 'student',
             displayName: profile.name
           });
@@ -323,27 +358,20 @@ export default function AuthPortalView({
         onComplete(profile);
       }
     } catch (err: any) {
-      console.warn('Google sign-in exception:', err);
+      console.error('[Google Auth Error]:', err?.code, err?.message);
       playFailureChime();
       if (err?.isPopupBlocked || err?.code === 'auth/popup-blocked' || err?.message?.includes('popup')) {
         setIsPopupBlocked(true);
       } else {
-        setAuthError(err?.message || (lang === 'am' ? "የGoogle መግቢያ ተሰርዟል ወይም አልተሳካም።" : "Google connection canceled or failed."));
+        const friendlyMessage = formatFirebaseAuthError(err, lang);
+        setAuthError(friendlyMessage);
       }
     }
   };
 
   const handleGoogleRedirect = async () => {
-    try {
-      setAuthError(null);
-      setIsPopupBlocked(false);
-      playClickChime();
-      await googleSignInRedirect();
-    } catch (err: any) {
-      console.error(err);
-      playFailureChime();
-      setAuthError(lang === 'am' ? "የGoogle መግቢያ አልተሳካም።" : "Google Redirect Sign-In failed.");
-    }
+    // Forward directly to handleGoogleAuth popup flow to prevent broken /__/auth/handler redirect error
+    await handleGoogleAuth();
   };
 
   // 2. Sign In Handler (Strictly Email & Password Authorization)
@@ -396,57 +424,63 @@ export default function AuthPortalView({
     // 1. Primary Authentication: Firebase Auth
     if (auth) {
       try {
+        await ensureLocalAuthPersistence();
         const userCredential = await signInWithEmailAndPassword(auth, emailTrim, passwordTrim);
         if (userCredential?.user) {
           const uid = userCredential.user.uid;
           
-          // Fetch user profile from Supabase where firebase_uid = auth_uid
-          let supaProfile = await fetchProfileFromSupabase(uid, emailTrim);
-
-          // If not in Supabase yet (existing user or first sync), fetch from Firestore or build default & save to Supabase
-          if (!supaProfile) {
-            let firestoreProfile = await fetchProfileFromFirestore(uid);
-            const nameToUse = userCredential.user.displayName || firestoreProfile?.name || localExistingAccount?.profile.name || emailTrim.split('@')[0];
-            const univToUse = firestoreProfile?.university || localExistingAccount?.profile.university || "Wolkite University (WKU)";
-            const deptToUse = firestoreProfile?.department || localExistingAccount?.profile.department || "Freshman Common Courses";
-            const yearToUse = firestoreProfile?.year || localExistingAccount?.profile.year || "Freshman (1st Year)";
-            const phoneToUse = firestoreProfile?.phone || localExistingAccount?.profile.phone || '';
-
-            await saveProfileToSupabase({
-              firebase_uid: uid,
-              full_name: nameToUse,
-              email: emailTrim,
-              phone: phoneToUse,
-              university: univToUse,
-              department: deptToUse,
-              year_level: yearToUse,
-              profile_photo: 'champion',
-              subscription_status: isAdministratorEmail(emailTrim) ? 'pro' : 'free'
-            });
-
+          // Fetch user profile from Supabase where firebase_uid = auth_uid or email
+          let supaProfile = null;
+          try {
             supaProfile = await fetchProfileFromSupabase(uid, emailTrim);
+          } catch (supaErr) {
+            console.warn('[Supabase profile lookup notice]:', supaErr);
           }
+
+          let firestoreProfile: any = null;
+          try {
+            firestoreProfile = await fetchProfileFromFirestore(uid);
+          } catch (fireErr) {}
+
+          const nameToUse = supaProfile?.full_name || supaProfile?.name || userCredential.user.displayName || firestoreProfile?.name || localExistingAccount?.profile?.name || emailTrim.split('@')[0];
+          const univToUse = supaProfile?.university || firestoreProfile?.university || localExistingAccount?.profile?.university || "Wolkite University (WKU)";
+          const deptToUse = supaProfile?.department || firestoreProfile?.department || localExistingAccount?.profile?.department || "Freshman Common Courses";
+          const yearToUse = supaProfile?.year_level || supaProfile?.year || firestoreProfile?.year || localExistingAccount?.profile?.year || "Freshman (1st Year)";
+          const phoneToUse = supaProfile?.phone || firestoreProfile?.phone || localExistingAccount?.profile?.phone || '';
 
           const profileToUse: StudentProfile = {
             id: uid,
             firebaseUid: uid,
-            name: supaProfile?.full_name || userCredential.user.displayName || emailTrim.split('@')[0],
+            name: nameToUse,
             email: emailTrim,
-            phone: supaProfile?.phone || localExistingAccount?.profile.phone,
-            university: supaProfile?.university || "Wolkite University (WKU)",
-            department: supaProfile?.department || "Freshman Common Courses",
-            year: supaProfile?.year_level || "Freshman (1st Year)",
+            phone: phoneToUse,
+            university: univToUse,
+            department: deptToUse,
+            year: yearToUse,
             subjects: ["Emerging Technologies", "Communicative English", "Mathematics", "Logic and Critical Thinking"],
             claudeApiKey: "",
             dailyGoalHours: 2,
             theme: 'dark',
             language: lang,
-            avatar: (supaProfile?.profile_photo as any) || 'champion',
+            avatar: (supaProfile?.profile_photo as any) || (supaProfile?.avatar as any) || 'champion',
             isRegistered: true,
             isPro: supaProfile?.subscription_status === 'pro' || supaProfile?.subscription_status === 'active' || isAdministratorEmail(emailTrim),
             emailVerified: userCredential.user.emailVerified,
             unregisteredAICredits: 10
           };
+
+          // Background sync to Supabase without blocking the user
+          saveProfileToSupabase({
+            firebase_uid: uid,
+            full_name: nameToUse,
+            email: emailTrim,
+            phone: phoneToUse,
+            university: univToUse,
+            department: deptToUse,
+            year_level: yearToUse,
+            profile_photo: profileToUse.avatar,
+            subscription_status: profileToUse.isPro ? 'pro' : 'free'
+          }).catch(err => console.warn('[saveProfileToSupabase notice]:', err));
 
           const newAccount: AccountInfo = {
             email: emailTrim,
@@ -484,21 +518,23 @@ export default function AuthPortalView({
           return;
         }
       } catch (fbErr: any) {
-        console.warn('[Firebase Auth Login notice]:', fbErr?.code, fbErr?.message);
+        console.error('[Firebase Auth Login error]:', fbErr?.code, fbErr?.message);
+        playFailureChime();
+        setLoading(false);
         if (fbErr?.code === 'auth/wrong-password' || fbErr?.code === 'auth/invalid-credential') {
-          setPasswordError(lang === 'am' ? "የይለፍ ቃል ወይም ኢሜይል የተሳሳተ ነው። እባክዎ እንደገና ይሞክሩ ወይም 'የይለፍ ቃል ረሱ?' የሚለውን ይጫኑ።" : "Incorrect password or credentials. Please verify your credentials or reset your password.");
-          playFailureChime();
-          setLoading(false);
+          setPasswordError(lang === 'am' ? "የተሳሳተ ኢሜይል ወይም የይለፍ ቃል።" : "Invalid email or password.");
           return;
         } else if (fbErr?.code === 'auth/user-not-found') {
           setAuthError(lang === 'am' ? "በዚህ ኢሜይል የተመዘገበ ተማሪ አልተገኘም። እባክዎ 'አካውንት ፍጠር' የሚለውን ይጫኑ።" : "No user found with this email. Switch to 'Create Account' to register.");
-          playFailureChime();
-          setLoading(false);
           return;
         } else if (fbErr?.code === 'auth/too-many-requests') {
           setAuthError(lang === 'am' ? "ተደጋጋሚ ሙከራ ተደርጓል። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ ወይም የይለፍ ቃልዎን ይቀይሩ።" : "Too many failed attempts. Access temporarily restricted. Try resetting your password.");
-          playFailureChime();
-          setLoading(false);
+          return;
+        } else if (fbErr?.code === 'auth/network-request-failed') {
+          setAuthError(lang === 'am' ? "የኢንተርኔት ግንኙነት ችግር አጋጥሟል። እባክዎን ግንኙነትዎን ፈትሸው እንደገና ይሞክሩ።" : "Internet connection problem. Please check your connection and try again.");
+          return;
+        } else {
+          setAuthError(formatFirebaseAuthError(fbErr, lang));
           return;
         }
       }
@@ -715,6 +751,7 @@ export default function AuthPortalView({
     let userUid = '';
     if (auth && passwordTrim) {
       try {
+        await ensureLocalAuthPersistence();
         const cred = await createUserWithEmailAndPassword(auth, emailTrim, passwordTrim);
         if (cred?.user) {
           userUid = cred.user.uid;
@@ -754,52 +791,39 @@ export default function AuthPortalView({
           }
         }
       } catch (fbErr: any) {
-        console.warn('[Firebase Auth Creation Notice]:', fbErr?.message);
+        console.error('[Firebase Auth Registration Error]:', fbErr?.code, fbErr?.message);
+        playFailureChime();
+        setLoading(false);
         if (fbErr?.code === 'auth/email-already-in-use') {
-          try {
-            const cred = await signInWithEmailAndPassword(auth, emailTrim, passwordTrim);
-            if (cred?.user) {
-              userUid = cred.user.uid;
-              profile.id = userUid;
-              profile.firebaseUid = userUid;
-              profile.emailVerified = cred.user.emailVerified;
-
-              await saveProfileToSupabase({
-                firebase_uid: userUid,
-                full_name: nameTrim,
-                email: emailTrim,
-                phone: cleanedPhone.formatted || phoneRaw,
-                university: univTrim,
-                department: deptTrim,
-                year_level: year,
-                profile_photo: 'champion',
-                subscription_status: 'free'
-              });
-              await syncProfileToFirestore(userUid, profile);
-            }
-          } catch (signInErr) {
-            setAuthError(
-              lang === 'am'
-                ? "ይህ ኢሜይል አስቀድሞ ተመዝግቧል። እባክዎ ይግቡ።"
-                : "Email already registered. Please sign in instead."
-            );
-            playFailureChime();
-            setLoading(false);
-            return;
-          }
+          setAuthError(
+            lang === 'am'
+              ? "ይህ ኢሜይል አስቀድሞ ተመዝግቧል። እባክዎ ይግቡ።"
+              : "This email is already registered. Please sign in instead."
+          );
+          return;
         } else if (fbErr?.code === 'auth/weak-password') {
           setPasswordError(
             lang === 'am'
-              ? "የይለፍ ቃል ቢያንስ 6 ፊደላት/ቁጥሮች መሆን አለበት።"
-              : "Password should be at least 6 characters."
+              ? "የይለፍ ቃል በጣም ደካማ ነው። እባክዎን ቢያንስ 6 ፊደላት/ቁጥሮች ይጠቀሙ።"
+              : "Password is too weak. Please choose at least 6 characters."
           );
-          playFailureChime();
-          setLoading(false);
+          return;
+        } else if (fbErr?.code === 'auth/invalid-email') {
+          setEmailError(
+            lang === 'am'
+              ? "እባክዎን ትክክለኛ የኢሜይል አድራሻ ያስገቡ።"
+              : "Please enter a valid email address."
+          );
+          return;
+        } else if (fbErr?.code === 'auth/network-request-failed') {
+          setAuthError(
+            lang === 'am'
+              ? "የኢንተርኔት ግንኙነት ችግር አጋጥሟል። እባክዎን ግንኙነትዎን ፈትሸው እንደገና ይሞክሩ።"
+              : "Internet connection problem. Please check your connection and try again."
+          );
           return;
         } else {
-          setAuthError(fbErr?.message || (lang === 'am' ? "የምዝገባ ስህተት አጋጥሟል።" : "Registration failed."));
-          playFailureChime();
-          setLoading(false);
+          setAuthError(formatFirebaseAuthError(fbErr, lang));
           return;
         }
       }
@@ -1365,16 +1389,16 @@ export default function AuthPortalView({
             </div>
             <p className="text-[11px] text-slate-300 leading-relaxed">
               {lang === 'am' 
-                ? 'በAI Studio ፕሪቪው ውስጥ ስለሆኑ Google Sign-In ተከልክሏል። ከታች ያለውን የRedirect ቁልፍ ይሞክሩ።'
-                : 'Since you are inside the AI Studio Preview panel, Google popup was blocked. Try Redirect Sign-In below:'}
+                ? 'የብሮውዘርዎ ፖፕአፕ ታግዷል። እባክዎን ፖፕአፕ ይፍቀዱ ወይም ከዚህ በታች ያለውን ቁልፍ በመጫን የGoogle መግቢያ መስኮት ይክፈቱ።'
+                : 'The Google sign-in popup was blocked by your browser. Please allow popups for this site, or click the button below to open the window:'}
             </p>
             <div className="flex items-center gap-2 pt-1">
               <button
                 type="button"
-                onClick={handleGoogleRedirect}
+                onClick={handleGoogleAuth}
                 className="px-3 py-1.5 bg-[#F59E0B] hover:bg-[#D97706] text-black font-extrabold text-[10.5px] rounded-lg cursor-pointer transition shadow-xs flex items-center gap-1.5"
               >
-                <span>⚡ Try Redirect Sign-In</span>
+                <span>⚡ {lang === 'am' ? 'የGoogle መግቢያ መስኮት ክፈት' : 'Open Google Sign-In Window'}</span>
               </button>
               <button
                 type="button"

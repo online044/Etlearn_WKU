@@ -11,6 +11,7 @@ export const GOOGLE_SERVICES_PROJECT = {
   storageBucket: "etlearn-7b27d.firebasestorage.app",
   authDomain: "etlearn-7b27d.firebaseapp.com",
   apiKey: "AIzaSyCpPQ9ehHqtdjUo_T6DWXKQNRE5XGMp34c",
+  webAppId: "1:782413162967:web:etlearn2prodweb",
   clients: [
     {
       packageName: "Etlearn_wku.vercel.app",

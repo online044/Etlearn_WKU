@@ -42,7 +42,8 @@ import {
   saveNoteToFirestore, 
   deleteNoteFromFirestore, 
   fetchNotesFromFirestore,
-  auth
+  auth,
+  formatFirebaseAuthError
 } from './utils/firebaseStore';
 import { signOut as firebaseSignOut } from 'firebase/auth';
 
@@ -51,7 +52,7 @@ import { recordSignIn, recordSignOut } from './utils/sessionTracker';
 import { playClickChime, playSuccessChime, playFailureChime } from './utils/audio';
 import { initAuth, googleSignIn, googleSignInRedirect, logoutGoogle, exportAnalyticsToGoogleSheets } from './utils/workspace';
 import { User as FirebaseUser } from 'firebase/auth';
-import { initSupabaseConfig, getSupabase, clearSessionToken, syncAuthSessionWithServer } from './utils/supabaseClient';
+import { initSupabaseConfig, getSupabase, clearSessionToken, syncAuthSessionWithServer, fetchProfileFromSupabase, saveProfileToSupabase } from './utils/supabaseClient';
 import { safeStorage } from './utils/safeStorage';
 import { isAdministratorEmail, ADMIN_EMAIL } from './utils/adminAuth';
 import { 
@@ -538,59 +539,171 @@ export default function App() {
     }
   }, [profile?.claudeApiKey]);
 
-  // Firebase auth sync
+  // Auth initialization state to prevent login flash before Firebase finishes checking
+  const [isAuthInitializing, setIsAuthInitializing] = useState<boolean>(!profile);
+
+  // Firebase auth sync & session restore
   useEffect(() => {
+    let mounted = true;
+
+    // Failsafe timeout to prevent hanging on slow networks or sandbox proxies
+    const timer = setTimeout(() => {
+      if (mounted) {
+        setIsAuthInitializing(false);
+      }
+    }, 1800);
+
     const unsubscribe = initAuth(
       async (user, token) => {
+        if (!mounted) return;
         setGoogleUser(user);
         setGoogleToken(token);
-        if (user && !profile) {
+
+        if (user) {
           try {
-            const firestoreProfile = await fetchProfileFromFirestore(user.uid);
-            if (firestoreProfile) {
-              const fullProfile = { ...firestoreProfile, isRegistered: true };
-              setProfile(fullProfile);
-              safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(fullProfile));
-              if (firestoreProfile.email) {
-                safeStorage.setItem('ethiolearn_active_email', firestoreProfile.email);
-              }
-            } else if (user.email) {
-              const fallbackProfile: StudentProfile = {
+            // Priority 1: Check Supabase profiles or student_profiles table
+            let supaProfile = null;
+            try {
+              supaProfile = await fetchProfileFromSupabase(user.uid, user.email || undefined);
+            } catch (supaErr) {
+              console.warn('[Supabase session restore check notice]:', supaErr);
+            }
+
+            if (supaProfile) {
+              const fullProfile: StudentProfile = {
                 id: user.uid,
-                name: user.displayName || user.email.split('@')[0],
-                email: user.email,
-                university: 'Wolkite University',
-                year: 'Freshman',
+                firebaseUid: user.uid,
+                name: supaProfile.full_name || supaProfile.name || user.displayName || (user.email ? user.email.split('@')[0] : 'Student'),
+                email: user.email || supaProfile.email || '',
+                phone: supaProfile.phone || '',
+                university: supaProfile.university || 'Wolkite University',
+                department: supaProfile.department || 'Freshman Common Courses',
+                year: supaProfile.year_level || supaProfile.year || 'Freshman (1st Year)',
                 grade: 'University',
                 stream: 'Natural',
                 subjects: ["Emerging Technologies", "Communicative English", "Mathematics", "Logic and Critical Thinking"],
                 claudeApiKey: '',
                 dailyGoalHours: 2,
                 theme: 'dark',
-                language: 'both',
+                language: language,
+                avatar: (supaProfile.profile_photo as any) || (supaProfile.avatar as any) || 'champion',
+                isPro: supaProfile.subscription_status === 'pro' || supaProfile.subscription_status === 'active' || (user.email ? isAdministratorEmail(user.email) : false),
+                userRole: (user.email && isAdministratorEmail(user.email)) ? 'super_admin' : 'student',
+                isRegistered: true,
+                unregisteredAICredits: 10,
+                emailVerified: user.emailVerified
+              };
+              setProfile(fullProfile);
+              safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(fullProfile));
+              if (user.email) {
+                safeStorage.setItem('ethiolearn_active_email', user.email.toLowerCase().trim());
+              }
+            } else {
+              // Priority 2: Check local cache for previously saved profile data
+              let localCachedProfile: StudentProfile | null = null;
+              try {
+                const saved = safeStorage.getItem('ethiolearn_current_profile');
+                if (saved) {
+                  const parsed = JSON.parse(saved);
+                  if (parsed && (parsed.email === user.email || parsed.id === user.uid)) {
+                    localCachedProfile = parsed;
+                  }
+                }
+              } catch (e) {}
+
+              // Priority 3: Fallback composite profile derived from Firebase Auth user
+              const fallbackProfile: StudentProfile = {
+                id: user.uid,
+                firebaseUid: user.uid,
+                name: localCachedProfile?.name || user.displayName || (user.email ? user.email.split('@')[0] : 'Student'),
+                email: user.email || localCachedProfile?.email || '',
+                phone: localCachedProfile?.phone || '',
+                university: localCachedProfile?.university || 'Wolkite University',
+                department: localCachedProfile?.department || 'Freshman Common Courses',
+                year: localCachedProfile?.year || 'Freshman (1st Year)',
+                grade: 'University',
+                stream: 'Natural',
+                subjects: ["Emerging Technologies", "Communicative English", "Mathematics", "Logic and Critical Thinking"],
+                claudeApiKey: '',
+                dailyGoalHours: 2,
+                theme: 'dark',
+                language: language,
+                avatar: localCachedProfile?.avatar || 'champion',
+                isPro: (user.email && isAdministratorEmail(user.email)) || Boolean(localCachedProfile?.isPro),
+                userRole: (user.email && isAdministratorEmail(user.email)) ? 'super_admin' : 'student',
+                isRegistered: true,
+                unregisteredAICredits: 10,
+                emailVerified: user.emailVerified
+              };
+
+              setProfile(fallbackProfile);
+              safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(fallbackProfile));
+              if (user.email) {
+                safeStorage.setItem('ethiolearn_active_email', user.email.toLowerCase().trim());
+              }
+
+              // Asynchronously save profile to Supabase in background
+              saveProfileToSupabase({
+                firebase_uid: user.uid,
+                full_name: fallbackProfile.name,
+                email: fallbackProfile.email,
+                phone: fallbackProfile.phone,
+                university: fallbackProfile.university,
+                department: fallbackProfile.department,
+                year_level: fallbackProfile.year,
+                profile_photo: fallbackProfile.avatar,
+                subscription_status: fallbackProfile.isPro ? 'pro' : 'free'
+              }).catch(() => {});
+            }
+          } catch (restoreErr) {
+            console.error('[Firebase Auth session restore]:', restoreErr);
+            // Even on unexpected error, guarantee user access
+            if (user.email) {
+              const safeFallback: StudentProfile = {
+                id: user.uid,
+                firebaseUid: user.uid,
+                name: user.displayName || user.email.split('@')[0],
+                email: user.email,
+                university: 'Wolkite University',
+                year: 'Freshman (1st Year)',
+                grade: 'University',
+                stream: 'Natural',
+                subjects: ["Emerging Technologies", "Communicative English", "Mathematics", "Logic and Critical Thinking"],
+                claudeApiKey: '',
+                dailyGoalHours: 2,
+                theme: 'dark',
+                language: language,
                 avatar: 'champion',
                 isPro: isAdministratorEmail(user.email),
                 userRole: isAdministratorEmail(user.email) ? 'super_admin' : 'student',
                 isRegistered: true,
-                unregisteredAICredits: 10
+                unregisteredAICredits: 10,
+                emailVerified: user.emailVerified
               };
-              setProfile(fallbackProfile);
-              safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(fallbackProfile));
-              safeStorage.setItem('ethiolearn_active_email', user.email);
-              await syncProfileToFirestore(user.uid, fallbackProfile);
+              setProfile(safeFallback);
+              safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(safeFallback));
+              safeStorage.setItem('ethiolearn_active_email', user.email.toLowerCase().trim());
             }
-          } catch (restoreErr) {
-            console.warn('[Firebase Auth session restore]:', restoreErr);
           }
+        }
+        if (mounted) {
+          setIsAuthInitializing(false);
         }
       },
       () => {
+        if (!mounted) return;
         setGoogleUser(null);
         setGoogleToken(null);
+        setIsAuthInitializing(false);
       }
     );
-    return () => unsubscribe();
-  }, [profile]);
+
+    return () => {
+      mounted = false;
+      clearTimeout(timer);
+      unsubscribe();
+    };
+  }, []);
 
 
   // Supabase auth state listener & bidirectional data sync
@@ -883,6 +996,7 @@ export default function App() {
     // 2. Clear local profile and authentication variables
     safeStorage.removeItem('ethiolearn_current_profile');
     safeStorage.removeItem('ethiolearn_active_email');
+    safeStorage.removeItem('ethiolearn_remember_login');
     safeStorage.removeItem('ethiolearn_admin_session');
     safeStorage.removeItem('ethiolearn_admin_auth');
     setIsAdminOpen(false);
@@ -960,33 +1074,26 @@ export default function App() {
       setIsPopupBlockedApp(false);
       playClickChime();
       const res = await googleSignIn();
-      if (res) {
+      if (res?.user) {
         setGoogleUser(res.user);
         setGoogleToken(res.accessToken);
         playSuccessChime();
         showToast(`Signed in securely with ${res.user.email}!`);
       }
     } catch (err: any) {
-      console.error(err);
+      console.error('[Google Sign-In Exception]:', err);
       playFailureChime();
       if (err?.isPopupBlocked || err?.code === 'auth/popup-blocked' || err?.message?.includes('popup')) {
         setIsPopupBlockedApp(true);
       } else {
-        showToast("Google connection canceled or failed.");
+        showToast(formatFirebaseAuthError(err, language));
       }
     }
   };
 
   const handleGoogleSignInRedirect = async () => {
-    try {
-      setIsPopupBlockedApp(false);
-      playClickChime();
-      await googleSignInRedirect();
-    } catch (err: any) {
-      console.error(err);
-      playFailureChime();
-      showToast("Google Redirect Sign-In failed.");
-    }
+    // Avoid redirect loop / missing initial state by triggering user-initiated popup
+    await handleGoogleSignIn();
   };
 
   const handleGoogleSignOut = async () => {
@@ -1098,6 +1205,27 @@ export default function App() {
       setTelegramBackButton(false);
     };
   }, [currentPage]);
+
+  if (isAuthInitializing && !profile) {
+    return (
+      <div className="min-h-screen w-full bg-[#0A1128] text-white flex flex-col items-center justify-center p-6 select-none">
+        <div className="flex flex-col items-center gap-4 text-center max-w-sm">
+          <div className="w-16 h-16 rounded-2xl bg-[#1E293B] border border-amber-500/30 p-2.5 shadow-2xl flex items-center justify-center animate-pulse">
+            <EthioLearnLogo className="w-full h-full" />
+          </div>
+          <div>
+            <h1 className="text-lg font-black tracking-tight text-white">EthioLearn Pro</h1>
+            <p className="text-xs text-slate-400 mt-1">
+              {language === 'am' ? 'የተማሪ መለያ በመረጋገጥ ላይ...' : 'Securing student session...'}
+            </p>
+          </div>
+          <div className="w-32 h-1 bg-slate-800 rounded-full overflow-hidden mt-1">
+            <div className="h-full bg-gradient-to-r from-amber-500 to-amber-300 w-full animate-[pulse_1.5s_infinite]" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!profile) {
     return (
@@ -1560,31 +1688,24 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      {/* PERSISTENT BOTTOM NAVIGATION TAB BAR (5-Section Bottom Nav) */}
+      {/* PERSISTENT BOTTOM NAVIGATION TAB BAR (Native Android Style) */}
       <nav 
-        className="fixed bottom-0 left-0 right-0 z-40 bg-[#0A1128]/95 backdrop-blur-md border-t border-slate-800 shadow-2xl"
+        className="fixed bottom-0 left-0 right-0 z-40 bg-[#0B1228]/95 backdrop-blur-md border-t border-slate-800/90 shadow-lg"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 6px)' }}
       >
-        {/* Shifting active color bar indicator */}
-        <div className="grid grid-cols-5 max-w-xl mx-auto h-[2px] sm:h-[2.5px]">
-          <div className={currentPage === 'home' ? "bg-amber-400 shadow-sm shadow-amber-400/80" : "bg-transparent"} />
-          <div className={currentPage === 'quiz' || currentPage === 'tutor' || currentPage === 'examprep' ? "bg-amber-400 shadow-sm shadow-amber-400/80" : "bg-transparent"} />
-          <div className={currentPage === 'bookstore' || currentPage === 'notes' ? "bg-amber-400 shadow-sm shadow-amber-400/80" : "bg-transparent"} />
-          <div className={currentPage === 'university' || currentPage === 'examengine' ? "bg-amber-400 shadow-sm shadow-amber-400/80" : "bg-transparent"} />
-          <div className={currentPage === 'profile' ? "bg-amber-400 shadow-sm shadow-amber-400/80" : "bg-transparent"} />
-        </div>
-
-        <div className="grid grid-cols-5 max-w-xl mx-auto px-0.5 min-[360px]:px-1 py-1 min-[360px]:py-1.5 items-center justify-items-center relative">
+        <div className="grid grid-cols-5 max-w-xl mx-auto px-1 py-1.5 items-center justify-items-center relative">
           
           {/* Home Tab */}
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('home'); }}
-            className={`flex flex-col items-center justify-center w-full min-h-[44px] transition-all cursor-pointer rounded-xl px-0.5 ${
-              currentPage === 'home' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
+            className={`flex flex-col items-center justify-center w-full min-h-[48px] py-1 transition-colors cursor-pointer rounded-xl px-1 ${
+              currentPage === 'home' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <HomeIcon className="w-4 h-4 min-[360px]:w-5 min-[360px]:h-5 shrink-0" />
-            <span className="text-[9px] min-[360px]:text-[10px] sm:text-[10.5px] font-semibold mt-0.5 sm:mt-1 truncate max-w-[56px] min-[360px]:max-w-[66px] text-center">
+            <div className={`px-3 py-1 rounded-full transition-colors ${currentPage === 'home' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
+              <HomeIcon className="w-5 h-5 shrink-0" />
+            </div>
+            <span className={`text-[10px] sm:text-[11px] mt-0.5 truncate max-w-[64px] text-center ${currentPage === 'home' ? 'font-bold text-amber-400' : 'font-medium text-slate-400'}`}>
               {language === 'en' ? 'Home' : 'ዋና'}
             </span>
           </button>
@@ -1592,12 +1713,14 @@ export default function App() {
           {/* Quizzes Tab */}
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('quiz'); }}
-            className={`flex flex-col items-center justify-center w-full min-h-[44px] transition-all cursor-pointer rounded-xl px-0.5 ${
-              currentPage === 'quiz' || currentPage === 'tutor' || currentPage === 'examprep' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
+            className={`flex flex-col items-center justify-center w-full min-h-[48px] py-1 transition-colors cursor-pointer rounded-xl px-1 ${
+              currentPage === 'quiz' || currentPage === 'tutor' || currentPage === 'examprep' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Trophy className="w-4 h-4 min-[360px]:w-5 min-[360px]:h-5 shrink-0" />
-            <span className="text-[9px] min-[360px]:text-[10px] sm:text-[10.5px] font-semibold mt-0.5 sm:mt-1 truncate max-w-[56px] min-[360px]:max-w-[66px] text-center">
+            <div className={`px-3 py-1 rounded-full transition-colors ${currentPage === 'quiz' || currentPage === 'tutor' || currentPage === 'examprep' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
+              <Trophy className="w-5 h-5 shrink-0" />
+            </div>
+            <span className={`text-[10px] sm:text-[11px] mt-0.5 truncate max-w-[64px] text-center ${currentPage === 'quiz' || currentPage === 'tutor' || currentPage === 'examprep' ? 'font-bold text-amber-400' : 'font-medium text-slate-400'}`}>
               {language === 'en' ? 'Quizzes' : 'ፈተናዎች'}
             </span>
           </button>
@@ -1605,12 +1728,14 @@ export default function App() {
           {/* Book Store Tab */}
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('bookstore'); }}
-            className={`flex flex-col items-center justify-center w-full min-h-[44px] transition-all cursor-pointer rounded-xl px-0.5 ${
-              currentPage === 'bookstore' || currentPage === 'notes' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
+            className={`flex flex-col items-center justify-center w-full min-h-[48px] py-1 transition-colors cursor-pointer rounded-xl px-1 ${
+              currentPage === 'bookstore' || currentPage === 'notes' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <BookOpen className="w-4 h-4 min-[360px]:w-5 min-[360px]:h-5 shrink-0" />
-            <span className="text-[9px] min-[360px]:text-[10px] sm:text-[10.5px] font-semibold mt-0.5 sm:mt-1 truncate max-w-[56px] min-[360px]:max-w-[66px] text-center">
+            <div className={`px-3 py-1 rounded-full transition-colors ${currentPage === 'bookstore' || currentPage === 'notes' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
+              <BookOpen className="w-5 h-5 shrink-0" />
+            </div>
+            <span className={`text-[10px] sm:text-[11px] mt-0.5 truncate max-w-[64px] text-center ${currentPage === 'bookstore' || currentPage === 'notes' ? 'font-bold text-amber-400' : 'font-medium text-slate-400'}`}>
               {language === 'en' ? 'Books' : 'መጽሐፍት'}
             </span>
           </button>
@@ -1618,13 +1743,15 @@ export default function App() {
           {/* University past exams Tab */}
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('university'); }}
-            className={`flex flex-col items-center justify-center w-full min-h-[44px] transition-all cursor-pointer rounded-xl px-0.5 ${
-              currentPage === 'university' || currentPage === 'examengine' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
+            className={`flex flex-col items-center justify-center w-full min-h-[48px] py-1 transition-colors cursor-pointer rounded-xl px-1 ${
+              currentPage === 'university' || currentPage === 'examengine' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'
             }`}
             title="University Exams"
           >
-            <Award className="w-4 h-4 min-[360px]:w-5 min-[360px]:h-5 shrink-0" />
-            <span className="text-[9px] min-[360px]:text-[10px] sm:text-[10.5px] font-semibold mt-0.5 sm:mt-1 truncate max-w-[56px] min-[360px]:max-w-[66px] text-center">
+            <div className={`px-3 py-1 rounded-full transition-colors ${currentPage === 'university' || currentPage === 'examengine' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
+              <Award className="w-5 h-5 shrink-0" />
+            </div>
+            <span className={`text-[10px] sm:text-[11px] mt-0.5 truncate max-w-[64px] text-center ${currentPage === 'university' || currentPage === 'examengine' ? 'font-bold text-amber-400' : 'font-medium text-slate-400'}`}>
               {language === 'en' ? 'Uni Exam' : 'ዩኒቨርሲቲ'}
             </span>
           </button>
@@ -1632,17 +1759,19 @@ export default function App() {
           {/* Profile Tab */}
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('profile'); }}
-            className={`flex flex-col items-center justify-center w-full min-h-[44px] transition-all cursor-pointer rounded-xl px-0.5 ${
-              currentPage === 'profile' ? 'text-amber-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
+            className={`flex flex-col items-center justify-center w-full min-h-[48px] py-1 transition-colors cursor-pointer rounded-xl px-1 ${
+              currentPage === 'profile' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <StudentAvatar 
-              avatar={profile.avatar} 
-              name={profile.name} 
-              size={22} 
-              className={`transition-all ${currentPage === 'profile' ? 'border-2 border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.6)] scale-110' : 'border border-slate-700 opacity-80'}`}
-            />
-            <span className="text-[9px] min-[360px]:text-[10px] sm:text-[10.5px] font-semibold mt-0.5 sm:mt-1 truncate max-w-[56px] min-[360px]:max-w-[66px] text-center">
+            <div className={`px-2 py-0.5 rounded-full transition-colors ${currentPage === 'profile' ? 'bg-amber-400/15' : ''}`}>
+              <StudentAvatar 
+                avatar={profile.avatar} 
+                name={profile.name} 
+                size={22} 
+                className={`transition-all ${currentPage === 'profile' ? 'border-2 border-amber-400 scale-105' : 'border border-slate-700 opacity-80'}`}
+              />
+            </div>
+            <span className={`text-[10px] sm:text-[11px] mt-0.5 truncate max-w-[64px] text-center ${currentPage === 'profile' ? 'font-bold text-amber-400' : 'font-medium text-slate-400'}`}>
               {language === 'en' ? 'Profile' : 'መገለጫ'}
             </span>
           </button>
@@ -1665,9 +1794,9 @@ export default function App() {
               </div>
             </div>
 
-            <div className="p-3 bg-[#078930]/5 dark:bg-[#078930]/10 border border-[#078930]/15 dark:border-[#078930]/35 rounded-xl space-y-1.5 text-xs text-slate-700 dark:text-zinc-300">
-              <p>• <strong className="text-slate-800 dark:text-zinc-100">Recommended:</strong> Click the <strong className="text-[#078930] dark:text-emerald-400">"Open in new tab"</strong> button at the top right of this preview to connect securely.</p>
-              <p>• <strong className="text-slate-800 dark:text-zinc-100">Alternative:</strong> Try signing in using the standard redirect flow below.</p>
+            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-1.5 text-xs text-slate-700 dark:text-zinc-300">
+              <p>• <strong className="text-slate-800 dark:text-zinc-100">Tip:</strong> Allow popups for this site in your browser address bar.</p>
+              <p>• <strong className="text-slate-800 dark:text-zinc-100">Direct Connect:</strong> Click the button below to open the Google Sign-In window.</p>
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
@@ -1680,10 +1809,10 @@ export default function App() {
               </button>
               <button
                 type="button"
-                onClick={handleGoogleSignInRedirect}
-                className="px-4 py-2 bg-[#078930] hover:bg-[#1A7A3C] text-white rounded-xl text-xs font-black uppercase cursor-pointer transition-all"
+                onClick={handleGoogleSignIn}
+                className="px-4 py-2 bg-[#F59E0B] hover:bg-[#D97706] text-black rounded-xl text-xs font-black uppercase cursor-pointer transition-all shadow-sm flex items-center gap-1.5"
               >
-                ⚡ Use Redirect Sign-In
+                <span>⚡ Open Google Sign-In</span>
               </button>
             </div>
           </div>

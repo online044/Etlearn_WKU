@@ -3,11 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { StudentProfile } from '../types';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
-import { getSupabase, saveSupabaseCredentials, initSupabaseConfig, syncAuthSessionWithServer } from '../utils/supabaseClient';
+import { getSupabase, saveSupabaseCredentials, initSupabaseConfig, syncAuthSessionWithServer, fetchProfileFromSupabase, saveProfileToSupabase } from '../utils/supabaseClient';
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
@@ -19,7 +19,9 @@ import {
 import { 
   auth, 
   syncProfileToFirestore, 
-  fetchProfileFromFirestore 
+  fetchProfileFromFirestore,
+  ensureLocalAuthPersistence,
+  formatFirebaseAuthError
 } from '../utils/firebaseStore';
 import { 
   Key, User, Landmark, GraduationCap, ArrowRight, Info, Eye, EyeOff, 
@@ -733,67 +735,46 @@ export default function SplashOnboarding({ onComplete, initialProfile }: SplashO
     }
   }, [initialProfile]);
 
+  const isCompletingGoogleRef = useRef(false);
+
   const completeGoogleProfileSetup = async (userEmail: string, userName: string, fbUid?: string) => {
+    if (isCompletingGoogleRef.current) return;
+    isCompletingGoogleRef.current = true;
     try {
-      const emailLower = userEmail.toLowerCase();
+      setAuthError(null);
+      const emailLower = userEmail.toLowerCase().trim();
       let profile: StudentProfile | null = null;
+      const targetUid = fbUid || auth?.currentUser?.uid || '';
 
-      // 1. Try fetching existing profile from Firestore
-      const targetUid = fbUid || auth?.currentUser?.uid;
-      if (targetUid) {
-        try {
-          const firestoreProfile = await fetchProfileFromFirestore(targetUid);
-          if (firestoreProfile) {
-            profile = firestoreProfile;
-          }
-        } catch (e) {
-          console.warn('[Firestore Profile Fetch Notice]:', e);
+      // 1. Try Supabase profiles or student_profiles
+      try {
+        const supaProfile = await fetchProfileFromSupabase(targetUid, emailLower);
+        if (supaProfile) {
+          profile = {
+            id: targetUid || supaProfile.firebase_uid || supaProfile.id,
+            firebaseUid: targetUid || supaProfile.firebase_uid,
+            name: supaProfile.full_name || supaProfile.name || userName,
+            email: emailLower,
+            phone: supaProfile.phone || '',
+            university: supaProfile.university || "Wolkite University",
+            department: supaProfile.department || "Freshman Common Courses",
+            year: supaProfile.year_level || supaProfile.year || "Freshman (1st Year)",
+            subjects: [
+              "Emerging Technologies", "Communicative English", "Mathematics", "Logic and Critical Thinking"
+            ],
+            claudeApiKey: "",
+            dailyGoalHours: 2,
+            theme: 'dark',
+            language: preferredLanguage === 'am' ? 'am' : 'en',
+            avatar: (supaProfile.profile_photo as any) || (supaProfile.avatar as any) || 'champion',
+            isRegistered: true,
+            isPro: supaProfile.subscription_status === 'pro' || supaProfile.subscription_status === 'active' || isAdministratorEmail(emailLower),
+            unregisteredAICredits: 10
+          };
         }
-      }
+      } catch (e) {}
 
-      // 2. Try Supabase
-      const supa = getSupabase();
-      if (!profile && supa) {
-        try {
-          const { data: supaRecord } = await supa
-            .from('student_profiles')
-            .select('*')
-            .eq('email', emailLower)
-            .maybeSingle();
-
-          if (supaRecord && supaRecord.profile_data) {
-            const sp = supaRecord.profile_data;
-            profile = {
-              name: sp.name || userName,
-              email: userEmail,
-              university: sp.university || "Addis Ababa University",
-              year: sp.year || "University",
-              subjects: sp.subjects || [],
-              claudeApiKey: sp.claudeApiKey || "",
-              dailyGoalHours: sp.dailyGoalHours || 2,
-              theme: sp.theme || 'dark',
-              language: sp.language || 'both',
-              avatar: sp.avatar || 'champion',
-              isRegistered: true,
-              unregisteredAICredits: sp.unregisteredAICredits || 5
-            };
-
-            if (supaRecord.study_sessions) {
-              safeStorage.setItem('ethiolearn_study_sessions', JSON.stringify(supaRecord.study_sessions));
-            }
-            if (supaRecord.notes_data) {
-              safeStorage.setItem('ethiolearn_custom_notes', JSON.stringify(supaRecord.notes_data));
-            }
-            if (supaRecord.performance_data) {
-              safeStorage.setItem('ethiolearn_quiz_perf', JSON.stringify(supaRecord.performance_data));
-            }
-          }
-        } catch (supaEx) {
-          console.warn('[Supabase Google Sync] Handled error, falling back:', supaEx);
-        }
-      }
-
-      // 3. Fallback to local accounts or default
+      // 2. Fallback to local accounts or default
       if (!profile) {
         const found = registeredAccounts.find(
           acc => acc.email.toLowerCase() === emailLower
@@ -802,49 +783,40 @@ export default function SplashOnboarding({ onComplete, initialProfile }: SplashO
           profile = found.profile;
         } else {
           profile = {
+            id: targetUid || 'google-user-' + Math.random().toString(36).substring(2, 9),
+            firebaseUid: targetUid,
             name: userName,
             email: userEmail,
-            university: "Addis Ababa University",
-            year: "University",
+            university: "Wolkite University",
+            department: "Freshman Common Courses",
+            year: "Freshman (1st Year)",
             subjects: [
-              "Emerging Technologies", "Introduction to Economics", "General Biology",
-              "Communicative English", "Moral and Civic Education", "Mathematics",
-              "Inclusive Education", "Geography", "Logic and Critical Thinking",
-              "History", "Chemistry", "Aptitude", "General Physics",
-              "Entrepreneurship", "Social Anthropology", "C++ Programming"
+              "Emerging Technologies", "Communicative English", "Mathematics", "Logic and Critical Thinking"
             ],
             claudeApiKey: "",
             dailyGoalHours: 2,
             theme: 'dark',
-            language: 'both',
+            language: preferredLanguage === 'am' ? 'am' : 'en',
             avatar: 'champion',
             isRegistered: true,
-            unregisteredAICredits: 5
+            isPro: isAdministratorEmail(emailLower),
+            unregisteredAICredits: 10
           };
         }
       }
 
-      // Save to Firestore if user UID available
-      if (targetUid && profile) {
-        syncProfileToFirestore(targetUid, profile).catch(() => {});
-      }
-
-      // Save to Supabase
-      if (supa && profile) {
-        const payloadRecord = {
-          email: emailLower,
-          profile_data: { ...profile, password: "google_authenticated" },
-          study_sessions: [],
-          notes_data: [],
-          performance_data: {},
-          updated_at: new Date().toISOString()
-        };
-        try {
-          await supa.from('student_profiles').upsert(payloadRecord);
-        } catch (e) {
-          console.warn('[Supabase Upsert error]:', e);
-        }
-      }
+      // Save to Supabase in background
+      saveProfileToSupabase({
+        firebase_uid: targetUid,
+        full_name: profile.name,
+        email: emailLower,
+        phone: profile.phone || '',
+        university: profile.university,
+        department: profile.department || 'General',
+        year_level: profile.year,
+        profile_photo: profile.avatar,
+        subscription_status: profile.isPro ? 'pro' : 'free'
+      }).catch(() => {});
 
       const newAccount: AccountInfo = {
         email: userEmail,
@@ -856,6 +828,7 @@ export default function SplashOnboarding({ onComplete, initialProfile }: SplashO
       const updated = [...filteredAccounts, newAccount];
       safeStorage.setItem('ethiolearn_accounts', JSON.stringify(updated));
       safeStorage.setItem('ethiolearn_active_email', userEmail);
+      safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(profile));
 
       // Securely acquire signed session token from backend
       try {
@@ -873,6 +846,8 @@ export default function SplashOnboarding({ onComplete, initialProfile }: SplashO
       console.error('Google onboarding auth failed:', err);
       playFailureChime();
       setAuthError(err.message || 'Google Sign-In was canceled or encountered an issue. Please try again.');
+    } finally {
+      isCompletingGoogleRef.current = false;
     }
   };
 
@@ -1314,6 +1289,7 @@ export default function SplashOnboarding({ onComplete, initialProfile }: SplashO
     // 4. Try Firebase Auth with strict credentials
     if (auth) {
       try {
+        await ensureLocalAuthPersistence();
         const userCredential = await signInWithEmailAndPassword(auth, emailTrim, passwordTrim);
         if (userCredential?.user) {
           const uid = userCredential.user.uid;
@@ -1738,6 +1714,7 @@ export default function SplashOnboarding({ onComplete, initialProfile }: SplashO
     // 1. Try Firebase Auth registration & Firestore sync
     if (auth) {
       try {
+        await ensureLocalAuthPersistence();
         const userCred = await createUserWithEmailAndPassword(auth, emailTrim, passwordTrim);
         if (userCred?.user) {
           await syncProfileToFirestore(userCred.user.uid, profile);

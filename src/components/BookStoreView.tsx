@@ -1237,83 +1237,73 @@ export default function BookStoreView({
               {language === 'am' ? 'ሁሉንም አሳይ' : 'Reset All Filters'}
             </button>
           </div>
-        ) : viewMode === 'grid' ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {filteredBooks.map(book => {
-              const visual = getSubjectVisual(book.subject);
               const isFav = favoriteBookIds.includes(book.id);
 
               return (
                 <div
                   key={book.id}
-                  className="rounded-2xl bg-[#101A33] border border-white/10 hover:border-amber-500/40 p-5 shadow-lg flex flex-col justify-between transition-all group hover:shadow-xl hover:-translate-y-0.5"
+                  className="p-3.5 sm:p-4 rounded-2xl bg-[#111C35] border border-slate-800 hover:border-slate-700 transition flex flex-col justify-between gap-3 text-left relative"
                 >
-                  <div className="space-y-4">
-                    {/* Card Top: Visual Book Spine + Badge + Favorite */}
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        {/* Book Graphic */}
-                        <div className={`w-12 h-16 rounded-xl bg-gradient-to-br ${visual.gradient} flex flex-col justify-between p-1.5 text-white shadow-md relative shrink-0 border border-white/20 select-none`}>
-                          <div className="text-[8px] font-black tracking-tighter opacity-90 uppercase truncate">
-                            {book.grade}
-                          </div>
-                          <div className="text-base self-center filter drop-shadow">
-                            {visual.icon}
-                          </div>
-                          <div className="text-[7.5px] font-bold tracking-tight truncate text-center bg-black/30 rounded px-1">
-                            {book.subject}
-                          </div>
-                        </div>
-
-                        {/* Title & Subject */}
-                        <div className="space-y-1 min-w-0">
-                          <span className={`inline-block px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider border ${visual.bgTag}`}>
-                            {book.subject}
-                          </span>
-                          <h3 className="font-serif font-black text-sm text-white leading-snug group-hover:text-amber-300 transition-colors line-clamp-2">
-                            {book.title}
-                          </h3>
-                        </div>
-                      </div>
-
-                      {/* Favorite Button */}
-                      <button
-                        onClick={(e) => toggleFavorite(book.id, e)}
-                        className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-slate-400 hover:text-amber-400 cursor-pointer shrink-0"
-                        title={isFav ? 'Remove from favorites' : 'Add to favorites'}
-                      >
-                        <Star className={`w-4 h-4 ${isFav ? 'fill-amber-400 text-amber-400 scale-110' : ''}`} />
-                      </button>
+                  {/* Top: Thumbnail + Details */}
+                  <div className="flex items-start gap-3">
+                    {/* Consistent Book Thumbnail */}
+                    <div className="w-14 h-20 sm:w-16 sm:h-22 rounded-xl bg-[#17233D] border border-slate-700/80 flex flex-col items-center justify-between p-2 shrink-0 select-none shadow-sm">
+                      <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter truncate max-w-full">
+                        {book.grade}
+                      </span>
+                      <BookOpen className="w-5 h-5 text-amber-400" />
+                      <span className="text-[7.5px] font-semibold text-slate-300 truncate max-w-full text-center">
+                        {book.subject.slice(0, 10)}
+                      </span>
                     </div>
 
-                    {/* Book Description */}
-                    <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed font-normal">
-                      {book.description}
-                    </p>
+                    {/* Content details */}
+                    <div className="min-w-0 flex-1 space-y-1">
+                      {/* Category kicker + Subtle Favorite button */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider truncate">
+                          {book.subject}
+                        </span>
+                        <button
+                          onClick={(e) => toggleFavorite(book.id, e)}
+                          className="text-slate-500 hover:text-amber-400 p-0.5 cursor-pointer shrink-0 transition-colors"
+                          title={isFav ? 'Remove from favorites' : 'Add to favorites'}
+                        >
+                          <Star className={`w-3.5 h-3.5 ${isFav ? 'fill-amber-400 text-amber-400' : ''}`} />
+                        </button>
+                      </div>
 
-                    {/* Metadata Badges */}
-                    <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-white/5 text-[11px] text-slate-400 font-medium">
-                      <span className="flex items-center gap-1">
-                        <Layers className="w-3.5 h-3.5 text-amber-400" />
-                        <span>{book.chapters.length} {language === 'am' ? 'ምዕራፎች' : 'Chapters'}</span>
-                      </span>
-                      <span>•</span>
-                      <span>{book.pages} {language === 'am' ? 'ገጾች' : 'pages'}</span>
-                      <span>•</span>
-                      <span className="text-emerald-400 font-bold flex items-center gap-0.5">
-                        <CheckCircle className="w-3 h-3" />
-                        <span>Open Access</span>
-                      </span>
+                      {/* Book Title */}
+                      <h3 className="text-xs sm:text-sm font-bold text-white leading-snug line-clamp-2">
+                        {book.title}
+                      </h3>
+
+                      {/* Short description (2-3 lines with ellipsis) */}
+                      <p className="text-[11px] text-slate-300 line-clamp-2 leading-relaxed font-normal">
+                        {book.description}
+                      </p>
                     </div>
                   </div>
 
-                  {/* Card Bottom Actions: Primary Open & Read Button */}
-                  <div className="pt-4 mt-2 flex items-center gap-2">
+                  {/* Metadata row: unboxed clean text */}
+                  <div className="flex items-center gap-1.5 text-[10.5px] text-slate-400 font-medium pt-1 border-t border-slate-800/80">
+                    <span>{book.chapters.length} {language === 'am' ? 'ምዕራፎች' : 'Chapters'}</span>
+                    <span>•</span>
+                    <span>{book.pages} {language === 'am' ? 'ገጾች' : 'pages'}</span>
+                    <span>•</span>
+                    <span className="text-emerald-400 font-semibold">Open Access</span>
+                  </div>
+
+                  {/* Card Actions: [ Open & Read ] */}
+                  <div className="flex items-center gap-2 pt-0.5">
                     <button
                       onClick={() => handleOpenBook(book)}
-                      className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                      className="flex-1 py-2 sm:py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
                     >
-                      <BookOpen className="w-4 h-4 text-slate-950" />
+                      <BookOpen className="w-3.5 h-3.5" />
                       <span>{language === 'am' ? 'መጽሐፉን ክፈት' : 'Open & Read'}</span>
                     </button>
 
@@ -1324,70 +1314,12 @@ export default function BookStoreView({
                           playClickChime();
                           window.open(book.pdfUrl, '_blank');
                         }}
-                        className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-colors cursor-pointer"
-                        title="Download or View PDF in new tab"
+                        className="p-2 sm:p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                        title="View PDF in new tab"
                       >
-                        <ExternalLink className="w-4 h-4" />
+                        <ExternalLink className="w-3.5 h-3.5" />
                       </button>
                     )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          /* List / Compact View */
-          <div className="space-y-2">
-            {filteredBooks.map(book => {
-              const visual = getSubjectVisual(book.subject);
-              const isFav = favoriteBookIds.includes(book.id);
-
-              return (
-                <div
-                  key={book.id}
-                  onClick={() => handleOpenBook(book)}
-                  className="p-4 rounded-xl bg-[#101A33] border border-white/10 hover:border-amber-500/40 transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4 group hover:shadow-md"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-10 h-14 rounded-lg bg-gradient-to-br ${visual.gradient} flex items-center justify-center text-lg shadow-sm shrink-0`}>
-                      {visual.icon}
-                    </div>
-                    <div className="space-y-0.5 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.2 rounded bg-white/5 text-amber-400 border border-white/10">
-                          {book.grade}
-                        </span>
-                        <span className="text-xs text-slate-400 font-medium">
-                          {book.subject}
-                        </span>
-                      </div>
-                      <h3 className="font-serif font-black text-sm text-white group-hover:text-amber-300 transition-colors truncate">
-                        {book.title}
-                      </h3>
-                      <p className="text-xs text-slate-400 line-clamp-1">
-                        {book.description}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                    <button
-                      onClick={(e) => toggleFavorite(book.id, e)}
-                      className="p-2 rounded-lg hover:bg-white/10 transition-colors text-slate-400 hover:text-amber-400 cursor-pointer"
-                    >
-                      <Star className={`w-4 h-4 ${isFav ? 'fill-amber-400 text-amber-400' : ''}`} />
-                    </button>
-
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenBook(book);
-                      }}
-                      className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
-                    >
-                      <BookOpen className="w-3.5 h-3.5" />
-                      <span>{language === 'am' ? 'ክፈት' : 'Open'}</span>
-                    </button>
                   </div>
                 </div>
               );
