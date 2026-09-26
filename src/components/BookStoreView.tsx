@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   BookOpen, Search, Download, Sparkles, AlertCircle, FileText, Bot, 
@@ -23,6 +23,7 @@ export interface BookStoreViewProps {
   language: 'en' | 'am';
   onNavigate: (page: string) => void;
   onStudyAction: () => void;
+  books?: any[];
   supabaseBooks?: any[];
   onOpenInAppViewer?: (url: string, title: string) => void;
 }
@@ -628,13 +629,101 @@ export const PREBUILT_MODULES: ModuleResource[] = [
   }
 ];
 
+/**
+ * Adapt and normalize any book object from Supabase, Firestore, REST APIs, or props
+ * into a standardized ModuleResource for consistent display, search, and reading.
+ */
+export function mapToModuleResource(raw: any): ModuleResource {
+  if (!raw) {
+    return {
+      id: 'book_' + Math.random().toString(36).substring(7),
+      title: 'Academic Curriculum Module',
+      subject: 'Curriculum',
+      grade: 'University',
+      chapters: ['Chapter 1: Overview', 'Chapter 2: Core Analysis', 'Chapter 3: Exercises'],
+      pages: 120,
+      description: 'Official academic module for Ethiopian university students.',
+      languageSupport: 'Bilingual',
+      proRequired: false,
+      rating: 4.9
+    };
+  }
+
+  // If already matches ModuleResource shape with array of string chapters
+  if (raw.id && raw.title && raw.subject && Array.isArray(raw.chapters) && typeof raw.chapters[0] === 'string' && raw.pages && raw.grade) {
+    return raw as ModuleResource;
+  }
+
+  const id = String(raw.id || raw._id || raw.book_id || raw.code || 'book_' + Math.random().toString(36).substring(7));
+  const title = String(raw.title || raw.book_title || raw.name || 'Academic Course Textbook');
+  const subject = String(raw.subject || raw.course || raw.department || raw.category || 'General Curriculum');
+  
+  // Extract or generate chapters
+  let chapters: string[] = [];
+  if (Array.isArray(raw.chapters) && raw.chapters.length > 0) {
+    chapters = raw.chapters.map((ch: any, idx: number) => {
+      if (typeof ch === 'string') return ch;
+      if (ch && ch.title) return `Chapter ${ch.chapterNumber || idx + 1}: ${ch.title}`;
+      return `Chapter ${idx + 1}`;
+    });
+  } else if (raw.unit) {
+    chapters = [raw.unit, 'Core Concepts & Analytical Principles', 'Solved Model Questions & Exercises'];
+  } else {
+    chapters = [
+      'Chapter 1: Foundations & Core Principles',
+      'Chapter 2: In-Depth Conceptual Analysis',
+      'Chapter 3: Solved Problems & Practical Exercises',
+      'Chapter 4: Exam Review & Summary'
+    ];
+  }
+
+  // Calculate or read page count
+  const pages = Number(raw.pages || raw.pageCount || raw.page_count) || 
+    (raw.fileSize ? Math.max(10, Math.round(Number(raw.fileSize) / 50000)) : 160);
+
+  // Grade / Academic Year
+  let grade = raw.grade || raw.academicYear || raw.academic_year || 'University';
+  if (!grade.toLowerCase().includes('grade') && !grade.toLowerCase().includes('university')) {
+    grade = `University (${grade})`;
+  }
+
+  // Description
+  const description = raw.description || 
+    (raw.course ? `${raw.course} - ${raw.department || ''} (${raw.university || 'Wolkite University'}) verified curriculum module.` : 
+    `${title} official study textbook for Ethiopian higher education.`);
+
+  return {
+    id,
+    title,
+    subject,
+    grade,
+    chapters,
+    pages,
+    description,
+    languageSupport: raw.languageSupport || 'Bilingual',
+    proRequired: Boolean(raw.proRequired || raw.accessLevel === 'pro' || raw.access_level === 'pro'),
+    pdfUrl: raw.pdfUrl || raw.pdf_url || raw.fileUrl || raw.file_url || raw.url || raw.downloadUrl || raw.download_url,
+    contentJson: typeof raw.contentJson === 'string' ? raw.contentJson : (raw.content_json ? JSON.stringify(raw.content_json) : undefined),
+    isServerRecord: Boolean(raw.isServerRecord || raw.isSupabase || raw.createdAt),
+    isSupabase: Boolean(raw.isSupabase || raw.supabase),
+    fileSize: raw.fileSize || raw.file_size,
+    allowDownload: raw.allowDownload !== false && raw.allow_download !== false,
+    department: raw.department,
+    university: raw.university || 'Ethiopian University',
+    course: raw.course,
+    rating: Number(raw.rating) || 4.9
+  };
+}
+
 export default function BookStoreView({
   profile,
   apiKey,
   language,
   onNavigate,
   onStudyAction,
-  supabaseBooks
+  books,
+  supabaseBooks,
+  onOpenInAppViewer
 }: BookStoreViewProps) {
   // Search & Filter States
   const [searchQuery, setSearchQuery] = useState('');
@@ -700,38 +789,69 @@ export default function BookStoreView({
     }
   });
 
-  // Server books state
+  // Server books state & refresh handling
   const [serverBooks, setServerBooks] = useState<ModuleResource[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => {
-    fetchPublishedBooks().then(books => {
-      if (books && books.length > 0) {
-        const mapped: ModuleResource[] = books.map(b => ({
-          id: b.id,
-          title: b.title,
-          subject: b.subject || b.course || 'Curriculum',
-          grade: b.academicYear ? (b.academicYear.includes('Grade') ? b.academicYear : `University (${b.academicYear})`) : 'University',
-          chapters: b.unit ? [b.unit] : ['Chapter 1: ' + (b.course || b.subject || 'Overview'), 'Chapter 2: Core Analysis', 'Chapter 3: Exercises & Review'],
-          pages: b.pageCount || (b.fileSize ? Math.max(10, Math.round(b.fileSize / 50000)) : 120),
-          description: b.description || `${b.course || ''} - ${b.department || ''} (${b.university || 'Wolkite University'})`,
-          languageSupport: 'Bilingual',
-          proRequired: false,
-          pdfUrl: b.pdfUrl,
-          isServerRecord: true,
-          fileSize: b.fileSize,
-          department: b.department,
-          university: b.university,
-          rating: 4.9
-        }));
+  const loadServerBooks = useCallback(async () => {
+    try {
+      const fetched = await fetchPublishedBooks();
+      if (fetched && fetched.length > 0) {
+        const mapped = fetched.map(b => mapToModuleResource(b));
         setServerBooks(mapped);
       }
-    }).catch(err => console.warn('Could not fetch server books:', err));
+    } catch (err) {
+      console.warn('Could not fetch server books:', err);
+    }
   }, []);
 
-  // Combined master catalog
+  useEffect(() => {
+    loadServerBooks();
+  }, [loadServerBooks]);
+
+  const handleRefresh = async () => {
+    playClickChime();
+    setIsRefreshing(true);
+    await loadServerBooks();
+    setTimeout(() => {
+      setIsRefreshing(false);
+      playSuccessChime();
+    }, 400);
+  };
+
+  // Map Supabase books if passed via props
+  const mappedSupabaseBooks = useMemo(() => {
+    if (!supabaseBooks || !Array.isArray(supabaseBooks) || supabaseBooks.length === 0) return [];
+    return supabaseBooks.map(b => mapToModuleResource({ ...b, isSupabase: true }));
+  }, [supabaseBooks]);
+
+  // Map directly injected books if passed via props
+  const mappedPropsBooks = useMemo(() => {
+    if (!books || !Array.isArray(books) || books.length === 0) return [];
+    return books.map(b => mapToModuleResource(b));
+  }, [books]);
+
+  // Combined master catalog with clean deduplication by id and title
   const catalog = useMemo(() => {
-    return [...PREBUILT_MODULES, ...serverBooks, ...customBooks];
-  }, [serverBooks, customBooks]);
+    const bookMap = new Map<string, ModuleResource>();
+
+    // 1. Prebuilt default baseline modules
+    PREBUILT_MODULES.forEach(b => bookMap.set(b.id, b));
+
+    // 2. Server books from Firestore fetchPublishedBooks()
+    serverBooks.forEach(b => bookMap.set(b.id, b));
+
+    // 3. Supabase books
+    mappedSupabaseBooks.forEach(b => bookMap.set(b.id, b));
+
+    // 4. Directly passed books
+    mappedPropsBooks.forEach(b => bookMap.set(b.id, b));
+
+    // 5. Custom uploaded books
+    customBooks.forEach(b => bookMap.set(b.id, b));
+
+    return Array.from(bookMap.values());
+  }, [serverBooks, mappedSupabaseBooks, mappedPropsBooks, customBooks]);
 
   // Filtered & Sorted Catalog
   const filteredBooks = useMemo(() => {
@@ -989,75 +1109,68 @@ export default function BookStoreView({
     <div className="min-h-screen bg-[#0A1128] text-slate-100 pb-28 pt-4 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto font-sans">
       
       {/* ========================================================================= */}
-      {/* 🏛️ PRO HEADER: DIGITAL ACADEMIC LIBRARY HERO BANNER                      */}
-      {/* ========================================================================= */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#101A33] via-[#0E1628] to-[#121E36] border border-white/10 p-6 sm:p-8 shadow-2xl mb-8">
-        {/* Ethiopian Tri-Color Subtle Accent Bar */}
-        <div className="absolute top-0 left-0 right-0 h-1 flex">
-          <div className="flex-1 bg-emerald-500" />
-          <div className="flex-1 bg-[#F59E0B]" />
-          <div className="flex-1 bg-red-500" />
-        </div>
-
-        {/* Ambient Warm Gold Glow */}
-        <div className="absolute -top-24 -right-24 w-72 h-72 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 max-w-3xl">
+      {/* 🏛️ PRO HEADER: DIGITAL ACADEMIC LIBRARY HERO BANNER */}
+      <div className="relative overflow-hidden rounded-2xl bg-[#111C35] border border-slate-800 p-5 sm:p-7 shadow-sm mb-6">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 max-w-3xl">
             {/* Primary Book Icon with Coming Soon Banner */}
-            <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-amber-500/20 via-amber-600/10 to-transparent border border-amber-500/30 flex items-center justify-center shrink-0 shadow-xl group">
-              <BookOpen className="w-8 h-8 sm:w-10 sm:h-10 text-amber-400 group-hover:scale-110 transition-transform" />
+            <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-[#17233D] border border-slate-700/80 flex items-center justify-center shrink-0 shadow-sm">
+              <BookOpen className="w-7 h-7 sm:w-8 sm:h-8 text-amber-400" />
               {/* Coming Soon Banner overlay directly on the Book icon */}
-              <div className="absolute -top-2.5 -right-3 px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black text-[9px] uppercase tracking-wider shadow-lg border border-amber-300/60 flex items-center gap-1">
+              <div className="absolute -top-2 -right-2.5 px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black text-[9px] uppercase tracking-wider shadow border border-amber-300/40 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-slate-950 animate-pulse" />
                 <span>{language === 'am' ? 'በቅርቡ' : 'Coming Soon'}</span>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-extrabold uppercase tracking-wider">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>{language === 'am' ? 'ክፍት የትምህርት መጻሕፍት' : '100% Free Open Access Curriculum'}</span>
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[11px] font-bold">
+                <Sparkles className="w-3 h-3" />
+                <span>{language === 'am' ? 'ክፍት የትምህርት መጻሕፍት' : 'Free Open Access Curriculum'}</span>
               </div>
               
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black font-serif tracking-tight text-white leading-tight">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-white leading-tight">
                 {language === 'am' ? 'የኢትዮለርን አካዳሚክ ቤተ-መጽሐፍት' : 'EthioLearn Pro Academic Library'}
               </h1>
               
-              <p className="text-sm text-slate-300 leading-relaxed font-normal">
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-normal">
                 {language === 'am' 
                   ? 'የዩኒቨርሲቲ ሞጁሎችና የ12ኛ ክፍል ማትሪክ መማሪያ መጻሕፍት። ማናቸውንም መጽሐፍ ያለምንም ገደብ ወዲያውኑ ይክፈቱ፣ ያንብቡና ይማሩ።'
-                  : 'Access official Ethiopian University course modules and Grade 12 national matric textbooks. Open whatever book you need instantly with zero restrictions.'}
+                  : 'Access official Ethiopian University course modules and Grade 12 national matric textbooks. Open whatever book you need instantly.'}
               </p>
 
               {/* Quick Metrics Ribbon */}
-              <div className="flex flex-wrap items-center gap-2.5 pt-2">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-xs font-bold text-amber-300">
-                  <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+              <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-400">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#17233D] text-amber-300 font-semibold border border-slate-700/60">
+                  <BookOpen className="w-3 h-3 text-amber-400" />
                   <span>{language === 'am' ? 'በቅርቡ የሚደርሱ የታተሙ መጻሕፍት' : 'Hardcover Bookstore Coming Soon'}</span>
                 </span>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-semibold text-slate-300">
-                  <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#17233D] text-slate-300 border border-slate-700/60">
                   <span>{catalog.length} {language === 'am' ? 'መጻሕፍት' : 'Textbooks'}</span>
                 </span>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-semibold text-slate-300">
-                  <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#17233D] text-emerald-400 border border-slate-700/60 font-semibold">
+                  <CheckCircle className="w-3 h-3" />
                   <span>{language === 'am' ? 'ክፍት መዳረሻ' : 'All Free & Unlocked'}</span>
-                </span>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-semibold text-slate-300">
-                  <Bot className="w-3.5 h-3.5 text-sky-400" />
-                  <span>{language === 'am' ? 'አስጎብኚ AI ያለው' : 'AI Asgobnyi Powered'}</span>
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Action Button: Add Custom Book */}
-          <div className="flex flex-wrap items-center gap-3 shrink-0">
+          {/* Action Buttons: Add Custom Book + Sync/Refresh Books */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="h-10 min-h-[40px] px-3 bg-[#17233D] hover:bg-[#1E2D4E] border border-slate-700 text-slate-200 font-semibold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer active:scale-98 shadow-sm"
+              title={language === 'am' ? 'መጻሕፍትን አድስ' : 'Refresh and sync books from database'}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-amber-400 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{language === 'am' ? 'አድስ' : 'Sync Books'}</span>
+            </button>
+
             <button
               onClick={() => { playClickChime(); setShowAddModal(true); }}
-              className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-lg hover:shadow-amber-500/20 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+              className="h-10 min-h-[40px] px-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center gap-2 cursor-pointer active:scale-98 shadow-sm"
             >
               <Plus className="w-4 h-4 text-slate-950" />
               <span>{language === 'am' ? 'መጽሐፍ ጨምር' : 'Add Custom Book'}</span>
@@ -1312,10 +1425,14 @@ export default function BookStoreView({
                         onClick={(e) => {
                           e.stopPropagation();
                           playClickChime();
-                          window.open(book.pdfUrl, '_blank');
+                          if (onOpenInAppViewer) {
+                            onOpenInAppViewer(book.pdfUrl!, book.title);
+                          } else {
+                            window.open(book.pdfUrl, '_blank');
+                          }
                         }}
                         className="p-2 sm:p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
-                        title="View PDF in new tab"
+                        title={language === 'am' ? 'PDF ክፈት' : 'View PDF'}
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
                       </button>

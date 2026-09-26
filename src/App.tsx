@@ -1655,6 +1655,7 @@ export default function App() {
                 onNavigate={(p) => setCurrentPage(p as any)}
                 onStudyAction={handleRecordStudyAction}
                 supabaseBooks={supabaseBooks}
+                onOpenInAppViewer={(url, title) => { setInAppViewerUrl(url); setInAppViewerTitle(title); }}
               />
             )}
 
