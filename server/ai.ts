@@ -2,10 +2,55 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * EthioLearn Pro - Dedicated Server-Side Curriculum Advisor & Study Engine
- * 100% Self-Contained Manual Academic Engine (Zero External AI Dependencies)
+ * Real-time Gemini AI integration with authentic curriculum engine fallback
  */
 
 import { Request, Response } from 'express';
+import { GoogleGenAI } from '@google/genai';
+
+// Active in-memory master API key storage
+let activeMasterApiKey: string = process.env.GEMINI_API_KEY || '';
+
+export function setMasterApiKey(key: string): void {
+  if (typeof key === 'string' && key.trim()) {
+    activeMasterApiKey = key.trim();
+  }
+}
+
+export function getMasterApiKey(preferredKey?: string): string {
+  const clean = typeof preferredKey === 'string' ? preferredKey.trim() : '';
+  if (clean) return clean;
+  if (activeMasterApiKey) return activeMasterApiKey;
+  if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY.trim();
+  return '';
+}
+
+/**
+ * Validates a Master API Key by sending a lightweight test request to Gemini
+ */
+export async function testMasterApiKey(keyToTest: string): Promise<{ valid: boolean; error?: string }> {
+  const models = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
+  let lastErr = 'Failed to authenticate with Google Gemini API.';
+  try {
+    const ai = new GoogleGenAI({ apiKey: keyToTest.trim() });
+    for (const model of models) {
+      try {
+        const response = await ai.models.generateContent({
+          model,
+          contents: 'Respond with the single word: OK'
+        });
+        if (response && response.text) {
+          return { valid: true };
+        }
+      } catch (err: any) {
+        lastErr = err?.message || lastErr;
+      }
+    }
+    return { valid: false, error: lastErr };
+  } catch (err: any) {
+    return { valid: false, error: err?.message || 'Failed to authenticate with Google Gemini API.' };
+  }
+}
 
 export interface ChatAttachment {
   name?: string;
@@ -273,8 +318,8 @@ Regarding your study question: **"${userQuery.slice(0, 120)}"**
 }
 
 /**
- * Core handler for streaming curriculum advisor responses using Server-Sent Events (SSE).
- * Works completely manually without external API dependencies.
+ * Core handler for streaming AI responses using Server-Sent Events (SSE).
+ * Uses Google GenAI (gemini-3.8-flash) with seamless fallback to curriculum engine.
  */
 export async function handleAIChatStream(req: Request, res: Response): Promise<void> {
   const validation = validateChatPayload(req.body);
@@ -286,8 +331,9 @@ export async function handleAIChatStream(req: Request, res: Response): Promise<v
     return;
   }
 
-  const { messages, system } = req.body;
-  const lastUserMsg = [...messages].reverse().find((m: any) => m.role === 'user')?.content || 'Hello';
+  const { messages, system, highThinking, apiKey } = req.body;
+  const headerKey = req.headers['x-api-key'] as string | undefined;
+  const resolvedKey = getMasterApiKey(apiKey || headerKey);
 
   // Initialize SSE headers
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
@@ -295,9 +341,89 @@ export async function handleAIChatStream(req: Request, res: Response): Promise<v
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
 
-  const fullResponse = buildManualCurriculumResponse(lastUserMsg, system);
+  const defaultSystem = `You are Asgobnyi ("አስጎብኚ"), the elite AI tutor and academic companion for Ethiopian university and high school students on EthioLearn Pro.
+You possess comprehensive mastery of the Ethiopian national curriculum (Grade 12 matric and university freshman common courses including Freshman Mathematics, Emerging Technologies, Communicative English, General Physics, Economics, General Psychology, and Critical Thinking).
+Core Guidelines:
+1. Academic Rigor: Provide clear, authoritative, and pedagogically sound explanations with step-by-step mathematical derivations or scientific breakdowns where applicable.
+2. Bilingual Fluency: You are completely fluent in both Amharic and English. When students communicate in Amharic, respond naturally and respectfully in Amharic. When they communicate in English, respond in English. When bilingual clarification helps, provide English terms alongside clear Amharic definitions.
+3. Ethiopian Context: Reference verified curriculum units, national exam patterns, and Wolkite University / Ethiopian higher education contexts where helpful.
+4. Encouraging Tone: Maintain a respectful, supportive, and motivating academic advisor tone.`;
 
-  // Stream in realistic, responsive sentence chunks
+  const systemInstruction = system || defaultSystem;
+
+  // 1. Attempt streaming with Gemini API if key is available
+  if (resolvedKey) {
+    try {
+      const ai = new GoogleGenAI({ apiKey: resolvedKey });
+      
+      // Transform incoming messages into GenAI contents format
+      const contents: any[] = [];
+      for (const m of messages) {
+        if (!m || (!m.content && !m.attachment)) continue;
+        const role = m.role === 'assistant' || m.role === 'model' ? 'model' : 'user';
+        const parts: any[] = [];
+        if (m.attachment && m.attachment.data && m.attachment.mimeType) {
+          parts.push({
+            inlineData: {
+              mimeType: m.attachment.mimeType,
+              data: m.attachment.data
+            }
+          });
+        }
+        if (m.content) {
+          parts.push({ text: m.content });
+        }
+        if (parts.length > 0) {
+          contents.push({ role, parts });
+        }
+      }
+
+      // Ensure at least one valid message exists and last is user
+      if (contents.length === 0 || contents[contents.length - 1].role !== 'user') {
+        const lastUser = [...messages].reverse().find((m: any) => m.role === 'user')?.content || 'Hello';
+        contents.push({ role: 'user', parts: [{ text: lastUser }] });
+      }
+
+      const candidateModels = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
+      for (const model of candidateModels) {
+        try {
+          const stream = await ai.models.generateContentStream({
+            model,
+            contents,
+            config: {
+              systemInstruction,
+              ...(highThinking ? { thinkingConfig: { thinkingBudget: 1024 } } : {})
+            }
+          });
+
+          for await (const chunk of stream) {
+            const text = chunk.text;
+            if (text) {
+              const payload = {
+                type: 'content_block_delta',
+                delta: { text }
+              };
+              res.write(`data: ${JSON.stringify(payload)}\n\n`);
+            }
+          }
+
+          res.write('data: [DONE]\n\n');
+          res.end();
+          return;
+        } catch (mErr: any) {
+          console.warn(`[Model ${model} stream warning, trying fallback]:`, mErr?.message || mErr);
+        }
+      }
+    } catch (aiErr: any) {
+      console.warn('[Gemini AI Stream Initialization Warning]:', aiErr?.message || aiErr);
+    }
+  }
+
+  // 2. Fallback to curriculum engine if no key or API call threw an error
+  const lastUserMsg = [...messages].reverse().find((m: any) => m.role === 'user')?.content || 'Hello';
+  const fullResponse = buildManualCurriculumResponse(lastUserMsg, systemInstruction);
+
+  // Stream in responsive sentence chunks
   const chunks = fullResponse.split(/(?<=[.\n])/);
 
   let idx = 0;
@@ -326,15 +452,74 @@ export async function handleAIChatStream(req: Request, res: Response): Promise<v
 
 /**
  * Non-streaming single response handler for quick utilities (support chat, summary generation, etc.).
- * Works completely manually with zero external dependencies.
+ * Uses Google GenAI with candidate models fallback and curriculum fallback.
  */
 export async function generateSingleAIResponse(
   messages: IncomingChatMessage[],
-  systemInstruction?: string
+  systemInstruction?: string,
+  clientApiKey?: string
 ): Promise<{ success: boolean; text?: string; error?: string; status: number }> {
   const validation = validateChatPayload({ messages });
   if (!validation.valid) {
     return { success: false, error: validation.error, status: validation.status };
+  }
+
+  const resolvedKey = getMasterApiKey(clientApiKey);
+
+  if (resolvedKey) {
+    try {
+      const ai = new GoogleGenAI({ apiKey: resolvedKey });
+      const contents: any[] = [];
+      for (const m of messages) {
+        if (!m || (!m.content && !m.attachment)) continue;
+        const role = m.role === 'assistant' || m.role === 'model' ? 'model' : 'user';
+        const parts: any[] = [];
+        if (m.attachment && m.attachment.data && m.attachment.mimeType) {
+          parts.push({
+            inlineData: {
+              mimeType: m.attachment.mimeType,
+              data: m.attachment.data
+            }
+          });
+        }
+        if (m.content) {
+          parts.push({ text: m.content });
+        }
+        if (parts.length > 0) {
+          contents.push({ role, parts });
+        }
+      }
+
+      if (contents.length === 0 || contents[contents.length - 1].role !== 'user') {
+        const lastUser = [...messages].reverse().find(m => m.role === 'user')?.content || 'Hello';
+        contents.push({ role: 'user', parts: [{ text: lastUser }] });
+      }
+
+      const candidateModels = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
+      for (const model of candidateModels) {
+        try {
+          const response = await ai.models.generateContent({
+            model,
+            contents,
+            config: {
+              systemInstruction: systemInstruction || 'You are an academic mentor for Ethiopian university students on EthioLearn Pro.'
+            }
+          });
+
+          if (response && response.text) {
+            return {
+              success: true,
+              text: response.text,
+              status: 200
+            };
+          }
+        } catch (mErr: any) {
+          console.warn(`[Model ${model} single-call warning, trying fallback]:`, mErr?.message || mErr);
+        }
+      }
+    } catch (err: any) {
+      console.warn('[Gemini Single Call Warning - using fallback]:', err?.message || err);
+    }
   }
 
   const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || 'Hello';

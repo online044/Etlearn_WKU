@@ -7,6 +7,7 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
+import { getMasterApiKey } from './ai';
 
 export interface QuizQuestion {
   question: string;
@@ -460,8 +461,9 @@ export async function generateAcademicQuiz(params: QuizGenerationParams): Promis
   const normalizedSub = normalizeSubjectKey(subject);
 
   // 1. Attempt AI Generation with Google GenAI SDK if API key is present
-  if (process.env.GEMINI_API_KEY) {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const resolvedApiKey = getMasterApiKey((params as any).apiKey);
+  if (resolvedApiKey) {
+    const ai = new GoogleGenAI({ apiKey: resolvedApiKey });
     // Prioritize high-availability and lite models during high-demand periods, falling back cleanly
     const modelsToTry = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
 

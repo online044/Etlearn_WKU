@@ -1898,7 +1898,7 @@ export default function App() {
       )}
 
       {/* Floating conversational support assistant chat bubble */}
-      <SupportChatBubble language={language} studentName={profile?.name} />
+      <SupportChatBubble language={language} studentName={profile?.name} apiKey={profile?.claudeApiKey} />
 
       {/* 📱 Slide-over App Sidebar with Phone, Email, Telegram & App Details */}
       <AppSidebar

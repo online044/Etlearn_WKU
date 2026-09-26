@@ -67,7 +67,13 @@ import {
   uploadExamPdf 
 } from './server/content';
 
-import { handleAIChatStream, generateSingleAIResponse } from './server/ai';
+import { 
+  handleAIChatStream, 
+  generateSingleAIResponse, 
+  setMasterApiKey, 
+  getMasterApiKey, 
+  testMasterApiKey 
+} from './server/ai';
 import { generateAcademicQuiz } from './server/quizGenerator';
 
 dotenv.config();
@@ -716,9 +722,50 @@ app.delete(['/api/admin/exams/:id', '/api/admin/exams/:id/'], requireAdmin, dele
 app.post(['/api/admin/exams/:id/publish', '/api/admin/exams/:id/publish/'], requireAdmin, togglePublishAdminExam);
 app.post(['/api/admin/exams/upload-pdf', '/api/admin/exams/upload-pdf/'], requireAdmin, uploadExamPdf);
 
-// Master Key Cloud Sync (kept for endpoint compatibility)
-app.post(['/api/sync-master-key', '/api/sync-master-key/'], (req: Request, res: Response) => {
-  return res.json({ success: true, message: 'Server environment API configuration verified.' });
+// Master Key Cloud Sync & Real-time Verification
+app.post(['/api/sync-master-key', '/api/sync-master-key/'], async (req: Request, res: Response) => {
+  try {
+    const { key } = req.body;
+    if (!key || typeof key !== 'string' || !key.trim()) {
+      return res.status(400).json({ success: false, error: 'A valid API key string is required.' });
+    }
+
+    const cleanKey = key.trim();
+    // Test the key live with Gemini API
+    const testResult = await testMasterApiKey(cleanKey);
+    if (!testResult.valid) {
+      console.warn('[Master Key Sync] Verification failed:', testResult.error);
+      return res.status(400).json({ 
+        success: false, 
+        error: `Master AI key verification failed: ${testResult.error || 'Invalid credentials'}. Please verify your Google Gemini API key.` 
+      });
+    }
+
+    // Set as active master API key
+    setMasterApiKey(cleanKey);
+    process.env.GEMINI_API_KEY = cleanKey;
+    console.log('[Master Key Sync] Successfully verified and activated master AI key:', `${cleanKey.slice(0, 4)}...${cleanKey.slice(-4)}`);
+
+    return res.json({ 
+      success: true, 
+      message: 'Master AI Key verified and active for all EthioLearn services!',
+      keyPreview: `${cleanKey.slice(0, 4)}...${cleanKey.slice(-4)}`
+    });
+  } catch (err: any) {
+    console.error('[Master Key Sync Error]:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Server error syncing master key' });
+  }
+});
+
+// Master Key Status Check
+app.get(['/api/ai/master-key-status', '/api/ai/master-key-status/'], (req: Request, res: Response) => {
+  const activeKey = getMasterApiKey();
+  return res.json({
+    success: true,
+    hasKey: Boolean(activeKey),
+    keyLength: activeKey ? activeKey.length : 0,
+    keyPreview: activeKey ? `${activeKey.slice(0, 4)}...${activeKey.slice(-4)}` : null
+  });
 });
 
 // ============================================================================
@@ -827,7 +874,7 @@ app.post(['/api/support/ticket/action', '/api/support/ticket/action/'], requireA
 // Support Assistant chat with Abreham persona
 app.post(['/api/support/chat', '/api/support/chat/'], supportLimiter, async (req: Request, res: Response) => {
   try {
-    const { messages } = req.body;
+    const { messages, apiKey } = req.body;
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'Messages array is required for support assistant.' });
     }
@@ -838,7 +885,7 @@ Provide clear, accurate, and structured academic and technical guidance regardin
 If students ask about subscriptions, free tier limits, or Pro access: explain that free tier students get 5 daily AI queries, and to activate Pro (from 80-200 ETB) they must submit their Telebirr/CBE Birr transaction reference number, attach their payment receipt screenshot, and accept the EthioLearn Pro Terms & Academic Rules in the Upgrade section.
 Maintain a professional educational tone at all times. If students encounter technical issues, advise them to submit a formal ticket from their Profile tab. Always speak in the first person ('I', 'me', 'our platform') as Abreham.`;
 
-    const aiResult = await generateSingleAIResponse(messages, systemInstruction);
+    const aiResult = await generateSingleAIResponse(messages, systemInstruction, apiKey);
     if (aiResult.success && aiResult.text) {
       return res.json({ success: true, reply: aiResult.text });
     }
@@ -1809,6 +1856,40 @@ app.post([
   '/ai/chat', 
   '/ai/chat/'
 ], aiChatLimiter, handleAIChatStream);
+
+// Dedicated Asgobnyi ("አስጎብኚ") AI Q&A Assistant Endpoint
+app.post(['/api/ai/ask', '/api/ai/ask/'], aiChatLimiter, async (req: Request, res: Response) => {
+  try {
+    const { prompt, studentName, university, department, language, apiKey } = req.body;
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      return res.status(400).json({ success: false, error: 'Prompt is required.' });
+    }
+
+    const systemPrompt = `You are Asgobnyi ("አስጎብኚ"), the elite Ethiopian university tutor and academic companion on EthioLearn Pro.
+Student: ${studentName || 'Student'}
+University: ${university || 'Wolkite University / Ethiopian Higher Education'}
+Department: ${department || 'General Curriculum'}
+Target Language: ${language || 'English'}
+Instructions:
+- Provide accurate, concise, and helpful academic guidance aligned with the Ethiopian higher education curriculum.
+- If the student asks in Amharic, reply in polite and encouraging Amharic.
+- Include practical study advice, step-by-step solutions, formulas, or key terms where appropriate.`;
+
+    const aiRes = await generateSingleAIResponse(
+      [{ role: 'user', content: prompt.trim() }],
+      systemPrompt,
+      apiKey
+    );
+
+    return res.json({
+      success: true,
+      reply: aiRes.text || (language === 'Amharic' ? 'ይቅርታ መልስ ማግኘት አልተቻለም።' : 'Could not generate a response.')
+    });
+  } catch (e: any) {
+    console.error('[Asgobnyi AI Ask Error]:', e);
+    return res.status(500).json({ success: false, error: e.message || 'Failed to process AI request' });
+  }
+});
 
 // Dedicated Subject-Pure Academic Quiz Generation Endpoint (Gemini AI + Curated Fallback)
 app.post(['/api/quiz/generate', '/api/quiz/generate/'], async (req: Request, res: Response) => {

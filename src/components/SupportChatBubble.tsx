@@ -14,9 +14,10 @@ interface Message {
 interface SupportChatBubbleProps {
   language: 'en' | 'am';
   studentName?: string;
+  apiKey?: string;
 }
 
-export default function SupportChatBubble({ language, studentName }: SupportChatBubbleProps) {
+export default function SupportChatBubble({ language, studentName, apiKey }: SupportChatBubbleProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
@@ -120,7 +121,8 @@ export default function SupportChatBubble({ language, studentName }: SupportChat
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          messages: updated.map(m => ({ role: m.role, content: m.content }))
+          messages: updated.map(m => ({ role: m.role, content: m.content })),
+          apiKey
         })
       });
 
@@ -134,7 +136,7 @@ export default function SupportChatBubble({ language, studentName }: SupportChat
       const assistantMsg: Message = {
         id: Math.random().toString(36).substring(7),
         role: 'assistant',
-        content: data.reply,
+        content: data.reply || (language === 'am' ? 'ሰላም፣ ጥያቄዎን ተቀብለናል። እንዴት ልርዳዎት?' : 'Greetings, how can I assist you today?'),
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
 
@@ -145,8 +147,8 @@ export default function SupportChatBubble({ language, studentName }: SupportChat
     } catch (err: any) {
       console.error('[Support Chat Bubble Error]:', err);
       setChatError(language === 'en' 
-        ? "Connection to Abreham's assistant timed out. Check your academic AI master key." 
-        : "ከአብርሃም ረዳት ጋር መገናኘት አልተቻለም። እባክዎን የኢንተርኔት ግንኙነትዎን ወይም የኤፒአይ ቁልፍዎን ያረጋግጡ።"
+        ? "Could not connect to academic advisor. Please verify your connection or try again." 
+        : "ከአካዳሚክ ረዳት ጋር መገናኘት አልተቻለም። እባክዎን የኢንተርኔት ግንኙነትዎን ያረጋግጡ ወይም እንደገና ይሞክሩ።"
       );
       playFailureChime();
     } finally {

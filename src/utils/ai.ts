@@ -87,11 +87,13 @@ export async function submitClaudeChat(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(_userApiKey ? { 'x-api-key': _userApiKey } : {})
         },
         body: JSON.stringify({
           messages,
           system: systemPrompt,
-          highThinking
+          highThinking,
+          apiKey: _userApiKey
         })
       });
     } catch (netErr) {
