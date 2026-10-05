@@ -12,8 +12,12 @@ import {
 } from '../types';
 import { SEED_QUESTION_BANK } from '../data/seedQuestions';
 import { getAll10kQuestionBankRecords } from '../data/ethiopianExams10kBank';
+import { getFreshmanQuestionBankRecords } from '../data/questionBanks/freshmanCurriculumBank';
+import { GENERAL_BIOLOGY_QUESTIONS } from '../data/generalBiologyQuestions';
 
 export const LOCAL_STORAGE_QUESTIONS_KEY = 'ethiolearn_supabase_questions_cache';
+export const LOCAL_STORAGE_PROGRESS_KEY = 'ethiolearn_user_question_progress';
+export const LOCAL_STORAGE_BOOKMARKS_KEY = 'ethiolearn_user_question_bookmarks';
 
 // ============================================================================
 // 1. TEXT NORMALIZATION & FINGERPRINTING (Duplicate Prevention Engine)
@@ -59,8 +63,61 @@ export function getCachedQuestions(): QuestionBankRecord[] {
     console.warn('[getCachedQuestions error]:', e);
   }
 
-  // Authentic 10,000 Ethiopian University & National Matric Exam Questions repository
-  return getAll10kQuestionBankRecords();
+  // Combine authentic 10k university exam bank with 19 freshman curriculum modules & General Biology
+  const master10k = getAll10kQuestionBankRecords();
+  const freshmanCurriculum = getFreshmanQuestionBankRecords();
+  
+  const mergedMap = new Map<string, QuestionBankRecord>();
+  master10k.forEach(q => mergedMap.set(q.id, q));
+  freshmanCurriculum.forEach(q => mergedMap.set(q.id, q));
+
+  // Add General Biology questions following exact user structure
+  GENERAL_BIOLOGY_QUESTIONS.forEach(q => {
+    const optionsRaw = [
+      { id: 'A', text: q.options.A },
+      { id: 'B', text: q.options.B },
+      { id: 'C', text: q.options.C },
+      { id: 'D', text: q.options.D }
+    ];
+    const optionTexts = [q.options.A, q.options.B, q.options.C, q.options.D];
+    const correctLetter = q.correct_answer;
+    const letterIdx = correctLetter.charCodeAt(0) - 65;
+    const correctText = optionTexts[letterIdx] || q.options.A;
+
+    const record: QuestionBankRecord = {
+      id: String(q.id),
+      module_id: q.module_id,
+      module_name: q.module_name,
+      chapter: q.chapter,
+      subject_id: String(q.module_id),
+      subject: q.module_name,
+      course: q.module_name,
+      unit: q.chapter,
+      topic: q.chapter,
+      question: q.question,
+      question_text: q.question,
+      question_type: 'multiple_choice' as BankQuestionType,
+      options: optionTexts,
+      options_raw: optionsRaw,
+      correct_answer: correctText,
+      explanation: q.explanation,
+      difficulty: q.difficulty as BankDifficulty,
+      exam_category: 'practice_exam' as BankExamCategory,
+      source: 'General Biology Module',
+      source_unit: q.chapter,
+      batch_id: 'general_biology_master',
+      fingerprint: generateQuestionFingerprint(q.module_name, q.module_name, q.question),
+      is_published: true,
+      is_pro: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    mergedMap.set(String(q.id), record);
+  });
+
+  const allCombined = Array.from(mergedMap.values());
+  setCachedQuestions(allCombined);
+  return allCombined;
 }
 
 export function setCachedQuestions(questions: QuestionBankRecord[]) {
@@ -74,41 +131,97 @@ export function setCachedQuestions(questions: QuestionBankRecord[]) {
 // Map a raw database row from Supabase to QuestionBankRecord
 export function mapDbQuestion(row: any): QuestionBankRecord {
   let optionsArr: string[] = [];
+  const optionsRaw: Array<{ id: string; text: string }> = [];
+
   if (Array.isArray(row.options)) {
-    optionsArr = row.options.map((o: any) => typeof o === 'string' ? o : (o.text || String(o)));
+    row.options.forEach((o: any, idx: number) => {
+      const id = typeof o === 'object' && o?.id ? String(o.id) : String.fromCharCode(65 + idx);
+      const text = typeof o === 'string' ? o.trim() : String(o?.text || o || '').trim();
+      optionsArr.push(text);
+      optionsRaw.push({ id, text });
+    });
+  } else if (row.options && typeof row.options === 'object') {
+    // Handle dictionary: { "A": "...", "B": "...", "C": "...", "D": "..." }
+    ['A', 'B', 'C', 'D', 'E'].forEach((letter) => {
+      const val = row.options[letter] || row.options[letter.toLowerCase()];
+      if (val !== undefined && val !== null) {
+        const text = String(val).trim();
+        optionsArr.push(text);
+        optionsRaw.push({ id: letter, text });
+      }
+    });
+    if (optionsArr.length === 0) {
+      Object.entries(row.options).forEach(([k, v]) => {
+        const text = String(v).trim();
+        optionsArr.push(text);
+        optionsRaw.push({ id: String(k).toUpperCase(), text });
+      });
+    }
   } else if (typeof row.options === 'string') {
     try {
       const parsed = JSON.parse(row.options);
       if (Array.isArray(parsed)) {
-        optionsArr = parsed.map((o: any) => typeof o === 'string' ? o : (o.text || String(o)));
+        parsed.forEach((o: any, idx: number) => {
+          const id = typeof o === 'object' && o?.id ? String(o.id) : String.fromCharCode(65 + idx);
+          const text = typeof o === 'string' ? o.trim() : String(o?.text || o || '').trim();
+          optionsArr.push(text);
+          optionsRaw.push({ id, text });
+        });
+      } else if (parsed && typeof parsed === 'object') {
+        ['A', 'B', 'C', 'D', 'E'].forEach((letter) => {
+          const val = parsed[letter] || parsed[letter.toLowerCase()];
+          if (val !== undefined && val !== null) {
+            const text = String(val).trim();
+            optionsArr.push(text);
+            optionsRaw.push({ id: letter, text });
+          }
+        });
       }
     } catch {
-      optionsArr = row.options.split('|').map((s: string) => s.trim());
+      optionsArr = row.options.split('|').map((s: string, idx: number) => {
+        const text = s.trim();
+        optionsRaw.push({ id: String.fromCharCode(65 + idx), text });
+        return text;
+      });
     }
   }
 
+  const qText = String(row.question || row.question_text || '');
+  const subjectStr = String(row.subject || row.module_name || 'General Biology');
+  const courseStr = String(row.course || row.module_name || subjectStr);
+  const unitStr = String(row.unit || row.chapter || 'Unit 1');
+  const chapterStr = row.chapter ? String(row.chapter) : unitStr;
+  const topicStr = row.topic ? String(row.topic) : chapterStr;
+
   return {
     id: String(row.id || `q-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`),
-    question_text: String(row.question_text || row.question || ''),
+    subject_id: row.subject_id ? String(row.subject_id) : undefined,
+    subject: subjectStr,
+    course: courseStr,
+    unit: unitStr,
+    topic: topicStr,
+    chapter: chapterStr,
+    question: qText,
+    question_text: qText,
     question_type: (row.question_type || 'multiple_choice') as BankQuestionType,
     options: optionsArr,
+    options_raw: optionsRaw.length > 0 ? optionsRaw : optionsArr.map((text, i) => ({ id: String.fromCharCode(65 + i), text })),
     correct_answer: String(row.correct_answer || row.correctAnswer || ''),
     explanation: row.explanation ? String(row.explanation) : undefined,
-    subject: String(row.subject || 'General'),
-    course: String(row.course || 'University Course'),
-    unit: String(row.unit || 'Unit 1'),
-    chapter: row.chapter ? String(row.chapter) : undefined,
     difficulty: (row.difficulty || 'medium') as BankDifficulty,
     exam_category: (row.exam_category || 'practice_exam') as BankExamCategory,
-    source: row.source ? String(row.source) : 'imported',
+    source: row.source ? String(row.source) : 'Curriculum Module',
+    source_unit: row.source_unit ? String(row.source_unit) : (row.unit ? String(row.unit) : undefined),
+    source_file: row.source_file ? String(row.source_file) : undefined,
     university: row.university ? String(row.university) : undefined,
     department: row.department ? String(row.department) : undefined,
     academic_year: row.academic_year ? String(row.academic_year) : undefined,
     semester: row.semester ? String(row.semester) : undefined,
     is_verified_official: Boolean(row.is_verified_official),
     batch_id: String(row.batch_id || 'manual-entry'),
-    fingerprint: row.fingerprint || generateQuestionFingerprint(row.course || '', row.subject || '', row.question_text || ''),
+    fingerprint: row.fingerprint || generateQuestionFingerprint(courseStr, subjectStr, qText),
     is_published: row.is_published !== false,
+    is_pro: Boolean(row.is_pro),
     created_at: row.created_at || new Date().toISOString(),
     updated_at: row.updated_at || new Date().toISOString()
   };
@@ -237,6 +350,21 @@ export async function validateQuestionsBatch(
     let options: string[] = [];
     if (Array.isArray(raw.options)) {
       options = raw.options.map(o => typeof o === 'string' ? o.trim() : (o.text || String(o)).trim()).filter(Boolean);
+    } else if (raw.options && typeof raw.options === 'object') {
+      // Handles dictionary: { "A": "...", "B": "...", "C": "...", "D": "..." }
+      const keyOrder = ['A', 'B', 'C', 'D', 'E'];
+      const fromLetters: string[] = [];
+      keyOrder.forEach(k => {
+        const val = raw.options[k] || raw.options[k.toLowerCase()];
+        if (val !== undefined && val !== null) {
+          fromLetters.push(String(val).trim());
+        }
+      });
+      if (fromLetters.length >= 2) {
+        options = fromLetters;
+      } else {
+        options = Object.values(raw.options).map(v => typeof v === 'string' ? v.trim() : String(v)).filter(Boolean);
+      }
     } else if (typeof raw.options === 'string' && raw.options.trim().length > 0) {
       if (raw.options.includes('|')) {
         options = raw.options.split('|').map((s: string) => s.trim()).filter(Boolean);
@@ -272,10 +400,12 @@ export async function validateQuestionsBatch(
       }
     }
 
-    const subject = (raw.subject || raw.subject_name || 'General').trim();
-    const course = (raw.course || raw.course_name || `${subject} 101`).trim();
-    const unit = (raw.unit || raw.unit_name || 'Unit 1').trim();
-    const chapter = raw.chapter ? String(raw.chapter).trim() : undefined;
+    const subject = (raw.subject || raw.subject_name || raw.module_name || 'General Biology').trim();
+    const course = (raw.course || raw.course_name || raw.module_name || `${subject}`).trim();
+    const unit = (raw.unit || raw.unit_name || raw.chapter || raw.source_unit || 'Unit 1').trim();
+    const topic = (raw.topic || raw.topic_name || raw.chapter || unit).trim();
+    const chapter = raw.chapter ? String(raw.chapter).trim() : unit;
+    const isPro = Boolean(raw.is_pro || raw.isPro);
 
     // Difficulty normalization
     let rawDiff = (raw.difficulty || raw.level || 'medium').toLowerCase().trim();
@@ -356,18 +486,23 @@ export async function validateQuestionsBatch(
 
     const record: QuestionBankRecord = {
       id: raw.id ? String(raw.id) : `q-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      question: questionText,
       question_text: questionText,
       question_type: questionType,
       options,
+      options_raw: options.map((t, i) => ({ id: String.fromCharCode(65 + i), text: t })),
       correct_answer: correctAnswer,
       explanation,
       subject,
       course,
       unit,
+      topic,
       chapter,
       difficulty,
       exam_category: examCategory,
       source,
+      source_unit: raw.source_unit || unit,
+      source_file: raw.source_file || undefined,
       university,
       department,
       academic_year: academicYear,
@@ -376,6 +511,7 @@ export async function validateQuestionsBatch(
       batch_id: batchId,
       fingerprint,
       is_published: isPublished,
+      is_pro: isPro,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -458,27 +594,34 @@ export async function importQuestionsBatch(
           .upsert(
             chunk.map(q => ({
               id: q.id,
-              question_text: q.question_text,
-              question_type: q.question_type,
+              question: q.question || q.question_text,
+              question_text: q.question_text || q.question,
+              question_type: q.question_type || 'multiple_choice',
               options: q.options,
               correct_answer: q.correct_answer,
               explanation: q.explanation || null,
               subject: q.subject,
-              course: q.course,
-              unit: q.unit,
-              chapter: q.chapter || null,
-              difficulty: q.difficulty,
-              exam_category: q.exam_category,
+              course: q.course || q.subject,
+              unit: q.unit || 'Unit 1',
+              topic: q.topic || q.unit || 'General Topic',
+              chapter: q.chapter || q.unit || 'Unit 1',
+              module_id: (q as any).module_id || 5,
+              module_name: (q as any).module_name || q.subject,
+              difficulty: q.difficulty || 'medium',
+              exam_category: q.exam_category || 'practice_exam',
               source: q.source || 'imported',
+              source_unit: q.source_unit || q.unit,
+              source_file: q.source_file || null,
               university: q.university || null,
               department: q.department || null,
               academic_year: q.academic_year || null,
               semester: q.semester || null,
               is_verified_official: q.is_verified_official || false,
-              batch_id: q.batch_id,
+              batch_id: q.batch_id || 'manual',
               fingerprint: q.fingerprint,
-              is_published: q.is_published,
-              created_at: q.created_at,
+              is_published: q.is_published !== undefined ? q.is_published : true,
+              is_pro: Boolean(q.is_pro),
+              created_at: q.created_at || new Date().toISOString(),
               updated_at: new Date().toISOString()
             })),
             { onConflict: 'id' }
@@ -878,6 +1021,7 @@ export interface ExamGenerationConfig {
   course?: string;
   subject?: string;
   unit?: string;
+  topic?: string;
   difficulty?: BankDifficulty;
   difficultyDistribution?: {
     easy?: number;
@@ -905,14 +1049,18 @@ export async function generateRandomExamQuestions(config: ExamGenerationConfig):
         .select('*')
         .eq('is_published', true);
 
-      if (config.course && config.course !== 'All') {
+      if (config.course && config.course !== 'All' && !config.course.startsWith('All First-Year')) {
         query = query.eq('course', config.course);
-      } else if (config.subject && config.subject !== 'All') {
+      } else if (config.subject && config.subject !== 'All' && !config.subject.startsWith('All First-Year')) {
         query = query.eq('subject', config.subject);
       }
 
-      if (config.unit && config.unit !== 'All') {
+      if (config.unit && config.unit !== 'All' && config.unit !== 'All Units') {
         query = query.eq('unit', config.unit);
+      }
+
+      if (config.topic && config.topic !== 'All' && config.topic !== 'All Topics') {
+        query = query.eq('topic', config.topic);
       }
 
       if (config.examCategory && (config.examCategory as string) !== 'All') {
@@ -923,8 +1071,8 @@ export async function generateRandomExamQuestions(config: ExamGenerationConfig):
         query = query.eq('university', config.university);
       }
 
-      // Fetch up to 200 candidates to select from
-      const { data, error } = await query.limit(200);
+      // Fetch up to 1000 candidates to select from
+      const { data, error } = await query.limit(1000);
       if (!error && Array.isArray(data) && data.length > 0) {
         candidatePool = data.map(mapDbQuestion);
       }
@@ -937,9 +1085,10 @@ export async function generateRandomExamQuestions(config: ExamGenerationConfig):
   if (candidatePool.length === 0) {
     const cached = getCachedQuestions().filter(q => q.is_published);
     candidatePool = cached.filter(q => {
-      if (config.course && config.course !== 'All' && q.course !== config.course) return false;
-      if (config.subject && config.subject !== 'All' && q.subject !== config.subject) return false;
-      if (config.unit && config.unit !== 'All' && q.unit !== config.unit) return false;
+      if (config.course && config.course !== 'All' && !config.course.startsWith('All First-Year') && q.course !== config.course) return false;
+      if (config.subject && config.subject !== 'All' && !config.subject.startsWith('All First-Year') && q.subject !== config.subject) return false;
+      if (config.unit && config.unit !== 'All' && config.unit !== 'All Units' && q.unit !== config.unit) return false;
+      if (config.topic && config.topic !== 'All' && config.topic !== 'All Topics' && q.topic !== config.topic) return false;
       if (config.examCategory && (config.examCategory as string) !== 'All' && q.exam_category !== config.examCategory) return false;
       if (config.university && config.university !== 'All' && q.university !== config.university) return false;
       return true;
@@ -947,7 +1096,7 @@ export async function generateRandomExamQuestions(config: ExamGenerationConfig):
 
     // If still empty, broaden search to subject or general
     if (candidatePool.length === 0) {
-      candidatePool = cached.filter(q => !config.subject || config.subject === 'All' || q.subject === config.subject);
+      candidatePool = cached.filter(q => !config.subject || config.subject === 'All' || config.subject.startsWith('All First-Year') || q.subject === config.subject);
       if (candidatePool.length === 0) {
         candidatePool = [...cached];
       }
@@ -1000,3 +1149,427 @@ export async function generateRandomExamQuestions(config: ExamGenerationConfig):
   const shuffled = [...available].sort(() => 0.5 - Math.random());
   return shuffled.slice(0, Math.min(config.totalQuestions, shuffled.length));
 }
+
+// ============================================================================
+// 11. QUESTION & OPTION RANDOMIZATION (Safely maps correct answer)
+// ============================================================================
+
+export interface RandomizedQuizQuestion {
+  id: string;
+  originalId: string;
+  subject: string;
+  course: string;
+  unit: string;
+  topic?: string;
+  difficulty: BankDifficulty;
+  question_type: BankQuestionType;
+  question: string;
+  options: Array<{ id: 'A' | 'B' | 'C' | 'D'; text: string }>;
+  correct_answer_id: 'A' | 'B' | 'C' | 'D';
+  correct_answer_text: string;
+  explanation?: string;
+  source?: string;
+  source_unit?: string;
+  source_file?: string;
+  is_pro?: boolean;
+}
+
+/**
+ * Shuffles options for a question while guaranteeing the correct answer ID ('A'|'B'|'C'|'D')
+ * points to the exact correct text without modifying the database question record.
+ */
+export function randomizeQuestionWithMappedAnswer(q: QuestionBankRecord): RandomizedQuizQuestion {
+  // Determine correct answer text
+  let correctText = (q.correct_answer || '').trim();
+  
+  // If correct_answer was stored as a letter "A", "B", "C", "D"
+  if (/^[A-D]$/i.test(correctText)) {
+    const letterIdx = correctText.toUpperCase().charCodeAt(0) - 65;
+    if (q.options[letterIdx]) {
+      correctText = q.options[letterIdx].trim();
+    }
+  }
+
+  // Extract raw option texts
+  const optionTexts = q.options.length >= 2 
+    ? [...q.options] 
+    : (q.options_raw?.map(o => o.text) || []);
+
+  // Ensure 4 choices if possible
+  while (optionTexts.length < 4 && q.question_type === 'multiple_choice') {
+    optionTexts.push(`Option ${String.fromCharCode(65 + optionTexts.length)}`);
+  }
+
+  // Shuffle option texts (Fisher-Yates)
+  const shuffledTexts = [...optionTexts];
+  for (let i = shuffledTexts.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffledTexts[i], shuffledTexts[j]] = [shuffledTexts[j], shuffledTexts[i]];
+  }
+
+  const letters: Array<'A' | 'B' | 'C' | 'D'> = ['A', 'B', 'C', 'D'];
+  const formattedOptions: Array<{ id: 'A' | 'B' | 'C' | 'D'; text: string }> = shuffledTexts.slice(0, 4).map((text, idx) => ({
+    id: letters[idx],
+    text
+  }));
+
+  // Find which letter now holds the correct text
+  let mappedCorrectId: 'A' | 'B' | 'C' | 'D' = 'A';
+  const foundIdx = formattedOptions.findIndex(o => o.text.trim().toLowerCase() === correctText.toLowerCase());
+  if (foundIdx >= 0) {
+    mappedCorrectId = letters[foundIdx];
+  } else {
+    // If not found, assign to option A and update text
+    formattedOptions[0].text = correctText;
+    mappedCorrectId = 'A';
+  }
+
+  return {
+    id: `quiz_${q.id}_${Math.random().toString(36).substring(2, 6)}`,
+    originalId: q.id,
+    subject: q.subject,
+    course: q.course,
+    unit: q.unit,
+    topic: q.topic,
+    difficulty: q.difficulty,
+    question_type: q.question_type,
+    question: q.question_text || q.question || '',
+    options: formattedOptions,
+    correct_answer_id: mappedCorrectId,
+    correct_answer_text: correctText,
+    explanation: q.explanation,
+    source: q.source,
+    source_unit: q.source_unit,
+    source_file: q.source_file,
+    is_pro: q.is_pro
+  };
+}
+
+// ============================================================================
+// 12. STUDENT PROGRESS & ACCURACY TRACKING
+// ============================================================================
+
+export async function recordQuestionProgress(
+  userId: string,
+  questionId: string,
+  isCorrect: boolean,
+  chosenAnswer: string
+): Promise<void> {
+  if (!userId || !questionId) return;
+
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      // Upsert attempt into Supabase question_progress table
+      const { data: existing } = await supabase
+        .from('question_progress')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('question_id', questionId)
+        .maybeSingle();
+
+      const now = new Date().toISOString();
+      if (existing) {
+        await supabase
+          .from('question_progress')
+          .update({
+            attempts: (existing.attempts || 1) + 1,
+            correct_attempts: isCorrect ? (existing.correct_attempts || 0) + 1 : (existing.correct_attempts || 0),
+            incorrect_attempts: !isCorrect ? (existing.incorrect_attempts || 0) + 1 : (existing.incorrect_attempts || 0),
+            last_answer: chosenAnswer,
+            last_attempt_at: now
+          })
+          .eq('id', existing.id);
+      } else {
+        await supabase
+          .from('question_progress')
+          .insert({
+            id: `prog_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            user_id: userId,
+            question_id: questionId,
+            attempts: 1,
+            correct_attempts: isCorrect ? 1 : 0,
+            incorrect_attempts: isCorrect ? 0 : 1,
+            last_answer: chosenAnswer,
+            last_attempt_at: now
+          });
+      }
+    } catch (e) {
+      console.warn('[recordQuestionProgress Supabase error]:', e);
+    }
+  }
+
+  // Backup to Server API
+  try {
+    await fetch('/api/questions/progress', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, questionId, isCorrect, chosenAnswer })
+    });
+  } catch (e) {
+    // Ignore server error
+  }
+
+  // Update local storage progress cache
+  try {
+    const raw = safeStorage.getItem(LOCAL_STORAGE_PROGRESS_KEY);
+    const progressList: any[] = raw ? JSON.parse(raw) : [];
+    const idx = progressList.findIndex(p => p.question_id === questionId && p.user_id === userId);
+    const now = new Date().toISOString();
+
+    if (idx >= 0) {
+      progressList[idx].attempts = (progressList[idx].attempts || 1) + 1;
+      if (isCorrect) progressList[idx].correct_attempts = (progressList[idx].correct_attempts || 0) + 1;
+      else progressList[idx].incorrect_attempts = (progressList[idx].incorrect_attempts || 0) + 1;
+      progressList[idx].last_answer = chosenAnswer;
+      progressList[idx].last_attempt_at = now;
+    } else {
+      progressList.push({
+        id: `prog_${Date.now()}`,
+        user_id: userId,
+        question_id: questionId,
+        attempts: 1,
+        correct_attempts: isCorrect ? 1 : 0,
+        incorrect_attempts: isCorrect ? 0 : 1,
+        last_answer: chosenAnswer,
+        last_attempt_at: now
+      });
+    }
+    safeStorage.setItem(LOCAL_STORAGE_PROGRESS_KEY, JSON.stringify(progressList));
+  } catch (e) {
+    console.warn('[Progress Local Storage]:', e);
+  }
+}
+
+export async function fetchUserQuestionProgress(userId: string): Promise<any[]> {
+  if (!userId) return [];
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { data } = await supabase
+        .from('question_progress')
+        .select('*')
+        .eq('user_id', userId);
+      if (Array.isArray(data) && data.length > 0) return data;
+    } catch (e) {
+      console.warn('[fetchUserQuestionProgress Supabase error]:', e);
+    }
+  }
+
+  // Try server endpoint
+  try {
+    const res = await fetch(`/api/questions/progress?userId=${encodeURIComponent(userId)}`);
+    if (res.ok) {
+      const json = await res.json();
+      if (Array.isArray(json.progress) && json.progress.length > 0) return json.progress;
+    }
+  } catch {}
+
+  // Fallback to local storage
+  try {
+    const raw = safeStorage.getItem(LOCAL_STORAGE_PROGRESS_KEY);
+    if (raw) {
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) return list.filter(p => p.user_id === userId);
+    }
+  } catch {}
+
+  return [];
+}
+
+// ============================================================================
+// 13. BOOKMARKS ENGINE
+// ============================================================================
+
+export async function toggleQuestionBookmark(userId: string, questionId: string): Promise<boolean> {
+  if (!userId || !questionId) return false;
+
+  let isNowBookmarked = false;
+  const supabase = getSupabase();
+
+  if (supabase) {
+    try {
+      const { data: existing } = await supabase
+        .from('question_bookmarks')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('question_id', questionId)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase.from('question_bookmarks').delete().eq('id', existing.id);
+        isNowBookmarked = false;
+      } else {
+        await supabase.from('question_bookmarks').insert({
+          id: `bm_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          user_id: userId,
+          question_id: questionId
+        });
+        isNowBookmarked = true;
+      }
+    } catch (e) {
+      console.warn('[toggleQuestionBookmark error]:', e);
+    }
+  }
+
+  // Server sync
+  try {
+    const res = await fetch('/api/questions/bookmarks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, questionId })
+    });
+    if (res.ok) {
+      const j = await res.json();
+      if (typeof j.isBookmarked === 'boolean') isNowBookmarked = j.isBookmarked;
+    }
+  } catch {}
+
+  // Local storage cache
+  try {
+    const raw = safeStorage.getItem(LOCAL_STORAGE_BOOKMARKS_KEY);
+    const bookmarks: string[] = raw ? JSON.parse(raw) : [];
+    const idx = bookmarks.indexOf(questionId);
+    if (idx >= 0) {
+      bookmarks.splice(idx, 1);
+      isNowBookmarked = false;
+    } else {
+      bookmarks.push(questionId);
+      isNowBookmarked = true;
+    }
+    safeStorage.setItem(LOCAL_STORAGE_BOOKMARKS_KEY, JSON.stringify(bookmarks));
+  } catch (e) {
+    console.warn('[Bookmark local cache]:', e);
+  }
+
+  return isNowBookmarked;
+}
+
+export async function fetchUserBookmarkedQuestionIds(userId: string): Promise<string[]> {
+  if (!userId) return [];
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { data } = await supabase
+        .from('question_bookmarks')
+        .select('question_id')
+        .eq('user_id', userId);
+      if (Array.isArray(data)) return data.map(d => d.question_id);
+    } catch (e) {}
+  }
+
+  try {
+    const res = await fetch(`/api/questions/bookmarks?userId=${encodeURIComponent(userId)}`);
+    if (res.ok) {
+      const j = await res.json();
+      if (Array.isArray(j.bookmarkedQuestionIds)) return j.bookmarkedQuestionIds;
+    }
+  } catch {}
+
+  try {
+    const raw = safeStorage.getItem(LOCAL_STORAGE_BOOKMARKS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+
+  return [];
+}
+
+// ============================================================================
+// 14. ADMIN AI QUESTION GENERATION WORKFLOW (Draft Only -> Review Screen)
+// ============================================================================
+
+export interface AiGenerationDraftParams {
+  subject: string;
+  course?: string;
+  unit?: string;
+  topic?: string;
+  count: number;
+  difficultyDistribution?: { easy: number; medium: number; hard: number };
+  questionType?: string;
+  source?: string;
+  sourceUnit?: string;
+  sourceFile?: string;
+  sourceExcerpt?: string;
+  apiKey?: string;
+}
+
+export async function generateAiQuestionDrafts(
+  params: AiGenerationDraftParams
+): Promise<{ success: boolean; questions: any[]; batchId?: string; error?: string }> {
+  try {
+    const res = await fetch('/api/questions/ai-generate-draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      return { success: false, questions: [], error: json.error || 'AI generation failed' };
+    }
+
+    return {
+      success: true,
+      questions: json.questions || [],
+      batchId: json.batchId
+    };
+  } catch (err: any) {
+    return { success: false, questions: [], error: err.message || 'Failed to call generation API' };
+  }
+}
+
+// ============================================================================
+// 15. OFFICIAL 19 FRESHMAN SUBJECTS DIRECTORY
+// ============================================================================
+
+export interface OfficialSubjectInfo {
+  id: string;
+  name: string;
+  code: string;
+  department: string;
+  year: string;
+  semester: string;
+  description: string;
+}
+
+export const OFFICIAL_19_SUBJECTS: OfficialSubjectInfo[] = [
+  { id: 'subj_critical_thinking', name: 'Critical Thinking', code: 'PHIL 1011', department: 'Freshman Common', year: 'Year 1', semester: 'Semester 1', description: 'Logic, arguments, fallacies, categorical syllogisms, and propositional logic' },
+  { id: 'subj_economics', name: 'Economics', code: 'ECON 1011', department: 'Freshman Common', year: 'Year 1', semester: 'Semester 2', description: 'Microeconomic and Macroeconomic principles, consumer theory, market structures' },
+  { id: 'subj_emerging_technologies', name: 'Emerging Technologies', code: 'EMTE 1011', department: 'Freshman Common', year: 'Year 1', semester: 'Semester 2', description: 'Artificial Intelligence, IoT, Cloud, Blockchain, Big Data, Industry 4.0' },
+  { id: 'subj_entrepreneurship', name: 'Entrepreneurship', code: 'MGMT 1012', department: 'Freshman Common', year: 'Year 1', semester: 'Semester 2', description: 'Venture creation, business planning, opportunity identification, marketing' },
+  { id: 'subj_general_biology', name: 'General Biology', code: 'BIOL 1011', department: 'Natural Science', year: 'Year 1', semester: 'Semester 1', description: 'Cell biology, bioenergetics, genetics, human anatomy, ecology' },
+  { id: 'subj_general_chemistry', name: 'General Chemistry', code: 'CHEM 1011', department: 'Natural Science', year: 'Year 1', semester: 'Semester 1', description: 'Atomic structure, chemical bonding, equilibria, kinetics, thermodynamics' },
+  { id: 'subj_general_physics', name: 'General Physics', code: 'PHYS 1011', department: 'Natural Science', year: 'Year 1', semester: 'Semester 1', description: 'Classical mechanics, thermodynamics, electromagnetism, wave optics' },
+  { id: 'subj_general_psychology', name: 'General Psychology', code: 'PSYC 1011', department: 'Freshman Common', year: 'Year 1', semester: 'Semester 1', description: 'Human cognition, perception, memory, personality, developmental psychology' },
+  { id: 'subj_geography', name: 'Geography', code: 'GEOG 1011', department: 'Social Science & Common', year: 'Year 1', semester: 'Semester 1', description: 'Geography of Ethiopia and the Horn, physiography, drainage, climate, population' },
+  { id: 'subj_global_trends', name: 'Global Trends', code: 'GLTR 1012', department: 'Freshman Common', year: 'Year 1', semester: 'Semester 2', description: 'International relations, diplomacy, geopolitics, regional integration, globalization' },
+  { id: 'subj_inclusiveness', name: 'Inclusiveness', code: 'SNIE 1012', department: 'Freshman Common', year: 'Year 1', semester: 'Semester 2', description: 'Special needs education, diversity, accessibility, legal and societal frameworks' },
+  { id: 'subj_moral_and_civic', name: 'Moral and Civic', code: 'MCED 1011', department: 'Freshman Common', year: 'Year 1', semester: 'Semester 1', description: 'Ethics, constitutional governance, human rights, democracy, civil society' },
+  { id: 'subj_physical_fitness', name: 'Physical Fitness', code: 'SpSc 1011', department: 'Freshman Common', year: 'Year 1', semester: 'Semester 1', description: 'Exercise physiology, cardiovascular health, strength training, wellness' },
+  { id: 'subj_english_1', name: 'Communicative English Language Skills I', code: 'FLEn 1011', department: 'Freshman Common', year: 'Year 1', semester: 'Semester 1', description: 'Reading comprehension, communicative grammar, sentence structure, discourse' },
+  { id: 'subj_english_2', name: 'Communicative English Language Skills II', code: 'FLEn 1012', department: 'Freshman Common', year: 'Year 1', semester: 'Semester 2', description: 'Academic essay writing, argumentative discourse, presentation skills, citations' },
+  { id: 'subj_history', name: 'History of Ethiopia and the Horn', code: 'HIST 1012', department: 'Freshman Common', year: 'Year 1', semester: 'Semester 2', description: 'Prehistoric archaeology, ancient states, mediaeval dynasties, modern Ethiopian state' },
+  { id: 'subj_math_natural', name: 'Mathematics — Natural Science', code: 'MATH 1011', department: 'Natural Science', year: 'Year 1', semester: 'Semester 1', description: 'Vectors, limits, differential calculus, integral calculus, analytic geometry' },
+  { id: 'subj_math_social', name: 'Mathematics — Social Science', code: 'MATH 1012', department: 'Social Science', year: 'Year 1', semester: 'Semester 1', description: 'Linear equations, matrices, linear programming, financial mathematics, statistics' },
+  { id: 'subj_social_anthropology', name: 'Social Anthropology', code: 'ANTH 1012', department: 'Freshman Common', year: 'Year 1', semester: 'Semester 2', description: 'Human culture, ethnography, kinship, marriage, social stratification in the Horn' }
+];
+
+export async function fetchOfficialSubjects(): Promise<OfficialSubjectInfo[]> {
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { data } = await supabase
+        .from('subjects')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+      if (Array.isArray(data) && data.length > 0) {
+        return data as OfficialSubjectInfo[];
+      }
+    } catch (e) {
+      console.warn('[fetchOfficialSubjects Supabase warning]:', e);
+    }
+  }
+  return OFFICIAL_19_SUBJECTS;
+}
+

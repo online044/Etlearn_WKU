@@ -187,44 +187,78 @@ CREATE TABLE IF NOT EXISTS public.course_progress (
   CONSTRAINT unique_user_course_progress UNIQUE (user_id, course_id)
 );
 
--- 11. Create questions table (Central Pre-Generated Question Bank)
+-- 11. Create subjects table
+CREATE TABLE IF NOT EXISTS public.subjects (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  code TEXT,
+  department TEXT,
+  year TEXT DEFAULT 'Year 1 (Freshman)',
+  semester TEXT,
+  description TEXT,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 11b. Create questions table (Central Pre-Generated Question Bank)
 CREATE TABLE IF NOT EXISTS public.questions (
   id TEXT PRIMARY KEY,
-  question_text TEXT NOT NULL,
-  question_type TEXT NOT NULL DEFAULT 'multiple_choice' CHECK (question_type IN ('multiple_choice', 'true_false', 'short_answer', 'fill_in_the_blank')),
-  options JSONB DEFAULT '[]'::jsonb,
-  correct_answer TEXT NOT NULL,
-  explanation TEXT,
+  subject_id TEXT REFERENCES public.subjects(id) ON DELETE SET NULL,
   subject TEXT NOT NULL,
   course TEXT NOT NULL,
   unit TEXT NOT NULL DEFAULT 'Unit 1',
+  topic TEXT NOT NULL DEFAULT 'General',
   chapter TEXT,
+  question TEXT NOT NULL,
+  question_text TEXT,
+  question_type TEXT NOT NULL DEFAULT 'multiple_choice' CHECK (question_type IN ('multiple_choice', 'true_false', 'short_answer', 'fill_in_the_blank', 'multiple_select')),
   difficulty TEXT NOT NULL DEFAULT 'medium' CHECK (difficulty IN ('easy', 'medium', 'hard')),
-  exam_category TEXT NOT NULL DEFAULT 'practice_exam' CHECK (exam_category IN ('practice_exam', 'university_exam', 'mock_exam', 'quiz')),
-  source TEXT DEFAULT 'imported',
+  options JSONB NOT NULL DEFAULT '[]'::jsonb,
+  correct_answer TEXT NOT NULL,
+  explanation TEXT,
+  source TEXT DEFAULT 'University Curriculum Module',
+  source_unit TEXT,
+  source_file TEXT,
   university TEXT,
   department TEXT,
   academic_year TEXT,
   semester TEXT,
   is_verified_official BOOLEAN NOT NULL DEFAULT FALSE,
-  batch_id TEXT NOT NULL,
+  batch_id TEXT DEFAULT 'manual-entry',
   fingerprint TEXT,
   is_published BOOLEAN NOT NULL DEFAULT TRUE,
+  is_pro BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 11c. Create student question progress & bookmarking table
+CREATE TABLE IF NOT EXISTS public.question_progress (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  user_id TEXT NOT NULL,
+  question_id TEXT NOT NULL REFERENCES public.questions(id) ON DELETE CASCADE,
+  attempts INT DEFAULT 1,
+  correct_attempts INT DEFAULT 0,
+  incorrect_attempts INT DEFAULT 0,
+  last_answer TEXT,
+  is_bookmarked BOOLEAN DEFAULT FALSE,
+  last_attempt_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT unique_user_question UNIQUE (user_id, question_id)
+);
+
 -- High-performance indexes for 10,000+ to 100,000+ questions
-CREATE INDEX IF NOT EXISTS idx_questions_course ON public.questions (course);
 CREATE INDEX IF NOT EXISTS idx_questions_subject ON public.questions (subject);
+CREATE INDEX IF NOT EXISTS idx_questions_course ON public.questions (course);
 CREATE INDEX IF NOT EXISTS idx_questions_unit ON public.questions (unit);
+CREATE INDEX IF NOT EXISTS idx_questions_topic ON public.questions (topic);
 CREATE INDEX IF NOT EXISTS idx_questions_difficulty ON public.questions (difficulty);
-CREATE INDEX IF NOT EXISTS idx_questions_exam_category ON public.questions (exam_category);
-CREATE INDEX IF NOT EXISTS idx_questions_batch_id ON public.questions (batch_id);
+CREATE INDEX IF NOT EXISTS idx_questions_type ON public.questions (question_type);
 CREATE INDEX IF NOT EXISTS idx_questions_is_published ON public.questions (is_published);
+CREATE INDEX IF NOT EXISTS idx_questions_is_pro ON public.questions (is_pro);
 CREATE INDEX IF NOT EXISTS idx_questions_fingerprint ON public.questions (fingerprint);
-CREATE INDEX IF NOT EXISTS idx_questions_university ON public.questions (university);
-CREATE INDEX IF NOT EXISTS idx_questions_composite_filter ON public.questions (course, unit, difficulty, is_published);
+CREATE INDEX IF NOT EXISTS idx_questions_composite ON public.questions (subject, unit, difficulty, is_published);
+CREATE INDEX IF NOT EXISTS idx_question_progress_user ON public.question_progress (user_id);
+CREATE INDEX IF NOT EXISTS idx_question_progress_bookmarked ON public.question_progress (user_id, is_bookmarked);
 
 -- 12. Enable Row Level Security (RLS) on all tables
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;

@@ -1,1620 +1,1654 @@
-import React, { useState, useEffect, useRef } from 'react';
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ * EthioLearn Pro - Official Ethiopian University Question Bank & Quiz Engine
+ * Production-ready Question Bank System (10,000+ Questions Scale)
+ * Zero Runtime AI overhead • Supabase Pre-Generated & Offline Cache • Practice & Exam Modes
+ */
+
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Compass, Trophy, Zap, Clock, Calendar, ArrowRight, Layers, FileText, CheckCircle, XCircle, 
-  HelpCircle, Award, RefreshCw, Plus, X, Star, ArrowLeft, Crown, Lock, Sparkles, AlertTriangle, 
-  Check, BookOpen, RotateCcw, Home, GraduationCap, ChevronRight, ShieldCheck
+  Database, Plus, Play, RotateCcw, CheckCircle2, XCircle, 
+  HelpCircle, Award, Star, ArrowLeft, Crown, Sparkles, 
+  Trash2, Search, Filter, BookOpen, Layers, Check, X,
+  Clock, Trophy, AlertCircle, Share2, Eye, Bookmark, BookmarkCheck,
+  Flag, ChevronLeft, ChevronRight, Zap, BookMarked, SlidersHorizontal,
+  GraduationCap, CheckSquare
 } from 'lucide-react';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
 import { safeStorage } from '../utils/safeStorage';
-import { generateRandomExamQuestions } from '../utils/supabaseQuestions';
+import { 
+  generateRandomExamQuestions,
+  randomizeQuestionWithMappedAnswer,
+  RandomizedQuizQuestion,
+  recordQuestionProgress,
+  fetchUserQuestionProgress,
+  toggleQuestionBookmark,
+  fetchUserBookmarkedQuestionIds,
+  getCachedQuestions,
+  OFFICIAL_19_SUBJECTS
+} from '../utils/supabaseQuestions';
+import { QuestionBankRecord } from '../types';
+import { ManualDatabaseQuestion } from '../data/databaseQuestionBank';
+import { 
+  getAllDatabaseQuestions, 
+  saveManualQuestionToDatabase, 
+  deleteManualQuestionFromDatabase
+} from '../utils/questionDatabase';
 
 interface ExamPrepProps {
-  apiKey: string;
-  enrolledSubjects: string[];
+  apiKey?: string;
+  enrolledSubjects?: string[];
   onStudyAction?: () => void;
   onNavigateBack?: () => void;
   isPro?: boolean;
   onNavigateToUpgrade?: () => void;
+  userId?: string;
 }
-
-interface QuizQuestion {
-  question: string;
-  options: string[];
-  correctAnswer: string;
-  explanation?: string;
-}
-
-const DEFAULT_SUBJECTS = [
-  "Mathematics",
-  "General Biology",
-  "Emerging Technologies",
-  "Introduction to Economics",
-  "Communicative English",
-  "Moral and Civic Education",
-  "General Physics",
-  "Chemistry",
-  "Logic and Critical Thinking",
-  "C++ Programming",
-  "Geography of Ethiopia",
-  "History of Ethiopia"
-];
-
-const PAST_EXAM_BANK: { [subject: string]: QuizQuestion[] } = {
-  "Mathematics": [
-    {
-      question: "What is the derivative of f(x) = 3x^4 - 5x^2 + 7 with respect to x?",
-      options: ["12x^3 - 10x", "12x^3 - 5x + 7", "7x^3 - 10x", "12x^4 - 10x^2"],
-      correctAnswer: "12x^3 - 10x",
-      explanation: "Using the power rule d/dx(x^n) = n*x^(n-1): d/dx(3x^4) = 12x^3, d/dx(-5x^2) = -10x, and the derivative of constant (7) is 0."
-    },
-    {
-      question: "Evaluate the limit: lim(x -> 0) [sin(5x) / x].",
-      options: ["5", "1", "0", "Does not exist"],
-      correctAnswer: "5",
-      explanation: "Using the standard limit theorem lim(u -> 0) [sin(u)/u] = 1, lim(x -> 0) [sin(5x)/x] = 5 * lim(x -> 0) [sin(5x)/(5x)] = 5 * 1 = 5."
-    },
-    {
-      question: "In linear algebra, if matrix A has a determinant det(A) = 0, which statement is always true?",
-      options: ["Matrix A is singular and non-invertible", "Matrix A is symmetric", "Matrix A is an identity matrix", "The eigenvalues of A are all equal to 1"],
-      correctAnswer: "Matrix A is singular and non-invertible",
-      explanation: "A square matrix is invertible if and only if its determinant is non-zero. When det(A) = 0, the matrix is singular."
-    },
-    {
-      question: "What is the integral ∫ (2x + 3)^4 dx?",
-      options: ["(1/10)(2x + 3)^5 + C", "(1/5)(2x + 3)^5 + C", "(2/5)(2x + 3)^5 + C", "(1/8)(2x + 3)^4 + C"],
-      correctAnswer: "(1/10)(2x + 3)^5 + C",
-      explanation: "Let u = 2x + 3, then du = 2 dx or dx = du/2. The integral becomes (1/2) ∫ u^4 du = (1/10)(2x + 3)^5 + C."
-    }
-  ],
-  "General Biology": [
-    {
-      question: "What primary cellular organelle hosts the aerobic Krebs (Citric Acid) Cycle within eukaryotic cells?",
-      options: ["The inner mitochondrial matrix", "Cytosolic ribosomes", "Nucleolar envelope membranes", "Lysosome digestion vesicles"],
-      correctAnswer: "The inner mitochondrial matrix",
-      explanation: "While glycolysis happens in the cytosol, the Citric Acid Cycle occurs inside the mitochondrial matrix to synthesize NADH, FADH2, and ATP precursors."
-    },
-    {
-      question: "Which cellular cycle phase replicates genomic DNA to prepare cells for mitotic division?",
-      options: ["S (Synthesis) phase of Interphase", "G0 stagnant resting stage", "Prophase spindle convergence", "Telophase cytokinesis split"],
-      correctAnswer: "S (Synthesis) phase of Interphase",
-      explanation: "DNA replication is carried out during the S-phase (Synthesis phase) of the cell cycle, ensuring each resulting daughter cell inherits a complete duplicate genome."
-    },
-    {
-      question: "During light-dependent photosynthetic reactions in chloroplasts, where is molecular oxygen (O2) derived from?",
-      options: ["The photolysis (splitting) of water molecules", "Carbon dioxide fixation in the Calvin cycle", "The degradation of glucose monomers", "ATP synthase catalytic activity"],
-      correctAnswer: "The photolysis (splitting) of water molecules",
-      explanation: "Light energy absorbed by Photosystem II oxidizes and splits water (H2O) into protons, electrons, and O2 gas as a byproduct."
-    },
-    {
-      question: "Which enzyme is responsible for synthesizing mRNA from a DNA template during transcription?",
-      options: ["RNA Polymerase II", "DNA Ligase", "DNA Polymerase III", "Peptidyl Transferase"],
-      correctAnswer: "RNA Polymerase II",
-      explanation: "RNA Polymerase binds to the gene promoter region and transcribes the DNA sequence into messenger RNA (mRNA)."
-    }
-  ],
-  "Emerging Technologies": [
-    {
-      question: "Which technology acts as the underlying decentralized fabric enabling verifiable trust without central intermediaries?",
-      options: ["Blockchain distributed ledgers", "Centralized relational databases", "Quantum supercomputing nodes", "Edge mesh radios"],
-      correctAnswer: "Blockchain distributed ledgers",
-      explanation: "Blockchain technology employs decentralized cryptographic consensus mechanisms (PoW/PoS) to secure ledgers without relying on centralized banks or authorities."
-    },
-    {
-      question: "What is the primary operational advantage of implementing Edge Computing in IoT sensor networks?",
-      options: ["Reduced latency by processing data closer to local source devices", "Higher centralization in distant global cloud hubs", "Increased long-haul bandwidth consumption", "Lower computational requirements on microcontrollers"],
-      correctAnswer: "Reduced latency by processing data closer to local source devices",
-      explanation: "Edge processing analyzes data directly at or near the collection node, cutting transmission latency to distant cloud servers and saving precious network bandwidth."
-    },
-    {
-      question: "In Machine Learning, what type of learning paradigm trains algorithms using explicitly labeled input-output pairs?",
-      options: ["Supervised Learning", "Unsupervised Clustering", "Reinforcement Learning", "Self-Organizing Heuristic Learning"],
-      correctAnswer: "Supervised Learning",
-      explanation: "Supervised learning algorithms are provided with pairs of inputs and corresponding ground-truth targets (labels) to learn a mapping function."
-    },
-    {
-      question: "What is the primary purpose of a Smart Contract deployed on the Ethereum virtual machine?",
-      options: ["To automatically execute contractual agreements when predefined conditions are satisfied", "To physically secure hardware mining rigs", "To generate GPU clock speed profiles", "To compress video files for distributed streaming"],
-      correctAnswer: "To automatically execute contractual agreements when predefined conditions are satisfied",
-      explanation: "Smart contracts are autonomous, self-executing code blocks living on a blockchain that execute logic automatically without third-party arbitration."
-    }
-  ],
-  "Introduction to Economics": [
-    {
-      question: "Which state of a competitive market represents the stable price level where quantity demanded equals quantity supplied?",
-      options: ["Equilibrium price level", "Inflationary gap", "Deadweight monopoly surplus", "Mercantile deficit"],
-      correctAnswer: "Equilibrium price level",
-      explanation: "Market equilibrium occurs at the intersection of supply and demand curves, where no excess supply or unmet demand exerts pressure on prices."
-    },
-    {
-      question: "What does the concept of 'Opportunity Cost' measure in economic decision-making?",
-      options: ["The value of the next best alternative forgone when a choice is made", "The total monetary expenditure incurred during production", "The historical sunk cost that cannot be recovered", "The profit margin earned after deducting taxes"],
-      correctAnswer: "The value of the next best alternative forgone when a choice is made",
-      explanation: "Opportunity cost represents the highest-valued alternative sacrificed whenever resources are allocated to one specific choice over another."
-    },
-    {
-      question: "If the cross-price elasticity of demand between good X and good Y is positive, what is the economic relationship between them?",
-      options: ["They are substitute goods", "They are complementary goods", "They are inferior goods", "They are luxury Giffen goods"],
-      correctAnswer: "They are substitute goods",
-      explanation: "A positive cross-price elasticity means that an increase in the price of one good causes an increase in demand for the other, indicating they can substitute for each other."
-    },
-    {
-      question: "Which macroeconomic indicator calculates the total market value of all final goods and services produced within a country's borders in a given year?",
-      options: ["Gross Domestic Product (GDP)", "Gross National Product (GNP)", "Net National Disposable Income", "Consumer Price Index (CPI)"],
-      correctAnswer: "Gross Domestic Product (GDP)",
-      explanation: "GDP measures the monetary value of all finished goods and services produced domestically over a specified period."
-    }
-  ],
-  "Communicative English": [
-    {
-      question: "Choose the correct reported speech form: 'I am preparing for the midterm exam now,' said Abebe.",
-      options: [
-        "Abebe said that he was preparing for the midterm exam then.",
-        "Abebe said that he is preparing for the midterm exam now.",
-        "Abebe told that he will prepare for the midterm exam then.",
-        "Abebe said he had been preparing for the midterm exam today."
-      ],
-      correctAnswer: "Abebe said that he was preparing for the midterm exam then.",
-      explanation: "In reported speech with a past reporting verb ('said'), present continuous ('am preparing') shifts to past continuous ('was preparing') and 'now' shifts to 'then'."
-    },
-    {
-      question: "Identify the grammatically correct sentence with proper subject-verb agreement:",
-      options: [
-        "The professor, along with her graduate assistants, has published a groundbreaking paper.",
-        "The professor, along with her graduate assistants, have published a groundbreaking paper.",
-        "Neither the students nor the instructor were present at the auditorium.",
-        "A bouquet of fresh yellow roses were placed on the podium."
-      ],
-      correctAnswer: "The professor, along with her graduate assistants, has published a groundbreaking paper.",
-      explanation: "Parenthetical phrases introduced by 'along with' do not change the number of the singular subject ('The professor' -> 'has published')."
-    }
-  ],
-  "Moral and Civic Education": [
-    {
-      question: "Which supreme legal document serves as the foundational framework for governance and human rights in modern Ethiopia?",
-      options: ["The 1995 FDRE Constitution", "The 1931 Imperial Constitution", "The 1987 PDRE Constitution", "The Fetha Nagast historical code"],
-      correctAnswer: "The 1995 FDRE Constitution",
-      explanation: "The 1995 Constitution of the Federal Democratic Republic of Ethiopia establishes the federal state structure, separation of powers, and human and democratic rights."
-    },
-    {
-      question: "In philosophical ethics, which normative theory asserts that the morality of an action depends solely on the greatest overall happiness it produces?",
-      options: ["Utilitarianism (Consequentialism)", "Kantian Deontology", "Virtue Ethics", "Ethical Egoism"],
-      correctAnswer: "Utilitarianism (Consequentialism)",
-      explanation: "Utilitarianism judges actions based on their consequences, seeking the greatest good for the greatest number."
-    }
-  ],
-  "General Physics": [
-    {
-      question: "A constant force of 20 N acts upon a 4 kg mass initially at rest. What is the acceleration produced?",
-      options: ["5 m/s²", "80 m/s²", "16 m/s²", "0.2 m/s²"],
-      correctAnswer: "5 m/s²",
-      explanation: "By Newton's Second Law of Motion: F = m * a. Therefore, a = F / m = 20 N / 4 kg = 5 m/s²."
-    },
-    {
-      question: "What physical quantity does the area under a Velocity-Time graph represent?",
-      options: ["Displacement", "Instantaneous acceleration", "Kinetic momentum", "Jerk"],
-      correctAnswer: "Displacement",
-      explanation: "The definite integral of velocity with respect to time (∫ v(t) dt) calculates the displacement of the moving body."
-    }
-  ],
-  "Chemistry": [
-    {
-      question: "What is the pH of a 0.001 M hydrochloric acid (HCl) aqueous solution at 25°C?",
-      options: ["3.0", "1.0", "11.0", "7.0"],
-      correctAnswer: "3.0",
-      explanation: "HCl is a strong monoprotic acid that dissociates completely: [H+] = 0.001 M = 10^-3 M. pH = -log10([H+]) = -log10(10^-3) = 3.0."
-    },
-    {
-      question: "According to the Bronsted-Lowry acid-base definition, what is a base?",
-      options: ["A proton (H+) acceptor", "A proton (H+) donor", "An electron pair donor only", "A substance that produces OH- ions in nonpolar solvents"],
-      correctAnswer: "A proton (H+) acceptor",
-      explanation: "In Bronsted-Lowry theory, an acid is a proton donor and a base is a proton acceptor."
-    }
-  ]
-};
 
 export default function ExamPrep({ 
-  apiKey, 
-  enrolledSubjects, 
   onStudyAction,
   onNavigateBack,
   isPro = false,
-  onNavigateToUpgrade
+  onNavigateToUpgrade,
+  userId = 'guest_student'
 }: ExamPrepProps) {
-  // Load language settings from safeStorage
+  // Bilingual support
   const [language, setLanguage] = useState<'en' | 'am'>(() => {
     const saved = safeStorage.getItem('ethiolearn_language_preference');
     return (saved === 'am' || saved === 'en') ? saved : 'en';
   });
 
-  // Track practiced subjects for Free tier limit (max 3 subjects)
-  const [triedSubjects, setTriedSubjects] = useState<string[]>(() => {
-    try {
-      const stored = safeStorage.getItem('ethiolearn_quiz_tried_subjects');
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
+  // Active navigation tab
+  const [activeTab, setActiveTab] = useState<'quiz_launcher' | 'bookmarked' | 'database_manager'>('quiz_launcher');
 
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  // Master questions repository in state
+  const [allQuestions, setAllQuestions] = useState<QuestionBankRecord[]>([]);
+  const [loadingQuestions, setLoadingQuestions] = useState<boolean>(true);
+  const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
 
-  const [customQuestionBank, setCustomQuestionBank] = useState<{ [subject: string]: QuizQuestion[] }>(() => {
-    try {
-      const stored = safeStorage.getItem('ethiolearn_custom_exams');
-      return stored ? JSON.parse(stored) : {};
-    } catch {
-      return {};
-    }
-  });
+  // ─── QUIZ GENERATOR CONFIGURATION STATE ───
+  const [selectedSubject, setSelectedSubject] = useState<string>("Critical Thinking");
+  const [selectedUnit, setSelectedUnit] = useState<string>("All Units");
+  const [selectedTopic, setSelectedTopic] = useState<string>("All Topics");
+  const [selectedDifficulty, setSelectedDifficulty] = useState<'all' | 'easy' | 'medium' | 'hard'>('all');
+  const [questionCount, setQuestionCount] = useState<number>(10);
+  const [quizMode, setQuizMode] = useState<'practice' | 'exam'>('practice');
 
-  const [allSubjects, setAllSubjects] = useState<string[]>(() => {
-    try {
-      const stored = safeStorage.getItem('ethiolearn_custom_exams');
-      const customSubjects = stored ? Object.keys(JSON.parse(stored)) : [];
-      const combined = Array.from(new Set([...DEFAULT_SUBJECTS, ...enrolledSubjects, ...customSubjects]));
-      return combined;
-    } catch {
-      return DEFAULT_SUBJECTS;
-    }
-  });
+  // ─── ACTIVE QUIZ RUNTIME STATE ───
+  const [quizState, setQuizState] = useState<'config' | 'active' | 'results' | 'review'>('config');
+  const [activeQuestions, setActiveQuestions] = useState<RandomizedQuizQuestion[]>([]);
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [userAnswers, setUserAnswers] = useState<{ [index: number]: 'A' | 'B' | 'C' | 'D' }>({});
+  const [userAnswerTexts, setUserAnswerTexts] = useState<{ [index: number]: string }>({});
+  const [flaggedIndices, setFlaggedIndices] = useState<Set<number>>(new Set());
+  const [isAnswerRevealed, setIsAnswerRevealed] = useState<boolean>(false);
+  const [showQuestionPalette, setShowQuestionPalette] = useState<boolean>(false);
 
-  const [selectedSubject, setSelectedSubject] = useState(() => {
-    return allSubjects[0] || "Mathematics";
-  });
-
-  const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
-  const [qCount, setQCount] = useState<number>(5);
-  const [customNeeds, setCustomNeeds] = useState<string>('');
-
-  // Custom exam form states
-  const [showAddExamModal, setShowAddExamModal] = useState(false);
-  const [newExamSubject, setNewExamSubject] = useState('');
-  const [newQuestionText, setNewQuestionText] = useState('');
-  const [newOptionA, setNewOptionA] = useState('');
-  const [newOptionB, setNewOptionB] = useState('');
-  const [newOptionC, setNewOptionC] = useState('');
-  const [newOptionD, setNewOptionD] = useState('');
-  const [newCorrectOption, setNewCorrectOption] = useState<'A' | 'B' | 'C' | 'D'>('A');
-  const [newExplanation, setNewExplanation] = useState('');
-
-  // Exam runtime state
-  const [examMode, setExamMode] = useState<'setup' | 'active' | 'results'>('setup');
-  const [examQuestions, setExamQuestions] = useState<QuizQuestion[]>([]);
-  const [activeQIndex, setActiveQIndex] = useState(0);
-  const [userSelections, setUserSelections] = useState<{ [index: number]: string }>({});
-  const [isAnswerRevealed, setIsAnswerRevealed] = useState(false);
-  const [timeRemaining, setTimeRemaining] = useState<number>(90);
+  // ─── EXAM TIMER STATE ───
+  const [timeRemaining, setTimeRemaining] = useState<number>(600); // in seconds
+  const [totalExamTime, setTotalExamTime] = useState<number>(600);
+  const [examStartTimestamp, setExamStartTimestamp] = useState<number>(0);
   const examTimerRef = useRef<any>(null);
 
-  // Results State
-  const [examScore, setExamScore] = useState<number>(0);
-  const [examGrade, setExamGrade] = useState<string>('A');
-  const [particles, setParticles] = useState<{ id: number; left: number; top: number; color: string; size: number; duration: number }[]>([]);
-
-  // 5-minute revision summaries
-  const [revisionTopic, setRevisionTopic] = useState('');
-  const [revisionOutput, setRevisionOutput] = useState('');
-  const [isSummarizing, setIsSummarizing] = useState(false);
-
-  // Loading state
-  const [loadingText, setLoadingText] = useState<string | null>(null);
-
-  // History & Favorites
-  const [pastSessions, setPastSessions] = useState<any[]>(() => {
-    try {
-      const stored = safeStorage.getItem('ethiolearn_exam_sessions');
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
+  // ─── RESULTS & CELEBRATION ───
+  const [quizScore, setQuizScore] = useState<{ correct: number; wrong: number; total: number; percentage: number; timeSpentSeconds: number }>({
+    correct: 0,
+    wrong: 0,
+    total: 0,
+    percentage: 0,
+    timeSpentSeconds: 0
   });
+  const [performanceRating, setPerformanceRating] = useState<string>('Good');
+  const [particles, setParticles] = useState<{ id: number; left: number; top: number; color: string; size: number }[]>([]);
 
-  const [favoriteSessionIds, setFavoriteSessionIds] = useState<string[]>(() => {
+  // ─── DATABASE MANAGER STATE (Manual question addition & testing) ───
+  const [dbSearch, setDbSearch] = useState<string>('');
+  const [dbSubjectFilter, setDbSubjectFilter] = useState<string>('All');
+  const [showAddModal, setShowAddModal] = useState<boolean>(false);
+  const [formSubject, setFormSubject] = useState<string>("Critical Thinking");
+  const [formUnit, setFormUnit] = useState<string>("Unit 1");
+  const [formTopic, setFormTopic] = useState<string>("Introduction");
+  const [formQuestionText, setFormQuestionText] = useState<string>("");
+  const [formOptionA, setFormOptionA] = useState<string>("");
+  const [formOptionB, setFormOptionB] = useState<string>("");
+  const [formOptionC, setFormOptionC] = useState<string>("");
+  const [formOptionD, setFormOptionD] = useState<string>("");
+  const [formCorrectOption, setFormCorrectOption] = useState<'A' | 'B' | 'C' | 'D'>('A');
+  const [formExplanation, setFormExplanation] = useState<string>("");
+  const [formDifficulty, setFormDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
+  const [formSource, setFormSource] = useState<string>("Curriculum Module");
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // ─── LOAD QUESTIONS & BOOKMARKS ON MOUNT ───
+  const loadQuestionRepository = async () => {
+    setLoadingQuestions(true);
     try {
-      const stored = safeStorage.getItem('ethiolearn_favorite_exam_sessions');
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
+      const cached = getCachedQuestions();
+      setAllQuestions(cached);
 
-  const [showFavoriteSessionsOnly, setShowFavoriteSessionsOnly] = useState<boolean>(false);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-
-  // Check if selected subject is permitted under the 3-subject rule
-  const isSubjectPermitted = (sub: string): boolean => {
-    if (isPro) return true;
-    if (triedSubjects.includes(sub)) return true;
-    return triedSubjects.length < 3;
-  };
-
-  const recordSubjectUsage = (sub: string) => {
-    if (!triedSubjects.includes(sub)) {
-      const updated = [...triedSubjects, sub];
-      setTriedSubjects(updated);
-      try {
-        safeStorage.setItem('ethiolearn_quiz_tried_subjects', JSON.stringify(updated));
-      } catch (e) {
-        console.warn('Failed to persist tried subjects', e);
-      }
+      // Load bookmarks
+      const bms = await fetchUserBookmarkedQuestionIds(userId);
+      setBookmarkedIds(new Set(bms));
+    } catch (e) {
+      console.warn('[ExamPrep] Failed to load repository:', e);
+    } finally {
+      setLoadingQuestions(false);
     }
   };
 
-  const handleAddCustomQuestion = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newExamSubject.trim() || !newQuestionText.trim() || !newOptionA.trim() || !newOptionB.trim() || !newOptionC.trim() || !newOptionD.trim()) {
-      alert(language === 'en' ? 'Please fill out all required fields!' : 'እባክዎን ሁሉንም አስፈላጊ ቦታዎች ይሙሉ!');
-      return;
+  useEffect(() => {
+    loadQuestionRepository();
+  }, [userId]);
+
+  // Derived subject list from 19 standard subjects + any additional courses
+  const subjectList = useMemo(() => {
+    const list = OFFICIAL_19_SUBJECTS.map(s => s.name);
+    return ['All First-Year Subjects (Comprehensive Mixed)', ...list];
+  }, []);
+
+  // Compute available units for the selected subject
+  const availableUnits = useMemo(() => {
+    if (selectedSubject.startsWith('All First-Year')) {
+      return ['All Units'];
     }
-
-    const correctMap = {
-      'A': newOptionA.trim(),
-      'B': newOptionB.trim(),
-      'C': newOptionC.trim(),
-      'D': newOptionD.trim()
-    };
-
-    const newQn: QuizQuestion = {
-      question: newQuestionText.trim(),
-      options: [newOptionA.trim(), newOptionB.trim(), newOptionC.trim(), newOptionD.trim()],
-      correctAnswer: correctMap[newCorrectOption],
-      explanation: newExplanation.trim() || undefined
-    };
-
-    const subjectKey = newExamSubject.trim();
-
-    try {
-      const stored = safeStorage.getItem('ethiolearn_custom_exams');
-      const bank = stored ? JSON.parse(stored) : {};
-      
-      if (!bank[subjectKey]) {
-        bank[subjectKey] = [];
+    const unitsSet = new Set<string>();
+    allQuestions.forEach(q => {
+      if (q.subject.toLowerCase() === selectedSubject.toLowerCase() && q.unit) {
+        unitsSet.add(q.unit);
       }
-      bank[subjectKey].push(newQn);
-      
-      safeStorage.setItem('ethiolearn_custom_exams', JSON.stringify(bank));
-      setCustomQuestionBank(bank);
-      
-      if (!allSubjects.includes(subjectKey)) {
-        setAllSubjects(prev => Array.from(new Set([...prev, subjectKey])));
-      }
-      
-      setSelectedSubject(subjectKey);
-      playSuccessChime();
-      alert(language === 'en' 
-        ? `Successfully added your question to "${subjectKey}"!` 
-        : `ጥያቄዎ ወደ "${subjectKey}" በተሳካ ሁኔታ ተጨምሯል!`
-      );
-      
-      setNewQuestionText('');
-      setNewOptionA('');
-      setNewOptionB('');
-      setNewOptionC('');
-      setNewOptionD('');
-      setNewExplanation('');
-      setShowAddExamModal(false);
-    } catch {
-      alert(language === 'en' ? 'Failed to save custom question.' : 'ጥያቄውን መመዝገብ አልተቻለም።');
+    });
+    return ['All Units', ...Array.from(unitsSet).sort()];
+  }, [selectedSubject, allQuestions]);
+
+  // Compute available topics for the selected subject and unit
+  const availableTopics = useMemo(() => {
+    if (selectedSubject.startsWith('All First-Year')) {
+      return ['All Topics'];
     }
-  };
+    const topicsSet = new Set<string>();
+    allQuestions.forEach(q => {
+      const matchSub = q.subject.toLowerCase() === selectedSubject.toLowerCase();
+      const matchUnit = selectedUnit === 'All Units' || q.unit === selectedUnit;
+      if (matchSub && matchUnit && q.topic) {
+        topicsSet.add(q.topic);
+      }
+    });
+    return ['All Topics', ...Array.from(topicsSet).sort()];
+  }, [selectedSubject, selectedUnit, allQuestions]);
 
+  // Available questions count for current filter
+  const matchingQuestionsCount = useMemo(() => {
+    if (selectedSubject.startsWith('All First-Year')) {
+      return allQuestions.filter(q => q.is_published).length;
+    }
+    return allQuestions.filter(q => {
+      if (!q.is_published) return false;
+      const subMatch = q.subject.toLowerCase().includes(selectedSubject.toLowerCase()) || 
+                       selectedSubject.toLowerCase().includes(q.subject.toLowerCase());
+      if (!subMatch) return false;
+      if (selectedUnit !== 'All Units' && q.unit !== selectedUnit) return false;
+      if (selectedTopic !== 'All Topics' && q.topic !== selectedTopic) return false;
+      if (selectedDifficulty !== 'all' && q.difficulty !== selectedDifficulty) return false;
+      return true;
+    }).length;
+  }, [selectedSubject, selectedUnit, selectedTopic, selectedDifficulty, allQuestions]);
+
+  // Celebration Dopamine Effect
   const triggerDopaminePop = () => {
     const newParticles = Array.from({ length: 24 }).map((_, i) => ({
       id: Date.now() + i,
       left: Math.random() * 80 + 10,
       top: Math.random() * 60 + 20,
-      color: ['#078930', '#FCDD09', '#DA121A', '#3B82F6', '#10B981', '#F59E0B'][Math.floor(Math.random() * 6)],
-      size: Math.random() * 8 + 4,
-      duration: Math.random() * 1.5 + 1
+      color: ['#F59E0B', '#10B981', '#3B82F6', '#8B5CF6', '#EC4899', '#EAB308'][Math.floor(Math.random() * 6)],
+      size: Math.random() * 10 + 4
     }));
     setParticles(newParticles);
     setTimeout(() => setParticles([]), 2500);
   };
 
-  const toggleFavoriteSession = (sessionId: string) => {
+  // ─── START QUIZ ENGINE (0 RUNTIME AI CALLS) ───
+  const handleStartQuiz = async (customSubject?: string) => {
+    const targetSubject = customSubject || selectedSubject;
     playClickChime();
-    setFavoriteSessionIds(prev => {
-      let updated: string[];
-      if (prev.includes(sessionId)) {
-        updated = prev.filter(id => id !== sessionId);
-      } else {
-        updated = [...prev, sessionId];
+
+    try {
+      const isComprehensive = targetSubject.startsWith('All First-Year');
+      const candidates = await generateRandomExamQuestions({
+        subject: isComprehensive ? undefined : targetSubject,
+        unit: selectedUnit !== 'All Units' ? selectedUnit : undefined,
+        topic: selectedTopic !== 'All Topics' ? selectedTopic : undefined,
+        difficulty: selectedDifficulty !== 'all' ? selectedDifficulty : undefined,
+        totalQuestions: Math.max(questionCount, 5)
+      });
+
+      if (!candidates || candidates.length === 0) {
+        alert(language === 'en' 
+          ? `No questions found for ${targetSubject}. Please try another subject or add questions in Manage DB.` 
+          : `ለ ${targetSubject} ምንም ጥያቄ አልተገኘም። እባክዎን ሌላ ይምረጡ ወይም አዲስ ጥያቄ ያክሉ።`
+        );
+        return;
       }
-      safeStorage.setItem('ethiolearn_favorite_exam_sessions', JSON.stringify(updated));
-      return updated;
+
+      // Pro Access Check if Pro questions requested
+      let questionsToUse = candidates;
+      if (!isPro) {
+        const hasProQuestions = candidates.some(c => c.is_pro);
+        if (hasProQuestions) {
+          const freeCandidates = candidates.filter(c => !c.is_pro);
+          if (freeCandidates.length < 3) {
+            onNavigateToUpgrade?.();
+            return;
+          }
+          questionsToUse = freeCandidates;
+        }
+      }
+
+      // Randomize option order and safely map correct answer without permanent DB mutation
+      const randomizedItems: RandomizedQuizQuestion[] = questionsToUse.map(randomizeQuestionWithMappedAnswer);
+
+      setActiveQuestions(randomizedItems);
+      setCurrentIndex(0);
+      setUserAnswers({});
+      setUserAnswerTexts({});
+      setFlaggedIndices(new Set());
+      setIsAnswerRevealed(false);
+
+      // Setup Timer for Exam Mode (1.2 minutes per question)
+      const allocatedSeconds = quizMode === 'exam' ? Math.max(randomizedItems.length * 72, 300) : 0;
+      setTimeRemaining(allocatedSeconds);
+      setTotalExamTime(allocatedSeconds);
+      setExamStartTimestamp(Date.now());
+
+      if (quizMode === 'exam') {
+        clearInterval(examTimerRef.current);
+        examTimerRef.current = setInterval(() => {
+          setTimeRemaining((prev) => {
+            if (prev <= 1) {
+              clearInterval(examTimerRef.current);
+              handleFinishQuizAuto();
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      }
+
+      setQuizState('active');
+      playSuccessChime();
+    } catch (e) {
+      console.warn('[Quiz Launch Error]:', e);
+      alert('Failed to launch quiz from question bank.');
+    }
+  };
+
+  // ─── BOOKMARK TOGGLE ───
+  const handleToggleBookmark = async (questionId: string) => {
+    playClickChime();
+    const isNow = await toggleQuestionBookmark(userId, questionId);
+    setBookmarkedIds(prev => {
+      const next = new Set(prev);
+      if (isNow) next.add(questionId);
+      else next.delete(questionId);
+      return next;
     });
   };
 
-  const finalizeQuizStart = (questions: QuizQuestion[]) => {
-    recordSubjectUsage(selectedSubject);
-    setExamQuestions(questions);
-    setExamMode('active');
-    setActiveQIndex(0);
-    setUserSelections({});
-    setIsAnswerRevealed(false);
-    setTimeRemaining(90);
-    startQuestionTimer(90);
-    playSuccessChime();
-  };
+  // ─── ANSWER SELECTION ───
+  const handleSelectAnswer = (optionId: 'A' | 'B' | 'C' | 'D', optionText: string) => {
+    if (quizMode === 'practice' && isAnswerRevealed) return;
 
-  // Generate Authentic Pro AI Quiz
-  const handleGenerateCuratedMock = async () => {
-    // 3-Subject Subscription Check
-    if (!isSubjectPermitted(selectedSubject)) {
-      playFailureChime();
-      setShowUpgradeModal(true);
-      return;
-    }
+    setUserAnswers(prev => ({ ...prev, [currentIndex]: optionId }));
+    setUserAnswerTexts(prev => ({ ...prev, [currentIndex]: optionText }));
 
-    playClickChime();
-    setLoadingText(language === 'en' 
-      ? `Asgobnyi AI is generating verified ${selectedSubject} questions...` 
-      : `አስጎብኚ AI ትክክለኛ የ${selectedSubject} የፈተና ጥያቄዎችን በማዘጋጀት ላይ...`
-    );
+    const currentQ = activeQuestions[currentIndex];
+    const isCorrect = optionId === currentQ.correct_answer_id;
 
-    try {
-      const resp = await fetch('/api/quiz/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subject: selectedSubject,
-          topic: revisionTopic || undefined,
-          difficulty,
-          qCount,
-          customNeeds,
-          language
-        })
-      });
+    // Track progress in background
+    recordQuestionProgress(userId, currentQ.originalId, isCorrect, optionId);
 
-      if (resp.ok) {
-        const data = await resp.json();
-        if (data.success && Array.isArray(data.questions) && data.questions.length > 0) {
-          setLoadingText(null);
-          finalizeQuizStart(data.questions);
-          return;
-        }
+    if (quizMode === 'practice') {
+      setIsAnswerRevealed(true);
+      if (isCorrect) {
+        playSuccessChime();
+        triggerDopaminePop();
+      } else {
+        playFailureChime();
       }
-    } catch (e) {
-      console.warn('[Quiz API Error, falling back to dedicated subject bank]:', e);
+    } else {
+      playClickChime();
     }
 
-    // Fallback: strictly query questions for this subject only.
-    // NEVER mix questions from other subjects!
-    const defaultBank = PAST_EXAM_BANK[selectedSubject] || [];
-    const customBankForSubject = customQuestionBank[selectedSubject] || [];
-    let combined: QuizQuestion[] = [...customBankForSubject, ...defaultBank];
-
-    if (combined.length === 0) {
-      combined = [
-        {
-          question: `In Ethiopian university syllabus for ${selectedSubject}, which core concept governs ${customNeeds || 'foundational analysis'}?`,
-          options: [
-            `A) Theoretical axioms and empirical verification in ${selectedSubject}`,
-            `B) Unsubstantiated empirical observation without foundational models`,
-            `C) Isolated scalar approximations disregarding domain boundaries`,
-            `D) Non-reproducible empirical extrapolation`
-          ],
-          correctAnswer: `A) Theoretical axioms and empirical verification in ${selectedSubject}`,
-          explanation: `In standard university level ${selectedSubject}, academic rigor requires proven theoretical frameworks and empirical consistency.`
-        }
-      ];
-    }
-
-    const shuffled = [...combined].sort(() => 0.5 - Math.random());
-    const selected = shuffled.slice(0, Math.min(qCount, shuffled.length));
-    setLoadingText(null);
-    finalizeQuizStart(selected);
+    onStudyAction?.();
   };
 
-  const handleStartPastExam = async () => {
-    // 3-Subject Subscription Check
-    if (!isSubjectPermitted(selectedSubject)) {
-      playFailureChime();
-      setShowUpgradeModal(true);
-      return;
-    }
-
+  // ─── QUESTION NAVIGATION ───
+  const handleNext = () => {
     playClickChime();
-    setLoadingText(language === 'en' 
-      ? `Retrieving authentic ${selectedSubject} university examination paper...` 
-      : `ኦፊሴላዊ የ${selectedSubject} የዩኒቨርሲቲ ፈተና ጥያቄዎችን በማምጣት ላይ...`
-    );
-
-    try {
-      const dbQuestions = await generateRandomExamQuestions({
-        subject: selectedSubject,
-        totalQuestions: 10,
-        examCategory: 'practice_exam'
-      });
-
-      if (dbQuestions && dbQuestions.length > 0) {
-        const mapped: QuizQuestion[] = dbQuestions.map(q => ({
-          question: q.question_text,
-          options: q.options,
-          correctAnswer: q.correct_answer,
-          explanation: q.explanation || `${q.course} (${q.unit})`
-        }));
-        setLoadingText(null);
-        finalizeQuizStart(mapped);
-        return;
-      }
-    } catch {
-      // Fallback below
+    if (currentIndex < activeQuestions.length - 1) {
+      setCurrentIndex(prev => prev + 1);
+      setIsAnswerRevealed(false);
+    } else {
+      handleFinishQuiz();
     }
-
-    // Fallback: dedicated subject bank only (strictly matching selected subject)
-    const matchedKey = Object.keys(PAST_EXAM_BANK).find(
-      k => k.toLowerCase() === selectedSubject.toLowerCase() ||
-           k.toLowerCase().includes(selectedSubject.toLowerCase()) ||
-           selectedSubject.toLowerCase().includes(k.toLowerCase())
-    );
-    const defaultBank = matchedKey ? PAST_EXAM_BANK[matchedKey] : (PAST_EXAM_BANK[selectedSubject] || []);
-    const customBankForSubject = customQuestionBank[selectedSubject] || [];
-    const bank = [...customBankForSubject, ...defaultBank];
-    setLoadingText(null);
-    finalizeQuizStart(bank);
   };
 
-  const startQuestionTimer = (seconds: number) => {
-    clearInterval(examTimerRef.current);
-    setTimeRemaining(seconds);
-    examTimerRef.current = setInterval(() => {
-      setTimeRemaining((prev) => {
-        if (prev <= 1) {
-          clearInterval(examTimerRef.current);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+  const handlePrev = () => {
+    playClickChime();
+    if (currentIndex > 0) {
+      setCurrentIndex(prev => prev - 1);
+      setIsAnswerRevealed(Boolean(userAnswers[currentIndex - 1]));
+    }
   };
 
-  const handleOptionSelect = (option: string) => {
-    if (isAnswerRevealed) return;
+  const handleToggleFlag = () => {
+    playClickChime();
+    setFlaggedIndices(prev => {
+      const next = new Set(prev);
+      if (next.has(currentIndex)) next.delete(currentIndex);
+      else next.add(currentIndex);
+      return next;
+    });
+  };
 
-    setUserSelections(prev => ({ ...prev, [activeQIndex]: option }));
-    setIsAnswerRevealed(true);
+  // ─── QUIZ COMPLETION & SCORING ───
+  const handleFinishQuiz = () => {
     clearInterval(examTimerRef.current);
+    calculateAndShowScore();
+  };
 
-    const question = examQuestions[activeQIndex];
-    if (option === question.correctAnswer) {
+  const handleFinishQuizAuto = () => {
+    calculateAndShowScore();
+  };
+
+  const calculateAndShowScore = () => {
+    let correct = 0;
+    let wrong = 0;
+
+    activeQuestions.forEach((q, idx) => {
+      const chosen = userAnswers[idx];
+      if (chosen === q.correct_answer_id) {
+        correct++;
+      } else {
+        wrong++;
+      }
+    });
+
+    const total = activeQuestions.length;
+    const percentage = total > 0 ? Math.round((correct / total) * 100) : 0;
+    const timeSpentSeconds = Math.max(1, Math.round((Date.now() - examStartTimestamp) / 1000));
+
+    // Performance rating
+    let rating = 'Good';
+    if (percentage >= 85) rating = 'Excellent (A+)';
+    else if (percentage >= 75) rating = 'Very Good (A)';
+    else if (percentage >= 65) rating = 'Good (B)';
+    else if (percentage >= 50) rating = 'Satisfactory (C)';
+    else rating = 'Needs Improvement';
+
+    setQuizScore({
+      correct,
+      wrong,
+      total,
+      percentage,
+      timeSpentSeconds
+    });
+    setPerformanceRating(rating);
+    setQuizState('results');
+
+    if (percentage >= 65) {
       playSuccessChime();
       triggerDopaminePop();
     } else {
       playFailureChime();
     }
-    onStudyAction?.();
   };
 
-  const handleNextQuestion = () => {
+  // ─── ADD MANUAL QUESTION TO DATABASE ───
+  const handleAddManualQuestion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formQuestionText.trim() || !formOptionA.trim() || !formOptionB.trim()) {
+      alert('Question text and at least options A and B are required.');
+      return;
+    }
+
+    setIsSubmitting(true);
     playClickChime();
-    if (activeQIndex < examQuestions.length - 1) {
-      setActiveQIndex(prev => prev + 1);
-      setIsAnswerRevealed(false);
-      setTimeRemaining(90);
-      startQuestionTimer(90);
-    } else {
-      finishExam();
+
+    const optionsList: [string, string, string, string] = [
+      formOptionA.trim(),
+      formOptionB.trim(),
+      formOptionC.trim() || 'None',
+      formOptionD.trim() || 'All of the above'
+    ];
+
+    const correctTextMap: Record<'A' | 'B' | 'C' | 'D', string> = {
+      'A': formOptionA.trim(),
+      'B': formOptionB.trim(),
+      'C': formOptionC.trim() || 'None',
+      'D': formOptionD.trim() || 'All of the above'
+    };
+
+    const newQuestion: ManualDatabaseQuestion = {
+      id: `manual_db_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      subject: formSubject,
+      questionText: formQuestionText.trim(),
+      options: optionsList,
+      correctAnswer: correctTextMap[formCorrectOption],
+      correctOption: formCorrectOption,
+      explanation: formExplanation.trim() || 'Verified university curriculum module concept.',
+      topic: formTopic.trim() || 'General Concepts',
+      unit: formUnit.trim() || 'Unit 1',
+      difficulty: formDifficulty,
+      createdAt: new Date().toISOString(),
+      source: 'manual'
+    };
+
+    try {
+      await saveManualQuestionToDatabase(newQuestion);
+      await loadQuestionRepository();
+      setShowAddModal(false);
+      setFormQuestionText('');
+      setFormOptionA('');
+      setFormOptionB('');
+      setFormOptionC('');
+      setFormOptionD('');
+      setFormExplanation('');
+      playSuccessChime();
+    } catch (e) {
+      console.warn('[Save Question Error]:', e);
+      alert('Failed to save question to database.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const finishExam = () => {
-    clearInterval(examTimerRef.current);
+  // Bookmarked questions list
+  const bookmarkedQuestionsList = useMemo(() => {
+    return allQuestions.filter(q => bookmarkedIds.has(q.id));
+  }, [allQuestions, bookmarkedIds]);
 
-    let score = 0;
-    examQuestions.forEach((q, idx) => {
-      if (userSelections[idx] === q.correctAnswer) {
-        score++;
-      }
-    });
-
-    setExamScore(score);
-    const percent = Math.round((score / examQuestions.length) * 100);
-
-    let grade = 'F';
-    if (percent >= 90) grade = 'A+';
-    else if (percent >= 85) grade = 'A';
-    else if (percent >= 80) grade = 'A-';
-    else if (percent >= 75) grade = 'B+';
-    else if (percent >= 70) grade = 'B';
-    else if (percent >= 60) grade = 'C';
-    else if (percent >= 50) grade = 'D';
-
-    setExamGrade(grade);
-    setExamMode('results');
-
-    const newSessionId = `session_${Date.now()}_${selectedSubject}`;
-    setCurrentSessionId(newSessionId);
-
-    const sessionRecord = {
-      id: newSessionId,
-      subject: selectedSubject,
-      score: percent,
-      grade,
-      correctCount: score,
-      totalCount: examQuestions.length,
-      date: new Date().toLocaleDateString(language === 'en' ? 'en-US' : 'am-ET', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric'
-      })
-    };
-
-    const updatedSessions = [sessionRecord, ...pastSessions].slice(0, 30);
-    setPastSessions(updatedSessions);
-    safeStorage.setItem('ethiolearn_exam_sessions', JSON.stringify(updatedSessions));
-
-    playSuccessChime();
-    triggerDopaminePop();
-  };
-
-  // Exit Quiz cleanly if student changes their mind
-  const handleConfirmExitQuiz = () => {
-    playClickChime();
-    clearInterval(examTimerRef.current);
-    setShowExitConfirm(false);
-    setExamMode('setup');
-  };
-
-  // Curriculum 5-Minute summaries
-  const runTopicRevision = async () => {
-    if (!revisionTopic.trim()) return;
-    setIsSummarizing(true);
-    setRevisionOutput('');
-    playClickChime();
-
-    setTimeout(() => {
-      const summaryCard = `### 📌 5-Minute High-Yield Study Revision Card
-**Subject:** ${selectedSubject}
-**Topic:** ${revisionTopic}
-
-**Core Curriculum Takeaways:**
-1. **Fundamental Axiom:** Review the key theorems and definitions of ${revisionTopic} in ${selectedSubject}.
-2. **High-Frequency University Exam Formula:** Verify standard equations, formulas, and relationships used in Ethiopian universities.
-3. **Common Trap to Avoid:** Distractor options often invert variables or drop units. Always verify dimensional consistency.
-4. **Active Application:** Connect theoretical concepts directly to practical exam problem solving.
-5. **Exam Strategy:** Eliminate choices that contradict foundational definitions first.
-
-*Verified Ethiopian Higher Education Curriculum Reference.*`;
-      setIsSummarizing(false);
-      setRevisionOutput(summaryCard);
-      playSuccessChime();
-    }, 250);
+  // Format time remaining MM:SS
+  const formatTime = (secs: number) => {
+    const mins = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${mins.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
   return (
-    <div className="space-y-6">
-      <AnimatePresence mode="wait">
-        {/* SETUP SCREEN */}
-        {examMode === 'setup' && (
-          <motion.div
-            key="setup"
-            initial={{ opacity: 0, scale: 0.99 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0 }}
-            className="space-y-5"
-          >
-            {/* Top Navigation & Status Bar */}
-            {/* Top Bar: Back button and Quota */}
-            <div className="flex items-center justify-between gap-3 pb-1">
-              <button
-                onClick={() => {
-                  playClickChime();
-                  if (onNavigateBack) onNavigateBack();
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 bg-[#111C35] hover:bg-[#17233D] border border-slate-800 transition cursor-pointer"
-              >
-                <ArrowLeft className="w-4 h-4 text-amber-400" />
-                <span>{language === 'en' ? 'Back' : 'ተመለስ'}</span>
-              </button>
+    <div className="min-h-screen bg-[#0A1128] text-slate-100 p-4 md:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+      {/* ─── DOPAMINE POP PARTICLES ─── */}
+      {particles.map(p => (
+        <motion.div
+          key={p.id}
+          initial={{ opacity: 1, scale: 0.5, x: 0, y: 0 }}
+          animate={{ opacity: 0, scale: 1.8, x: (Math.random() - 0.5) * 200, y: (Math.random() - 0.5) * 200 }}
+          transition={{ duration: 1.8, ease: 'easeOut' }}
+          className="fixed pointer-events-none rounded-full z-50 shadow-lg"
+          style={{
+            left: `${p.left}%`,
+            top: `${p.top}%`,
+            backgroundColor: p.color,
+            width: `${p.size}px`,
+            height: `${p.size}px`
+          }}
+        />
+      ))}
 
-              {isPro ? (
-                <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
-                  <Crown className="w-3.5 h-3.5" />
-                  <span>{language === 'en' ? 'Pro: Unlimited' : 'ፕሮ፦ ያልተገደበ'}</span>
+      {/* ─── TOP BRAND & NAVIGATION BAR ─── */}
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800/80">
+        <div className="flex items-center gap-3">
+          {onNavigateBack && (
+            <button
+              onClick={onNavigateBack}
+              className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+          )}
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+                University Question Bank & Quizzes
+                <span className="text-[10px] uppercase font-bold font-mono px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  {allQuestions.length} Questions
                 </span>
-              ) : (
-                <div className="text-right">
-                  <span className="text-xs font-medium text-slate-300">
-                    {language === 'en' ? 'Free subjects: ' : 'ነፃ ትምህርቶች፦ '}
-                    <strong className="text-amber-400 font-bold">{triedSubjects.length} / 3</strong> active
-                  </span>
-                </div>
+              </h1>
+              {isPro && (
+                <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[10px] flex items-center gap-1 shadow-sm">
+                  <Crown className="w-3 h-3" /> PRO
+                </span>
               )}
             </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              100% Pre-Generated Database &bull; Zero AI Latency &bull; Authentic Ethiopian University Curriculum
+            </p>
+          </div>
+        </div>
 
-            {/* Simple Quota Progress Indicator */}
-            {!isPro && (
-              <div className="w-full bg-[#111C35] rounded-full h-1.5 overflow-hidden">
-                <div 
-                  className={`h-full transition-all duration-300 ${
-                    triedSubjects.length >= 3 ? 'bg-amber-400' : 'bg-emerald-400'
-                  }`}
-                  style={{ width: `${Math.min(100, (triedSubjects.length / 3) * 100)}%` }}
-                />
-              </div>
-            )}
+        {/* Tab Switcher & Language */}
+        <div className="flex items-center gap-2">
+          <div className="flex p-1 bg-slate-900 border border-slate-800 rounded-xl">
+            <button
+              onClick={() => { playClickChime(); setActiveTab('quiz_launcher'); setQuizState('config'); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'quiz_launcher' ? 'bg-amber-500 text-slate-950 font-black shadow-md' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Quiz Launcher
+            </button>
+            <button
+              onClick={() => { playClickChime(); setActiveTab('bookmarked'); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'bookmarked' ? 'bg-amber-500 text-slate-950 font-black shadow-md' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Bookmark className="w-3 h-3" />
+              <span>Saved ({bookmarkedIds.size})</span>
+            </button>
+            <button
+              onClick={() => { playClickChime(); setActiveTab('database_manager'); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'database_manager' ? 'bg-amber-500 text-slate-950 font-black shadow-md' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Database className="w-3 h-3" />
+              <span>Manage DB</span>
+            </button>
+          </div>
 
-            {/* 3-Column Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-1">
-              {/* Form configuration panel */}
-              <div className="bg-[#111C35] p-5 rounded-2xl border border-slate-800 space-y-4">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
-                  <h3 className="font-bold text-sm text-white">
-                    {language === 'en' ? 'Curriculum Practice & Exams' : 'ፈተና እና ልምምድ'}
-                  </h3>
+          <button
+            onClick={() => {
+              playClickChime();
+              const next = language === 'en' ? 'am' : 'en';
+              setLanguage(next);
+              safeStorage.setItem('ethiolearn_language_preference', next);
+            }}
+            className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-bold text-slate-300 hover:text-white cursor-pointer"
+          >
+            {language === 'en' ? '🇬🇧 EN' : '🇪🇹 AM'}
+          </button>
+        </div>
+      </header>
 
-                  <button
-                    onClick={() => { playClickChime(); setShowAddExamModal(true); }}
-                    className="p-1 text-slate-400 hover:text-amber-400 transition-colors cursor-pointer"
-                    title={language === 'en' ? 'Add Custom Question' : 'ጥያቄ ጨምር'}
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* Subject select */}
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-                    {language === 'en' ? 'Subject' : 'የትምህርት አይነት'}
-                  </label>
-
-                  <select
-                    value={selectedSubject}
-                    onChange={(e) => setSelectedSubject(e.target.value)}
-                    className="w-full bg-[#0B1228] border border-slate-800 text-slate-100 font-sans text-xs font-semibold rounded-xl py-2.5 px-3 outline-none cursor-pointer focus:border-amber-400"
-                  >
-                    {allSubjects.map(s => {
-                      const locked = !isSubjectPermitted(s);
-                      return (
-                        <option key={s} value={s}>
-                          {s} {locked ? '🔒 (Pro)' : (triedSubjects.includes(s) ? '✓' : '')}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-
-                {/* Number of questions: native mobile segmented control */}
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-                    {language === 'en' ? 'Number of questions' : 'የጥያቄዎች ብዛት'}
-                  </label>
-                  <div className="grid grid-cols-3 gap-1.5 bg-[#0B1228] p-1 rounded-xl border border-slate-800">
-                    {[5, 10, 20].map((count) => (
-                      <button
-                        key={count}
-                        type="button"
-                        onClick={() => { setQCount(count); playClickChime(); }}
-                        className={`py-2 text-xs font-bold rounded-lg cursor-pointer transition-all ${
-                          qCount === count ? 'bg-amber-500 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        {count}
-                      </button>
-                    ))}
+      {/* ─── TAB 1: QUIZ LAUNCHER & ACTIVE QUIZ FLOW ─── */}
+      {activeTab === 'quiz_launcher' && (
+        <>
+          {/* ================================================================ */}
+          {/* 1. QUIZ CONFIGURATION / GENERATOR SCREEN                         */}
+          {/* ================================================================ */}
+          {quizState === 'config' && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-6"
+            >
+              {/* Hero Banner Card */}
+              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-amber-950/40 border border-slate-800 p-6 sm:p-8">
+                <div className="max-w-2xl space-y-3 relative z-10">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Curriculum Question Bank (19 University Freshman Subjects)</span>
                   </div>
-                </div>
-
-                {/* Difficulty: native mobile segmented control */}
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-                    {language === 'en' ? 'Difficulty' : 'የክብደት ደረጃ'}
-                  </label>
-                  <div className="grid grid-cols-3 gap-1.5 bg-[#0B1228] p-1 rounded-xl border border-slate-800">
-                    {(['easy', 'medium', 'hard'] as const).map((diff) => (
-                      <button
-                        key={diff}
-                        type="button"
-                        onClick={() => { setDifficulty(diff); playClickChime(); }}
-                        className={`py-2 text-xs font-bold rounded-lg cursor-pointer capitalize transition-all ${
-                          difficulty === diff ? 'bg-amber-500 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        {language === 'en' ? diff : (diff === 'easy' ? 'ቀላል' : diff === 'medium' ? 'መካከለኛ' : 'ከባድ')}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Specific topic input */}
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-                    {language === 'en' ? 'Specific topic' : 'የትኩረት ርዕስ'}
-                  </label>
-                  <input
-                    type="text"
-                    value={customNeeds}
-                    onChange={(e) => setCustomNeeds(e.target.value)}
-                    placeholder={language === 'en' ? 'Enter topic...' : 'ርዕስ ያስገቡ...'}
-                    className="w-full bg-[#0B1228] border border-slate-800 text-slate-200 font-sans text-xs font-medium rounded-xl py-2 px-3 outline-none focus:border-amber-400 placeholder-slate-500"
-                  />
-                </div>
-
-                {/* Action Buttons: Prominent Start Practice Quiz */}
-                <div className="pt-2 space-y-2">
-                  <button
-                    onClick={handleGenerateCuratedMock}
-                    className="w-full h-11 min-h-[44px] bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all active:scale-98"
-                  >
-                    <Layers className="w-4 h-4 text-slate-950" />
-                    <span>{language === 'en' ? 'Start Practice Quiz' : 'የልምምድ ፈተና ጀምር'}</span>
-                  </button>
-
-                  <button
-                    onClick={handleStartPastExam}
-                    className="w-full h-10 min-h-[40px] bg-[#17233D] hover:bg-[#1E2D4E] border border-slate-700 text-slate-200 text-xs font-semibold rounded-xl flex items-center justify-center gap-2 cursor-pointer transition active:scale-98"
-                  >
-                    <FileText className="w-3.5 h-3.5 text-amber-400" />
-                    <span>{language === 'en' ? 'Official Past University Paper' : 'ኦፊሴላዊ የዩኒቨርሲቲ ፈተና'}</span>
-                  </button>
-
-                  {/* Change mind / back button */}
-                  {onNavigateBack && (
-                    <button
-                      onClick={() => {
-                        playClickChime();
-                        onNavigateBack();
-                      }}
-                      className="w-full text-center py-1 text-xs text-slate-400 hover:text-amber-400 transition-colors cursor-pointer"
-                    >
-                      {language === 'en' ? 'Changed your mind? Return to Dashboard' : 'ሀሳብዎን ቀየሩ? ወደ ዋናው ዳሽቦርድ ይመለሱ'}
-                    </button>
-                  )}
-                </div>
-
-                {loadingText && (
-                  <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-center text-xs text-amber-300 font-bold animate-pulse">
-                    {loadingText}
-                  </div>
-                )}
-              </div>
-
-              {/* Topic Revision helper cards */}
-              <div className="bg-[#141E33] p-6 rounded-2xl border border-slate-700/80 shadow-md space-y-4">
-                <div className="flex items-center gap-2 pb-3 border-b border-slate-700/60">
-                  <Zap className="w-5 h-5 text-amber-400" />
-                  <h3 className="font-serif font-bold text-base text-white">
-                    {language === 'en' ? '5-Min Topic Summary' : 'ፈጣን የርዕስ ማጠቃለያ'}
-                  </h3>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-xs text-slate-400 font-sans leading-relaxed">
-                    {language === 'en' 
-                      ? 'Type any difficult chapter or concept to generate high-yield revision notes before taking your quiz!' 
-                      : 'ያልገባዎትን ርዕስ እዚህ ይጻፉና ፈተና ከመውሰድዎ በፊት ፈጣን ማጠቃለያ ይከልሱ!'}
+                  <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                    Instant Quiz & Timed Exam Engine
+                  </h2>
+                  <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                    Select any subject, unit, and difficulty to load pre-verified questions from Supabase. 
+                    Practice with explanations or challenge yourself in timed Exam Mode.
                   </p>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder={language === 'en' ? "e.g. Mitochondria, GDP, FDRE Constitution..." : "ምሳሌ፦ Mitochondria, GDP, የፌደራል ህገ-መንግስት..."}
-                      value={revisionTopic}
-                      onChange={(e) => setRevisionTopic(e.target.value)}
-                      className="flex-1 bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-xl px-3.5 outline-none focus:border-amber-400"
-                    />
-                    <button
-                      onClick={runTopicRevision}
-                      disabled={isSummarizing || !revisionTopic.trim()}
-                      className="h-10 px-4 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl flex items-center justify-center cursor-pointer disabled:opacity-40 transition-colors"
+                </div>
+              </div>
+
+              {/* Quiz Setup Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Left 2 Cols: Subject, Unit, Topic Selectors */}
+                <div className="lg:col-span-2 space-y-5 bg-slate-900/80 border border-slate-800 p-6 rounded-3xl">
+                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                    <h3 className="text-sm font-black text-white flex items-center gap-2">
+                      <GraduationCap className="w-4 h-4 text-amber-400" />
+                      1. Select Course & Topic
+                    </h3>
+                    <span className="text-xs font-mono font-bold text-amber-400">
+                      {matchingQuestionsCount} Questions Available
+                    </span>
+                  </div>
+
+                  {/* Subject Dropdown */}
+                  <div>
+                    <label className="text-xs font-bold text-slate-300 block mb-1.5">
+                      Academic Subject
+                    </label>
+                    <select
+                      value={selectedSubject}
+                      onChange={(e) => {
+                        setSelectedSubject(e.target.value);
+                        setSelectedUnit('All Units');
+                        setSelectedTopic('All Topics');
+                      }}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-sm font-semibold text-white focus:outline-none focus:border-amber-500 transition-colors"
                     >
-                      <RefreshCw className={`w-4 h-4 ${isSummarizing ? 'animate-spin' : ''}`} />
-                    </button>
+                      {subjectList.map((sub, i) => (
+                        <option key={i} value={sub}>{sub}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Unit & Topic Dropdowns */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs font-bold text-slate-300 block mb-1.5">
+                        Module Unit / Chapter
+                      </label>
+                      <select
+                        value={selectedUnit}
+                        onChange={(e) => {
+                          setSelectedUnit(e.target.value);
+                          setSelectedTopic('All Topics');
+                        }}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-xs font-semibold text-white focus:outline-none focus:border-amber-500 transition-colors"
+                      >
+                        {availableUnits.map((u, i) => (
+                          <option key={i} value={u}>{u}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-300 block mb-1.5">
+                        Specific Topic
+                      </label>
+                      <select
+                        value={selectedTopic}
+                        onChange={(e) => setSelectedTopic(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-xs font-semibold text-white focus:outline-none focus:border-amber-500 transition-colors"
+                      >
+                        {availableTopics.map((t, i) => (
+                          <option key={i} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Quick Subject Chips for Quick Tap */}
+                  <div>
+                    <span className="text-xs font-bold text-slate-400 block mb-2">
+                      Popular Freshman Modules:
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        "Critical Thinking",
+                        "General Biology",
+                        "General Physics",
+                        "General Chemistry",
+                        "Economics",
+                        "Emerging Technologies",
+                        "Mathematics — Natural Science",
+                        "History of Ethiopia and the Horn"
+                      ].map((subName) => (
+                        <button
+                          key={subName}
+                          onClick={() => {
+                            setSelectedSubject(subName);
+                            setSelectedUnit('All Units');
+                            setSelectedTopic('All Topics');
+                          }}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            selectedSubject === subName
+                              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                              : 'bg-slate-950 border border-slate-800 text-slate-300 hover:text-white'
+                          }`}
+                        >
+                          {subName}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
-                {revisionOutput ? (
-                  <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 text-xs leading-relaxed max-h-64 overflow-y-auto whitespace-pre-line text-slate-300 font-sans">
-                    {revisionOutput}
-                  </div>
-                ) : (
-                  <div className="p-8 border border-dashed border-slate-700 rounded-xl text-center text-xs text-slate-500 font-serif">
-                    {language === 'en' ? 'Notes outcome will compile here...' : 'የተዘጋጀው ማጠቃለያ እዚህ ላይ ይወጣል...'}
-                  </div>
-                )}
-              </div>
+                {/* Right Col: Mode, Count & Launch */}
+                <div className="space-y-5 bg-slate-900/80 border border-slate-800 p-6 rounded-3xl flex flex-col justify-between">
+                  <div className="space-y-4">
+                    <div className="border-b border-slate-800/80 pb-3">
+                      <h3 className="text-sm font-black text-white flex items-center gap-2">
+                        <SlidersHorizontal className="w-4 h-4 text-amber-400" />
+                        2. Quiz Mode & Constraints
+                      </h3>
+                    </div>
 
-              {/* Performance Logs list */}
-              <div className="bg-[#141E33] p-6 rounded-2xl border border-slate-700/80 shadow-md space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-700/60">
-                  <div className="flex items-center gap-2">
-                    <Trophy className="w-5 h-5 text-amber-400" />
-                    <h3 className="font-serif font-bold text-base text-white">
-                      {language === 'en' ? 'Performance History' : 'የፈተና ታሪክ እና ውጤት'}
+                    {/* Mode Toggle: Practice vs Exam */}
+                    <div>
+                      <label className="text-xs font-bold text-slate-300 block mb-1.5">
+                        Simulation Mode
+                      </label>
+                      <div className="grid grid-cols-2 gap-2 p-1 bg-slate-950 border border-slate-800 rounded-2xl">
+                        <button
+                          type="button"
+                          onClick={() => setQuizMode('practice')}
+                          className={`py-2 rounded-xl text-xs font-bold flex flex-col items-center gap-0.5 transition-all cursor-pointer ${
+                            quizMode === 'practice'
+                              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <BookOpen className="w-3.5 h-3.5" />
+                          <span>Practice Mode</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setQuizMode('exam')}
+                          className={`py-2 rounded-xl text-xs font-bold flex flex-col items-center gap-0.5 transition-all cursor-pointer ${
+                            quizMode === 'exam'
+                              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>Exam Mode</span>
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        {quizMode === 'practice' 
+                          ? 'Immediate feedback & explanations after each answer.' 
+                          : 'Strict countdown timer & full exam submission at the end.'}
+                      </p>
+                    </div>
+
+                    {/* Number of Questions */}
+                    <div>
+                      <label className="text-xs font-bold text-slate-300 block mb-1.5">
+                        Question Count
+                      </label>
+                      <div className="flex gap-2">
+                        {[5, 10, 15, 20, 30].map(cnt => (
+                          <button
+                            key={cnt}
+                            type="button"
+                            onClick={() => setQuestionCount(cnt)}
+                            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                              questionCount === cnt
+                                ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                                : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            {cnt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Difficulty Selection */}
+                    <div>
+                      <label className="text-xs font-bold text-slate-300 block mb-1.5">
+                        Difficulty Level
+                      </label>
+                      <div className="grid grid-cols-4 gap-2">
+                        {(['all', 'easy', 'medium', 'hard'] as const).map(diff => (
+                          <button
+                            key={diff}
+                            type="button"
+                            onClick={() => setSelectedDifficulty(diff)}
+                            className={`py-2 rounded-xl text-xs font-bold uppercase transition-all cursor-pointer ${
+                              selectedDifficulty === diff
+                                ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                                : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            {diff}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Launch Button */}
+                  <button
+                    onClick={() => handleStartQuiz()}
+                    disabled={loadingQuestions}
+                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-xl shadow-amber-500/20 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <Play className="w-4 h-4 fill-slate-950" />
+                    <span>Start {quizMode === 'exam' ? 'Timed Exam' : 'Practice Quiz'}</span>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ================================================================ */}
+          {/* 2. ACTIVE QUIZ / EXAM SCREEN                                     */}
+          {/* ================================================================ */}
+          {quizState === 'active' && activeQuestions.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="space-y-6"
+            >
+              {/* Question Header & Timer Bar */}
+              <div className="flex items-center justify-between p-4 bg-slate-900 border border-slate-800 rounded-3xl">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Leave active quiz? Your current session answers will be lost.')) {
+                        clearInterval(examTimerRef.current);
+                        setQuizState('config');
+                      }
+                    }}
+                    className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <div>
+                    <span className="text-xs font-bold text-amber-400 font-mono">
+                      Question {currentIndex + 1} of {activeQuestions.length}
+                    </span>
+                    <h3 className="text-sm font-black text-white truncate max-w-[200px] sm:max-w-md">
+                      {activeQuestions[currentIndex].subject} &bull; {activeQuestions[currentIndex].unit}
                     </h3>
                   </div>
+                </div>
 
-                  {pastSessions.length > 0 && (
+                <div className="flex items-center gap-2.5">
+                  {/* Bookmark Button */}
+                  <button
+                    type="button"
+                    onClick={() => handleToggleBookmark(activeQuestions[currentIndex].originalId)}
+                    className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+                      bookmarkedIds.has(activeQuestions[currentIndex].originalId)
+                        ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                        : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-white'
+                    }`}
+                    title="Bookmark this question"
+                  >
+                    {bookmarkedIds.has(activeQuestions[currentIndex].originalId) ? (
+                      <BookmarkCheck className="w-4 h-4 text-amber-400" />
+                    ) : (
+                      <Bookmark className="w-4 h-4" />
+                    )}
+                  </button>
+
+                  {/* Flag button (Exam Mode) */}
+                  {quizMode === 'exam' && (
                     <button
-                      onClick={() => {
-                        playClickChime();
-                        setShowFavoriteSessionsOnly(!showFavoriteSessionsOnly);
-                      }}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border ${
-                        showFavoriteSessionsOnly 
-                          ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-xs'
-                          : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                      type="button"
+                      onClick={handleToggleFlag}
+                      className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+                        flaggedIndices.has(currentIndex)
+                          ? 'bg-rose-500/20 text-rose-400 border-rose-500/40'
+                          : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-white'
                       }`}
+                      title="Flag question for review"
                     >
-                      <Star className={`w-3 h-3 ${showFavoriteSessionsOnly ? 'fill-slate-950 text-slate-950' : ''}`} />
-                      {language === 'en' ? 'Favorites' : 'ምርጦቹ'}
-                      {favoriteSessionIds.length > 0 && ` (${favoriteSessionIds.length})`}
+                      <Flag className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  {/* Timer Badge (Exam Mode) */}
+                  {quizMode === 'exam' && (
+                    <div className={`px-3.5 py-2 rounded-xl text-xs font-mono font-black flex items-center gap-1.5 border ${
+                      timeRemaining < 120 
+                        ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse' 
+                        : 'bg-slate-800 text-amber-400 border-slate-700'
+                    }`}>
+                      <Clock className="w-4 h-4" />
+                      <span>{formatTime(timeRemaining)}</span>
+                    </div>
+                  )}
+
+                  {/* Question Palette Trigger (Exam Mode) */}
+                  {quizMode === 'exam' && (
+                    <button
+                      type="button"
+                      onClick={() => setShowQuestionPalette(true)}
+                      className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold border border-slate-700 cursor-pointer hidden sm:flex items-center gap-1.5"
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      <span>Palette</span>
                     </button>
                   )}
                 </div>
+              </div>
 
-                {(() => {
-                  const displayedSessions = pastSessions.filter(sess => {
-                    if (!showFavoriteSessionsOnly) return true;
-                    const sessId = sess.id || `session_${sess.subject}_${sess.date}_${sess.score}`;
-                    return favoriteSessionIds.includes(sessId);
-                  });
+              {/* Progress Bar */}
+              <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800/80">
+                <div 
+                  className="bg-amber-500 h-full transition-all duration-300 rounded-full"
+                  style={{ width: `${((currentIndex + 1) / activeQuestions.length) * 100}%` }}
+                />
+              </div>
 
-                  if (displayedSessions.length === 0) {
-                    return (
-                      <div className="p-8 border border-dashed border-slate-700 rounded-xl text-center text-xs text-slate-500 font-serif">
-                        {showFavoriteSessionsOnly 
-                          ? (language === 'en' ? 'No favorited exam logs yet.' : 'ምርጥ ተብለው የተመረጡ ፈተናዎች የሉም።')
-                          : (language === 'en' ? 'Your test grades history is currently empty' : 'የወሰዷቸው ፈተናዎች ውጤት እዚህ ሙሉ ታሪክ ሆኖ ይቀመጣል')}
-                      </div>
-                    );
-                  }
+              {/* Question Card */}
+              {(() => {
+                const q = activeQuestions[currentIndex];
+                const selectedOptionId = userAnswers[currentIndex];
 
-                  return (
-                    <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
-                      {displayedSessions.map((sess) => {
-                        const sessId = sess.id || `session_${sess.subject}_${sess.date}_${sess.score}`;
-                        const isFav = favoriteSessionIds.includes(sessId);
+                return (
+                  <div className="bg-slate-900 border border-slate-800 p-6 sm:p-8 rounded-3xl space-y-6 shadow-xl">
+                    {/* Meta Badges */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+                        q.difficulty === 'easy' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                        q.difficulty === 'hard' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
+                        'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                      }`}>
+                        {q.difficulty}
+                      </span>
+                      {q.topic && (
+                        <span className="text-[11px] text-slate-400 bg-slate-950 px-2.5 py-0.5 rounded-full border border-slate-800">
+                          {q.topic}
+                        </span>
+                      )}
+                      {q.is_pro && (
+                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 flex items-center gap-1">
+                          <Crown className="w-3 h-3" /> PRO
+                        </span>
+                      )}
+                      {q.source && (
+                        <span className="text-[10px] text-slate-500 ml-auto">
+                          Source: {q.source}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Question Text */}
+                    <h2 className="text-lg sm:text-xl font-bold text-white leading-relaxed">
+                      {q.question}
+                    </h2>
+
+                    {/* 4 Choices */}
+                    <div className="grid grid-cols-1 gap-3 pt-2">
+                      {q.options.map((opt) => {
+                        const isSelected = selectedOptionId === opt.id;
+                        let optionStyle = 'bg-slate-950 border-slate-800/90 text-slate-200 hover:border-slate-700';
+
+                        if (quizMode === 'practice' && isAnswerRevealed) {
+                          if (opt.id === q.correct_answer_id) {
+                            optionStyle = 'bg-emerald-950/70 border-emerald-500 text-emerald-100 font-bold';
+                          } else if (isSelected && opt.id !== q.correct_answer_id) {
+                            optionStyle = 'bg-rose-950/70 border-rose-500 text-rose-200 font-bold';
+                          } else {
+                            optionStyle = 'bg-slate-950/40 border-slate-800/40 text-slate-500 opacity-60';
+                          }
+                        } else if (isSelected) {
+                          optionStyle = 'bg-amber-500/20 border-amber-500 text-amber-200 font-bold';
+                        }
+
                         return (
-                          <div key={sessId} className="bg-slate-900/90 p-3 rounded-xl border border-slate-700/80 flex items-center justify-between text-xs hover:border-slate-600 transition-colors">
-                            <div className="flex items-center gap-2.5">
-                              <button
-                                onClick={() => toggleFavoriteSession(sessId)}
-                                className="p-1 hover:bg-slate-800 rounded text-slate-500 hover:text-amber-400 transition-colors shrink-0"
-                                title={language === 'en' ? 'Toggle Favorite' : 'ምርጥ ምርጫ'}
-                              >
-                                <Star className={`w-3.5 h-3.5 transition-all ${isFav ? 'fill-amber-400 text-amber-400 scale-110' : ''}`} />
-                              </button>
-                              <div>
-                                <span className="font-bold text-slate-200 block leading-tight">{sess.subject}</span>
-                                <span className="text-[10px] text-slate-400 mt-0.5 block">{sess.date}</span>
-                              </div>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <span className="font-mono font-extrabold text-sm text-emerald-400 block">{sess.score}%</span>
-                              <span className="block text-[10px] font-black uppercase text-amber-400">Grade {sess.grade}</span>
-                            </div>
-                          </div>
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => handleSelectAnswer(opt.id, opt.text)}
+                            className={`p-4 rounded-2xl border text-left flex items-start gap-3 transition-all cursor-pointer min-h-[48px] ${optionStyle}`}
+                          >
+                            <span className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-black shrink-0 ${
+                              isSelected 
+                                ? 'bg-amber-500 text-slate-950' 
+                                : 'bg-slate-800 text-slate-400'
+                            }`}>
+                              {opt.id}
+                            </span>
+                            <span className="text-sm pt-0.5 leading-relaxed">{opt.text}</span>
+                          </button>
                         );
                       })}
                     </div>
+
+                    {/* Practice Mode Explanation Box */}
+                    {quizMode === 'practice' && isAnswerRevealed && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className={`p-4 rounded-2xl border text-xs sm:text-sm leading-relaxed ${
+                          selectedOptionId === q.correct_answer_id
+                            ? 'bg-emerald-950/50 border-emerald-500/40 text-emerald-200'
+                            : 'bg-rose-950/50 border-rose-500/40 text-rose-200'
+                        }`}
+                      >
+                        <div className="font-black flex items-center gap-1.5 mb-1 text-sm">
+                          {selectedOptionId === q.correct_answer_id ? (
+                            <>
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                              <span>Correct! Excellent Reasoning</span>
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="w-4 h-4 text-rose-400" />
+                              <span>Incorrect. Correct Answer is Option {q.correct_answer_id}</span>
+                            </>
+                          )}
+                        </div>
+                        {q.explanation ? (
+                          <div className="text-slate-300 mt-2 space-y-1">
+                            <span className="font-bold text-amber-400">Explanation: </span>
+                            <span>{q.explanation}</span>
+                          </div>
+                        ) : (
+                          <div className="text-slate-400 mt-1 italic">
+                            Refer to standard curriculum module notes for deeper study.
+                          </div>
+                        )}
+                      </motion.div>
+                    )}
+
+                    {/* Navigation Buttons */}
+                    <div className="flex items-center justify-between pt-4 border-t border-slate-800/80">
+                      <button
+                        type="button"
+                        onClick={handlePrev}
+                        disabled={currentIndex === 0}
+                        className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                        <span>Previous</span>
+                      </button>
+
+                      {quizMode === 'exam' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm('Submit Exam now and view your official score?')) {
+                              handleFinishQuiz();
+                            }
+                          }}
+                          className="px-4 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-bold border border-rose-500/40 cursor-pointer"
+                        >
+                          Submit Exam
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={handleNext}
+                        className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black flex items-center gap-1.5 shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
+                      >
+                        <span>{currentIndex === activeQuestions.length - 1 ? (quizMode === 'exam' ? 'Submit Exam' : 'Finish Quiz') : 'Next Question'}</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+            </motion.div>
+          )}
+
+          {/* ================================================================ */}
+          {/* 3. RESULTS SCREEN                                                */}
+          {/* ================================================================ */}
+          {quizState === 'results' && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="max-w-2xl mx-auto space-y-6 text-center"
+            >
+              <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl space-y-6 shadow-2xl relative overflow-hidden">
+                <div className="w-16 h-16 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center mx-auto shadow-inner">
+                  <Trophy className="w-8 h-8 text-amber-400" />
+                </div>
+
+                <div>
+                  <h2 className="text-2xl font-black text-white">
+                    {selectedSubject} {quizMode === 'exam' ? 'Exam' : 'Quiz'} Completed!
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Performance rating: <span className="font-bold text-amber-400">{performanceRating}</span>
+                  </p>
+                </div>
+
+                {/* Score Big Display */}
+                <div className="p-6 bg-slate-950 border border-slate-800 rounded-3xl">
+                  <div className="text-5xl font-black text-amber-400 tracking-tight font-mono">
+                    {quizScore.percentage}%
+                  </div>
+                  <div className="text-xs text-slate-400 mt-1">
+                    Score: <span className="font-bold text-white">{quizScore.correct}</span> / {quizScore.total} Correct
+                  </div>
+                </div>
+
+                {/* Breakdown Stats */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-3 bg-slate-950 border border-slate-800/80 rounded-2xl">
+                    <span className="text-[10px] text-slate-400 block">Correct</span>
+                    <span className="text-lg font-black text-emerald-400">{quizScore.correct}</span>
+                  </div>
+                  <div className="p-3 bg-slate-950 border border-slate-800/80 rounded-2xl">
+                    <span className="text-[10px] text-slate-400 block">Wrong</span>
+                    <span className="text-lg font-black text-rose-400">{quizScore.wrong}</span>
+                  </div>
+                  <div className="p-3 bg-slate-950 border border-slate-800/80 rounded-2xl">
+                    <span className="text-[10px] text-slate-400 block">Time</span>
+                    <span className="text-lg font-black text-amber-400 font-mono">{formatTime(quizScore.timeSpentSeconds)}</span>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                  <button
+                    onClick={() => setQuizState('review')}
+                    className="flex-1 py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center gap-2 border border-slate-700 transition-colors cursor-pointer"
+                  >
+                    <Eye className="w-4 h-4 text-amber-400" />
+                    <span>Review Answers</span>
+                  </button>
+                  <button
+                    onClick={() => handleStartQuiz()}
+                    className="flex-1 py-3.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Retry Quiz</span>
+                  </button>
+                  <button
+                    onClick={() => setQuizState('config')}
+                    className="flex-1 py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs flex items-center justify-center gap-2 border border-slate-700 transition-colors cursor-pointer"
+                  >
+                    <span>Back to Subject</span>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ================================================================ */}
+          {/* 4. QUESTION REVIEW SCREEN                                        */}
+          {/* ================================================================ */}
+          {quizState === 'review' && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-6"
+            >
+              <div className="flex items-center justify-between p-4 bg-slate-900 border border-slate-800 rounded-2xl">
+                <div>
+                  <h3 className="text-sm font-black text-white">
+                    Question-by-Question Review ({quizScore.correct}/{quizScore.total} Correct)
+                  </h3>
+                  <p className="text-xs text-slate-400">Inspect correct answers and detailed explanations</p>
+                </div>
+                <button
+                  onClick={() => setQuizState('results')}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold cursor-pointer"
+                >
+                  Back to Results
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {activeQuestions.map((q, idx) => {
+                  const studentChosenId = userAnswers[idx];
+                  const isCorrect = studentChosenId === q.correct_answer_id;
+
+                  return (
+                    <div
+                      key={idx}
+                      className={`p-5 rounded-3xl border transition-all ${
+                        isCorrect
+                          ? 'bg-slate-900/90 border-emerald-500/40'
+                          : 'bg-slate-900/90 border-rose-500/40'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-800/80 mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-black ${
+                            isCorrect ? 'bg-emerald-500 text-slate-950' : 'bg-rose-500 text-white'
+                          }`}>
+                            {idx + 1}
+                          </span>
+                          <span className={`text-xs font-bold ${isCorrect ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {isCorrect ? 'Correct Answer' : 'Incorrect'}
+                          </span>
+                          <span className="text-[10px] text-slate-400 bg-slate-950 px-2 py-0.5 rounded-md border border-slate-800">
+                            {q.subject} &bull; {q.unit}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleBookmark(q.originalId)}
+                          className={`p-1.5 rounded-lg border text-xs cursor-pointer ${
+                            bookmarkedIds.has(q.originalId) ? 'text-amber-400 border-amber-500/40' : 'text-slate-400 border-slate-700'
+                          }`}
+                        >
+                          {bookmarkedIds.has(q.originalId) ? <BookmarkCheck className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+
+                      <p className="text-sm font-bold text-white mb-3">{q.question}</p>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                        {q.options.map(opt => {
+                          const isStudentPick = studentChosenId === opt.id;
+                          const isTargetCorrect = opt.id === q.correct_answer_id;
+
+                          let style = 'bg-slate-950/60 border-slate-800 text-slate-400';
+                          if (isTargetCorrect) {
+                            style = 'bg-emerald-950/70 border-emerald-500 text-emerald-200 font-bold';
+                          } else if (isStudentPick && !isTargetCorrect) {
+                            style = 'bg-rose-950/70 border-rose-500 text-rose-200 font-bold';
+                          }
+
+                          return (
+                            <div key={opt.id} className={`p-3 rounded-xl border text-xs flex items-start gap-2.5 ${style}`}>
+                              <span className="font-black shrink-0">{opt.id}.</span>
+                              <span className="leading-relaxed">{opt.text}</span>
+                              {isStudentPick && (
+                                <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 font-bold">
+                                  Your Choice
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {q.explanation && (
+                        <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800 text-xs text-slate-300">
+                          <span className="font-bold text-amber-400">Explanation: </span>
+                          {q.explanation}
+                        </div>
+                      )}
+                    </div>
                   );
-                })()}
+                })}
               </div>
-            </div>
-          </motion.div>
-        )}
+            </motion.div>
+          )}
+        </>
+      )}
 
-        {/* ACTIVE EXAM RUNNING SCREEN */}
-        {examMode === 'active' && examQuestions.length > 0 && (
-          <motion.div
-            key="active"
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="max-w-xl mx-auto bg-[#141E33] p-6 rounded-2xl border border-slate-700 shadow-xl space-y-5"
-          >
-            {/* Header with Exit Quiz Button */}
-            <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-700/60">
+      {/* ─── TAB 2: MY BOOKMARKED QUESTIONS ─── */}
+      {activeTab === 'bookmarked' && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-6"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-slate-900 border border-slate-800 rounded-3xl">
+            <div>
+              <h2 className="text-lg font-black text-white flex items-center gap-2">
+                <Bookmark className="w-5 h-5 text-amber-400" />
+                My Saved Questions ({bookmarkedQuestionsList.length})
+              </h2>
+              <p className="text-xs text-slate-400">Questions you flagged or saved during study sessions.</p>
+            </div>
+            {bookmarkedQuestionsList.length > 0 && (
               <button
-                onClick={() => setShowExitConfirm(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white bg-slate-800/90 hover:bg-red-500/20 border border-slate-700 hover:border-red-500/40 transition-all cursor-pointer"
+                onClick={() => {
+                  const randomized = bookmarkedQuestionsList.map(randomizeQuestionWithMappedAnswer);
+                  setActiveQuestions(randomized);
+                  setCurrentIndex(0);
+                  setUserAnswers({});
+                  setUserAnswerTexts({});
+                  setQuizState('active');
+                  setActiveTab('quiz_launcher');
+                }}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-md cursor-pointer"
               >
-                <ArrowLeft className="w-3.5 h-3.5 text-amber-400" />
-                <span>{language === 'en' ? 'Exit Quiz' : 'ውጣ / ተመለስ'}</span>
+                <Play className="w-3.5 h-3.5 fill-slate-950" />
+                <span>Practice Saved Questions ({bookmarkedQuestionsList.length})</span>
               </button>
+            )}
+          </div>
 
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-xs text-amber-400 uppercase tracking-wide">
-                  {selectedSubject}
-                </span>
-              </div>
+          {bookmarkedQuestionsList.length === 0 ? (
+            <div className="p-12 text-center bg-slate-900/50 border border-slate-800 rounded-3xl space-y-3">
+              <BookMarked className="w-10 h-10 text-slate-600 mx-auto" />
+              <h3 className="text-sm font-bold text-slate-300">No bookmarked questions yet</h3>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                Click the bookmark icon on any question during quizzes or practice exams to save it here for review.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {bookmarkedQuestionsList.map((q, idx) => (
+                <div key={q.id} className="p-5 bg-slate-900 border border-slate-800 rounded-3xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-amber-400 font-mono">
+                      {q.subject} &bull; {q.unit}
+                    </span>
+                    <button
+                      onClick={() => handleToggleBookmark(q.id)}
+                      className="text-xs text-rose-400 hover:underline cursor-pointer"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <p className="text-sm font-bold text-white">{q.question_text || q.question}</p>
+                  {q.explanation && (
+                    <p className="text-xs text-slate-400 italic">
+                      <span className="font-bold text-slate-300">Explanation:</span> {q.explanation}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </motion.div>
+      )}
 
-              <span className="flex items-center gap-1 text-xs font-extrabold font-mono text-amber-300 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30">
-                <Clock className="w-3.5 h-3.5 text-amber-400" />
-                {timeRemaining}s
-              </span>
+      {/* ─── TAB 3: MANAGE DATABASE (Direct manual question control - 0 API Key required) ─── */}
+      {activeTab === 'database_manager' && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-6"
+        >
+          {/* Header & Controls */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 bg-slate-900 border border-slate-800 rounded-3xl">
+            <div>
+              <h2 className="text-lg font-black text-white flex items-center gap-2">
+                <Database className="w-5 h-5 text-amber-400" />
+                Manual Question Database
+              </h2>
+              <p className="text-xs text-slate-400">
+                Directly add, test, and manage questions stored in the app repository. 0 API Key needed.
+              </p>
             </div>
 
-            {/* Progress Bar */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center text-xs font-bold text-slate-400">
-                <span>{language === 'en' ? 'Progress' : 'ሂደት'}</span>
-                <span className="text-amber-400 font-mono">
-                  {activeQIndex + 1} / {examQuestions.length}
-                </span>
-              </div>
-              <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-                <div 
-                  className="bg-amber-400 h-full rounded-full transition-all duration-300" 
-                  style={{ width: `${((activeQIndex + 1) / examQuestions.length) * 100}%` }}
-                />
-              </div>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/20 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Question to Database</span>
+              </button>
             </div>
+          </div>
 
-            {/* Question Text block */}
-            <div className="space-y-4 py-2">
-              <h3 className="font-serif text-lg text-slate-100 font-bold leading-relaxed">
-                {examQuestions[activeQIndex]?.question}
-              </h3>
+          {/* Search & Subject Filter Bar */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Search questions by text or concept..."
+                value={dbSearch}
+                onChange={(e) => setDbSearch(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-800 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+            <select
+              value={dbSubjectFilter}
+              onChange={(e) => setDbSubjectFilter(e.target.value)}
+              className="bg-slate-900 border border-slate-800 rounded-2xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+            >
+              <option value="All">All Subjects ({allQuestions.length})</option>
+              {OFFICIAL_19_SUBJECTS.map(s => (
+                <option key={s.id} value={s.name}>{s.name}</option>
+              ))}
+            </select>
+          </div>
 
-              {/* Options */}
-              <div className="grid grid-cols-1 gap-2.5">
-                {examQuestions[activeQIndex]?.options.map((opt: string, optIdx: number) => {
-                  const isSelected = userSelections[activeQIndex] === opt;
-                  const isCorrect = examQuestions[activeQIndex].correctAnswer === opt;
-                  const optionLetter = String.fromCharCode(65 + optIdx);
-                  
-                  let btnStyle = "bg-slate-900/90 border-slate-700 text-slate-200 hover:bg-slate-800 hover:border-slate-600";
-                  let badgeStyle = "bg-slate-800 text-slate-400 border-slate-700";
-                  
-                  if (isAnswerRevealed) {
-                    if (isCorrect) {
-                      btnStyle = "bg-emerald-500/15 border-emerald-500 text-emerald-300 font-bold ring-1 ring-emerald-500";
-                      badgeStyle = "bg-emerald-500 text-slate-950 border-emerald-500 font-black";
-                    } else if (isSelected) {
-                      btnStyle = "bg-red-500/15 border-red-500 text-red-300 font-bold ring-1 ring-red-500";
-                      badgeStyle = "bg-red-500 text-white border-red-500 font-black";
-                    } else {
-                      btnStyle = "bg-slate-900/50 border-slate-800 text-slate-500 opacity-50";
-                      badgeStyle = "bg-slate-900 text-slate-600 border-slate-800";
-                    }
-                  } else if (isSelected) {
-                    btnStyle = "bg-amber-500/15 border-amber-400 text-amber-300 font-bold";
-                    badgeStyle = "bg-amber-400 text-slate-950 border-amber-400 font-black";
-                  }
+          {/* Questions Grid */}
+          <div className="space-y-3">
+            {allQuestions
+              .filter(q => {
+                if (dbSubjectFilter !== 'All' && q.subject !== dbSubjectFilter) return false;
+                if (dbSearch.trim()) {
+                  const s = dbSearch.toLowerCase().trim();
+                  const qText = (q.question_text || q.question || '').toLowerCase();
+                  const exp = (q.explanation || '').toLowerCase();
+                  return qText.includes(s) || exp.includes(s);
+                }
+                return true;
+              })
+              .slice(0, 50)
+              .map((q) => (
+                <div key={q.id} className="p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                        {q.subject}
+                      </span>
+                      <span className="text-[10px] text-slate-400">{q.unit}</span>
+                      <span className="text-[10px] uppercase font-bold text-slate-500">[{q.difficulty}]</span>
+                    </div>
+                  </div>
+                  <p className="text-xs font-bold text-white">{q.question_text || q.question}</p>
+                  <div className="text-[11px] text-emerald-400 font-bold">
+                    Correct Answer: {q.correct_answer}
+                  </div>
+                </div>
+              ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* ─── ADD QUESTION MODAL ─── */}
+      <AnimatePresence>
+        {showAddModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-slate-900 border border-slate-800 rounded-3xl max-w-xl w-full p-6 space-y-4 shadow-2xl relative my-8"
+            >
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 className="text-base font-black text-white flex items-center gap-2">
+                  <Plus className="w-5 h-5 text-amber-400" />
+                  Add Question to Database
+                </h3>
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleAddManualQuestion} className="space-y-3.5">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-400 block mb-1">Subject</label>
+                    <select
+                      value={formSubject}
+                      onChange={(e) => setFormSubject(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                    >
+                      {OFFICIAL_19_SUBJECTS.map(s => (
+                        <option key={s.id} value={s.name}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-400 block mb-1">Unit / Chapter</label>
+                    <input
+                      type="text"
+                      value={formUnit}
+                      onChange={(e) => setFormUnit(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                      placeholder="e.g. Unit 1: Introduction"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-400 block mb-1">Question Text</label>
+                  <textarea
+                    rows={2}
+                    value={formQuestionText}
+                    onChange={(e) => setFormQuestionText(e.target.value)}
+                    required
+                    placeholder="Enter full question..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                  />
+                </div>
+
+                {/* 4 Choices */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Option A</label>
+                    <input
+                      type="text"
+                      value={formOptionA}
+                      onChange={(e) => setFormOptionA(e.target.value)}
+                      required
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Option B</label>
+                    <input
+                      type="text"
+                      value={formOptionB}
+                      onChange={(e) => setFormOptionB(e.target.value)}
+                      required
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Option C</label>
+                    <input
+                      type="text"
+                      value={formOptionC}
+                      onChange={(e) => setFormOptionC(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Option D</label>
+                    <input
+                      type="text"
+                      value={formOptionD}
+                      onChange={(e) => setFormOptionD(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-400 block mb-1">Correct Option</label>
+                    <select
+                      value={formCorrectOption}
+                      onChange={(e) => setFormCorrectOption(e.target.value as any)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                    >
+                      <option value="A">Option A</option>
+                      <option value="B">Option B</option>
+                      <option value="C">Option C</option>
+                      <option value="D">Option D</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-400 block mb-1">Difficulty</label>
+                    <select
+                      value={formDifficulty}
+                      onChange={(e) => setFormDifficulty(e.target.value as any)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                    >
+                      <option value="easy">Easy</option>
+                      <option value="medium">Medium</option>
+                      <option value="hard">Hard</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-400 block mb-1">Explanation</label>
+                  <textarea
+                    rows={2}
+                    value={formExplanation}
+                    onChange={(e) => setFormExplanation(e.target.value)}
+                    placeholder="Why is this answer correct? Reference academic concept..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs cursor-pointer disabled:opacity-50"
+                  >
+                    {isSubmitting ? 'Saving...' : 'Save to Database'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── QUESTION PALETTE MODAL (Exam Mode) ─── */}
+      <AnimatePresence>
+        {showQuestionPalette && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl"
+            >
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 className="text-sm font-black text-white flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-amber-400" />
+                  Exam Question Navigation Palette
+                </h3>
+                <button
+                  onClick={() => setShowQuestionPalette(false)}
+                  className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-5 gap-2 max-h-60 overflow-y-auto p-1">
+                {activeQuestions.map((_, idx) => {
+                  const isAnswered = Boolean(userAnswers[idx]);
+                  const isFlagged = flaggedIndices.has(idx);
+                  const isCurrent = idx === currentIndex;
 
                   return (
                     <button
-                      key={opt}
-                      disabled={isAnswerRevealed}
-                      onClick={() => handleOptionSelect(opt)}
-                      className={`w-full min-h-[48px] py-3 px-4 rounded-xl text-left text-sm leading-snug font-sans transition-all flex items-center justify-between border shadow-sm cursor-pointer select-none active:scale-[0.99] ${btnStyle}`}
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setCurrentIndex(idx);
+                        setShowQuestionPalette(false);
+                      }}
+                      className={`h-10 rounded-xl text-xs font-bold transition-all relative flex items-center justify-center cursor-pointer ${
+                        isCurrent 
+                          ? 'ring-2 ring-amber-400 bg-amber-500 text-slate-950 font-black' 
+                          : isAnswered 
+                          ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40' 
+                          : 'bg-slate-950 text-slate-400 border border-slate-800'
+                      }`}
                     >
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <span className={`w-7 h-7 rounded-lg border text-xs flex items-center justify-center shrink-0 font-mono transition-colors ${badgeStyle}`}>
-                          {optionLetter}
-                        </span>
-                        <span className="break-words leading-relaxed">{opt}</span>
-                      </div>
-                      {isAnswerRevealed && isCorrect && <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0 ml-2" />}
-                      {isAnswerRevealed && isSelected && !isCorrect && <XCircle className="w-5 h-5 text-red-400 shrink-0 ml-2" />}
+                      {idx + 1}
+                      {isFlagged && (
+                        <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-rose-500" />
+                      )}
                     </button>
                   );
                 })}
               </div>
-            </div>
 
-            {/* Explanation card dynamically revealed */}
-            {isAnswerRevealed && (
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="p-4 bg-slate-900/90 rounded-xl border border-slate-700 text-xs text-slate-300 space-y-1.5"
-              >
-                <div className="flex items-center gap-1.5 font-bold uppercase tracking-wide">
-                  {userSelections[activeQIndex] === examQuestions[activeQIndex].correctAnswer ? (
-                    <span className="text-emerald-400 flex items-center gap-1 font-bold">
-                      <CheckCircle className="w-4 h-4" />
-                      <span>{language === 'en' ? 'Correct Answer!' : 'በጣም ጎበዝ! መልስዎ ትክክል ነው'}</span>
-                    </span>
-                  ) : (
-                    <span className="text-red-400 flex items-center gap-1 font-bold">
-                      <XCircle className="w-4 h-4" />
-                      <span>{language === 'en' ? 'Incorrect' : 'ትክክለኛው መልስ አልነበረም'}</span>
-                    </span>
-                  )}
+              <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-md bg-emerald-500" />
+                  <span>Answered ({Object.keys(userAnswers).length})</span>
                 </div>
-                <p className="font-sans leading-relaxed text-slate-300 italic">
-                  {examQuestions[activeQIndex]?.explanation || (language === 'en' ? 'Verified academic solution.' : 'ትክክለኛ አካዳሚያዊ ማብራሪያ።')}
-                </p>
-              </motion.div>
-            )}
-
-            {/* Proceed button */}
-            <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-700">
-              <div className="flex items-center gap-2">
-                {activeQIndex > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playClickChime();
-                      setActiveQIndex(prev => prev - 1);
-                    }}
-                    className="h-11 px-3.5 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold text-xs rounded-xl flex items-center gap-1 cursor-pointer transition active:scale-95"
-                  >
-                    <ArrowLeft className="w-3.5 h-3.5" />
-                    <span>{language === 'en' ? 'Prev' : 'ቀዳሚ'}</span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setShowExitConfirm(true)}
-                    className="text-xs text-slate-400 hover:text-slate-200 cursor-pointer px-2"
-                  >
-                    {language === 'en' ? 'Leave' : 'ውጣ'}
-                  </button>
-                )}
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-md bg-rose-500" />
+                  <span>Flagged ({flaggedIndices.size})</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-md bg-slate-800" />
+                  <span>Remaining ({activeQuestions.length - Object.keys(userAnswers).length})</span>
+                </div>
               </div>
-
-              <button
-                onClick={handleNextQuestion}
-                disabled={!userSelections[activeQIndex]}
-                className="h-11 px-6 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black text-xs sm:text-sm rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 disabled:opacity-40 cursor-pointer select-none active:scale-98 transition-all"
-              >
-                <span>
-                  {activeQIndex === examQuestions.length - 1 
-                    ? (language === 'en' ? 'Complete Quiz' : 'ውጤት ይመልከቱ') 
-                    : (language === 'en' ? 'Next Question' : 'ቀጣይ ጥያቄ')}
-                </span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </motion.div>
-        )}
-
-        {/* RESULTS CELEBRATORY SCREEN */}
-        {examMode === 'results' && (
-          <motion.div
-            key="results"
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="max-w-lg mx-auto bg-[#141E33] p-6 rounded-2xl border border-slate-700 text-center space-y-6 relative overflow-hidden shadow-xl"
-          >
-            {/* Confetti */}
-            {particles.map(p => (
-              <div 
-                key={p.id}
-                className="absolute pointer-events-none rounded-full particle-reward-rise z-50"
-                style={{
-                  left: `${p.left}%`,
-                  top: `${p.top}%`,
-                  backgroundColor: p.color,
-                  width: `${p.size}px`,
-                  height: `${p.size}px`,
-                  animationDuration: `${p.duration}s`
-                }}
-              />
-            ))}
-
-            <div className="w-20 h-20 bg-amber-500/10 border-2 border-amber-500/30 text-amber-400 rounded-full flex items-center justify-center mx-auto text-3xl font-serif font-black shadow-inner">
-              {examGrade}
-            </div>
-
-            <div className="space-y-1.5">
-              <h2 className="font-serif text-2xl font-black text-white leading-tight">
-                {language === 'en' ? 'Quiz Session Finalized!' : 'የፈተና ጊዜ ተጠናቋል!'}
-              </h2>
-              
-              <p className="text-base font-serif font-bold text-amber-400">
-                {Math.round((examScore / examQuestions.length) * 100) >= 80 ? (
-                  <span>ጎበዝ! ምርጥ ውጤት ነው 🌟 <span className="block text-xs font-sans text-slate-400 mt-1">Excellent mastery of {selectedSubject}!</span></span>
-                ) : Math.round((examScore / examQuestions.length) * 100) >= 50 ? (
-                  <span>በጣም ጥሩ! በርታ/በርቺ 💪 <span className="block text-xs font-sans text-slate-400 mt-1">Great practice. Review concepts to reach an A!</span></span>
-                ) : (
-                  <span>ተስፋ አትቁረጥ! ይቻላል 🎯 <span className="block text-xs font-sans text-slate-400 mt-1">Practice makes perfect. Review the revision cards!</span></span>
-                )}
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 max-w-sm mx-auto text-xs bg-slate-900 p-4 border border-slate-700 rounded-xl shadow-inner">
-              <div className="space-y-0.5">
-                <span className="text-slate-400 font-bold uppercase">{language === 'en' ? 'Score' : 'ውጤት'}</span>
-                <span className="font-mono text-lg font-extrabold text-white block">{examScore} / {examQuestions.length}</span>
-              </div>
-
-              <div className="space-y-0.5">
-                <span className="text-slate-400 font-bold uppercase">{language === 'en' ? 'Percentage' : 'በመቶኛ'}</span>
-                <span className="font-mono text-lg font-extrabold text-amber-400 block">
-                  {Math.round((examScore / examQuestions.length) * 100)}%
-                </span>
-              </div>
-            </div>
-
-            {/* Questions Recap */}
-            <div className="text-left bg-slate-900 border border-slate-700 p-4 rounded-xl space-y-3 text-xs max-h-56 overflow-y-auto">
-              <p className="font-bold text-slate-200 pb-1.5 border-b border-slate-700 font-serif">
-                {language === 'en' ? 'Questions Recap' : 'ለጥያቄዎች የተሰጡ መልሶች፡'}
-              </p>
-              {examQuestions.map((q, idx) => {
-                const isCorrect = userSelections[idx] === q.correctAnswer;
-                return (
-                  <div key={idx} className="pb-2 border-b border-slate-800 last:border-none last:pb-0 font-sans">
-                    <p className="font-medium text-slate-300 flex items-start gap-1.5">
-                      <span className={isCorrect ? "text-emerald-400 font-black" : "text-red-400 font-black"}>
-                        {isCorrect ? "✓" : "✗"}
-                      </span>
-                      <span>
-                        {language === 'en' ? 'Q' : 'ጥያቄ'} {idx + 1}: {q.question}
-                      </span>
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Favorite toggle */}
-            {currentSessionId && (
-              <button
-                onClick={() => toggleFavoriteSession(currentSessionId)}
-                className={`w-full h-11 flex items-center justify-center gap-2 rounded-xl text-xs font-bold transition-all border ${
-                  favoriteSessionIds.includes(currentSessionId)
-                    ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-sm'
-                    : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750'
-                }`}
-              >
-                <Star className={`w-4 h-4 ${favoriteSessionIds.includes(currentSessionId) ? 'fill-slate-950 text-slate-950' : ''}`} />
-                {favoriteSessionIds.includes(currentSessionId)
-                  ? (language === 'en' ? 'Saved to Favorites' : 'በምርጥ ፈተናዎች ስር ተቀምጧል')
-                  : (language === 'en' ? 'Save to Favorites' : 'ይህንን ምርጥ ፈተና አስቀምጥ')}
-              </button>
-            )}
-
-            {/* Navigation options: practice another or return home */}
-            <div className="space-y-2 pt-1">
-              <button
-                onClick={() => { playClickChime(); setExamMode('setup'); }}
-                className="w-full h-12 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-sm rounded-xl cursor-pointer transition-all flex items-center justify-center gap-2 shadow-md"
-              >
-                <RotateCcw className="w-4 h-4" />
-                {language === 'en' ? 'Choose Another Subject / Retake' : 'ሌላ ትምህርት ምረጥ / ደግመህ ሞክር'}
-              </button>
-
-              {onNavigateBack && (
-                <button
-                  onClick={() => { playClickChime(); onNavigateBack(); }}
-                  className="w-full h-11 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white font-semibold text-xs rounded-xl cursor-pointer transition-all flex items-center justify-center gap-2 border border-slate-700"
-                >
-                  <Home className="w-4 h-4" />
-                  {language === 'en' ? 'Return to Dashboard' : 'ወደ ዋናው ዳሽቦርድ ተመለስ'}
-                </button>
-              )}
-            </div>
-          </motion.div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
-
-      {/* CONFIRM EXIT QUIZ MODAL */}
-      {showExitConfirm && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[999] flex items-center justify-center p-4"
-          onClick={() => setShowExitConfirm(false)}
-        >
-          <motion.div
-            initial={{ scale: 0.95, y: 15 }}
-            animate={{ scale: 1, y: 0 }}
-            exit={{ scale: 0.95, y: 15 }}
-            className="bg-[#141E33] border border-slate-700 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl text-center"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto">
-              <AlertTriangle className="w-6 h-6" />
-            </div>
-
-            <div className="space-y-1.5">
-              <h3 className="font-serif text-lg font-bold text-white">
-                {language === 'en' ? 'Changed Your Mind?' : 'ከፈተናው መውጣት ይፈልጋሉ?'}
-              </h3>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                {language === 'en' 
-                  ? 'If you change your mind, you can safely return to subject selection. Your active answers in this session will not be saved.' 
-                  : 'ሀሳብዎን ከቀየሩ ወይም ሌላ ትምህርት መምረጥ ከፈለጉ ወደ ኋላ መመለስ ይችላሉ። የዚህ ፈተና መልሶች አይቀመጡም።'}
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 pt-2">
-              <button
-                onClick={() => setShowExitConfirm(false)}
-                className="h-11 px-4 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold text-xs rounded-xl border border-slate-700 cursor-pointer"
-              >
-                {language === 'en' ? 'Keep Going' : 'ፈተናውን ቀጥል'}
-              </button>
-
-              <button
-                onClick={handleConfirmExitQuiz}
-                className="h-11 px-4 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl cursor-pointer"
-              >
-                {language === 'en' ? 'Yes, Exit Quiz' : 'አዎ፣ ውጣ'}
-              </button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-
-      {/* PRO UPGRADE MODAL (3-Subject Limit) */}
-      {showUpgradeModal && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[999] flex items-center justify-center p-4 overflow-y-auto"
-          onClick={() => setShowUpgradeModal(false)}
-        >
-          <motion.div
-            initial={{ scale: 0.95, y: 20 }}
-            animate={{ scale: 1, y: 0 }}
-            exit={{ scale: 0.95, y: 20 }}
-            className="bg-[#141E33] border border-amber-500/40 rounded-2xl w-full max-w-lg p-6 space-y-5 shadow-2xl relative text-left"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={() => setShowUpgradeModal(false)}
-              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
-                <Crown className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="font-serif font-black text-lg text-white">
-                  {language === 'en' ? 'Subject Limit Reached (Free Plan: 3/3)' : 'የትምህርት ገደብ ደርሰዋል (ነፃ እቅድ፦ 3/3)'}
-                </h3>
-                <p className="text-xs text-amber-400 font-bold">
-                  {language === 'en' ? 'Upgrade to EthioLearn Pro to Unlock All Subjects' : 'ሁሉንም ትምህርቶች ለመክፈት ወደ ኢትዮለርን ፕሮ ያሻሽሉ'}
-                </p>
-              </div>
-            </div>
-
-            <div className="p-4 bg-slate-900/90 border border-slate-700/80 rounded-xl space-y-2 text-xs text-slate-300">
-              <p className="leading-relaxed">
-                {language === 'en'
-                  ? `You have explored your 3 free subjects: ${triedSubjects.join(', ')}. Upgrade to EthioLearn Pro to unlock all faculties, national entrance papers, and unlimited AI tutoring.`
-                  : `እስካሁን የሞከሯቸው 3 ነፃ ትምህርቶች፦ ${triedSubjects.join(', ')} ናቸው። ሁሉንም የዩኒቨርሲቲ ኮርሶች፣ ብሔራዊ ፈተናዎች እና ያልተገደበ AI ፈተና ለማግኘት ፕሮ አባል ይሁኑ።`}
-              </p>
-
-              <div className="pt-2 border-t border-slate-800 space-y-1.5 text-[11px]">
-                <div className="flex items-center gap-2 text-emerald-400 font-bold">
-                  <Check className="w-3.5 h-3.5" />
-                  <span>{language === 'en' ? 'Access all 40+ Ethiopian university courses' : 'ከ40+ በላይ የዩኒቨርሲቲ ኮርሶች'}</span>
-                </div>
-                <div className="flex items-center gap-2 text-emerald-400 font-bold">
-                  <Check className="w-3.5 h-3.5" />
-                  <span>{language === 'en' ? 'Unlimited AI Exam & Quiz Generation' : 'ያልተገደበ የAI ፈተና ዝግጅት'}</span>
-                </div>
-                <div className="flex items-center gap-2 text-emerald-400 font-bold">
-                  <Check className="w-3.5 h-3.5" />
-                  <span>{language === 'en' ? 'Direct Telebirr, CBE Birr & HelloCash instant activation' : 'በቴሌብር እና በኢትዮጵያ ንግድ ባንክ ቀላል ክፍያ'}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Price Badge */}
-            <div className="flex items-center justify-between p-3.5 bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/20 rounded-xl">
-              <div>
-                <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold block">
-                  {language === 'en' ? 'Special Student Pricing' : 'የተማሪዎች ቅናሽ'}
-                </span>
-                <span className="font-serif text-lg font-black text-amber-400">
-                  149 ETB <span className="text-xs text-slate-400 font-normal">/ month</span>
-                </span>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                  Telebirr
-                </span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                  CBE Birr
-                </span>
-              </div>
-            </div>
-
-            {/* Upgrade Action */}
-            <div className="space-y-2 pt-1">
-              <button
-                onClick={() => {
-                  playClickChime();
-                  setShowUpgradeModal(false);
-                  if (onNavigateToUpgrade) onNavigateToUpgrade();
-                }}
-                className="w-full h-12 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold text-sm rounded-xl flex items-center justify-center gap-2 shadow-lg cursor-pointer transition-all active:scale-98"
-              >
-                <Crown className="w-4 h-4 text-slate-950" />
-                {language === 'en' ? 'Upgrade to Pro (149 ETB)' : 'ወደ ፕሮ አሻሽል (149 ብር)'}
-              </button>
-
-              {/* Or switch to an active subject */}
-              {triedSubjects.length > 0 && (
-                <div className="text-center pt-2">
-                  <span className="text-[11px] text-slate-400 block mb-1.5">
-                    {language === 'en' ? 'Or continue with your 3 active subjects:' : 'ወይም ከነፃ ትምህርቶችዎ አንዱን ይምረጡ፦'}
-                  </span>
-                  <div className="flex flex-wrap justify-center gap-1.5">
-                    {triedSubjects.map(sub => (
-                      <button
-                        key={sub}
-                        onClick={() => {
-                          playClickChime();
-                          setSelectedSubject(sub);
-                          setShowUpgradeModal(false);
-                        }}
-                        className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700 cursor-pointer"
-                      >
-                        {sub}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-
-      {/* ADD CUSTOM EXAM MODAL */}
-      {showAddExamModal && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[999] flex items-center justify-center p-4 overflow-y-auto"
-          onClick={() => setShowAddExamModal(false)}
-        >
-          <motion.div
-            initial={{ scale: 0.95, y: 20 }}
-            animate={{ scale: 1, y: 0 }}
-            exit={{ scale: 0.95, y: 20 }}
-            className="bg-[#141E33] rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative text-left border border-slate-700"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={() => { playClickChime(); setShowAddExamModal(false); }}
-              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <div className="space-y-1">
-              <h3 className="font-serif font-black text-lg text-white flex items-center gap-2">
-                <Trophy className="w-5 h-5 text-amber-400" />
-                {language === 'en' ? 'Add Exam Question / Subject' : 'የፈተና ጥያቄ / የትምህርት አይነት ጨምር'}
-              </h3>
-              <p className="text-xs text-slate-400">
-                {language === 'en' 
-                  ? 'Add official questions from your university midterms or instructors.' 
-                  : 'የዩኒቨርሲቲ መምህራን የሰጧቸውን ወይም ያለፉ ፈተናዎችን እዚህ ያክሉ።'}
-              </p>
-            </div>
-
-            <form onSubmit={handleAddCustomQuestion} className="space-y-3 text-xs">
-              <div className="space-y-1">
-                <label className="font-bold text-slate-300">
-                  {language === 'en' ? 'Subject Name' : 'የትምህርት አይነት ስም'}
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Invertebrate Zoology, Data Structures..."
-                  value={newExamSubject}
-                  onChange={(e) => setNewExamSubject(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-xl p-2.5 outline-none focus:border-amber-400"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-slate-300">
-                  {language === 'en' ? 'Question Text' : 'የጥያቄው ጽሑፍ'}
-                </label>
-                <textarea
-                  required
-                  rows={2}
-                  placeholder={language === 'en' ? "Enter the exam question here..." : "የፈተናውን ጥያቄ እዚህ ይጻፉ..."}
-                  value={newQuestionText}
-                  onChange={(e) => setNewQuestionText(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-xl p-2.5 outline-none focus:border-amber-400 resize-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400">Option A</label>
-                  <input
-                    type="text"
-                    required
-                    value={newOptionA}
-                    onChange={(e) => setNewOptionA(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg p-2 outline-none focus:border-amber-400"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400">Option B</label>
-                  <input
-                    type="text"
-                    required
-                    value={newOptionB}
-                    onChange={(e) => setNewOptionB(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg p-2 outline-none focus:border-amber-400"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400">Option C</label>
-                  <input
-                    type="text"
-                    required
-                    value={newOptionC}
-                    onChange={(e) => setNewOptionC(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg p-2 outline-none focus:border-amber-400"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400">Option D</label>
-                  <input
-                    type="text"
-                    required
-                    value={newOptionD}
-                    onChange={(e) => setNewOptionD(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg p-2 outline-none focus:border-amber-400"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="font-bold text-slate-300">
-                    {language === 'en' ? 'Correct Answer' : 'ትክክለኛው ምርጫ'}
-                  </label>
-                  <select
-                    value={newCorrectOption}
-                    onChange={(e) => setNewCorrectOption(e.target.value as any)}
-                    className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg p-2 outline-none font-bold"
-                  >
-                    <option value="A">Option A</option>
-                    <option value="B">Option B</option>
-                    <option value="C">Option C</option>
-                    <option value="D">Option D</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-300">
-                    {language === 'en' ? 'Explanation (Optional)' : 'ማብራሪያ (አስፈላጊ ከሆነ)'}
-                  </label>
-                  <input
-                    type="text"
-                    value={newExplanation}
-                    onChange={(e) => setNewExplanation(e.target.value)}
-                    placeholder={language === 'en' ? "e.g. Chapter 4 reference" : "ምሳሌ፦ ከምዕራፍ 4 ማጣቀሻ"}
-                    className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg p-2 outline-none focus:border-amber-400"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAddExamModal(false)}
-                  className="px-4 py-2.5 text-xs text-slate-400 hover:text-white rounded-xl cursor-pointer"
-                >
-                  {language === 'en' ? 'Cancel' : 'ይቅር'}
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 text-xs font-bold text-slate-950 bg-amber-500 hover:bg-amber-600 rounded-xl cursor-pointer shadow-sm transition-all"
-                >
-                  {language === 'en' ? 'Save Question' : 'ጥያቄውን መዝግብ'}
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        </motion.div>
-      )}
     </div>
   );
 }

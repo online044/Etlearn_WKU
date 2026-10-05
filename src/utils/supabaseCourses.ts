@@ -916,38 +916,92 @@ export async function fetchCoupons(): Promise<CouponCode[]> {
 
   const defaultCampusCoupons: CouponCode[] = [
     {
-      code: 'WKU2026',
-      discountPercentage: 20,
-      fixedDiscountETB: 0,
-      maxUses: 1000,
-      usedCount: 14,
+      code: 'FRESHMAN100',
+      description: '100% Free Full Freshman Scholarship Access',
+      discountPercentage: 100,
+      fixedDiscountETB: 349,
+      maxUses: 5000,
+      usedCount: 142,
+      expiresAt: '2026-12-31',
+      isActive: true
+    },
+    {
+      code: 'WKU100',
+      description: '100% Free Wolkite University Campus Access',
+      discountPercentage: 100,
+      fixedDiscountETB: 349,
+      maxUses: 2000,
+      usedCount: 88,
       expiresAt: '2026-12-31',
       isActive: true
     },
     {
       code: 'FREESTUDENT',
+      description: '100% Student Scholarship Activation',
       discountPercentage: 100,
-      fixedDiscountETB: 200,
-      maxUses: 500,
-      usedCount: 28,
+      fixedDiscountETB: 349,
+      maxUses: 1000,
+      usedCount: 52,
       expiresAt: '2026-12-31',
       isActive: true
     },
     {
       code: 'ETHIOLEARN50',
+      description: '50% Semester Discount for University Students',
       discountPercentage: 50,
-      fixedDiscountETB: 100,
-      maxUses: 200,
+      fixedDiscountETB: 175,
+      maxUses: 1000,
       usedCount: 42,
       expiresAt: '2026-12-31',
       isActive: true
     },
     {
-      code: 'TELEBIRR25',
-      discountPercentage: 25,
-      fixedDiscountETB: 50,
-      maxUses: 300,
-      usedCount: 9,
+      code: 'WKU2026',
+      description: '40% Special Wolkite University Student Discount',
+      discountPercentage: 40,
+      fixedDiscountETB: 140,
+      maxUses: 1500,
+      usedCount: 56,
+      expiresAt: '2026-12-31',
+      isActive: true
+    },
+    {
+      code: 'TELEBIRR30',
+      description: '30% Discount for Telebirr Payments',
+      discountPercentage: 30,
+      fixedDiscountETB: 105,
+      maxUses: 1000,
+      usedCount: 61,
+      expiresAt: '2026-12-31',
+      isActive: true
+    },
+    {
+      code: 'CBEBIRR30',
+      description: '30% Discount for Commercial Bank of Ethiopia (CBE)',
+      discountPercentage: 30,
+      fixedDiscountETB: 105,
+      maxUses: 1000,
+      usedCount: 39,
+      expiresAt: '2026-12-31',
+      isActive: true
+    },
+    {
+      code: 'AAU2026',
+      description: '35% Discount for Addis Ababa University',
+      discountPercentage: 35,
+      fixedDiscountETB: 122,
+      maxUses: 1000,
+      usedCount: 27,
+      expiresAt: '2026-12-31',
+      isActive: true
+    },
+    {
+      code: 'CAMPUS40',
+      description: '40% Campus Representative Student Voucher',
+      discountPercentage: 40,
+      fixedDiscountETB: 140,
+      maxUses: 500,
+      usedCount: 19,
       expiresAt: '2026-12-31',
       isActive: true
     }

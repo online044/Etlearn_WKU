@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Home as HomeIcon, Bot, Trophy, Award, Sparkles, Calendar, Sun, Moon, User as UserIcon, BookOpen, CheckCircle,
-  Share, X, ShieldCheck, Download, WifiOff, GraduationCap, FileText, Menu, MoreVertical
+  Share, X, ShieldCheck, Download, WifiOff, GraduationCap, FileText, Menu, MoreVertical, Type
 } from 'lucide-react';
 
 import { StudentProfile, CustomNote, Flashcard, AITeacherContext, ExamAttemptRecord } from './types';
@@ -268,6 +268,20 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
 
+  // Student Text Size preference: moderate by default for clear readability
+  const [textSize, setTextSize] = useState<'normal' | 'moderate' | 'large' | 'xlarge'>(() => {
+    const saved = safeStorage.getItem('ethiolearn_text_size');
+    if (saved === 'normal' || saved === 'moderate' || saved === 'large' || saved === 'xlarge') {
+      return saved;
+    }
+    return 'moderate';
+  });
+
+  useEffect(() => {
+    document.documentElement.dataset.textSize = textSize;
+    safeStorage.setItem('ethiolearn_text_size', textSize);
+  }, [textSize]);
+
   // Supabase books sync state
   const [supabaseBooks, setSupabaseBooks] = useState<any[]>([]);
 
@@ -500,7 +514,7 @@ export default function App() {
     // Handle Telegram MainButton on specific pages
     if (tg.MainButton) {
       if (currentPage === 'upgrade') {
-        tg.MainButton.setText(language === 'en' ? 'UPGRADE TO PRO (200 BIRR)' : 'ወደ ፕሮ አባልነት አሳድግ (200 ብር)');
+        tg.MainButton.setText(language === 'en' ? 'UPGRADE TO PRO (149 ETB)' : 'ወደ ፕሮ አባልነት አሳድግ (149 ብር)');
         tg.MainButton.show();
         const handleTelegramMainBtn = () => {
           triggerHaptic('medium');
@@ -656,7 +670,7 @@ export default function App() {
               }).catch(() => {});
             }
           } catch (restoreErr) {
-            console.error('[Firebase Auth session restore]:', restoreErr);
+            console.warn('[Firebase Auth session restore]:', restoreErr);
             // Even on unexpected error, guarantee user access
             if (user.email) {
               const safeFallback: StudentProfile = {
@@ -1364,7 +1378,7 @@ export default function App() {
             <div className="flex bg-slate-100 dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-800 rounded-lg sm:rounded-xl p-0.5 shrink-0">
               <button
                 onClick={() => { setLanguage('en'); playClickChime(); }}
-                className={`text-[9.5px] min-[360px]:text-[10px] sm:text-[10.5px] font-extrabold px-1.5 min-[360px]:px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg transition-colors cursor-pointer ${
+                className={`text-xs sm:text-sm font-bold px-2 sm:px-2.5 py-1 rounded-md sm:rounded-lg transition-colors cursor-pointer ${
                   language === 'en' ? 'bg-[#078930] text-white shadow-sm' : 'text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200'
                 }`}
               >
@@ -1372,13 +1386,30 @@ export default function App() {
               </button>
               <button
                 onClick={() => { setLanguage('am'); playClickChime(); }}
-                className={`text-[9.5px] min-[360px]:text-[10px] sm:text-[10.5px] font-extrabold px-1.5 min-[360px]:px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg transition-colors cursor-pointer ${
+                className={`text-xs sm:text-sm font-bold px-2 sm:px-2.5 py-1 rounded-md sm:rounded-lg transition-colors cursor-pointer ${
                   language === 'am' ? 'bg-[#078930] text-white shadow-sm' : 'text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200'
                 }`}
               >
                 አማ
               </button>
             </div>
+
+            {/* Quick Text Size Toggle (Moderate / Large / X-Large / Normal) */}
+            <button
+              onClick={() => {
+                triggerHaptic('light');
+                playClickChime();
+                const nextSize = textSize === 'moderate' ? 'large' : textSize === 'large' ? 'xlarge' : textSize === 'xlarge' ? 'normal' : 'moderate';
+                setTextSize(nextSize);
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg sm:rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-100 dark:bg-zinc-900/90 text-slate-700 dark:text-zinc-200 hover:text-amber-500 transition-colors cursor-pointer"
+              title={`Reading Text Size: ${textSize.toUpperCase()} (Click to toggle)`}
+            >
+              <Type className="w-3.5 h-3.5 text-amber-500" />
+              <span className="font-mono text-xs font-black">
+                {textSize === 'normal' ? 'A' : textSize === 'moderate' ? 'A+' : textSize === 'large' ? 'A++' : 'A+++'}
+              </span>
+            </button>
 
             {/* Desktop / Tablet Controls (Visible on sm screens and up) */}
             <div className="hidden sm:flex items-center gap-2">
@@ -1628,6 +1659,8 @@ export default function App() {
                 onSignOut={handleSignOut}
                 onNavigateToUpgrade={() => setCurrentPage('upgrade')}
                 onOpenAdmin={isUserAdmin ? () => setIsAdminOpen(true) : undefined}
+                textSize={textSize}
+                onUpdateTextSize={setTextSize}
               />
             )}
 
@@ -1706,7 +1739,7 @@ export default function App() {
             <div className={`px-3 py-1 rounded-full transition-colors ${currentPage === 'home' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
               <HomeIcon className="w-5 h-5 shrink-0" />
             </div>
-            <span className={`text-[10px] sm:text-[11px] mt-0.5 truncate max-w-[64px] text-center ${currentPage === 'home' ? 'font-bold text-amber-400' : 'font-medium text-slate-400'}`}>
+            <span className={`text-xs mt-0.5 truncate max-w-[76px] sm:max-w-[88px] text-center ${currentPage === 'home' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
               {language === 'en' ? 'Home' : 'ዋና'}
             </span>
           </button>
@@ -1721,7 +1754,7 @@ export default function App() {
             <div className={`px-3 py-1 rounded-full transition-colors ${currentPage === 'quiz' || currentPage === 'tutor' || currentPage === 'examprep' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
               <Trophy className="w-5 h-5 shrink-0" />
             </div>
-            <span className={`text-[10px] sm:text-[11px] mt-0.5 truncate max-w-[64px] text-center ${currentPage === 'quiz' || currentPage === 'tutor' || currentPage === 'examprep' ? 'font-bold text-amber-400' : 'font-medium text-slate-400'}`}>
+            <span className={`text-xs mt-0.5 truncate max-w-[76px] sm:max-w-[88px] text-center ${currentPage === 'quiz' || currentPage === 'tutor' || currentPage === 'examprep' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
               {language === 'en' ? 'Quizzes' : 'ፈተናዎች'}
             </span>
           </button>
@@ -1736,7 +1769,7 @@ export default function App() {
             <div className={`px-3 py-1 rounded-full transition-colors ${currentPage === 'bookstore' || currentPage === 'notes' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
               <BookOpen className="w-5 h-5 shrink-0" />
             </div>
-            <span className={`text-[10px] sm:text-[11px] mt-0.5 truncate max-w-[64px] text-center ${currentPage === 'bookstore' || currentPage === 'notes' ? 'font-bold text-amber-400' : 'font-medium text-slate-400'}`}>
+            <span className={`text-xs mt-0.5 truncate max-w-[76px] sm:max-w-[88px] text-center ${currentPage === 'bookstore' || currentPage === 'notes' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
               {language === 'en' ? 'Books' : 'መጽሐፍት'}
             </span>
           </button>
@@ -1752,7 +1785,7 @@ export default function App() {
             <div className={`px-3 py-1 rounded-full transition-colors ${currentPage === 'university' || currentPage === 'examengine' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
               <Award className="w-5 h-5 shrink-0" />
             </div>
-            <span className={`text-[10px] sm:text-[11px] mt-0.5 truncate max-w-[64px] text-center ${currentPage === 'university' || currentPage === 'examengine' ? 'font-bold text-amber-400' : 'font-medium text-slate-400'}`}>
+            <span className={`text-xs mt-0.5 truncate max-w-[76px] sm:max-w-[88px] text-center ${currentPage === 'university' || currentPage === 'examengine' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
               {language === 'en' ? 'Uni Exam' : 'ዩኒቨርሲቲ'}
             </span>
           </button>
@@ -1772,7 +1805,7 @@ export default function App() {
                 className={`transition-all ${currentPage === 'profile' ? 'border-2 border-amber-400 scale-105' : 'border border-slate-700 opacity-80'}`}
               />
             </div>
-            <span className={`text-[10px] sm:text-[11px] mt-0.5 truncate max-w-[64px] text-center ${currentPage === 'profile' ? 'font-bold text-amber-400' : 'font-medium text-slate-400'}`}>
+            <span className={`text-xs mt-0.5 truncate max-w-[76px] sm:max-w-[88px] text-center ${currentPage === 'profile' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
               {language === 'en' ? 'Profile' : 'መገለጫ'}
             </span>
           </button>

@@ -562,3 +562,307 @@ CREATE POLICY "subscriptions_admin_update"
 CREATE POLICY "subscriptions_admin_delete"
     ON public.subscriptions FOR DELETE
     USING (public.is_admin());
+
+-- ====================================================================
+-- 16. CENTRAL QUESTION BANK & SUBJECTS TABLES (10,000+ Questions Scale)
+-- ====================================================================
+
+-- 16.1 SUBJECTS TABLE
+CREATE TABLE IF NOT EXISTS public.subjects (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    code TEXT,
+    department TEXT DEFAULT 'Common Freshman Courses',
+    year TEXT DEFAULT 'Year 1',
+    semester TEXT DEFAULT 'Semester 1 & 2',
+    description TEXT,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_subjects_active ON public.subjects(is_active);
+CREATE INDEX IF NOT EXISTS idx_subjects_name ON public.subjects(name);
+
+-- Seed standard 19 Ethiopian University Freshman subjects
+INSERT INTO public.subjects (id, name, code, department, year, semester, description, is_active)
+VALUES 
+    ('subj_critical_thinking', 'Critical Thinking', 'PHIL 1011', 'Freshman Common', 'Year 1', 'Semester 1', 'Logic, reasoning, and critical inquiry module', TRUE),
+    ('subj_economics', 'Economics', 'ECON 1011', 'Freshman Common', 'Year 1', 'Semester 2', 'Microeconomics and Macroeconomics principles', TRUE),
+    ('subj_emerging_technologies', 'Emerging Technologies', 'EMTE 1011', 'Freshman Common', 'Year 1', 'Semester 2', 'AI, IoT, Cloud, Blockchain and Industry 4.0', TRUE),
+    ('subj_entrepreneurship', 'Entrepreneurship', 'MGMT 1012', 'Freshman Common', 'Year 1', 'Semester 2', 'Business innovation, venture creation and mindset', TRUE),
+    ('subj_general_biology', 'General Biology', 'BIOL 1011', 'Natural Science', 'Year 1', 'Semester 1', 'Cell biology, genetics, ecology, and human biology', TRUE),
+    ('subj_general_chemistry', 'General Chemistry', 'CHEM 1011', 'Natural Science', 'Year 1', 'Semester 1', 'Atomic theory, chemical bonding, equilibria, kinetics', TRUE),
+    ('subj_general_physics', 'General Physics', 'PHYS 1011', 'Natural Science', 'Year 1', 'Semester 1', 'Mechanics, thermodynamics, electricity, magnetism', TRUE),
+    ('subj_general_psychology', 'General Psychology', 'PSYC 1011', 'Freshman Common', 'Year 1', 'Semester 1', 'Human cognition, behavior, learning, and memory', TRUE),
+    ('subj_geography', 'Geography', 'GEOG 1011', 'Social Science & Common', 'Year 1', 'Semester 1', 'Geography of Ethiopia and the Horn', TRUE),
+    ('subj_global_trends', 'Global Trends', 'GLTR 1012', 'Freshman Common', 'Year 1', 'Semester 2', 'International relations, geopolitics and globalization', TRUE),
+    ('subj_inclusiveness', 'Inclusiveness', 'SNIE 1012', 'Freshman Common', 'Year 1', 'Semester 2', 'Special needs and inclusive education in Ethiopia', TRUE),
+    ('subj_moral_and_civic', 'Moral and Civic', 'MCED 1011', 'Freshman Common', 'Year 1', 'Semester 1', 'Ethics, democracy, constitutional law and rights', TRUE),
+    ('subj_physical_fitness', 'Physical Fitness', 'SpSc 1011', 'Freshman Common', 'Year 1', 'Semester 1', 'Exercise physiology, wellness and health promotion', TRUE),
+    ('subj_english_1', 'Communicative English Language Skills I', 'FLEn 1011', 'Freshman Common', 'Year 1', 'Semester 1', 'Grammar, reading comprehension, vocabulary and discourse', TRUE),
+    ('subj_english_2', 'Communicative English Language Skills II', 'FLEn 1012', 'Freshman Common', 'Year 1', 'Semester 2', 'Academic writing, formal presentations and debate', TRUE),
+    ('subj_history', 'History of Ethiopia and the Horn', 'HIST 1012', 'Freshman Common', 'Year 1', 'Semester 2', 'Ancient civilizations to modern Ethiopian statehood', TRUE),
+    ('subj_math_natural', 'Mathematics — Natural Science', 'MATH 1011', 'Natural Science', 'Year 1', 'Semester 1', 'Precalculus, vectors, limits, derivatives, integrals', TRUE),
+    ('subj_math_social', 'Mathematics — Social Science', 'MATH 1012', 'Social Science', 'Year 1', 'Semester 1', 'Linear algebra, matrices, probability, business math', TRUE),
+    ('subj_social_anthropology', 'Social Anthropology', 'ANTH 1012', 'Freshman Common', 'Year 1', 'Semester 2', 'Cultural diversity, ethnography, kinship in the Horn', TRUE)
+ON CONFLICT (id) DO NOTHING;
+
+-- 16.2 CENTRAL QUESTIONS TABLE (Can scale to 10,000+ items)
+CREATE TABLE IF NOT EXISTS public.questions (
+    id TEXT PRIMARY KEY,
+    subject_id TEXT,
+    subject TEXT NOT NULL DEFAULT 'General Biology',
+    course TEXT NOT NULL DEFAULT 'General Biology',
+    unit TEXT NOT NULL DEFAULT 'Unit 1',
+    topic TEXT NOT NULL DEFAULT 'General Topic',
+    module_id INT DEFAULT 5,
+    module_name TEXT NOT NULL DEFAULT 'General Biology',
+    chapter TEXT NOT NULL DEFAULT 'Unit 1',
+    question TEXT NOT NULL,
+    question_type TEXT NOT NULL DEFAULT 'multiple_choice',
+    difficulty TEXT NOT NULL DEFAULT 'medium' CHECK (difficulty IN ('easy', 'medium', 'hard')),
+    options JSONB NOT NULL,
+    correct_answer TEXT NOT NULL,
+    explanation TEXT,
+    source TEXT DEFAULT 'Curriculum Module',
+    source_unit TEXT,
+    source_file TEXT,
+    is_published BOOLEAN NOT NULL DEFAULT TRUE,
+    is_pro BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Sync module_name & chapter triggers to ensure 100% interoperability across both schemas
+CREATE OR REPLACE FUNCTION public.sync_question_columns()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.subject IS NULL OR NEW.subject = '' THEN
+        NEW.subject := COALESCE(NEW.module_name, 'General Biology');
+    END IF;
+    IF NEW.course IS NULL OR NEW.course = '' THEN
+        NEW.course := NEW.subject;
+    END IF;
+    IF NEW.unit IS NULL OR NEW.unit = '' THEN
+        NEW.unit := COALESCE(NEW.chapter, 'Unit 1');
+    END IF;
+    IF NEW.topic IS NULL OR NEW.topic = '' THEN
+        NEW.topic := NEW.unit;
+    END IF;
+    IF NEW.module_name IS NULL OR NEW.module_name = '' THEN
+        NEW.module_name := NEW.subject;
+    END IF;
+    IF NEW.chapter IS NULL OR NEW.chapter = '' THEN
+        NEW.chapter := NEW.unit;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_sync_question_columns ON public.questions;
+CREATE TRIGGER trg_sync_question_columns
+    BEFORE INSERT OR UPDATE ON public.questions
+    FOR EACH ROW EXECUTE FUNCTION public.sync_question_columns();
+
+-- High-performance indexes requested:
+-- subject, course, unit, topic, difficulty, question_type, is_published, is_pro
+CREATE INDEX IF NOT EXISTS idx_questions_subject ON public.questions(subject);
+CREATE INDEX IF NOT EXISTS idx_questions_course ON public.questions(course);
+CREATE INDEX IF NOT EXISTS idx_questions_unit ON public.questions(unit);
+CREATE INDEX IF NOT EXISTS idx_questions_topic ON public.questions(topic);
+CREATE INDEX IF NOT EXISTS idx_questions_module_id ON public.questions(module_id);
+CREATE INDEX IF NOT EXISTS idx_questions_module_name ON public.questions(module_name);
+CREATE INDEX IF NOT EXISTS idx_questions_chapter ON public.questions(chapter);
+CREATE INDEX IF NOT EXISTS idx_questions_difficulty ON public.questions(difficulty);
+CREATE INDEX IF NOT EXISTS idx_questions_type ON public.questions(question_type);
+CREATE INDEX IF NOT EXISTS idx_questions_is_published ON public.questions(is_published);
+CREATE INDEX IF NOT EXISTS idx_questions_is_pro ON public.questions(is_pro);
+CREATE INDEX IF NOT EXISTS idx_questions_subject_published ON public.questions(subject, is_published);
+
+-- Prevent duplicate questions where practical (unique subject + question text hash)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_questions_prevent_duplicate 
+    ON public.questions (subject, MD5(LOWER(TRIM(question))));
+
+-- Updated_at trigger for questions
+DROP TRIGGER IF EXISTS update_questions_updated_at ON public.questions;
+CREATE TRIGGER update_questions_updated_at BEFORE UPDATE ON public.questions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- 16.3 QUESTION PROGRESS TABLE (Student attempts & accuracy)
+CREATE TABLE IF NOT EXISTS public.question_progress (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    question_id TEXT NOT NULL,
+    attempts INT NOT NULL DEFAULT 1,
+    correct_attempts INT NOT NULL DEFAULT 0,
+    incorrect_attempts INT NOT NULL DEFAULT 0,
+    last_answer TEXT,
+    last_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT unique_user_question_progress UNIQUE (user_id, question_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_qprog_user ON public.question_progress(user_id);
+CREATE INDEX IF NOT EXISTS idx_qprog_question ON public.question_progress(question_id);
+
+-- 16.4 QUESTION BOOKMARKS TABLE
+CREATE TABLE IF NOT EXISTS public.question_bookmarks (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    question_id TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT unique_user_question_bookmark UNIQUE (user_id, question_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_qbm_user ON public.question_bookmarks(user_id);
+CREATE INDEX IF NOT EXISTS idx_qbm_question ON public.question_bookmarks(question_id);
+
+-- 16.5 EXAM PRESETS TABLE (Exam Mode: Timed Mock Exams)
+CREATE TABLE IF NOT EXISTS public.question_exams (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    description TEXT,
+    question_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+    duration_minutes INT NOT NULL DEFAULT 60,
+    total_questions INT NOT NULL DEFAULT 50,
+    passing_score INT NOT NULL DEFAULT 50,
+    is_pro BOOLEAN NOT NULL DEFAULT FALSE,
+    is_published BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ====================================================================
+-- 17. ZERO-TRUST RLS POLICIES FOR QUESTIONS & SUBJECTS
+-- ====================================================================
+
+-- 17.1 Subjects RLS
+ALTER TABLE public.subjects ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "subjects_select" ON public.subjects;
+DROP POLICY IF EXISTS "subjects_admin_insert" ON public.subjects;
+DROP POLICY IF EXISTS "subjects_admin_update" ON public.subjects;
+DROP POLICY IF EXISTS "subjects_admin_delete" ON public.subjects;
+
+CREATE POLICY "subjects_select"
+    ON public.subjects FOR SELECT
+    USING (is_active = TRUE OR public.is_admin());
+
+CREATE POLICY "subjects_admin_insert"
+    ON public.subjects FOR INSERT
+    WITH CHECK (public.is_admin());
+
+CREATE POLICY "subjects_admin_update"
+    ON public.subjects FOR UPDATE
+    USING (public.is_admin())
+    WITH CHECK (public.is_admin());
+
+CREATE POLICY "subjects_admin_delete"
+    ON public.subjects FOR DELETE
+    USING (public.is_admin());
+
+-- 17.2 Questions RLS
+ALTER TABLE public.questions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "questions_select" ON public.questions;
+DROP POLICY IF EXISTS "questions_admin_insert" ON public.questions;
+DROP POLICY IF EXISTS "questions_admin_update" ON public.questions;
+DROP POLICY IF EXISTS "questions_admin_delete" ON public.questions;
+
+-- Students can read published questions; admins can read all
+CREATE POLICY "questions_select"
+    ON public.questions FOR SELECT
+    USING (is_published = TRUE OR public.is_admin());
+
+CREATE POLICY "questions_admin_insert"
+    ON public.questions FOR INSERT
+    WITH CHECK (public.is_admin());
+
+CREATE POLICY "questions_admin_update"
+    ON public.questions FOR UPDATE
+    USING (public.is_admin())
+    WITH CHECK (public.is_admin());
+
+CREATE POLICY "questions_admin_delete"
+    ON public.questions FOR DELETE
+    USING (public.is_admin());
+
+-- 17.3 Question Progress RLS
+ALTER TABLE public.question_progress ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "qprog_select" ON public.question_progress;
+DROP POLICY IF EXISTS "qprog_insert" ON public.question_progress;
+DROP POLICY IF EXISTS "qprog_update" ON public.question_progress;
+DROP POLICY IF EXISTS "qprog_delete" ON public.question_progress;
+
+CREATE POLICY "qprog_select"
+    ON public.question_progress FOR SELECT
+    USING (
+        auth.role() = 'service_role' OR
+        auth.jwt() ->> 'email' = user_id OR
+        auth.uid()::text = user_id OR
+        public.is_admin()
+    );
+
+CREATE POLICY "qprog_insert"
+    ON public.question_progress FOR INSERT
+    WITH CHECK (
+        auth.role() = 'service_role' OR
+        auth.jwt() ->> 'email' = user_id OR
+        auth.uid()::text = user_id OR
+        public.is_admin()
+    );
+
+CREATE POLICY "qprog_update"
+    ON public.question_progress FOR UPDATE
+    USING (
+        auth.role() = 'service_role' OR
+        auth.jwt() ->> 'email' = user_id OR
+        auth.uid()::text = user_id OR
+        public.is_admin()
+    )
+    WITH CHECK (
+        auth.role() = 'service_role' OR
+        auth.jwt() ->> 'email' = user_id OR
+        auth.uid()::text = user_id OR
+        public.is_admin()
+    );
+
+CREATE POLICY "qprog_delete"
+    ON public.question_progress FOR DELETE
+    USING (
+        auth.role() = 'service_role' OR
+        auth.jwt() ->> 'email' = user_id OR
+        auth.uid()::text = user_id OR
+        public.is_admin()
+    );
+
+-- 17.4 Question Bookmarks RLS
+ALTER TABLE public.question_bookmarks ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "qbm_select" ON public.question_bookmarks;
+DROP POLICY IF EXISTS "qbm_insert" ON public.question_bookmarks;
+DROP POLICY IF EXISTS "qbm_delete" ON public.question_bookmarks;
+
+CREATE POLICY "qbm_select"
+    ON public.question_bookmarks FOR SELECT
+    USING (
+        auth.role() = 'service_role' OR
+        auth.jwt() ->> 'email' = user_id OR
+        auth.uid()::text = user_id OR
+        public.is_admin()
+    );
+
+CREATE POLICY "qbm_insert"
+    ON public.question_bookmarks FOR INSERT
+    WITH CHECK (
+        auth.role() = 'service_role' OR
+        auth.jwt() ->> 'email' = user_id OR
+        auth.uid()::text = user_id OR
+        public.is_admin()
+    );
+
+CREATE POLICY "qbm_delete"
+    ON public.question_bookmarks FOR DELETE
+    USING (
+        auth.role() = 'service_role' OR
+        auth.jwt() ->> 'email' = user_id OR
+        auth.uid()::text = user_id OR
+        public.is_admin()
+    );

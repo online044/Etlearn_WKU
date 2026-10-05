@@ -447,21 +447,21 @@ export default function HomeDashboard({
           <section className="space-y-1">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0 flex-1">
-                <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block truncate">
+                <span className="text-xs sm:text-sm font-bold text-amber-400 uppercase tracking-wider block truncate">
                   {isAmharic ? greetingAm : greetingEn}, {profile.name?.split(' ')[0] || (isAmharic ? 'ተማሪ' : 'Scholar')} 👋
                 </span>
-                <h1 className="text-base sm:text-xl font-black text-white tracking-tight truncate">
+                <h1 className="text-lg sm:text-2xl font-black text-white tracking-tight truncate">
                   {isAmharic ? 'ትምህርትዎን ለመቀጠል ዝግጁ ነዎት?' : 'Ready to continue learning?'}
                 </h1>
               </div>
 
               {/* Mobile Ethiopian date ticker */}
               <div className="text-right shrink-0 lg:hidden">
-                <span className="text-[10px] font-mono text-slate-400 block">
+                <span className="text-xs font-mono text-slate-300 block">
                   {ethDate.monthAm || ethDate.monthName || 'መስከረም'} {geezDayNumeral} ({ethDate.year} ዓ.ም)
                 </span>
                 {todayHoliday && (
-                  <span className="text-[9.5px] font-bold text-amber-400 truncate block max-w-[130px]">
+                  <span className="text-xs font-bold text-amber-400 truncate block max-w-[150px]">
                     {todayHoliday.nameAm}
                   </span>
                 )}
@@ -470,8 +470,8 @@ export default function HomeDashboard({
           </section>
 
           {/* 2. Quick Actions (4 Touch Tiles) */}
-          <section className="space-y-2">
-            <h2 className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-400">
+          <section className="space-y-2.5">
+            <h2 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-300">
               {isAmharic ? 'ፈጣን አገልግሎቶች' : 'Quick Actions'}
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 min-[360px]:gap-2.5">
@@ -537,10 +537,10 @@ export default function HomeDashboard({
                   }}
                   className="p-3 rounded-xl bg-[#111C35] border border-slate-800/90 hover:border-slate-700 transition flex flex-col justify-between text-left cursor-pointer active:scale-98 min-h-[64px] group"
                 >
-                  <span className="text-xs font-bold text-white group-hover:text-amber-400 transition truncate block">
+                  <span className="text-sm sm:text-base font-bold text-white group-hover:text-amber-400 transition truncate block">
                     {isAmharic ? sub.nameAm : sub.name}
                   </span>
-                  <span className="text-[11px] text-slate-400 mt-1 block">
+                  <span className="text-xs text-slate-300 mt-1 block">
                     {sub.count} {isAmharic ? 'ጥያቄዎች' : 'questions'}
                   </span>
                 </button>
@@ -549,24 +549,24 @@ export default function HomeDashboard({
           </section>
 
           {/* 4. Today's Study Goals & Checklist */}
-          <section className="space-y-2">
+          <section className="space-y-2.5">
             <div className="flex items-center justify-between">
-              <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                <CheckSquare className="w-3.5 h-3.5 text-amber-400" />
+              <h2 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                <CheckSquare className="w-4 h-4 text-amber-400" />
                 <span>{isAmharic ? 'የዛሬ የጥናት ግቦች' : "Today's Study Checklist"}</span>
               </h2>
               <button
                 onClick={() => { playClickChime(); setShowAddTaskModal(true); }}
-                className="text-[11px] font-bold text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
+                className="text-xs font-bold text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>{isAmharic ? 'ግብ ጨምር' : 'Add Task'}</span>
               </button>
             </div>
 
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {tasks.length === 0 ? (
-                <div className="p-3.5 rounded-xl bg-[#111C35]/60 border border-dashed border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                <div className="p-3.5 rounded-xl bg-[#111C35]/60 border border-dashed border-slate-800 flex items-center justify-between text-xs sm:text-sm text-slate-300">
                   <span>{isAmharic ? 'እስካሁን የታቀደ ግብ የለም። አዲስ ግብ ያክሉ!' : 'No tasks planned for today. Add one to track your focus.'}</span>
                   <button
                     onClick={() => { playClickChime(); setShowAddTaskModal(true); }}

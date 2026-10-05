@@ -1,6 +1,6 @@
 /**
- * Detailed chapter contents for Grade 12 New Curriculum books and prebuilt modules
- * used by the in-app textbook viewer.
+ * Detailed chapter contents for Ethiopian University Freshman Modules
+ * Official Ministry of Education (MoE) Common Curriculum.
  */
 
 export interface ChapterTextContent {
@@ -14,291 +14,306 @@ export interface ChapterTextContent {
 }
 
 export const TEXTBOOK_CHAPTERS: Record<string, Record<string, ChapterTextContent>> = {
-  // Economics (New Curriculum)
-  'g12_new_economics': {
-    'Chapter 1: Theory of Consumer Behavior': {
-      title: 'Chapter 1: Theory of Consumer Behavior',
-      intro: 'In this chapter, we explore how individual consumers allocate their limited income to purchase combinations of goods and services that maximize their satisfaction (utility).',
+  // 1. Critical Thinking (Phil 1011)
+  'freshman_critical_thinking': {
+    'Chapter 1: Introducing Philosophy, Logic and Arguments': {
+      title: 'Chapter 1: Introducing Philosophy, Logic and Arguments',
+      intro: 'Logic and Critical Thinking is a foundational freshman course designed to cultivate analytical rigor, rational deliberation, and the capacity to identify sound arguments from cognitive fallacies in academic and social contexts.',
       sections: [
         {
-          title: '1. Cardinal vs. Ordinal Utility Approaches',
-          body: 'The cardinal approach suggests utility can be measured quantitatively in absolute units called "utils." Modern economics, however, prefers the ordinal utility approach, which states that satisfaction cannot be measured numerically but only ranked or ordered dynamically (First, Second, Third) using Indifference Curves.'
+          title: '1. Meaning and Nature of Philosophy & Logic',
+          body: 'Philosophy originates from the Greek words "Philos" (love) and "Sophia" (wisdom)—the systematic investigation of fundamental questions regarding reality, knowledge, and moral existence. Logic is the core normative branch of philosophy that formulates standards for distinguishing valid from invalid reasoning, and sound from unsound arguments.'
         },
         {
-          title: '2. The Law of Diminishing Marginal Utility (LDMU)',
-          body: 'As a consumer consumes more and more of a specific good (e.g., cups of traditional coffee or slices of injera), the additional satisfaction or "Marginal Utility" (MU) gained from each successive unit decreases. Mathematically, marginal utility is given by MU = ΔTU / ΔQ.'
+          title: '2. The Structure of an Argument: Premises and Conclusion',
+          body: 'An argument consists of a group of statements (declarative sentences that are either true or false) where one or more statements (Premises) are asserted as offering evidence or support for another statement (Conclusion).\n\nPremise Indicators include: "since", "because", "for", "inasmuch as", "given that".\nConclusion Indicators include: "therefore", "thus", "hence", "consequently", "it follows that".'
         },
         {
-          title: '3. Consumer Equilibrium Condition',
-          body: 'A consumer maximizes utility when the ratio of the marginal utility of each good to its price is equal across all purchased commodities: MU_x / P_x = MU_y / P_y, subject to the budget constraint: I = P_x * Q_x + P_y * Q_y.'
+          title: '3. Deduction vs. Induction',
+          body: 'Deductive Arguments claim that the conclusion follows necessarily from the premises. If the structure is valid and the premises are factually true, the argument is Sound.\n\nInductive Arguments claim only that the conclusion follows with probability. If the premises make the conclusion likely, the argument is Strong. If a strong argument has true premises, it is Cogent.'
         }
       ],
-      formulas: [
-        { name: 'Marginal Utility (MU)', formula: 'MU = d(TU) / dQ  or  (TU_2 - TU_1) / (Q_2 - Q_1)', description: 'Measures the rate of change in total utility resulting from a one-unit change in consumption volume.' },
-        { name: 'Equilibrium Condition', formula: 'MU_x / P_x = MU_y / P_y', description: 'Represents the equal marginal utility per dollar spent condition ensuring optimal satisfaction.' }
-      ],
       keyTerms: [
-        { term: 'Utility (ጥቅም)', definition: 'The capacity of a commodity or service to satisfy human wants.', amharic: 'ጥቅም' },
-        { term: 'Marginal Utility (ተጨማሪ ጥቅም)', definition: 'The additional satisfaction from consuming one extra unit of a good.', amharic: 'ተጨማሪ ጥቅም' },
-        { term: 'Indifference Curve (አድሏዊ ያልሆነ ኩርባ)', definition: 'A curve showing combination points of two goods that give the consumer equal satisfaction.', amharic: 'ገለልተኛ ኩርባ' }
+        { term: 'Logic (ስነ-አመክንዮ)', definition: 'The systematic science that evaluates principles of correct reasoning.', amharic: 'ስነ-አመክንዮ' },
+        { term: 'Premise (መነሻ ሃሳብ)', definition: 'A declarative statement setting forth evidence or reasons in an argument.', amharic: 'መነሻ ሃሳብ' },
+        { term: 'Conclusion (መደምደሚያ)', definition: 'The statement claimed to be supported by the premises.', amharic: 'መደምደሚያ' },
+        { term: 'Validity (ትክክለኛነት)', definition: 'Structural property of deduction where it is impossible for premises to be true and conclusion false.', amharic: 'ህጋዊነት / ትክክለኛነት' },
+        { term: 'Soundness (ሙሉዕነት)', definition: 'A deductive argument that is both structurally valid and contains factually true premises.', amharic: 'ሙሉዕነት' }
       ],
       asciiDiagram: `
-     Consumer Indifference Curve & Budget Line:
+     Deductive vs Inductive Argument Classification:
      
-     Quantity Y
-         |  \\
-      I1 |...\\*  <- Optimal Consumer Choice (Equilibrium)
-         |   .\\
-         |    .\\  U_High (Indifference Curve)
-         |_____\\________________ Quantity X
-               Budget Line
+                 [ ARGUMENTS ]
+                   /       \\
+             Deductive      Inductive
+              /     \\        /     \\
+           Valid  Invalid  Strong  Weak
+           /   \\             |
+        Sound Unsound     Cogent
       `,
-      examAlert: 'MATRIC ALERT: At consumer equilibrium, the slope of the indifference curve (Marginal Rate of Substitution, MRS) is exactly equal to the slope of the budget line (Price Ratio, P_x / P_y). Prepare for multiple-choice questions testing this intersection!'
+      examAlert: 'UNIVERSITY MID-TERM TRAP: Remember that validity is strictly a matter of structural relationship, NOT factual truth. An argument can be 100% VALID even if all premises and the conclusion are completely false in the real world!'
     },
-    'Chapter 2: Market Structure and Perfect Competition': {
-      title: 'Chapter 2: Market Structure and Perfect Competition',
-      intro: 'This chapter analyses perfect competition—a highly idealized market structure with homogenous goods, price-taking behavior, and complete information.',
+    'Chapter 3: Informal Fallacies': {
+      title: 'Chapter 3: Informal Fallacies (Relevance, Weak Induction, Presumption)',
+      intro: 'An informal fallacy is a defect in the reasoning process caused by linguistic ambiguity, irrelevant appeals, or faulty assumptions rather than purely invalid formal structure.',
       sections: [
         {
-          title: '1. Conditions of Perfect Competition',
-          body: 'Perfect competition requires four main assumptions:\n- Large number of buyers and sellers;\n- Homogenous (identical) products;\n- Free entry and exit of firms;\n- Perfect knowledge of market price profiles.'
+          title: '1. Fallacies of Relevance',
+          body: 'Arguments where premises are logically irrelevant to the conclusion, relying instead on emotional or psychological deception:\n- Ad Hominem (against the person): Attacking the arguer instead of their claim.\n- Appeal to Force (Ad Baculum): Threatening harm if a conclusion is rejected.\n- Appeal to Pity (Ad Misericordiam): Urging acceptance solely on sympathy.\n- Straw Man: Distorting an opponent\'s stance to make it easier to attack.\n- Red Herring: Diverting attention to an entirely different issue.'
         },
         {
-          title: '2. Short-Run vs Long-Run Equilibrium',
-          body: 'In the short-run, competitive firms can earn abnormal profits, normal profits, or incur losses. In the long-run, because of free entry and exit, abnormal profits attract competitors, driving price down to the minimum average cost, resulting in only Normal Profit (P = MC = Minimum ATC).'
+          title: '2. Fallacies of Weak Induction and Presumption',
+          body: '- Hasty Generalization: Drawing a conclusion about a whole group from an unrepresentative or tiny sample.\n- False Cause (Post Hoc Ergo Propter Hoc): Concluding that because Event B followed Event A, Event A must have caused Event B.\n- Begging the Question (Petitio Principii): Circular reasoning where the premise assumes the very conclusion it aims to prove.\n- False Dilemma: Presenting only two extreme choices when viable alternatives exist.'
+        }
+      ],
+      keyTerms: [
+        { term: 'Informal Fallacy (አመክንዮአዊ ስህተት)', definition: 'A flaw in reasoning arising from content, context, or linguistic confusion.', amharic: 'አመክንዮአዊ ስህተት' },
+        { term: 'Ad Hominem (ግለሰብን ማጥቃት)', definition: 'Attacking an opponent\'s character rather than answering their argument.', amharic: 'ግለሰብን ማጥቃት' },
+        { term: 'Begging the Question (ጥያቄን መዋጥ)', definition: 'Circular reasoning where the premise repeats the conclusion in different words.', amharic: 'ክበባዊ አመክንዮ' }
+      ],
+      examAlert: 'FINAL EXAM FOCUS: Ethiopian university exams consistently test identifying fallacies in practical political speeches and campus debates. Pay close attention to distinguishing "Straw Man" (distortion) from "Red Herring" (distraction)!'
+    }
+  },
+
+  // 2. Economics (Econ 1011)
+  'freshman_economics': {
+    'Chapter 1: Foundations of Economics & Scarcity': {
+      title: 'Chapter 1: Foundations of Economics & Scarcity',
+      intro: 'Economics is the social science studying how individuals, businesses, and governments allocate scarce resources with alternative uses to satisfy unlimited human wants.',
+      sections: [
+        {
+          title: '1. The Fundamental Economic Problem: Scarcity & Choice',
+          body: 'Human wants are virtually unlimited, while productive resources (Land, Labor, Capital, Entrepreneurship) are strictly finite. This fundamental condition of Scarcity necessitates Choice, which inevitably generates Opportunity Cost—the value of the next best alternative foregone.'
+        },
+        {
+          title: '2. Production Possibilities Frontier (PPF)',
+          body: 'The PPF graph illustrates maximum output combinations of two goods an economy can produce given fixed technology and full employment of resources. Points on the curve are efficient; points inside are inefficient (unemployment/underutilization); points outside are currently unattainable without economic growth or technological progress.'
+        },
+        {
+          title: '3. Microeconomics vs. Macroeconomics',
+          body: 'Microeconomics analyzes individual economic units (single consumers, households, firms, and specific markets). Macroeconomics studies aggregate economic indicators across the entire nation, including Gross Domestic Product (GDP), inflation, unemployment, balance of payments, and fiscal/monetary policies.'
         }
       ],
       formulas: [
-        { name: 'Marginal Revenue (MR)', formula: 'MR = d(TR) / dQ', description: 'The change in total revenue from selling one more unit. For perfect competition, P = MR = AR.' }
+        { name: 'Opportunity Cost Formula', formula: 'Opportunity Cost = Loss in Good Y / Gain in Good X = ΔY / ΔX', description: 'Measures the marginal rate of transformation along the production possibilities frontier.' }
       ],
       keyTerms: [
-        { term: 'Price Taker (ዋጋ ተቀባይ)', definition: 'A firm that must accept the prevailing market price because it lacks market power to set it.', amharic: 'ዋጋ ተቀባይ' }
-      ]
-    }
-  },
-
-  // Geography (New Curriculum)
-  'g12_new_geography': {
-    'Chapter 1: Geological Structure and Landforms of Ethiopia': {
-      title: 'Chapter 1: Geological Structure and Landforms of Ethiopia',
-      intro: 'An analysis of plates tectonics, volcanic eruptions, and geological epochs that formed the rugged highland plateaus and beautiful rift valley basins of Ethiopia.',
-      sections: [
-        {
-          title: '1. Geological Eras and Epochs',
-          body: 'Ethiopia\'s landscape is built from rocks ranging from Pre-Cambrian crystalline basement complex rocks (found in Tigray, Gojjam, and Southern regions) to Mesozoic marine sedimentary rocks (limestone, sandstone), and Cenozoic volcanic trap series (basalt over Rift Valley margins).'
-        },
-        {
-          title: '2. Plate Tectonics and the Great East African Rift Valley',
-          body: 'The rifting of the African plate into the Nubian and Somalian sub-plates created the Great East African Rift Valley. This zone is characterised by high geological activity, active volcanoes (such as Erta Ale), hot springs, and tectonic lakes.'
-        }
+        { term: 'Scarcity (እጥረት)', definition: 'The universal condition where human wants exceed available resources.', amharic: 'እጥረት' },
+        { term: 'Opportunity Cost (የእድል ዋጋ)', definition: 'The value of the next best alternative sacrificed when making a choice.', amharic: 'የእድል ዋጋ' },
+        { term: 'PPF Curve (የምርት እድል ድንበር)', definition: 'A graphical boundary representing maximum feasible output combinations.', amharic: 'የምርት እድል ድንበር' }
       ],
-      keyTerms: [
-        { term: 'Basement Complex (መሠረታዊ ድንጋይ)', definition: 'The oldest, highly metamorphosed crystalline rocks forming the foundation of Ethiopian soil geology.', amharic: 'መሠረተ ድንጋይ' },
-        { term: 'Rifting (ስንጥቃት)', definition: 'The process of lithospheric stretching and breaking under tectonic pull factors.', amharic: 'መሰንጠቅ' }
-      ],
-      asciiDiagram: `
-     Ethiopian Rift Valley Cross-section:
-     
-      Western Highlands                          Eastern Highlands
-         (Gojjam/Shewa)                            (Bale/Arsi)
-           \\________                                ________/
-                    \\      Rift Valley Basin       /
-                     \\     (Tectonic Lakes, e.g.) /
-                      \\______[ Erta Ale ]_________/
-                            Crust Stretching
-      `,
-      examAlert: 'TRAP GUIDE: Basement complex rocks are mineral-rich but mostly ancient metamorphic formations. Sedimentary layers from the Mesozoic era host major water reservoirs and construction materials.'
-    }
-  },
-
-  // History (New Curriculum)
-  'g12_new_history': {
-    'Chapter 1: Human Beginnings & Stone Age Cultures in the Horn': {
-      title: 'Chapter 1: Human Beginnings and Stone Age Cultures in the Horn',
-      intro: 'East Africa and the Horn of Ethiopia are universally recognized as the "Cradle of humankind" due to revolutionary fossil discoveries spanning millions of years.',
-      sections: [
-        {
-          title: '1. Paleoanthropological Fossil Discoveries',
-          body: 'World-famous hominid fossils including "Lucy" (Dinknesh, Australopithecus afarensis, 3.2 million years old) discovered in Hadar (Afar), "Ardi" (Ardipithecus ramidus, 4.4 million years old), and "Selam" confirm the Great Rift Valley as a central hub for early hominid bipedal evolution.'
-        },
-        {
-          title: '2. Stone Age Technologies',
-          body: 'Early humans in Ethiopia transitioned from the Oldowan tool culture (choppers and simple flakes) to the Acheulean hand-axes, eventually developing sophisticated microliths during the Late Stone Age.'
-        }
-      ],
-      keyTerms: [
-        { term: 'Australopithecus (አውስትራሎፒተከስ)', definition: 'An extinct genus of bipedal hominids that lived in East Africa millions of years ago.', amharic: 'ድንቅነሽ' },
-        { term: 'Microliths (ጥቃቅን የድንጋይ መሣሪያዎች)', definition: 'Small, highly precise stone tools constructed for spear heads and hunting.', amharic: 'ጥቃቅን የድንጋይ መሣሪያዎች' }
-      ]
+      examAlert: 'UNIVERSITY EXAM TIP: A bowed-out (concave) PPF reflects the Law of Increasing Opportunity Cost due to specialized factor resources.'
     },
-    'Chapter 2: State Formations, Trade and Religions (Axum, Lalibela)': {
-      title: 'Chapter 2: State Formations, Trade and Religions',
-      intro: 'This chapter explores ancient civilizations, monumental architecture, and trade dynamics of Axum and the Zagwe dynasty.',
+    'Chapter 2: Demand, Supply and Market Equilibrium': {
+      title: 'Chapter 2: Demand, Supply and Market Equilibrium',
+      intro: 'This chapter models the price mechanism: how competitive interactions between buyers (demand) and sellers (supply) determine market-clearing equilibrium prices and quantities.',
       sections: [
         {
-          title: '1. The Kingdom of Axum',
-          body: 'Centred in Northern Ethiopia, Axum controlled major Red Sea trade routes via its port Adulis. Axum minted its own gold coins, developed the Ge\'ez script, and adopted Christianity under King Ezana in the 4th century AD.'
+          title: '1. The Law of Demand',
+          body: 'Ceteris paribus (all other factors held constant), as the price of a good increases, the quantity demanded decreases, yielding a downward-sloping demand curve. Non-price determinants that shift the entire demand curve include consumer income, prices of related goods (substitutes & complements), tastes, and expectations.'
         },
         {
-          title: '2. The Zagwe Dynasty and Lalibela',
-          body: 'Following Axum\'s decline, the center of power shifted south to Lalibela. King Lalibela supervised the construction of 11 monolithic, rock-hewn churches carved out of single basalt blocks, showcasing architectural genius.'
-        }
-      ],
-      keyTerms: [
-        { term: 'Adulis (አዱሊስ)', definition: 'The essential international Red Sea port city of ancient Axum controlling trade to Rome and India.', amharic: 'አዱሊስ' },
-        { term: 'Monolithic (አንድ ወጥ ድንጋይ)', definition: 'Structures carved out from a single contiguous block of solid volcanic stone.', amharic: 'አንድ ወጥ' }
-      ]
-    }
-  },
-
-  // Information Technology (New Curriculum)
-  'g12_new_it': {
-    'Chapter 3: Web Development Fundamentals (HTML, CSS, JS)': {
-      title: 'Chapter 3: Web Development Fundamentals (HTML, CSS, JS)',
-      intro: 'This chapter teaches the core programming pillars of modern Web Authoring systems.',
-      sections: [
-        {
-          title: '1. HTML (Hypertext Markup Language)',
-          body: 'HTML represents the structure of web documents. Elements are enclosed in tags like <header>, <div>, and <a>. Example: <p id="target">Hello World</p> is a paragraph tag.'
+          title: '2. The Law of Supply',
+          body: 'Ceteris paribus, as the price of a good rises, producers are willing to supply more, yielding an upward-sloping supply curve. Non-price determinants shifting supply include input costs, production technology, taxes/subsidies, and number of sellers.'
         },
         {
-          title: '2. CSS (Cascading Style Sheets)',
-          body: 'CSS manages visual presentations, margins, layouts, and colors. Tailwind CSS, which we use, compiles direct utilities into compiled style arrays.'
-        },
-        {
-          title: '3. JavaScript Dynamic Logic',
-          body: 'JavaScript handles user interactions, click events, states, API fetches, and dynamic operations.'
-        }
-      ],
-      keyTerms: [
-        { term: 'HTML DOM (ዶም)', definition: "Document Object Model, the structural representation of the HTML document tree.", amharic: "ዶም" },
-        { term: 'Asynchronous (አሲንክሮነስ)', definition: "Programming model that handles operations running in the background without blocking the execution thread.", amharic: "አሲንክሮነስ" }
-      ],
-      asciiDiagram: `
-     Standard Web 3-Tier Client Flow:
-     
-     [ HTML Structure ]  <-- Bone structure elements
-            ||
-     [ CSS Presentation ] <-- Visual margins/Colors (Vibrant layouts)
-            ||
-     [ Dynamic JS Actions ] <-- State logic, user click chime, API requests
-      `
-    }
-  },
-
-  // Math (Grade 12 Prebuilt)
-  'g12_math': {
-    'Chapter 1: Sequences and Series': {
-      title: 'Chapter 1: Sequences and Series',
-      intro: 'Explore mathematical sequences, arithmetic progressions, geometric ratios, and mathematical induction techniques used in national entrance exams.',
-      sections: [
-        {
-          title: '1. Arithmetic Progressions (AP)',
-          body: 'A sequence where the difference between consecutive terms is constant (d). The n-th term is given by a_n = a_1 + (n - 1)d.'
-        },
-        {
-          title: '2. Geometric Progressions (GP)',
-          body: 'A sequence where each term is found by multiplying the previous term by a constant ratio (r). The n-th term is given by g_n = g_1 * r^(n-1).'
+          title: '3. Market Equilibrium & Price Ceilings/Floors',
+          body: 'Equilibrium occurs where Quantity Demanded equals Quantity Supplied (Qd = Qs). When governments impose a Price Ceiling below equilibrium, a chronic Shortage results. A Price Floor above equilibrium produces a Surplus.'
         }
       ],
       formulas: [
-        { name: 'n-th term of AP', formula: 'a_n = a_1 + (n - 1)d', description: 'Calculates specific values in arithmetic intervals.' },
-        { name: 'Sum of Infinite GP', formula: 'S_inf = a_1 / (1 - r)  where |r| < 1', description: 'Resolves continuous fractional steps summation.' }
+        { name: 'Linear Demand Function', formula: 'Qd = a - bP', description: 'Represents demand where a is autonomous demand and b is price sensitivity slope.' },
+        { name: 'Linear Supply Function', formula: 'Qs = c + dP', description: 'Represents supply where c is intercept and d is supply responsiveness slope.' }
       ],
       keyTerms: [
-        { term: 'Sequence (ቅደም ተከተል)', definition: 'An ordered list of numbers following a clear mathematical rule.', amharic: 'ቅደም ተከተል' }
+        { term: 'Equilibrium Price (ተመጣጣኝ ዋጋ)', definition: 'The price at which quantity demanded equals quantity supplied.', amharic: 'ተመጣጣኝ ዋጋ' },
+        { term: 'Shortage (እጥረት በመሸጫ)', definition: 'A situation where quantity demanded exceeds quantity supplied at the prevailing price.', amharic: 'የአቅርቦት እጥረት' }
       ]
     }
   },
-  'g12_civics': {
-    'Chapter 1: Building a Democratic System': {
-      title: 'Chapter 1: Building a Democratic System',
-      intro: 'This chapter outlines the structures and procedures of democratic federalism in Ethiopia, highlighting constitutional development and democratic principles.',
+
+  // 3. Emerging Technologies (EmTe 1012)
+  'freshman_emerging_tech': {
+    'Chapter 1: Introduction to the Fourth Industrial Revolution (4IR)': {
+      title: 'Chapter 1: Introduction to the Fourth Industrial Revolution (4IR)',
+      intro: 'Examines the evolution of industrial eras and the convergence of physical, digital, and biological domains driving Industry 4.0 in contemporary civilization.',
       sections: [
         {
-          title: '1. Defining Democratic Principles',
-          body: 'Democracy requires sovereign power to reside in the citizens, implemented through representative or direct participation. Human and democratic rights must be codified and protected.'
+          title: '1. Industrial Eras in Perspective',
+          body: '1IR (1780s): Steam power, mechanization, and textile looms.\n2IR (1870s): Electricity, assembly lines, and mass production.\n3IR (1960s): Mainframes, semiconductors, personal computing, and early automation.\n4IR (Present): Cyber-Physical Systems (CPS), Artificial Intelligence, IoT, cloud computing, autonomous robotics, and additive manufacturing.'
         },
         {
-          title: '2. The Ethiopian Federal Model',
-          body: 'Ethiopia employs an ethnic-linguistic federal system aimed at accommodating diversity while fostering national unity. Powers are split between the federal government and regional states.'
+          title: '2. Disruptive Characteristics of Emerging Technologies',
+          body: 'Emerging tech exhibits exponential velocity, cross-industry scope, and transformative systemic impact. Core pillars include interoperability, virtualization, decentralization, real-time analytics, and service modularity.'
         }
       ],
       keyTerms: [
-        { term: 'Democracy (ዲሞክራሲ)', definition: 'A system of government where power is vested in the people.', amharic: 'ዲሞክራሲ' },
-        { term: 'Federalism (ፌዴራሊዝም)', definition: 'A political organization dividing power between local and national governments.', amharic: 'ፌዴራሊዝም' }
-      ]
-    }
-  },
-  'uni_civics': {
-    'Chapter 1: Understanding Civics, Morality, and Ethics': {
-      title: 'Chapter 1: Understanding Civics, Morality, and Ethics',
-      intro: 'An academic exploration of the ethical theories, moral obligations, and constitutional rights that govern relationships between citizens and the state.',
-      sections: [
-        {
-          title: '1. Theories of Morality and Ethics',
-          body: 'Philosophers distinguish between Deontological (duty-based) and Teleological/Utilitarian (consequence-based) moral frameworks. Professional ethics require impartiality and civic virtue.'
-        }
+        { term: '4IR (አራተኛው የኢንዱስትሪ አብዮት)', definition: 'The ongoing integration of smart autonomous systems with computing and physical networks.', amharic: 'አራተኛው የኢንዱስትሪ አብዮት' },
+        { term: 'Cyber-Physical Systems (ሳይበር-አካላዊ ስርዓት)', definition: 'Engineered systems integrating computational algorithms and physical sensor/actuator mechanisms.', amharic: 'ሳይበር-አካላዊ ስርዓት' }
       ],
-      keyTerms: [
-        { term: 'Ethics (ስነ-ምግባር)', definition: 'Systematic concepts of right and wrong behaviors.', amharic: 'ስነ-ምግባር' }
-      ]
-    }
-  },
-  'uni_emerging_tech': {
-    'Chapter 1: Introduction to Industry 4.0 & Digital Transformation': {
-      title: 'Chapter 1: Introduction to Industry 4.0 & Digital Transformation',
-      intro: 'Explore the fourth industrial revolution (4IR) and how advanced physical-cyber systems are revolutionizing modern industry, agriculture, and communication.',
+      examAlert: 'COMMON FRESHMAN EXAM QUESTION: Compare 3IR (digital automation) with 4IR (cyber-physical fusion and AI decision autonomy).'
+    },
+    'Chapter 3: Artificial Intelligence and Machine Learning': {
+      title: 'Chapter 3: Artificial Intelligence and Machine Learning',
+      intro: 'An overview of machine intelligence, learning paradigms, neural networks, and their applications across agriculture, healthcare, and education in developing economies.',
       sections: [
         {
-          title: '1. What is Industry 4.0?',
-          body: 'Industry 4.0 integrates cyber-physical systems, IoT, real-time edge computing, cloud storage, and AI to automate manufacturing and optimize supply chains.'
-        }
-      ],
-      keyTerms: [
-        { term: 'Cyber-Physical Systems', definition: 'Mechanisms controlled or monitored by computer-based algorithms closely integrated with internet layers.' }
-      ]
-    }
-  },
-  'g12_amharic': {
-    'Chapter 1: ስነ-ጽሁፍ እና ባህል (Literature & Culture)': {
-      title: 'Chapter 1: ስነ-ጽሁፍ እና ባህል (Literature & Culture)',
-      intro: 'ይህ ምዕራፍ ስለ አማርኛ ስነ-ጽሁፍ ታሪክ፣ ስለ ተለያዩ የስነ-ጽሁፍ ዘውጎች እና ከማህበረሰባዊ ባህል ጋር ስላላቸው ትስስር ያብራራል።',
-      sections: [
-        {
-          title: '1. የስነ-ጽሁፍ ምንነትና አይነቶች',
-          body: 'ስነ-ጽሁፍ በሰዎች አስተሳሰብ፣ ስሜትና ውበት ላይ ተመስርቶ በቃላት ጥበብ የሚገለጽ ጥበብ ነው። በሁለት ዋና ዋና ክፍሎች ይከፈላል፡ የፈጠራ ስራዎች (ልብ-ወለድ፣ ግጥም፣ ተውኔት) እና ታሪካዊ/አጠቃላይ ስራዎች።'
+          title: '1. Defining Artificial Intelligence (AI)',
+          body: 'AI is the computational simulation of human cognitive capabilities, including perception, pattern recognition, problem-solving, and language comprehension. Narrow/Weak AI excels at specialized tasks (e.g., image classification, language translation), whereas General/Strong AI remains theoretical.'
         },
         {
-          title: '2. ባህልና ስነ-ጽሁፍ',
-          body: 'የአንድ ማህበረሰብ ባህል፣ እምነት፣ ወግ እና ስነ-ምግባር በስነ-ጽሁፍ ውስጥ ይንጸባረቃሉ። ለምሳሌ የኢትዮጵያ ባህላዊ እሴቶች በሀገረሰብ ግጥሞች እና ተረቶች ውስጥ በሰፊው ይገኛሉ።'
+          title: '2. Major Machine Learning Paradigms',
+          body: '- Supervised Learning: Trained on labeled data pairs (e.g., regression, classification).\n- Unsupervised Learning: Discovers hidden structures in unlabeled data (e.g., clustering, anomaly detection).\n- Reinforcement Learning: Learns optimal policies via reward and penalty trial-and-error signals in dynamic environments.'
         }
       ],
       keyTerms: [
-        { term: 'ስነ-ጽሁፍ (Literature)', definition: 'በቃላት ውበትና ጥበብ ላይ ተመስርቶ ስሜትንና ሃሳብን የሚገልጽበት ጥበብ ነው።', amharic: 'ስነ-ጽሁፍ' },
-        { term: 'ዘውግ (Genre)', definition: 'የስነ-ጽሁፍ ስራዎች የሚከፈሉበት ወይም የሚመደቡበት ዘይቤ (ልብ-ወለድ፣ ግጥም፣ ወዘተ)።', amharic: 'ዘውግ' }
+        { term: 'Machine Learning (የማሽን መማር)', definition: 'A branch of AI enabling algorithms to improve performance directly from empirical data without hard-coded rules.', amharic: 'የማሽን መማር' },
+        { term: 'Deep Learning (ጥልቅ ትምህርት)', definition: 'Sub-field using multi-layered artificial neural networks inspired by human biological neurons.', amharic: 'ጥልቅ ትምህርት' }
+      ]
+    }
+  },
+
+  // 4. Entrepreneurship (Mgmt 1012)
+  'freshman_entrepreneurship': {
+    'Chapter 1: Nature of Entrepreneurship & Entrepreneurial Mindset': {
+      title: 'Chapter 1: Nature of Entrepreneurship & Entrepreneurial Mindset',
+      intro: 'Fosters the proactive mindset required to identify unmet societal needs, assemble productive resources under uncertainty, and build sustainable enterprises.',
+      sections: [
+        {
+          title: '1. What is Entrepreneurship?',
+          body: 'Entrepreneurship is the dynamic process of creating incremental wealth by individuals who assume the primary risks in terms of equity, time, and career commitment to provide value through a new product, process, or service.'
+        },
+        {
+          title: '2. Characteristics of Successful Entrepreneurs',
+          body: 'Key behavioral traits include moderate and calculated risk-taking, internal locus of control, high need for achievement (David McClelland), resilience against failure, proactive initiative, visionary leadership, and persistent goal orientation.'
+        }
       ],
-      examAlert: 'ለማትሪክ ፈተና፡ የስነ-ጽሁፍ ዘውጎችን መለየት እና ባህላዊ ግጥሞችን መተንተን በፈተና ላይ በብዛት ይጠየቃሉ።'
+      keyTerms: [
+        { term: 'Entrepreneur (ስራ ፈጣሪ)', definition: 'An innovator who identifies business opportunities and organizes resources to realize them.', amharic: 'ስራ ፈጣሪ' },
+        { term: 'Intrapreneur (የውስጥ ስራ ፈጣሪ)', definition: 'An employee who innovates new products within an existing corporate organization.', amharic: 'ድርጅት ውስጥ ስራ ፈጣሪ' }
+      ]
+    }
+  },
+
+  // 7. General Physics (Phys 1011)
+  'freshman_physics': {
+    'Chapter 1: Vectors, Kinematics and Motion in 1D & 2D': {
+      title: 'Chapter 1: Vectors, Kinematics and Motion in 1D & 2D',
+      intro: 'Covers physical measurements, vector operations, coordinate transformations, and kinematic equations governing displacement, velocity, and acceleration.',
+      sections: [
+        {
+          title: '1. Vector Algebra and Scalar Fields',
+          body: 'Physical quantities are categorized into Scalars (magnitude only: mass, temperature, time) and Vectors (magnitude and spatial direction: displacement, velocity, force, momentum). Vectors are decomposed into orthogonal Cartesian components: A = Ax i + Ay j + Az k.'
+        },
+        {
+          title: '2. Equations of Uniformly Accelerated Motion',
+          body: 'For constant acceleration a along a straight axis:\n1) v = u + at\n2) s = ut + 0.5 a t^2\n3) v^2 = u^2 + 2as\n4) s = ((u + v) / 2) * t'
+        },
+        {
+          title: '3. Two-Dimensional Projectile Motion',
+          body: 'In an idealized gravitational field (neglecting air resistance), horizontal motion has zero acceleration (constant horizontal velocity vx = v0 * cos θ), while vertical motion experiences constant downward acceleration (ay = -g).'
+        }
+      ],
+      formulas: [
+        { name: 'Vector Dot Product', formula: 'A · B = |A||B| cos θ = AxBx + AyBy + AzBz', description: 'Scalar product yielding maximum value when vectors are parallel.' },
+        { name: 'Vector Cross Product', formula: '|A × B| = |A||B| sin θ', description: 'Vector product perpendicular to the plane formed by A and B.' },
+        { name: 'Projectile Range', formula: 'R = (v0^2 * sin 2θ) / g', description: 'Maximum horizontal distance achieved at release angle of 45 degrees.' }
+      ],
+      keyTerms: [
+        { term: 'Kinematics (የእንቅስቃሴ ጥናት)', definition: 'Branch of mechanics describing motion without regard to its causes (forces).', amharic: 'የእንቅስቃሴ ጥናት' },
+        { term: 'Acceleration (ፍጥንጥነት)', definition: 'The time rate of change of velocity vector.', amharic: 'ፍጥንጥነት' }
+      ],
+      examAlert: 'PHYSICS TRAP: Remember that at the apex of a projectile trajectory, vertical velocity vy is zero, but acceleration is STILL g = 9.8 m/s^2 downwards!'
+    }
+  },
+
+  // 17. Mathematics for Natural Sciences (Math 1011)
+  'freshman_math_natural': {
+    'Chapter 1: Propositional Logic and Set Theory': {
+      title: 'Chapter 1: Propositional Logic and Set Theory',
+      intro: 'Introduces formal mathematical foundations: logical connectives, truth tables, tautologies, set operations, relations, and equivalence classes.',
+      sections: [
+        {
+          title: '1. Propositions and Logical Connectives',
+          body: 'A proposition is a declarative statement that is either definitively True (T) or False (F), but not both. Core compound connectives:\n- Negation (~p): NOT p\n- Conjunction (p ∧ q): True only when BOTH p and q are true\n- Disjunction (p ∨ q): False only when BOTH p and q are false\n- Conditional (p → q): False only when antecedent p is true and consequent q is false\n- Biconditional (p ↔ q): True when both have identical truth values'
+        },
+        {
+          title: '2. Tautology, Contradiction and Logical Equivalence',
+          body: 'A statement formula is a Tautology if it evaluates to True under all truth value assignments. It is a Contradiction if it evaluates to False everywhere. Two statements P and Q are Logically Equivalent (P ≡ Q) if P ↔ Q is a tautology.'
+        }
+      ],
+      formulas: [
+        { name: "De Morgan's Laws (Logic)", formula: '~(p ∧ q) ≡ ~p ∨ ~q  and  ~(p ∨ q) ≡ ~p ∧ ~q', description: 'Fundamental duality transformations in propositional algebra.' },
+        { name: "De Morgan's Laws (Sets)", formula: '(A ∪ B)\' = A\' ∩ B\'  and  (A ∩ B)\' = A\' ∪ B\'', description: 'Complement distributions across unions and intersections.' }
+      ],
+      keyTerms: [
+        { term: 'Proposition (አረፍተ-ነገር)', definition: 'A declarative sentence possessing a definitive truth value.', amharic: 'አረፍተ-ነገር' },
+        { term: 'Tautology (ሁልጊዜ እውነት)', definition: 'A compound statement that is true under every interpretation.', amharic: 'ሁልጊዜ እውነት' }
+      ],
+      examAlert: 'MATH 1011 MIDTERM: Memorize the contrapositive! p → q is logically equivalent to ~q → ~p. It is NOT equivalent to the converse (q → p) or inverse (~p → ~q).'
+    }
+  },
+
+  // 16. History of Ethiopia and the Horn (Hist 1012)
+  'freshman_history': {
+    'Chapter 1: Introduction to History and Human Evolution in the Horn': {
+      title: 'Chapter 1: Introduction to History and Human Evolution in the Horn',
+      intro: 'Explores historiography, primary sources, linguistic classifications, and the prehistoric archaeology establishing Ethiopia and the Horn as the primary cradle of human origins.',
+      sections: [
+        {
+          title: '1. Nature and Uses of History',
+          body: 'History is the systematic critical study of the human past based on verified surviving evidence. Sources are categorized into Primary sources (eyewitness documents, inscriptions, coins, fossils, oral traditions recorded contemporaneously) and Secondary sources (accounts written by scholars synthesizing primary records).'
+        },
+        {
+          title: '2. Paleoanthropological Discoveries in Ethiopia',
+          body: 'The East African Rift Valley in Ethiopia has produced world-renowned hominid fossils:\n- Ardipithecus ramidus (Ardi, 4.4 million years old) at Middle Awash.\n- Australopithecus afarensis (Lucy/Dinknesh, 3.18 million years old) discovered in 1974 at Hadar, Afar.\n- Australopithecus garhi and Homo erectus fossil remains confirming continuous bipedal human evolution.'
+        }
+      ],
+      keyTerms: [
+        { term: 'Historiography (የታሪክ ጥናት ዘዴ)', definition: 'The methodology and history of historical writing and critical source criticism.', amharic: 'የታሪክ አጻጻፍ' },
+        { term: 'Dinknesh / Lucy (ድንቅነሽ)', definition: '3.18-million-year-old fossil skeleton of Australopithecus afarensis found in Hadar, Ethiopia.', amharic: 'ድንቅነሽ' }
+      ]
+    }
+  },
+
+  // 9. Geography of Ethiopia and the Horn (GeES 1011)
+  'freshman_geography': {
+    'Chapter 1: Geographic Setting and Location of Ethiopia and the Horn': {
+      title: 'Chapter 1: Geographic Setting and Location of Ethiopia and the Horn',
+      intro: 'Covers spatial coordinates, astronomical and vicinal locations, borders, regional geopolitics, and cartographic projections characterizing Ethiopia and the Horn of Africa.',
+      sections: [
+        {
+          title: '1. Astronomical and Vicinal Location',
+          body: 'Astronomical Location: Ethiopia is situated between 3°N to 15°N latitudes and 33°E to 48°E longitudes in the tropical climatic belt.\n\nVicinal Location: Landlocked country in the Horn of Africa bounded by Eritrea to the north, Djibouti and Somalia to the east, Kenya to the south, South Sudan to the west, and Sudan to the northwest.'
+        },
+        {
+          title: '2. Size and Shape of Ethiopia',
+          body: 'Covering approximately 1,106,000 square kilometers, Ethiopia is the 10th largest nation in Africa. Its shape index is relatively compact, facilitating internal administrative communication compared to elongated geometries.'
+        }
+      ],
+      keyTerms: [
+        { term: 'Compact Shape (ጥቅል ቅርጽ)', definition: 'A state boundary geometry where center-to-perimeter distances are roughly balanced.', amharic: 'ጥቅል ቅርጽ' },
+        { term: 'Horn of Africa (የአፍሪካ ቀንድ)', definition: 'The easternmost peninsula of Africa encompassing Ethiopia, Eritrea, Djibouti, and Somalia.', amharic: 'የአፍሪካ ቀንድ' }
+      ]
     }
   }
 };
 
 /**
- * Returns detailed chapter information, falling back to a beautiful generic lesson plan
- * if specific content is not pre-populated.
+ * Returns detailed chapter information, falling back to an authentic,
+ * academic MoE Ethiopian University curriculum layout if specific text is dynamic.
  */
 export function getChapterContent(moduleId: string, chapterTitle: string, contentJson?: string): ChapterTextContent {
-  const fileKey = moduleId;
-
   if (contentJson) {
     try {
       const parsed = JSON.parse(contentJson);
-      // Let's check both case versions of parsed key, or direct matches
       if (parsed[chapterTitle]) {
         return parsed[chapterTitle];
       }
-      // If we have keys like "Chapter 1" instead of the full title, check partial matches
-      const matchedKey = Object.keys(parsed).find(k => chapterTitle.toLowerCase().startsWith(k.toLowerCase()) || k.toLowerCase().startsWith(chapterTitle.toLowerCase()));
+      const matchedKey = Object.keys(parsed).find(k => 
+        chapterTitle.toLowerCase().startsWith(k.toLowerCase()) || 
+        k.toLowerCase().startsWith(chapterTitle.toLowerCase())
+      );
       if (matchedKey && parsed[matchedKey]) {
         return parsed[matchedKey];
       }
@@ -307,38 +322,74 @@ export function getChapterContent(moduleId: string, chapterTitle: string, conten
     }
   }
   
-  if (TEXTBOOK_CHAPTERS[fileKey] && TEXTBOOK_CHAPTERS[fileKey][chapterTitle]) {
-    return TEXTBOOK_CHAPTERS[fileKey][chapterTitle];
+  if (TEXTBOOK_CHAPTERS[moduleId] && TEXTBOOK_CHAPTERS[moduleId][chapterTitle]) {
+    return TEXTBOOK_CHAPTERS[moduleId][chapterTitle];
   }
 
-  // Fallback to a highly sophisticated academic dynamic lesson content generator
-  const subjectName = moduleId.replace('g12_new_', '').replace('g12_', '').replace('uni_', '').toUpperCase();
-  
+  // Check if any chapter in TEXTBOOK_CHAPTERS matches by partial title
+  if (TEXTBOOK_CHAPTERS[moduleId]) {
+    const directKeys = Object.keys(TEXTBOOK_CHAPTERS[moduleId]);
+    const found = directKeys.find(k => 
+      chapterTitle.toLowerCase().includes(k.toLowerCase()) || 
+      k.toLowerCase().includes(chapterTitle.toLowerCase())
+    );
+    if (found) {
+      return TEXTBOOK_CHAPTERS[moduleId][found];
+    }
+  }
+
+  // Academic dynamic module generator tailored to Ethiopian University Freshman Curriculum
+  const cleanSubject = moduleId
+    .replace('freshman_', '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase());
+
   return {
     title: chapterTitle,
-    intro: `Welcome to high-fidelity EdTech companion notes for "${chapterTitle}". This segment corresponds to the latest academic syllabus approved by the Ministry of Education.`,
+    intro: `Welcome to the official Ethiopian Higher Education curriculum notes for "${chapterTitle}". This chapter is structured according to the latest standardized syllabus developed by the Ministry of Education (MoE) for first-year university scholars.`,
     sections: [
       {
-        title: `1. Core Overview of ${chapterTitle}`,
-        body: `This text segment analyzes the foundational laws, frameworks, and scientific principles dictating this academic core topic. Review this section block-by-block with your AI Tutor to extract critical matric question targets.`
+        title: `1. Core Theoretical Foundations: ${chapterTitle}`,
+        body: `In this section, students examine the foundational principles, analytical models, and methodological frameworks governing ${cleanSubject}. Study the core relationships, axiomatic definitions, and empirical applications emphasized during university lectures and tutorial sessions.`
       },
       {
-        title: "2. Strategic High Value Notes",
-        body: "Ensure that you draft a summary table listing primary features, differences, or sub-topics. Focus heavily on experimental traps and mathematical steps discussed in class lectures."
+        title: `2. Critical Concepts, Real-World Cases & Applications`,
+        body: `Higher education standards require contextualizing theoretical concepts within Ethiopian and global realities. Identify the practical implications, policy intersections, and technological challenges relevant to this topic. Formulate systematic notes summarizing key arguments, taxonomies, and experimental validations.`
+      },
+      {
+        title: `3. Solved Review Problems & Methodological Steps`,
+        body: `When preparing for campus mid-term and final examinations, practice articulating deductive arguments, solving computational models step-by-step, and providing clear justifications. Avoid superficial memorization; focus on foundational causality and analytical precision.`
       }
     ],
     keyTerms: [
-      { term: 'Syllabus (ካሪኩለም)', definition: 'The official course blueprint summarizing topics, lessons, and academic thresholds.', amharic: 'ሲላበስ' },
-      { term: 'Analysis (ትንተና)', definition: 'Deconstructing complex concepts into bite-sized systems for rigorous understanding.', amharic: 'ትንተና' }
+      { 
+        term: 'Curriculum Competency (የካሪኩለም ብቃት)', 
+        definition: 'The specific academic mastery and analytical skill expected by the Ministry of Education upon completing this chapter.', 
+        amharic: 'የካሪኩለም ብቃት' 
+      },
+      { 
+        term: 'Theoretical Model (ንድፈ-ሃሳባዊ ሞዴል)', 
+        definition: 'A formalized analytical representation of real-world phenomena used to make verifiable deductions.', 
+        amharic: 'ንድፈ-ሃሳባዊ ሞዴል' 
+      },
+      { 
+        term: 'Empirical Evidence (ተጨባጭ ማስረጃ)', 
+        definition: 'Data gathered through observation, experiment, or documented primary historical records.', 
+        amharic: 'ተጨባጭ ማስረጃ' 
+      }
     ],
     asciiDiagram: `
-     ===========================================
-     |           ETHIOLEARN ACADEMIC STUDY-PAD  |
-     |           Chapter Module Under Review     |
-     ===========================================
-     |  [ Concept ] ====> [ Synthesis ] ==> OK  |
-     ===========================================
+     +--------------------------------------------------------------+
+     |        FEDERAL DEMOCRATIC REPUBLIC OF ETHIOPIA               |
+     |                MINISTRY OF EDUCATION                         |
+     |         FRESHMAN COMMON CURRICULUM MODULE                    |
+     +--------------------------------------------------------------+
+     |  Course: ${cleanSubject.padEnd(20)} | Target: First-Year Scholars    |
+     |  Topic: ${chapterTitle.slice(0, 22).padEnd(21)} | Assessment: Mid/Final Exam     |
+     +--------------------------------------------------------------+
+     | [ Principles ] ======> [ Analytical Models ] ======> [ Proof ] |
+     +--------------------------------------------------------------+
     `,
-    examAlert: `QUICK NOTE: This chapter is heavily tested in national examinations. Write mock questions or press the "Custom Exam" button on the side to create an interactive MCQ quiz for this topic!`
+    examAlert: `UNIVERSITY EXAM FOCUS: This unit is frequently tested in mid-term and final examinations across Ethiopian public universities. Ensure you can explain the core definitions in both English and Amharic, and solve the practice problems at the end of this module section!`
   };
 }

@@ -84,41 +84,41 @@ export default function FocusedQuestionView({
       <div className="flex items-center justify-between gap-3 bg-[#101A33] border border-white/10 rounded-2xl p-3.5 px-4 shadow-lg">
         <button
           onClick={() => { playClickChime(); onBackToDetail(); }}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-300 hover:text-white transition-all cursor-pointer"
+          className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs sm:text-sm font-bold text-slate-200 hover:text-white transition-all cursor-pointer"
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
+          <ArrowLeft className="w-4 h-4" />
           <span>{language === 'am' ? 'ወደ ፈተና ዝርዝር' : 'Exam Details'}</span>
         </button>
 
         <div className="text-center hidden sm:block">
-          <span className="text-xs font-bold text-white block truncate max-w-[280px]">
+          <span className="text-sm font-bold text-white block truncate max-w-[280px]">
             {paperTitle}
           </span>
-          <span className="text-[10px] text-amber-400 font-semibold block">
+          <span className="text-xs text-amber-400 font-semibold block">
             {university} • {subject}
           </span>
         </div>
 
         <div className="flex items-center gap-2">
           {isSimulation && simulationTimeRemaining !== undefined && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-300 font-mono font-black text-xs">
-              <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-300 font-mono font-black text-sm">
+              <Clock className="w-4 h-4 text-amber-400 animate-pulse" />
               <span>{formatTimer(simulationTimeRemaining)}</span>
             </div>
           )}
 
           <button
             onClick={() => { playClickChime(); setShowPaletteDrawer(prev => !prev); }}
-            className="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-300 hover:text-white transition-all cursor-pointer flex items-center gap-1"
+            className="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs sm:text-sm font-bold text-slate-200 hover:text-white transition-all cursor-pointer flex items-center gap-1.5"
             title="Question Palette"
           >
-            <Layers className="w-3.5 h-3.5 text-amber-400" />
+            <Layers className="w-4 h-4 text-amber-400" />
             <span className="hidden sm:inline">{language === 'am' ? 'ጥያቄዎች' : 'Jump'}</span>
           </button>
 
           <button
             onClick={onToggleBookmark}
-            className={`p-1.5 rounded-xl border transition-all cursor-pointer ${
+            className={`p-2 rounded-xl border transition-all cursor-pointer ${
               isBookmarked
                 ? 'bg-amber-500/20 border-amber-500 text-amber-400'
                 : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
@@ -133,19 +133,19 @@ export default function FocusedQuestionView({
       {/* ========================================================================= */}
       {/* 📊 PROGRESS & QUESTION HEADER                                             */}
       {/* ========================================================================= */}
-      <div className="bg-[#101A33] border border-white/10 rounded-2xl p-4 shadow-lg space-y-2.5">
-        <div className="flex items-center justify-between text-xs font-bold">
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 font-mono text-xs uppercase tracking-wider font-extrabold">
+      <div className="bg-[#101A33] border border-white/10 rounded-2xl p-4 sm:p-5 shadow-lg space-y-2.5">
+        <div className="flex items-center justify-between text-xs sm:text-sm font-bold">
+          <div className="flex items-center gap-2.5">
+            <span className="px-3 py-1 rounded-lg bg-amber-500/20 text-amber-300 font-mono text-xs sm:text-sm uppercase tracking-wider font-extrabold">
               {language === 'am' ? `ጥያቄ ${questionIndex + 1} ከ ${totalQuestions}` : `Question ${questionIndex + 1} of ${totalQuestions}`}
             </span>
             {question.subjectTopic && (
-              <span className="text-slate-400 text-[11px] hidden sm:inline truncate max-w-[200px]">
+              <span className="text-slate-300 text-xs sm:text-sm hidden sm:inline truncate max-w-[240px]">
                 • {question.subjectTopic}
               </span>
             )}
           </div>
-          <span className="text-[11px] text-slate-400 font-mono">
+          <span className="text-xs sm:text-sm text-slate-300 font-mono">
             {Math.round(((questionIndex + 1) / totalQuestions) * 100)}% {language === 'am' ? 'ተጠናቋል' : 'completed'}
           </span>
         </div>
@@ -165,29 +165,29 @@ export default function FocusedQuestionView({
       <div className="bg-[#101A33] border border-white/10 rounded-2xl p-6 md:p-8 shadow-xl space-y-6">
         {/* Topic Tag & Source Indicator */}
         <div className="flex items-center justify-between gap-2 border-b border-white/5 pb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xs sm:text-sm font-bold text-amber-400 uppercase tracking-wider">
               {question.subjectTopic || subject}
             </span>
             {question.year && (
-              <span className="text-[10px] text-slate-400 px-2 py-0.5 rounded bg-white/5">
+              <span className="text-xs text-slate-300 px-2.5 py-0.5 rounded bg-white/5 font-semibold">
                 {question.year}
               </span>
             )}
           </div>
-          <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 flex items-center gap-1">
-            <ShieldCheck className="w-3 h-3" />
+          <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20 flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5" />
             <span>{language === 'am' ? 'የተረጋገጠ ፈተና' : 'Official Paper'}</span>
           </span>
         </div>
 
         {/* Large Readable Question Area */}
-        <div className="text-base sm:text-lg md:text-xl font-medium text-white leading-relaxed whitespace-pre-line font-serif">
+        <div className="text-lg sm:text-xl md:text-2xl font-medium text-white leading-relaxed whitespace-pre-line font-serif tracking-normal">
           {question.qText}
         </div>
 
         {/* Answer Choices List */}
-        <div className="space-y-3 pt-2">
+        <div className="space-y-3.5 pt-2">
           {question.choices.map((choice, idx) => {
             const isSelected = selectedChoiceIndex === idx;
             const isChoiceCorrect = idx === question.correctIndex;
@@ -197,14 +197,14 @@ export default function FocusedQuestionView({
 
             if (showFeedback) {
               if (isChoiceCorrect) {
-                choiceStyle = 'bg-emerald-500/15 border-emerald-500 text-emerald-200 ring-1 ring-emerald-500 font-bold';
+                choiceStyle = 'bg-emerald-500/15 border-emerald-500 text-emerald-100 ring-1 ring-emerald-500 font-semibold';
               } else if (isSelected && !isChoiceCorrect) {
-                choiceStyle = 'bg-red-500/15 border-red-500 text-red-200 ring-1 ring-red-500 font-bold';
+                choiceStyle = 'bg-red-500/15 border-red-500 text-red-100 ring-1 ring-red-500 font-semibold';
               } else {
                 choiceStyle = 'bg-[#0A1128] border-white/5 text-slate-400 opacity-60';
               }
             } else if (isSelected) {
-              choiceStyle = 'bg-amber-500/15 border-amber-500 text-amber-200 ring-1 ring-amber-500 font-bold';
+              choiceStyle = 'bg-amber-500/15 border-amber-500 text-amber-100 ring-1 ring-amber-500 font-semibold';
             }
 
             return (
@@ -215,10 +215,10 @@ export default function FocusedQuestionView({
                   playClickChime();
                   onSelectChoice(idx);
                 }}
-                className={`w-full min-h-[54px] p-4 rounded-xl text-left text-xs sm:text-sm leading-relaxed transition-all flex items-start gap-3.5 border cursor-pointer select-none ${choiceStyle}`}
+                className={`w-full min-h-[58px] p-4 sm:p-5 rounded-xl text-left text-sm sm:text-base md:text-[17px] leading-relaxed transition-all flex items-start gap-4 border cursor-pointer select-none ${choiceStyle}`}
               >
                 <div
-                  className={`w-7 h-7 rounded-lg shrink-0 flex items-center justify-center font-bold text-xs font-mono transition-colors ${
+                  className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center font-bold text-sm sm:text-base font-mono transition-colors ${
                     showFeedback
                       ? isChoiceCorrect
                         ? 'bg-emerald-500 text-slate-950 font-black'
@@ -234,14 +234,14 @@ export default function FocusedQuestionView({
                 </div>
 
                 <div className="flex-1 pt-0.5">
-                  <span>{choice}</span>
+                  <span className="font-normal">{choice}</span>
                 </div>
 
                 {showFeedback && isChoiceCorrect && (
-                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-1" />
                 )}
                 {showFeedback && isSelected && !isChoiceCorrect && (
-                  <XCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                  <XCircle className="w-5 h-5 text-red-400 shrink-0 mt-1" />
                 )}
               </button>
             );
@@ -258,7 +258,7 @@ export default function FocusedQuestionView({
                 onCheckAnswer();
               }}
               disabled={!isAnswered}
-              className={`w-full py-3.5 px-6 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md ${
+              className={`w-full py-4 px-6 rounded-xl font-black text-sm sm:text-base uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md ${
                 isAnswered
                   ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-amber-500/20'
                   : 'bg-white/5 border border-white/10 text-slate-500 cursor-not-allowed'
@@ -274,53 +274,53 @@ export default function FocusedQuestionView({
         {showFeedback && (
           <div className="space-y-4 pt-2">
             <div
-              className={`p-4 rounded-xl border flex items-center justify-between ${
+              className={`p-4 sm:p-5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
                 isCorrect
                   ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
                   : 'bg-red-500/10 border-red-500/30 text-red-300'
               }`}
             >
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-3">
                 {isCorrect ? (
-                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0" />
                 ) : (
-                  <XCircle className="w-5 h-5 text-red-400 shrink-0" />
+                  <XCircle className="w-6 h-6 text-red-400 shrink-0" />
                 )}
                 <div className="space-y-0.5">
-                  <span className="font-bold text-xs sm:text-sm block">
+                  <span className="font-bold text-sm sm:text-base block">
                     {isCorrect
                       ? (language === 'am' ? '🎉 ትክክለኛ መልስ! ድንቅ ግንዛቤ።' : '🎉 Excellent! Correct Answer.')
                       : (language === 'am' ? '❌ ትክክል አልነበረም። ትክክለኛው መልስ ' + letters[question.correctIndex] + ' ነው።' : '❌ Incorrect. The correct option is ' + letters[question.correctIndex] + '.')}
                   </span>
-                  <span className="text-[11px] opacity-80 block">
+                  <span className="text-xs sm:text-sm opacity-85 block">
                     {language === 'am' ? 'ከስር ያሉትን ማብራሪያዎች በመመልከት ጽንሰ-ሀሳቡን ይረዱ።' : 'Examine the detailed step solution below to solidify the concept.'}
                   </span>
                 </div>
               </div>
 
               {/* Solution Toggles */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={() => setShowStepSolution(prev => !prev)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                     showStepSolution
                       ? 'bg-amber-500 text-slate-950 shadow-sm'
                       : 'bg-white/10 hover:bg-white/15 text-slate-200'
                   }`}
                 >
-                  <Lightbulb className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">{language === 'am' ? 'የደረጃ መፍትሔ' : 'Step Solution'}</span>
+                  <Lightbulb className="w-4 h-4" />
+                  <span>{language === 'am' ? 'የደረጃ መፍትሔ' : 'Step Solution'}</span>
                 </button>
 
                 <button
                   onClick={() => setShowAmharicExplanation(prev => !prev)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                     showAmharicExplanation
                       ? 'bg-amber-500 text-slate-950 shadow-sm'
                       : 'bg-white/10 hover:bg-white/15 text-slate-200'
                   }`}
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <Sparkles className="w-4 h-4" />
                   <span>{language === 'am' ? 'በአማርኛ ማብራሪያ' : 'Amharic Notes'}</span>
                 </button>
               </div>
@@ -328,12 +328,12 @@ export default function FocusedQuestionView({
 
             {/* Step Solution Card */}
             {showStepSolution && (
-              <div className="p-5 rounded-xl bg-[#0A1128] border border-amber-500/30 space-y-2 text-xs sm:text-sm leading-relaxed text-slate-200 font-sans shadow-inner">
-                <div className="flex items-center gap-2 font-bold text-amber-300 pb-1 border-b border-white/5">
+              <div className="p-5 sm:p-6 rounded-xl bg-[#0A1128] border border-amber-500/30 space-y-2.5 text-sm sm:text-base leading-relaxed text-slate-100 font-sans shadow-inner">
+                <div className="flex items-center gap-2 font-bold text-amber-300 pb-2 border-b border-white/5">
                   <Lightbulb className="w-4 h-4 text-amber-400" />
                   <span>{language === 'am' ? 'የመምህራን ዝርዝር የደረጃ መፍትሔ (Step Solution)' : 'Faculty Step-by-Step Solution & Proof'}</span>
                 </div>
-                <div className="whitespace-pre-line text-slate-300 font-normal">
+                <div className="whitespace-pre-line text-slate-200 font-normal leading-relaxed text-sm sm:text-base">
                   {question.solutionProof || question.explanation || 'Refer to the textbook chapter for derivation details.'}
                 </div>
               </div>
@@ -341,12 +341,12 @@ export default function FocusedQuestionView({
 
             {/* Amharic Explanation Card */}
             {showAmharicExplanation && (
-              <div className="p-5 rounded-xl bg-[#0A1128] border border-emerald-500/30 space-y-2 text-xs sm:text-sm leading-relaxed text-emerald-200 font-sans shadow-inner">
-                <div className="flex items-center gap-2 font-bold text-emerald-300 pb-1 border-b border-white/5">
+              <div className="p-5 sm:p-6 rounded-xl bg-[#0A1128] border border-emerald-500/30 space-y-2.5 text-sm sm:text-base leading-relaxed text-emerald-100 font-sans shadow-inner">
+                <div className="flex items-center gap-2 font-bold text-emerald-300 pb-2 border-b border-white/5">
                   <Sparkles className="w-4 h-4 text-emerald-400" />
                   <span>በአማርኛ የተብራራ ጽንሰ-ሀሳብ (Amharic Explanation)</span>
                 </div>
-                <div className="whitespace-pre-line text-emerald-100 font-normal">
+                <div className="whitespace-pre-line text-emerald-100 font-normal leading-relaxed text-sm sm:text-base">
                   {question.explanationAmharic || 'ይህንን ጥያቄ ለመመለስ በኮርሱ ማስታወሻ ላይ የተጠቀሱትን ዋና ዋና ነጥቦች መገንዘብ ያስፈልጋል።'}
                 </div>
               </div>

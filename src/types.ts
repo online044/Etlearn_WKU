@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export type SubscriptionTier = 'free' | 'pro_monthly' | 'exam_season_pass' | 'subject_bundle';
+export type SubscriptionTier = 'free' | 'pro_monthly' | 'pro_semester' | 'pro_annual' | 'exam_season_pass' | 'subject_bundle';
 export type SubscriptionStatus = 'active' | 'pending' | 'expired' | 'none';
 export type PaymentProvider = 'telebirr' | 'cbe_birr' | 'chapa' | 'santim_pay' | 'manual';
 export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded';
@@ -97,6 +97,7 @@ export interface StudentProfile {
   dailyGoalHours: number;
   theme: 'dark' | 'light' | 'auto';
   language: 'en' | 'am' | 'both';
+  textSize?: 'normal' | 'moderate' | 'large' | 'xlarge';
   avatar?: string; // Preset name or Base64 string of student photo
   phone?: string;
   isRegistered?: boolean;
@@ -105,6 +106,7 @@ export interface StudentProfile {
   isPro?: boolean;
   tier?: SubscriptionTier;
   proStatus?: 'none' | 'trial' | 'pending' | 'active' | 'expired';
+  subscription_status?: string;
   proPaymentTxn?: string;
   proPaymentDate?: string;
   proStartDate?: string;
@@ -476,6 +478,7 @@ export interface QuestionOption {
 export interface FirestoreQuestion {
   id: string;
   examId: string;
+  subject?: string;
   questionNumber: number;
   text: string;
   textAmharic?: string;
@@ -685,20 +688,33 @@ export type BankDifficulty = 'easy' | 'medium' | 'hard';
 export type BankExamCategory = 'practice_exam' | 'university_exam' | 'mock_exam' | 'quiz' | 'exit_exam';
 export type BankQuestionSource = 'imported' | 'verified_past_paper' | 'faculty_authored' | 'sample_test';
 
+export interface QuestionOptionItem {
+  id: string;
+  text: string;
+}
+
 export interface QuestionBankRecord {
   id: string;
-  question_text: string;
-  question_type: BankQuestionType;
-  options: string[];
-  correct_answer: string;
-  explanation?: string;
+  subject_id?: string;
   subject: string;
   course: string;
   unit: string;
+  topic?: string;
   chapter?: string;
+  module_id?: number;
+  module_name?: string;
+  question?: string; // alias to question_text
+  question_text: string;
+  question_type: BankQuestionType;
+  options: string[];
+  options_raw?: QuestionOptionItem[];
+  correct_answer: string;
+  explanation?: string;
   difficulty: BankDifficulty;
   exam_category: BankExamCategory;
   source?: string;
+  source_unit?: string;
+  source_file?: string;
   university?: string;
   department?: string;
   academic_year?: string;
@@ -707,8 +723,21 @@ export interface QuestionBankRecord {
   batch_id: string;
   fingerprint?: string;
   is_published: boolean;
+  is_pro?: boolean;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface QuestionProgressRecord {
+  id: string;
+  user_id: string;
+  question_id: string;
+  attempts: number;
+  correct_attempts: number;
+  incorrect_attempts: number;
+  last_answer?: string;
+  is_bookmarked?: boolean;
+  last_attempt_at: string;
 }
 
 export interface QuestionValidationIssue {

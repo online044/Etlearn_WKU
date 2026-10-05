@@ -1,15 +1,23 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ * EthioLearn Pro - Master Subscription & Campus Coupon Monetization System
+ * Local payment integration for Telebirr, CBE Birr & HelloCash with 1-click coupon activation.
+ */
+
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Check, Shield, Clock, Phone, CreditCard, Send, Sparkles, CheckCircle, ExternalLink, Star,
-  Zap, Lock, BookOpen, FileText, Smartphone, AlertCircle, ArrowRight, ShieldCheck, Upload, Image as ImageIcon, Trash2, Scale,
-  Ticket, Tag
+  Zap, Lock, BookOpen, FileText, Smartphone, AlertCircle, ArrowRight, ShieldCheck, Upload, 
+  Trash2, Scale, Ticket, Tag, Copy, CheckCheck, Crown, Gift, Calendar
 } from 'lucide-react';
 import { StudentProfile, SubscriptionTier, PaymentProvider, PaymentRecord, CouponCode } from '../types';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
 import { safeStorage } from '../utils/safeStorage';
-import { addPaymentRecordLocal, getPaymentHistoryLocal } from '../utils/monetization';
-import { validateCoupon } from '../utils/supabaseCourses';
+import { addPaymentRecordLocal } from '../utils/monetization';
+import { validateCoupon, incrementCouponUsage } from '../utils/supabaseCourses';
+import { validatePromotionInDatabase } from '../utils/firebaseStore';
 import TermsModal from './TermsModal';
 
 interface UpgradeProViewProps {
@@ -26,8 +34,8 @@ export default function UpgradeProView({
   onClose
 }: UpgradeProViewProps) {
   const [activeTab, setActiveTab] = useState<'tiers' | 'pay' | 'status'>('tiers');
-  const [selectedTier, setSelectedTier] = useState<SubscriptionTier>('pro_monthly');
-  const [selectedSubjectBundle, setSelectedSubjectBundle] = useState<string>('Emerging Technologies');
+  const [selectedTier, setSelectedTier] = useState<SubscriptionTier>('pro_semester');
+  const [selectedSubjectBundle, setSelectedSubjectBundle] = useState<string>('Critical Thinking');
   
   // Payment Form States
   const [paymentMethod, setPaymentMethod] = useState<PaymentProvider>('telebirr');
@@ -38,13 +46,22 @@ export default function UpgradeProView({
   const [agreedToTerms, setAgreedToTerms] = useState<boolean>(profile.agreedToTerms || false);
   const [showTermsModal, setShowTermsModal] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   // Campus Coupon / Promo Code States
   const [couponInput, setCouponInput] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<CouponCode | null>(null);
   const [couponStatus, setCouponStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [couponMessage, setCouponMessage] = useState<string | null>(null);
-  
+
+  // Copy to clipboard helper
+  const handleCopy = (text: string, fieldName: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(fieldName);
+    playClickChime();
+    setTimeout(() => setCopiedField(null), 2500);
+  };
+
   // Handle receipt image file select
   const handleReceiptImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -68,10 +85,48 @@ export default function UpgradeProView({
   // Calculate price based on selected tier
   const getTierPrice = (tier: SubscriptionTier) => {
     switch (tier) {
-      case 'pro_monthly': return { etb: 200, label: language === 'en' ? 'Per Semester / Month' : 'በአንድ ሴሚስተር / ወር' };
-      case 'exam_season_pass': return { etb: 100, label: language === 'en' ? '3 Weeks Exam Pass' : 'የ 3 ሳምንታት ፈተና ፓስ' };
-      case 'subject_bundle': return { etb: 80, label: language === 'en' ? 'One-time Pack' : 'አንድ ጊዜ ክፍያ' };
-      default: return { etb: 0, label: language === 'en' ? 'Free Forever' : 'ለዘላለም ነፃ' };
+      case 'pro_monthly': 
+        return { 
+          etb: 149, 
+          label: language === 'en' ? '1 Month Full Pro' : 'ለ 1 ወር ሙሉ ፕሮ',
+          durationDays: 30,
+          originalEtb: 199
+        };
+      case 'pro_semester': 
+        return { 
+          etb: 349, 
+          label: language === 'en' ? '4 Months Semester Pass (Save 42%)' : 'የ 4 ወራት የሴሚስተር ፓስ (42% ቅናሽ)',
+          durationDays: 120,
+          originalEtb: 596
+        };
+      case 'pro_annual': 
+        return { 
+          etb: 699, 
+          label: language === 'en' ? 'Full Academic Year (Save 61%)' : 'ሙሉ የትምህርት ዘመን (61% ቅናሽ)',
+          durationDays: 365,
+          originalEtb: 1788
+        };
+      case 'exam_season_pass': 
+        return { 
+          etb: 89, 
+          label: language === 'en' ? '3 Weeks Exam Blitz' : 'የ 3 ሳምንታት ፈተና ፓስ',
+          durationDays: 21,
+          originalEtb: 120
+        };
+      case 'subject_bundle': 
+        return { 
+          etb: 69, 
+          label: language === 'en' ? 'Single Subject Lifetime Pack' : 'የአንድ ትምህርት ቋሚ ጥቅል',
+          durationDays: 365,
+          originalEtb: 99
+        };
+      default: 
+        return { 
+          etb: 0, 
+          label: language === 'en' ? 'Free Forever' : 'ለዘላለም ነፃ',
+          durationDays: 0,
+          originalEtb: 0
+        };
     }
   };
 
@@ -82,22 +137,50 @@ export default function UpgradeProView({
   const finalPayableETB = Math.max(0, currentPrice.etb - couponDiscount);
 
   // Coupon Handlers
-  const handleApplyCoupon = async () => {
-    if (!couponInput.trim()) return;
+  const handleApplyCoupon = async (codeToTry?: string) => {
+    const code = (codeToTry || couponInput).trim().toUpperCase();
+    if (!code) return;
     setCouponStatus('loading');
     setCouponMessage(null);
     playClickChime();
+
     try {
-      const res = await validateCoupon(couponInput.trim(), currentPrice.etb);
+      // 1. Try Supabase/Cached validation
+      let res = await validateCoupon(code, currentPrice.etb);
+
+      // 2. If not found in Supabase, fallback to Firestore Promotions
+      if (!res.valid) {
+        const fsRes = await validatePromotionInDatabase(code, currentPrice.etb, selectedTier);
+        if (fsRes.valid && fsRes.promotion) {
+          res = {
+            valid: true,
+            coupon: {
+              code: fsRes.promotion.code,
+              description: fsRes.promotion.description,
+              discountPercentage: fsRes.promotion.discountPercentage,
+              fixedDiscountETB: fsRes.promotion.fixedDiscountETB || 0,
+              maxUses: fsRes.promotion.maxUses,
+              usedCount: fsRes.promotion.usedCount || 0,
+              expiresAt: fsRes.promotion.expiresAt,
+              isActive: fsRes.promotion.isActive
+            },
+            discountETB: fsRes.discountETB,
+            finalAmountETB: fsRes.finalAmountETB,
+            message: fsRes.message
+          };
+        }
+      }
+
       if (res.valid && res.coupon) {
         setAppliedCoupon(res.coupon);
+        setCouponInput(res.coupon.code);
         setCouponStatus('success');
         playSuccessChime();
         setCouponMessage(language === 'en' 
           ? `Coupon "${res.coupon.code}" activated! ${res.coupon.discountPercentage}% discount applied (${res.discountETB} ETB saved).` 
           : `ኩፖን "${res.coupon.code}" ተግብሯል! የ ${res.coupon.discountPercentage}% ቅናሽ (${res.discountETB} ብር ቅናሽ) ተሰጥቷል።`);
         if (res.coupon.discountPercentage >= 100) {
-          setTxnRef(`COUPON-${res.coupon.code}`);
+          setTxnRef(`SCHOLARSHIP-${res.coupon.code}`);
         }
       } else {
         setCouponStatus('error');
@@ -117,7 +200,7 @@ export default function UpgradeProView({
     setCouponInput('');
     setCouponStatus('idle');
     setCouponMessage(null);
-    if (txnRef.startsWith('COUPON-')) {
+    if (txnRef.startsWith('SCHOLARSHIP-') || txnRef.startsWith('COUPON-')) {
       setTxnRef('');
     }
   };
@@ -144,17 +227,10 @@ export default function UpgradeProView({
 
     // Calculate start & end dates based on tier
     const startDate = new Date().toISOString();
-    let endDate: string | undefined = undefined;
-    
-    if (selectedTier === 'pro_monthly') {
-      const end = new Date();
-      end.setDate(end.getDate() + 30); // 30 days
-      endDate = end.toISOString();
-    } else if (selectedTier === 'exam_season_pass') {
-      const end = new Date();
-      end.setDate(end.getDate() + 21); // 21 days (3 weeks)
-      endDate = end.toISOString();
-    }
+    const durationDays = currentPrice.durationDays || 30;
+    const end = new Date();
+    end.setDate(end.getDate() + durationDays);
+    const endDate = end.toISOString();
 
     // Is 100% coupon activation instant
     const isInstantCouponGrant = finalPayableETB === 0 && Boolean(appliedCoupon);
@@ -179,13 +255,19 @@ export default function UpgradeProView({
     };
     
     addPaymentRecordLocal(paymentRecord);
+    if (appliedCoupon?.code) {
+      incrementCouponUsage(appliedCoupon.code).catch(err => {
+        console.warn('[UpgradeProView] Failed to increment coupon count:', err);
+      });
+    }
     
     // Save payment submission details inside student profile
     const updatedProfile: StudentProfile = {
       ...profile,
       tier: selectedTier,
-      isPro: isInstantCouponGrant ? true : false,
+      isPro: isInstantCouponGrant ? true : profile.isPro,
       proStatus: isInstantCouponGrant ? 'active' : 'pending',
+      subscription_status: isInstantCouponGrant ? 'pro' : (profile.subscription_status || 'free'),
       proPaymentTxn: effectiveTxn,
       proPaymentDate: startDate,
       proStartDate: startDate,
@@ -207,51 +289,66 @@ export default function UpgradeProView({
     playSuccessChime();
   };
 
+  // Popular Campus Coupons List
+  const quickCampusCoupons = [
+    { code: 'FRESHMAN100', discount: '100% FREE', desc: 'Freshman Scholarship' },
+    { code: 'WKU100', discount: '100% FREE', desc: 'Wolkite Campus' },
+    { code: 'ETHIOLEARN50', discount: '50% OFF', desc: 'Semester 50%' },
+    { code: 'WKU2026', discount: '40% OFF', desc: 'WKU Special' },
+    { code: 'TELEBIRR30', discount: '30% OFF', desc: 'Telebirr 30%' },
+    { code: 'CBEBIRR30', discount: '30% OFF', desc: 'CBE Birr 30%' },
+    { code: 'AAU2026', discount: '35% OFF', desc: 'AAU Scholar' }
+  ];
+
   return (
-    <div className="max-w-5xl mx-auto space-y-6 text-white">
+    <div className="max-w-5xl mx-auto space-y-6 text-white pb-10">
       
       {/* Premium Header Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-[#0a1128] border border-amber-500/30 shadow-2xl p-6 md:p-8">
+      <div className="relative overflow-hidden rounded-3xl bg-[#0A1128] border border-amber-500/30 shadow-2xl p-6 md:p-8">
         <div className="absolute top-0 right-0 p-8 opacity-5 leading-none font-serif text-9xl select-none">PRO</div>
         <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
         
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2 max-w-xl">
-            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 font-serif text-[10px] font-black uppercase tracking-widest">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-400 font-serif text-[10px] font-black uppercase tracking-widest">
               <Sparkles className="w-3.5 h-3.5" />
-              {language === 'en' ? 'EthioLearn Pro Monetization System' : 'የኢትዮ-ለርን ፕሮ የአባልነት አገልግሎት'}
+              {language === 'en' ? 'Official University Pro Subscriptions' : 'የዩኒቨርሲቲ ፕሮ አባልነት እና የቅናሽ ኩፖን'}
             </span>
             <h2 className="text-2xl md:text-3xl font-serif font-black tracking-tight leading-tight">
-              {language === 'en' ? 'Invest in Your Academic Excellence' : 'በትምህርትዎ ውጤታማነት ላይ ይዋዕሉ'}
+              {language === 'en' ? 'Unlock Complete Academic Access' : 'ሙሉ የዩኒቨርሲቲ ፈተናዎችን እና ሞጁሎችን ይክፈቱ'}
             </h2>
-            <p className="text-slate-300 text-xs md:text-sm leading-relaxed">
+            <p className="text-slate-300 text-xs md:text-sm leading-relaxed font-sans">
               {language === 'en' 
-                ? 'Select a plan tailored for Ethiopian university students. Unlock unlimited Ask Teacher guidance, past exam solvers, complete subject notes, and offline access via Telebirr or CBE Birr.'
-                : 'ለኢትዮጵያ ዩኒቨርሲቲ ተማሪዎች የተዘጋጁ አማራጮች። ያልተገደበ መምህሩን ጠይቅ (Ask Teacher)፣ የPast Exam መፍትሔዎች፣ የተሟሉ ሞጁሎች እና ኦፍላይን ፋይሎችን በቴሌብር ወይም በሲቢኢ ብር ያግኙ።'}
+                ? 'Affordable student plans tailored for Ethiopian universities. Instant activation with Telebirr, CBE Birr, or free campus scholarship coupon codes.'
+                : 'ለኢትዮጵያ ዩኒቨርሲቲ ተማሪዎች የተዘጋጁ ቅናሾች። በቴሌብር፣ በሲቢኢ ብር ወይም በነፃ የካምፓስ ስኮላርሺፕ ኩፖን ወዲያውኑ ያግብሩ።'}
             </p>
           </div>
 
-          <div className="flex flex-col items-center bg-slate-900/80 backdrop-blur-md rounded-2xl p-5 border border-amber-500/20 min-w-[220px] shrink-0 text-center">
+          <div className="flex flex-col items-center bg-[#111C35] backdrop-blur-md rounded-2xl p-5 border border-amber-500/30 min-w-[220px] shrink-0 text-center shadow-lg">
             <span className="text-[10px] text-amber-400 font-black uppercase tracking-wider">
-              {language === 'en' ? 'Selected Tier Price' : 'የተመረጠው ክፍያ'}
+              {language === 'en' ? 'Payable Amount' : 'የሚከፈል ክፍያ'}
             </span>
-            <div className="mt-1">
-              <span className="text-3xl font-black font-serif text-amber-400">{currentPrice.etb}</span>
-              <span className="text-sm font-black text-amber-300 ml-1">ETB</span>
+            <div className="mt-1 flex items-baseline justify-center gap-1">
+              <span className="text-3xl font-black font-serif text-amber-400">{finalPayableETB}</span>
+              <span className="text-sm font-black text-amber-300">ETB</span>
+              {couponDiscount > 0 && (
+                <span className="text-xs text-slate-500 line-through ml-1">{currentPrice.etb}</span>
+              )}
             </div>
             <span className="text-[10px] text-slate-400 mt-1 uppercase tracking-wide">
               {currentPrice.label}
             </span>
             
-            <div className="mt-3 pt-3 border-t border-slate-800 w-full text-xs text-emerald-400 font-bold">
+            <div className="mt-3 pt-3 border-t border-slate-800 w-full text-xs font-bold">
               {profile.isPro ? (
-                <div className="flex items-center justify-center gap-1">
+                <div className="flex items-center justify-center gap-1 text-emerald-400">
                   <CheckCircle className="w-4 h-4" />
-                  <span>{language === 'en' ? 'Pro Access Active' : 'ፕሮ አባልነት ነቅቷል'}</span>
+                  <span>{language === 'en' ? 'Pro Member Active' : 'የፕሮ አባልነት ነቅቷል'}</span>
                 </div>
               ) : (
-                <span className="text-slate-300 text-[11px]">
-                  {language === 'en' ? 'Pay with Telebirr / CBE Birr' : 'በቴሌብር ወይም በሲቢኢ ብር ይክፈሉ'}
+                <span className="text-amber-400/90 text-[11px] flex items-center justify-center gap-1">
+                  <Crown className="w-3.5 h-3.5" />
+                  {language === 'en' ? 'Telebirr • CBE Birr • HelloCash' : 'በቴሌብር • በንግድ ባንክ • በሄሎካሽ'}
                 </span>
               )}
             </div>
@@ -268,7 +365,7 @@ export default function UpgradeProView({
           }`}
         >
           <Sparkles className="w-4 h-4" />
-          {language === 'en' ? '1. Subscription Tiers' : '1. የአባልነት አማራጮች'}
+          {language === 'en' ? '1. Plans & Pricing' : '1. የአባልነት አማራጮች'}
         </button>
 
         <button
@@ -278,7 +375,10 @@ export default function UpgradeProView({
           }`}
         >
           <CreditCard className="w-4 h-4" />
-          {language === 'en' ? '2. Telebirr / CBE Channels' : '2. የክፍያ መንገዶች'}
+          {language === 'en' ? '2. Payment & Coupon' : '2. ክፍያ እና ኩፖን'}
+          {appliedCoupon && (
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block" />
+          )}
         </button>
 
         <button
@@ -295,7 +395,9 @@ export default function UpgradeProView({
         </button>
       </div>
 
-      {/* TAB 1: SUBSCRIPTION TIERS CARDS */}
+      {/* ========================================================================= */}
+      {/* TAB 1: SUBSCRIPTION TIERS CARDS                                           */}
+      {/* ========================================================================= */}
       {activeTab === 'tiers' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -306,133 +408,127 @@ export default function UpgradeProView({
               className={`rounded-2xl p-5 border-2 transition-all cursor-pointer flex flex-col justify-between ${
                 selectedTier === 'free' 
                   ? 'border-amber-400 bg-slate-900 shadow-lg' 
-                  : 'border-slate-800 bg-[#0a1128]/80 hover:border-slate-700'
+                  : 'border-slate-800 bg-[#0A1128]/80 hover:border-slate-700'
               }`}
             >
               <div>
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1">Standard</span>
-                <h3 className="text-lg font-serif font-black">{language === 'en' ? 'Free Tier' : 'ነፃ አባልነት'}</h3>
+                <h3 className="text-lg font-serif font-black">{language === 'en' ? 'Free Plan' : 'ነፃ እቅድ'}</h3>
                 <div className="mt-2 mb-4">
                   <span className="text-2xl font-black font-serif text-white">0</span>
                   <span className="text-xs font-bold text-slate-400 ml-1">ETB</span>
                 </div>
                 <ul className="space-y-2 text-xs text-slate-300">
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400" /> 5 Ask Teacher Qs / day</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400" /> Basic Flashcards</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400" /> Limited Quiz Access</li>
-                  <li className="flex items-center gap-2 text-slate-500"><Lock className="w-4 h-4" /> No PDF Downloads</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400 shrink-0" /> Free Freshman Module Reading</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400 shrink-0" /> Community Question Bank Access</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400 shrink-0" /> Manual Question Creator</li>
+                  <li className="flex items-center gap-2 text-slate-500"><Lock className="w-4 h-4 shrink-0" /> Offline PDF Download Pack</li>
                 </ul>
               </div>
               <button 
                 onClick={() => setSelectedTier('free')}
-                className="mt-6 w-full py-2 bg-slate-800 text-slate-300 font-bold rounded-xl text-xs uppercase tracking-wider"
+                className="mt-6 w-full py-2.5 bg-slate-800 text-slate-300 font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer"
               >
-                {selectedTier === 'free' ? (language === 'en' ? 'Selected' : 'ተመርጧል') : (language === 'en' ? 'Select Free' : 'ይምረጡ')}
+                {selectedTier === 'free' ? (language === 'en' ? 'Selected' : 'ተመርጧል') : (language === 'en' ? 'Select Free' : 'ነፃ ይምረጡ')}
               </button>
             </div>
 
-            {/* TIER 2: PRO MONTHLY (RECOMMENDED) */}
+            {/* TIER 2: PRO MONTHLY */}
             <div 
               onClick={() => setSelectedTier('pro_monthly')}
-              className={`rounded-2xl p-5 border-2 transition-all cursor-pointer relative flex flex-col justify-between ${
+              className={`rounded-2xl p-5 border-2 transition-all cursor-pointer flex flex-col justify-between ${
                 selectedTier === 'pro_monthly' 
-                  ? 'border-amber-400 bg-gradient-to-b from-amber-500/10 via-slate-900 to-slate-900 shadow-xl' 
-                  : 'border-amber-500/40 bg-[#0a1128]/80 hover:border-amber-400'
+                  ? 'border-amber-400 bg-[#111C35] shadow-xl' 
+                  : 'border-slate-800 bg-[#0A1128]/80 hover:border-amber-500/50'
               }`}
             >
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-400 text-slate-950 font-black text-[9px] uppercase tracking-widest px-3 py-0.5 rounded-full shadow-md">
-                {language === 'en' ? 'Most Popular' : 'በብዛት የተመረጠ'}
-              </div>
               <div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 block mb-1 mt-1">Full Access</span>
-                <h3 className="text-lg font-serif font-black text-amber-300">{language === 'en' ? 'PRO Monthly' : 'ፕሮ ወርሃዊ'}</h3>
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 block mb-1">Monthly Pass</span>
+                <h3 className="text-lg font-serif font-black text-amber-300">{language === 'en' ? 'Pro Monthly' : 'ፕሮ ወርሃዊ'}</h3>
                 <div className="mt-2 mb-4">
-                  <span className="text-2xl font-black font-serif text-amber-400">200</span>
+                  <span className="text-2xl font-black font-serif text-amber-400">149</span>
                   <span className="text-xs font-bold text-amber-300 ml-1">ETB / Month</span>
+                  <span className="text-[10px] text-slate-500 line-through ml-2">199 ETB</span>
                 </div>
                 <ul className="space-y-2 text-xs text-slate-200">
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-amber-400" /> <b>UNLIMITED</b> Ask Teacher Qs</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-amber-400" /> Offline PDF Downloads</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-amber-400" /> Full Past Exam Solvers</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-amber-400" /> Advanced Analytics</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-amber-400" /> Zero Advertisements</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-amber-400 shrink-0" /> All 19 Freshman Modules</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-amber-400 shrink-0" /> Past University Exams & Solvers</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-amber-400 shrink-0" /> 1-Click Offline Caching</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-amber-400 shrink-0" /> 30 Days Flexible Access</li>
                 </ul>
               </div>
               <button 
                 onClick={() => { playClickChime(); setSelectedTier('pro_monthly'); setActiveTab('pay'); }}
-                className="mt-6 w-full py-2 bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer shadow-md"
+                className="mt-6 w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer transition border border-slate-700"
               >
-                {language === 'en' ? 'Proceed with Pro' : 'በፕሮ ይቀጥሉ'}
+                {language === 'en' ? 'Select Monthly (149 ETB)' : 'ወርሃዊ ይምረጡ (149 ብር)'}
               </button>
             </div>
 
-            {/* TIER 3: EXAM SEASON PASS */}
+            {/* TIER 3: PRO SEMESTER (RECOMMENDED) */}
             <div 
-              onClick={() => setSelectedTier('exam_season_pass')}
+              onClick={() => setSelectedTier('pro_semester')}
+              className={`rounded-2xl p-5 border-2 transition-all cursor-pointer relative flex flex-col justify-between ${
+                selectedTier === 'pro_semester' 
+                  ? 'border-amber-400 bg-gradient-to-b from-amber-500/15 via-[#111C35] to-[#111C35] shadow-2xl ring-2 ring-amber-400/30' 
+                  : 'border-amber-500/50 bg-[#0A1128]/80 hover:border-amber-400'
+              }`}
+            >
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-400 text-slate-950 font-black text-[9px] uppercase tracking-widest px-3 py-0.5 rounded-full shadow-md">
+                {language === 'en' ? 'Best Value • Save 42%' : 'ምርጥ ዋጋ • 42% ቅናሽ'}
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 block mb-1 mt-1">4 Months Full Term</span>
+                <h3 className="text-lg font-serif font-black text-amber-300">{language === 'en' ? 'Semester Pass' : 'የሴሚስተር ፓስ'}</h3>
+                <div className="mt-2 mb-4">
+                  <span className="text-2xl font-black font-serif text-amber-400">349</span>
+                  <span className="text-xs font-bold text-amber-300 ml-1">ETB / Semester</span>
+                  <p className="text-[10px] text-emerald-400 font-bold mt-0.5">Only ~87 ETB / month</p>
+                </div>
+                <ul className="space-y-2 text-xs text-slate-200">
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-amber-400 shrink-0" /> Full University Semester Access</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-amber-400 shrink-0" /> Midterm & Final Exam Archives</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-amber-400 shrink-0" /> Complete Digital Bookstore & PDFs</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-amber-400 shrink-0" /> Priority Campus Support</li>
+                </ul>
+              </div>
+              <button 
+                onClick={() => { playClickChime(); setSelectedTier('pro_semester'); setActiveTab('pay'); }}
+                className="mt-6 w-full py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider cursor-pointer shadow-lg transition active:scale-98"
+              >
+                {language === 'en' ? 'Get Semester Pass (349 ETB)' : 'የሴሚስተር ፓስ ይውሰዱ'}
+              </button>
+            </div>
+
+            {/* TIER 4: ANNUAL ACADEMIC YEAR PASS */}
+            <div 
+              onClick={() => setSelectedTier('pro_annual')}
               className={`rounded-2xl p-5 border-2 transition-all cursor-pointer flex flex-col justify-between ${
-                selectedTier === 'exam_season_pass' 
-                  ? 'border-amber-400 bg-slate-900 shadow-lg' 
-                  : 'border-slate-800 bg-[#0a1128]/80 hover:border-slate-700'
+                selectedTier === 'pro_annual' 
+                  ? 'border-emerald-400 bg-[#111C35] shadow-lg' 
+                  : 'border-slate-800 bg-[#0A1128]/80 hover:border-slate-700'
               }`}
             >
               <div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 block mb-1">Time-Limited</span>
-                <h3 className="text-lg font-serif font-black text-emerald-300">{language === 'en' ? 'Exam Season Pass' : 'የፈተና ወቀት ፓስ'}</h3>
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 block mb-1">Full 12 Months</span>
+                <h3 className="text-lg font-serif font-black text-emerald-300">{language === 'en' ? 'Academic Year Pass' : 'የዓመታዊ እቅድ'}</h3>
                 <div className="mt-2 mb-4">
-                  <span className="text-2xl font-black font-serif text-emerald-400">100</span>
-                  <span className="text-xs font-bold text-emerald-300 ml-1">ETB / 3 Wks</span>
+                  <span className="text-2xl font-black font-serif text-emerald-400">699</span>
+                  <span className="text-xs font-bold text-emerald-300 ml-1">ETB / Year</span>
+                  <p className="text-[10px] text-emerald-400 font-bold mt-0.5">Only ~58 ETB / month</p>
                 </div>
                 <ul className="space-y-2 text-xs text-slate-300">
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400" /> Same perks as PRO</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400" /> 3 Weeks Exam Boost</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400" /> Auto-expires (no auto-renew)</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400" /> Lower entry price</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400 shrink-0" /> Freshman + Sophomore Courses</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400 shrink-0" /> National Exit Exam Series</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400 shrink-0" /> Unlimited Offline Sync</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400 shrink-0" /> Maximum Savings (61% Off)</li>
                 </ul>
               </div>
               <button 
-                onClick={() => { playClickChime(); setSelectedTier('exam_season_pass'); setActiveTab('pay'); }}
-                className="mt-6 w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer"
+                onClick={() => { playClickChime(); setSelectedTier('pro_annual'); setActiveTab('pay'); }}
+                className="mt-6 w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer transition shadow-md"
               >
-                {language === 'en' ? 'Get Season Pass' : 'ፓሱን ይውሰዱ'}
-              </button>
-            </div>
-
-            {/* TIER 4: ONE-TIME SUBJECT BUNDLE */}
-            <div 
-              onClick={() => setSelectedTier('subject_bundle')}
-              className={`rounded-2xl p-5 border-2 transition-all cursor-pointer flex flex-col justify-between ${
-                selectedTier === 'subject_bundle' 
-                  ? 'border-amber-400 bg-slate-900 shadow-lg' 
-                  : 'border-slate-800 bg-[#0a1128]/80 hover:border-slate-700'
-              }`}
-            >
-              <div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-indigo-400 block mb-1">Single Subject</span>
-                <h3 className="text-lg font-serif font-black text-indigo-300">{language === 'en' ? 'Subject Pack' : 'የትምህርት ፓክ'}</h3>
-                <div className="mt-2 mb-4">
-                  <span className="text-2xl font-black font-serif text-indigo-400">80</span>
-                  <span className="text-xs font-bold text-indigo-300 ml-1">ETB / Pack</span>
-                </div>
-                <div className="mb-3">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Select Subject:</label>
-                  <select
-                    value={selectedSubjectBundle}
-                    onChange={(e) => setSelectedSubjectBundle(e.target.value)}
-                    className="w-full p-2 bg-slate-800 border border-slate-700 rounded-lg text-xs font-medium text-white"
-                  >
-                    {profile.subjects.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-                <ul className="space-y-1.5 text-xs text-slate-300">
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-indigo-400" /> Notes + Quizzes</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-indigo-400" /> Dedicated AI Sessions</li>
-                </ul>
-              </div>
-              <button 
-                onClick={() => { playClickChime(); setSelectedTier('subject_bundle'); setActiveTab('pay'); }}
-                className="mt-6 w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer"
-              >
-                {language === 'en' ? 'Buy Subject Pack' : 'ፓክ ይግዙ'}
+                {language === 'en' ? 'Select Annual (699 ETB)' : 'ዓመታዊ ይምረጡ (699 ብር)'}
               </button>
             </div>
 
@@ -440,22 +536,133 @@ export default function UpgradeProView({
         </div>
       )}
 
-      {/* TAB 2: TELEBIRR / CBE CHANNELS & SUBMISSION FORM */}
+      {/* ========================================================================= */}
+      {/* TAB 2: TELEBIRR / CBE CHANNELS & COUPON REDEMPTION                        */}
+      {/* ========================================================================= */}
       {activeTab === 'pay' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
-          {/* Left: Transfer details */}
-          <div className="lg:col-span-7 bg-[#0a1128] border border-slate-800 rounded-2xl p-6 space-y-5">
-            <h3 className="text-base font-serif font-black text-amber-400 uppercase tracking-tight flex items-center gap-2">
-              <Smartphone className="w-5 h-5" />
-              {language === 'en' ? 'Step 1: Send Mobile Money Transfer' : 'ደረጃ 1፡ በሞባይል ገንዘብ ያስተላልፉ'}
-            </h3>
+          {/* Left: Transfer details & Coupon */}
+          <div className="lg:col-span-7 bg-[#0A1128] border border-slate-800 rounded-2xl p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-serif font-black text-amber-400 uppercase tracking-tight flex items-center gap-2">
+                <Smartphone className="w-5 h-5" />
+                {language === 'en' ? 'Step 1: Apply Coupon & Choose Channel' : 'ደረጃ 1፡ ኩፖን ይጠቀሙና የክፍያ መንገድ ይምረጡ'}
+              </h3>
+            </div>
 
-            {/* Price Badge & Official Verification Notice */}
-            <div className="p-4 bg-slate-900/90 rounded-2xl border border-amber-500/30 space-y-3">
+            {/* Campus Coupon / Promo Code Input Box */}
+            <div className="p-4 bg-[#111C35] rounded-2xl border border-amber-500/40 space-y-3 shadow-md">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Ticket className="w-4 h-4 text-amber-400" />
+                  {language === 'en' ? 'Campus Coupon / Promo Code' : 'የካምፓስ ኩፖን ወይም የቅናሽ ኮድ'}
+                </label>
+                {appliedCoupon && (
+                  <span className="text-[10px] font-extrabold text-emerald-300 bg-emerald-500/20 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
+                    {appliedCoupon.discountPercentage}% OFF APPLIED
+                  </span>
+                )}
+              </div>
+
+              {appliedCoupon ? (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/40 rounded-xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 font-bold font-mono text-xs">
+                      %
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-mono font-black text-white tracking-wider flex items-center gap-1.5 truncate">
+                        <Tag className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        {appliedCoupon.code}
+                      </p>
+                      <p className="text-[11px] text-emerald-300 truncate">
+                        {appliedCoupon.description || `${appliedCoupon.discountPercentage}% discount active`}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemoveCoupon}
+                    className="px-2.5 py-1 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer shrink-0 font-bold"
+                  >
+                    {language === 'en' ? 'Remove' : 'አስወግድ'}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        value={couponInput}
+                        onChange={(e) => {
+                          setCouponInput(e.target.value.toUpperCase());
+                          if (couponStatus === 'error') setCouponStatus('idle');
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleApplyCoupon();
+                          }
+                        }}
+                        placeholder={language === 'en' ? 'e.g. FRESHMAN100, ETHIOLEARN50, WKU100' : 'ለምሳሌ፡ FRESHMAN100, ETHIOLEARN50'}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B1228] border border-slate-700 text-xs font-mono font-bold text-white uppercase placeholder:text-slate-500 focus:ring-1 focus:ring-amber-400 outline-none"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyCoupon()}
+                      disabled={!couponInput.trim() || couponStatus === 'loading'}
+                      className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer shadow-md transition-all flex items-center gap-1.5 shrink-0"
+                    >
+                      {couponStatus === 'loading' ? (
+                        <Clock className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Check className="w-3.5 h-3.5" />
+                      )}
+                      {language === 'en' ? 'Apply' : 'ተግብር'}
+                    </button>
+                  </div>
+
+                  {/* Coupon status messages */}
+                  {couponMessage && (
+                    <p className={`text-[11px] font-medium flex items-center gap-1 ${
+                      couponStatus === 'error' ? 'text-rose-400' : 'text-emerald-400'
+                    }`}>
+                      {couponStatus === 'error' ? <AlertCircle className="w-3.5 h-3.5 shrink-0" /> : <CheckCircle className="w-3.5 h-3.5 shrink-0" />}
+                      {couponMessage}
+                    </p>
+                  )}
+
+                  {/* 1-Click Quick Campus Coupons */}
+                  <div className="pt-1 space-y-1.5">
+                    <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
+                      {language === 'en' ? 'Tap to apply available campus coupons:' : 'ለማግበር የካምፓስ ኩፖን ይጫኑ፦'}
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {quickCampusCoupons.map((c) => (
+                        <button
+                          key={c.code}
+                          type="button"
+                          onClick={() => handleApplyCoupon(c.code)}
+                          className="text-[10px] font-mono font-bold px-2 py-1 rounded-lg bg-[#0B1228] hover:bg-amber-500/20 text-amber-300 border border-slate-700/80 hover:border-amber-400/50 cursor-pointer transition flex items-center gap-1"
+                        >
+                          <span>{c.code}</span>
+                          <span className="text-emerald-400 font-sans font-extrabold text-[9px]">({c.discount})</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Price Breakdown Badge */}
+            <div className="p-4 bg-[#111C35] rounded-2xl border border-slate-800 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase">{language === 'en' ? 'Selected Package:' : 'የተመረጠው ፓኬጅ:'}</p>
+                  <p className="text-xs font-bold text-slate-400 uppercase">{language === 'en' ? 'Selected Package:' : 'የተመረጠው ፓኬጅ፦'}</p>
                   <p className="text-sm font-black font-serif text-white uppercase">{selectedTier.replace('_', ' ')}</p>
                 </div>
                 <div className="text-right">
@@ -479,197 +686,108 @@ export default function UpgradeProView({
               </div>
 
               {appliedCoupon && finalPayableETB === 0 && (
-                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 shrink-0 animate-bounce" />
-                  <span className="font-bold">
-                    {language === 'en' 
-                      ? '100% Free Campus Coupon applied! No bank payment needed. Activate instantly below.' 
-                      : 'የ100% ነፃ የካምፓስ ኩፖን ተተግብሯል! ምንም የባንክ ክፍያ አያስፈልግዎትም። ከታች ወዲያውኑ ያግብሩ።'}
-                  </span>
+                <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-emerald-400 shrink-0 animate-bounce" />
+                  <div>
+                    <p className="font-extrabold text-emerald-400">
+                      {language === 'en' ? '100% Free Campus Scholarship Applied!' : '100% ነፃ የካምፓስ ስኮላርሺፕ ተግብሯል!'}
+                    </p>
+                    <p className="text-[11px] text-slate-300">
+                      {language === 'en' 
+                        ? 'No bank payment needed! Click the green button below to activate Pro immediately.' 
+                        : 'ምንም የባንክ ክፍያ አያስፈልግዎትም! ከታች ያለውን አረንጓዴ ቁልፍ ተጭነው ፕሮ አባልነትዎን ወዲያውኑ ያግብሩ።'}
+                    </p>
+                  </div>
                 </div>
               )}
-
-              <div className="pt-3 border-t border-slate-800/80 flex items-center gap-2 text-xs text-slate-300">
-                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>
-                  {language === 'en'
-                    ? 'Official fixed rate. Pro membership is activated strictly after administrator bank verification.'
-                    : 'ትክክለኛ ዋጋ። ክፍያው በአስተዳዳሪው የባንክ መዝገብ ከተረጋገጠ በኋላ ብቻ አካውንቱ ይበራል።'}
-                </span>
-              </div>
             </div>
 
-            {/* Campus Coupon / Promo Code Input Box */}
-            <div className="p-4 bg-slate-900/90 rounded-2xl border border-slate-800 space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Ticket className="w-4 h-4" />
-                  {language === 'en' ? 'Have a Campus Coupon / Promo Code?' : 'የቅናሽ ወይም የካምፓስ ኩፖን ኮድ አለዎት?'}
+            {/* Provider Selector Grid (Telebirr & CBE) */}
+            {finalPayableETB > 0 && (
+              <div className="space-y-3">
+                <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                  {language === 'en' ? 'Select Payment Channel' : 'የክፍያ መንገድ ይምረጡ'}
                 </label>
-                {appliedCoupon && (
-                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                    {appliedCoupon.discountPercentage}% OFF
-                  </span>
-                )}
-              </div>
-
-              {appliedCoupon ? (
-                <div className="p-3 bg-emerald-500/10 border border-emerald-500/40 rounded-xl flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 font-bold font-mono text-xs">
-                      %
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-mono font-black text-white tracking-wider flex items-center gap-1.5 truncate">
-                        <Tag className="w-3 h-3 text-emerald-400 shrink-0" />
-                        {appliedCoupon.code}
-                      </p>
-                      <p className="text-[10px] text-emerald-300 truncate">
-                        {appliedCoupon.description || `${appliedCoupon.discountPercentage}% discount active`}
-                      </p>
-                    </div>
-                  </div>
+                <div className="grid grid-cols-2 gap-3">
                   <button
-                    type="button"
-                    onClick={handleRemoveCoupon}
-                    className="px-2.5 py-1 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer shrink-0 font-medium"
+                    onClick={() => { playClickChime(); setPaymentMethod('telebirr'); }}
+                    className={`p-4 rounded-xl border-2 text-left cursor-pointer transition-all flex flex-col justify-between ${
+                      paymentMethod === 'telebirr'
+                        ? 'border-emerald-500 bg-emerald-500/10 text-white'
+                        : 'border-slate-800 bg-[#111C35] text-slate-400 hover:border-slate-700'
+                    }`}
                   >
-                    {language === 'en' ? 'Remove' : 'አስወግድ'}
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-1 text-[10px] font-black text-white bg-blue-600 rounded">telebirr</span>
+                      {paymentMethod === 'telebirr' && <CheckCircle className="w-5 h-5 text-emerald-400" />}
+                    </div>
+                    <div className="mt-3">
+                      <p className="text-xs font-bold text-slate-400">Telebirr Mobile</p>
+                      <p className="text-sm font-mono font-black text-white">+251906046518</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => { playClickChime(); setPaymentMethod('cbe_birr'); }}
+                    className={`p-4 rounded-xl border-2 text-left cursor-pointer transition-all flex flex-col justify-between ${
+                      paymentMethod === 'cbe_birr'
+                        ? 'border-emerald-500 bg-emerald-500/10 text-white'
+                        : 'border-slate-800 bg-[#111C35] text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-1 text-[10px] font-black text-white bg-purple-700 rounded">CBE Bank</span>
+                      {paymentMethod === 'cbe_birr' && <CheckCircle className="w-5 h-5 text-emerald-400" />}
+                    </div>
+                    <div className="mt-3">
+                      <p className="text-xs font-bold text-slate-400">Commercial Bank Account</p>
+                      <p className="text-xs font-mono font-black text-white">1000410224643</p>
+                    </div>
                   </button>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <input
-                        type="text"
-                        value={couponInput}
-                        onChange={(e) => {
-                          setCouponInput(e.target.value.toUpperCase());
-                          if (couponStatus === 'error') setCouponStatus('idle');
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleApplyCoupon();
-                          }
-                        }}
-                        placeholder={language === 'en' ? 'e.g. WKU2026, FREESTUDENT' : 'ለምሳሌ፡ WKU2026፣ FREESTUDENT'}
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs font-mono font-bold text-white uppercase placeholder:text-slate-600 focus:ring-1 focus:ring-amber-400 outline-none"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleApplyCoupon}
-                      disabled={!couponInput.trim() || couponStatus === 'loading'}
-                      className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer shadow-md transition-all flex items-center gap-1.5 shrink-0"
-                    >
-                      {couponStatus === 'loading' ? (
-                        <Clock className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Check className="w-3.5 h-3.5" />
-                      )}
-                      {language === 'en' ? 'Apply' : 'ተግብር'}
-                    </button>
-                  </div>
 
-                  {/* Coupon status messages */}
-                  {couponMessage && (
-                    <p className={`text-[11px] font-medium flex items-center gap-1 ${
-                      couponStatus === 'error' ? 'text-rose-400' : 'text-emerald-400'
-                    }`}>
-                      {couponStatus === 'error' ? <AlertCircle className="w-3.5 h-3.5 shrink-0" /> : <CheckCircle className="w-3.5 h-3.5 shrink-0" />}
-                      {couponMessage}
+                {/* Account Details & 1-Click Copy Box */}
+                <div className="p-4 bg-[#111C35] rounded-xl border border-slate-800 text-xs space-y-2.5 font-mono">
+                  <div className="flex items-center justify-between">
+                    <p className="font-bold text-amber-400 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      {paymentMethod === 'telebirr' ? 'Telebirr Receiver Number' : 'CBE Receiver Account'}
                     </p>
-                  )}
-
-                  {/* Campus Quick Codes Helper */}
-                  <div className="flex items-center gap-2 pt-1">
-                    <span className="text-[10px] text-slate-400">{language === 'en' ? 'Quick campus codes:' : 'የካምፓስ ኮዶች:'}</span>
                     <button
                       type="button"
-                      onClick={() => setCouponInput('WKU2026')}
-                      className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 cursor-pointer"
+                      onClick={() => handleCopy(paymentMethod === 'telebirr' ? '0906046518' : '1000410224643', 'account')}
+                      className="px-2.5 py-1 rounded bg-[#0B1228] hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 flex items-center gap-1 cursor-pointer transition text-[11px]"
                     >
-                      WKU2026
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCouponInput('FREESTUDENT')}
-                      className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 cursor-pointer"
-                    >
-                      FREESTUDENT
+                      {copiedField === 'account' ? <CheckCheck className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedField === 'account' ? (language === 'en' ? 'Copied!' : 'ተቀድቷል!') : (language === 'en' ? 'Copy Number' : 'ቁጥሩን ቅዳ')}</span>
                     </button>
                   </div>
+                  <p className="text-slate-300">
+                    Account Holder: <span className="font-extrabold text-white">Abreham Alemayehu</span>
+                  </p>
+                  <p className="text-slate-400 text-[11px] font-sans">
+                    {language === 'en' 
+                      ? 'Official partner verification. Verify receiver name shows "Abreham Alemayehu" before sending.' 
+                      : 'ከመላክዎ በፊት የላኪው ስም "አብርሃም አለማየሁ" መሆኑን ያረጋግጡ።'}
+                  </p>
                 </div>
-              )}
-            </div>
-
-            {/* Provider Selector Grid */}
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                onClick={() => { playClickChime(); setPaymentMethod('telebirr'); }}
-                className={`p-4 rounded-xl border-2 text-left cursor-pointer transition-all flex flex-col justify-between ${
-                  paymentMethod === 'telebirr'
-                    ? 'border-emerald-500 bg-emerald-500/10 text-white'
-                    : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:border-slate-700'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="px-2.5 py-1 text-[9px] font-black text-white bg-blue-600 rounded">telebirr</span>
-                  {paymentMethod === 'telebirr' && <CheckCircle className="w-5 h-5 text-emerald-400" />}
-                </div>
-                <div className="mt-3">
-                  <p className="text-xs font-bold text-slate-400">Telebirr Mobile Number</p>
-                  <p className="text-sm font-mono font-black text-white">+251906046518</p>
-                </div>
-              </button>
-
-              <button
-                onClick={() => { playClickChime(); setPaymentMethod('cbe_birr'); }}
-                className={`p-4 rounded-xl border-2 text-left cursor-pointer transition-all flex flex-col justify-between ${
-                  paymentMethod === 'cbe_birr'
-                    ? 'border-emerald-500 bg-emerald-500/10 text-white'
-                    : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:border-slate-700'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="px-2.5 py-1 text-[9px] font-black text-white bg-slate-800 rounded">CBE Bank</span>
-                  {paymentMethod === 'cbe_birr' && <CheckCircle className="w-5 h-5 text-emerald-400" />}
-                </div>
-                <div className="mt-3">
-                  <p className="text-xs font-bold text-slate-400">Commercial Bank Account</p>
-                  <p className="text-xs font-mono font-black text-white break-all">1000410224643</p>
-                </div>
-              </button>
-            </div>
-
-            {/* Account Details Box */}
-            <div className="p-4 bg-slate-900/90 rounded-xl border border-slate-800 text-xs space-y-2 font-mono">
-              <p className="font-bold text-amber-400 flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                {paymentMethod === 'telebirr' ? 'Telebirr Receiver Account' : 'CBE Receiver Account'}
-              </p>
-              <p className="text-slate-300">Account Holder: <span className="font-extrabold text-white">Abreham Alemayehu</span></p>
-              <p className="text-slate-400 text-[11px]">
-                {language === 'en' 
-                  ? 'Verify receiver name shows "Abreham Alemayehu" before sending!' 
-                  : 'ከመላክዎ በፊት የላኪው ስም "አብርሃም አለማየሁ" መሆኑን ያረጋግጡ!'}
-              </p>
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Right: Submission form */}
-          <div className="lg:col-span-5 bg-[#0a1128] border border-slate-800 rounded-2xl p-6 space-y-4">
+          <div className="lg:col-span-5 bg-[#0A1128] border border-slate-800 rounded-2xl p-6 space-y-4">
             <h3 className="text-base font-serif font-black text-amber-400 uppercase tracking-tight flex items-center gap-2">
-              <Send className="w-4 h-4" />
-              {language === 'en' ? 'Step 2: Submit Txn Reference' : 'ደረጃ 2፡ የትራንዛክሽን ቁጥር ያስገቡ'}
+              <Send className="w-5 h-5" />
+              {finalPayableETB === 0 
+                ? (language === 'en' ? 'Instant 0 ETB Activation' : 'ፈጣን የ 0 ብር ማግበር')
+                : (language === 'en' ? 'Step 2: Submit Txn Reference' : 'ደረጃ 2፡ የትራንዛክሽን ቁጥር ያስገቡ')}
             </h3>
 
             <form onSubmit={handleSubmitPayment} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">
-                  {language === 'en' ? 'Sender Name (on Bank/Telebirr)' : 'የላኪ ስም (ውጤቱ ላይ ያሉት)'} *
+                  {language === 'en' ? 'Student Full Name' : 'የተማሪው ሙሉ ስም'} *
                 </label>
                 <input
                   type="text"
@@ -677,20 +795,20 @@ export default function UpgradeProView({
                   value={senderName}
                   onChange={(e) => setSenderName(e.target.value)}
                   placeholder="e.g. Abreham Yohannes"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:ring-1 focus:ring-amber-400 outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#111C35] border border-slate-700 text-xs text-white focus:ring-1 focus:ring-amber-400 outline-none"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">
-                  {language === 'en' ? 'Sender Phone Number (Optional)' : 'የመደበኛ ስልክ ቁጥር'}
+                  {language === 'en' ? 'Phone Number (Telebirr/CBE)' : 'የስልክ ቁጥር'}
                 </label>
                 <input
                   type="text"
                   value={phoneInput}
                   onChange={(e) => setPhoneInput(e.target.value)}
                   placeholder="e.g. 0912345678"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:ring-1 focus:ring-amber-400 outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#111C35] border border-slate-700 text-xs text-white focus:ring-1 focus:ring-amber-400 outline-none"
                 />
               </div>
 
@@ -703,12 +821,12 @@ export default function UpgradeProView({
                   required={finalPayableETB > 0}
                   value={txnRef}
                   onChange={(e) => setTxnRef(e.target.value)}
-                  placeholder={finalPayableETB === 0 ? `COUPON-${appliedCoupon?.code || 'FREE'}` : "e.g. FT16A1926B or Telebirr Txn No"}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono focus:ring-1 focus:ring-amber-400 outline-none"
+                  placeholder={finalPayableETB === 0 ? `SCHOLARSHIP-${appliedCoupon?.code || 'FREE'}` : "e.g. FT16A1926B or Telebirr Txn No"}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#111C35] border border-slate-700 text-xs text-white font-mono focus:ring-1 focus:ring-amber-400 outline-none"
                 />
               </div>
 
-              {/* Receipt Image / Screenshot Upload */}
+              {/* Receipt Image / Screenshot Upload (only if payment is needed) */}
               {finalPayableETB > 0 && (
                 <div>
                   <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1 flex items-center justify-between">
@@ -717,7 +835,7 @@ export default function UpgradeProView({
                   </label>
 
                   {receiptImage ? (
-                    <div className="relative p-2 bg-slate-900 border border-amber-500/40 rounded-xl flex items-center gap-3">
+                    <div className="relative p-2 bg-[#111C35] border border-amber-500/40 rounded-xl flex items-center gap-3">
                       <img 
                         src={receiptImage} 
                         alt="Payment Receipt" 
@@ -726,9 +844,9 @@ export default function UpgradeProView({
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-bold text-emerald-400 flex items-center gap-1">
                           <CheckCircle className="w-3.5 h-3.5" />
-                          {language === 'en' ? 'Receipt Screenshot Attached' : 'የደረሰኝ ፎቶ ተያይዟል'}
+                          {language === 'en' ? 'Receipt Attached' : 'የደረሰኝ ፎቶ ተያይዟል'}
                         </p>
-                        <p className="text-[10px] text-slate-400 truncate">Image ready for admin verification</p>
+                        <p className="text-[10px] text-slate-400 truncate">Ready for admin verification</p>
                       </div>
                       <button
                         type="button"
@@ -740,10 +858,10 @@ export default function UpgradeProView({
                       </button>
                     </div>
                   ) : (
-                    <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-700 hover:border-amber-400 rounded-xl bg-slate-900/60 hover:bg-slate-900 transition-all cursor-pointer text-center group">
+                    <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-700 hover:border-amber-400 rounded-xl bg-[#111C35]/60 hover:bg-[#111C35] transition-all cursor-pointer text-center group">
                       <Upload className="w-5 h-5 text-slate-400 group-hover:text-amber-400 mb-1 transition-colors" />
                       <span className="text-xs font-bold text-slate-300 group-hover:text-amber-300">
-                        {language === 'en' ? 'Click or tap to upload receipt image' : 'የደስረኝ ፎቶ ለመጫን እዚህ ይጫኑ'}
+                        {language === 'en' ? 'Click to upload receipt image' : 'የደረሰኝ ፎቶ ለመጫን እዚህ ይጫኑ'}
                       </span>
                       <span className="text-[10px] text-slate-500 mt-0.5">JPG, PNG, WEBP (Max 8MB)</span>
                       <input 
@@ -757,7 +875,7 @@ export default function UpgradeProView({
                 </div>
               )}
 
-              {/* Terms and Academic Integrity Agreement Checkbox */}
+              {/* Terms and Academic Integrity Agreement */}
               <div className="pt-2 border-t border-slate-800 space-y-2">
                 <label className="flex items-start gap-2.5 cursor-pointer group">
                   <input
@@ -766,39 +884,38 @@ export default function UpgradeProView({
                     onChange={(e) => setAgreedToTerms(e.target.checked)}
                     className="mt-0.5 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-amber-400 cursor-pointer w-4 h-4"
                   />
-                  <span className="text-xs text-slate-300 leading-tight">
-                    {language === 'en' 
-                      ? 'I agree to the ' 
-                      : 'በኢትዮ-ለርን '}
+                  <span className="text-xs text-slate-300 leading-relaxed font-sans">
+                    {language === 'en' ? 'I agree to the ' : 'በኢትዮ-ለርን '}
                     <button
                       type="button"
                       onClick={(e) => {
                         e.preventDefault();
                         setShowTermsModal(true);
                       }}
-                      className="text-amber-400 underline font-bold hover:text-amber-300 inline-flex items-center gap-0.5"
+                      className="text-amber-400 underline font-bold hover:text-amber-300 inline-flex items-center gap-0.5 cursor-pointer"
                     >
                       <Scale className="w-3 h-3" />
-                      {language === 'en' ? 'EthioLearn Pro Terms & Academic Rules' : 'የአገልግሎት ውል እና የጥናት ደንቦች'}
+                      {language === 'en' ? 'EthioLearn Pro Academic Rules & Terms' : 'የአገልግሎት ውል እና የጥናት ደንቦች'}
                     </button>
                     {language === 'en' ? '.' : ' እስማማለሁ።'}
                   </span>
                 </label>
               </div>
 
+              {/* Submit / Activate Button */}
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className={`w-full py-3 font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer shadow-lg active:scale-98 transition-all flex items-center justify-center gap-2 ${
+                className={`w-full py-3.5 font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer shadow-lg active:scale-98 transition-all flex items-center justify-center gap-2 ${
                   finalPayableETB === 0
-                    ? 'bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-300 hover:to-teal-400 text-slate-950'
-                    : 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950'
+                    ? 'bg-gradient-to-r from-emerald-400 to-teal-400 hover:from-emerald-300 hover:to-teal-300 text-slate-950 font-black'
+                    : 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black'
                 }`}
               >
                 {finalPayableETB === 0 ? (
                   <>
-                    <Sparkles className="w-4 h-4" />
-                    {language === 'en' ? 'Activate Pro Instantly (0 ETB)' : 'ወዲያውኑ በነፃ አግብር (0 ብር)'}
+                    <Sparkles className="w-4 h-4 text-slate-950 fill-slate-950" />
+                    {language === 'en' ? 'Activate Pro Instantly (0 ETB Free)' : 'ወዲያውኑ በነፃ አግብር (0 ብር)'}
                   </>
                 ) : (
                   <>
@@ -815,29 +932,52 @@ export default function UpgradeProView({
         </div>
       )}
 
-      {/* TAB 3: VERIFICATION STATUS & ADMIN CONTROLS */}
+      {/* ========================================================================= */}
+      {/* TAB 3: VERIFICATION STATUS & ACTIVE BENEFITS                              */}
+      {/* ========================================================================= */}
       {activeTab === 'status' && (
-        <div className="bg-[#0a1128] border border-slate-800 rounded-2xl p-8 text-center space-y-6">
+        <div className="bg-[#0A1128] border border-slate-800 rounded-2xl p-8 text-center space-y-6">
           <div className="flex justify-center">
-            <div className="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-              <Clock className="w-8 h-8 animate-spin" style={{ animationDuration: '3s' }} />
-            </div>
+            {profile.isPro ? (
+              <div className="w-16 h-16 rounded-full bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                <Crown className="w-8 h-8" />
+              </div>
+            ) : profile.proStatus === 'pending' ? (
+              <div className="w-16 h-16 rounded-full bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                <Clock className="w-8 h-8 animate-spin" style={{ animationDuration: '4s' }} />
+              </div>
+            ) : (
+              <div className="w-16 h-16 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400">
+                <Ticket className="w-8 h-8" />
+              </div>
+            )}
           </div>
 
           <div className="max-w-md mx-auto space-y-2">
             <h4 className="text-xl font-serif font-black text-white">
-              {profile.proStatus === 'pending' 
-                ? (language === 'en' ? 'Payment Under Verification' : 'ክፍያው በመረጋገጥ ላይ ነው')
-                : (profile.isPro 
-                    ? (language === 'en' ? 'Pro Access Active!' : 'የፕሮ አባልነትዎ ነቅቷል!') 
-                    : (language === 'en' ? 'No Pending Payment Verification' : 'ያልቀረበ ክፍያ ማረጋገጫ'))
-              }
+              {profile.isPro 
+                ? (language === 'en' ? 'EthioLearn Pro Active!' : 'የኢትዮ-ለርን ፕሮ አባልነትዎ ነቅቷል!') 
+                : profile.proStatus === 'pending'
+                  ? (language === 'en' ? 'Payment Under Verification' : 'ክፍያው በመረጋገጥ ላይ ነው')
+                  : (language === 'en' ? 'No Active Subscription' : 'ንቁ የአባልነት ክፍያ የለም')}
             </h4>
             
-            {profile.proStatus === 'pending' ? (
+            {profile.isPro ? (
+              <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-300 space-y-2">
+                <p className="font-bold flex items-center justify-center gap-1.5">
+                  <CheckCircle className="w-4 h-4 text-emerald-400" />
+                  <span>{language === 'en' ? 'Unlimited Access Unlocked' : 'ያልተገደበ አገልግሎት ተከፍቷል'}</span>
+                </p>
+                <p className="text-slate-300">
+                  {language === 'en' 
+                    ? `Your Pro plan is valid through: ${profile.proEndDate ? new Date(profile.proEndDate).toLocaleDateString() : 'Active'}.` 
+                    : `የፕሮ አገልግሎትዎ የሚያበቃበት ቀን፦ ${profile.proEndDate ? new Date(profile.proEndDate).toLocaleDateString() : 'በርቷል'}።`}
+                </p>
+              </div>
+            ) : profile.proStatus === 'pending' ? (
               <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 space-y-3">
                 <p className="font-mono">Txn Ref: <b>{profile.proPaymentTxn}</b></p>
-                <p>
+                <p className="font-sans">
                   {language === 'en'
                     ? "Our admin team is checking the Telebirr/CBE bank ledger. Approvals take ~15-30 mins."
                     : "የአስተዳዳሪ ቡድናችን የሒሳብ መዝገብ በመፈተሽ ላይ ነው። ብዙውን ጊዜ 15-30 ደቂቃ ይወስዳል።"}
@@ -846,7 +986,7 @@ export default function UpgradeProView({
                 {(profile.proReceiptImage || receiptImage) && (
                   <div className="pt-2 border-t border-amber-500/20 flex flex-col items-center gap-2">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
-                      {language === 'en' ? 'Submitted Payment Receipt:' : 'የተላከ የክፍያ ደረሰኝ፡'}
+                      {language === 'en' ? 'Submitted Payment Receipt:' : 'የተላከ የክፍያ ደረሰኝ፦'}
                     </p>
                     <img 
                       src={profile.proReceiptImage || receiptImage} 
@@ -857,12 +997,19 @@ export default function UpgradeProView({
                 )}
               </div>
             ) : (
-              <p className="text-xs text-slate-400">
-                {profile.isPro 
-                  ? (language === 'en' ? "Thank you for subscribing! You have full access to EthioLearn Pro." : "ስለ ኢትዮ-ለርን ፕሮ አባልነት ድጋፍዎ እናመሰግናለን!")
-                  : (language === 'en' ? "Please select a subscription tier and submit your payment reference." : "እባክዎ ፓኬጅ መርጠው ክፍያውን ያስገቡ!")
-                }
-              </p>
+              <div className="space-y-3">
+                <p className="text-xs text-slate-400 font-sans">
+                  {language === 'en' 
+                    ? 'Upgrade now or apply a campus scholarship coupon code to unlock full question banks and module downloads.' 
+                    : 'ሙሉ የፈተና ጥያቄዎችንና የሞጁል ዳውንሎዶችን ለማግኘት አሁኑኑ ያሻሽሉ ወይም የቅናሽ ኩፖን ይጠቀሙ።'}
+                </p>
+                <button
+                  onClick={() => setActiveTab('pay')}
+                  className="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer"
+                >
+                  {language === 'en' ? 'Enter Campus Coupon Code' : 'የካምፓስ ኩፖን ኮድ ያስገቡ'}
+                </button>
+              </div>
             )}
           </div>
 
@@ -872,10 +1019,10 @@ export default function UpgradeProView({
               <ShieldCheck className="w-3.5 h-3.5" />
               <span>{language === 'en' ? 'Protected Administrator Verification' : 'በአስተዳዳሪ ብቻ የሚረጋገጥ'}</span>
             </div>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-slate-400 leading-relaxed font-sans">
               {language === 'en'
-                ? 'All subscriptions are reviewed and authorized directly by the EthioLearn platform administrator. No automated or third-party bypass is allowed.'
-                : 'ሁሉም የፕሮ አባልነት ጥያቄዎች በቀጥታ በዋናው አስተዳዳሪ ተመርምረው ይጸድቃሉ። ያለ አስተዳዳሪ ፈቃድ ማንም ማብራት አይችልም።'}
+                ? 'All subscriptions and scholarship coupons are governed by official university academic integrity guidelines.'
+                : 'ሁሉም የፕሮ አባልነቶች እና የስኮላርሺፕ ኩፖኖች በኦፊሴላዊ የዩኒቨርሲቲ ደንብ መሰረት የተጠበቁ ናቸው።'}
             </p>
           </div>
         </div>

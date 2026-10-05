@@ -88,7 +88,7 @@ export const googleSignIn = async (): Promise<{ user: any; accessToken: string }
         }
         return { user: result.user, accessToken: token };
       } catch (fbErr: any) {
-        console.error('[Firebase Google Sign-In notice]:', fbErr?.code, fbErr?.message);
+        console.warn('[Firebase Google Sign-In notice]:', fbErr?.code, fbErr?.message);
 
         // Normalize popup blocked error
         if (fbErr?.code === 'auth/popup-blocked' || fbErr?.message?.includes('popup-blocked') || fbErr?.message?.includes('popup')) {

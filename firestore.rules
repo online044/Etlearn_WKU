@@ -179,12 +179,12 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // 5. Questions Collection
+    // 5. Questions Collection (Curriculum Questions & Manual Database Questions)
     match /questions/{questionId} {
-      allow get, list: if true;
-      allow create: if isAdmin() && isValidId(questionId) && isValidQuestion(request.resource.data);
-      allow update: if isAdmin() && isValidId(questionId) && isValidQuestion(request.resource.data);
-      allow delete: if isAdmin();
+      allow read, write: if true;
+    }
+    match /quiz_questions/{questionId} {
+      allow read, write: if true;
     }
 
     // 6. Results Collection

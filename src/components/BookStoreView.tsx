@@ -3,19 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  BookOpen, Search, Download, Sparkles, AlertCircle, FileText, Bot, 
-  CheckCircle, ChevronDown, Plus, BookOpenCheck, BookMarked, Sun, Moon, 
-  Type, ChevronRight, X, Check, Database, Star, Filter, ArrowRight, 
-  Layers, ExternalLink, RefreshCw, Zap, Bookmark, Share2
+  FileText, Search, Star, Bookmark, BookOpen, ChevronRight, ChevronLeft,
+  X, Check, Bot, Sparkles, Printer, ZoomIn, ZoomOut, Maximize2, Minimize2,
+  Download, Moon, Sun, Layers, HelpCircle, CheckCircle2, RotateCcw, Share2
 } from 'lucide-react';
 import { StudentProfile } from '../types';
-import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
+import { playClickChime, playSuccessChime } from '../utils/audio';
 import { getChapterContent } from '../data/textbookChapterContent';
 import { safeStorage } from '../utils/safeStorage';
-import { fetchPublishedBooks } from '../utils/contentStore';
 
 export interface BookStoreViewProps {
   profile: StudentProfile;
@@ -28,1213 +26,620 @@ export interface BookStoreViewProps {
   onOpenInAppViewer?: (url: string, title: string) => void;
 }
 
-export interface ModuleResource {
+export interface FreshmanModule {
   id: string;
+  code: string;
   title: string;
+  amharicTitle: string;
+  stream: 'Common' | 'Natural Science' | 'Social Science';
+  semester: 'Semester I' | 'Semester II';
   subject: string;
-  grade: string;
   chapters: string[];
   pages: number;
+  fileSizeMb: number;
+  creditHours: number;
   description: string;
-  languageSupport: 'English Only' | 'Bilingual';
-  proRequired: boolean;
-  pdfUrl?: string;
-  contentJson?: string;
-  isSupabase?: boolean;
-  isServerRecord?: boolean;
-  fileSize?: number;
-  allowDownload?: boolean;
-  department?: string;
-  university?: string;
-  course?: string;
-  rating?: number;
+  amharicDescription: string;
+  rating: number;
 }
-
-export const PREBUILT_MODULES: ModuleResource[] = [
-  // --- GRADE 12 CURRICULUM ---
-  {
-    id: 'g12_math',
-    title: 'Grade 12 Mathematics Ultimate Curriculum Module',
-    subject: 'Mathematics',
-    grade: 'Grade 12',
-    chapters: [
-      'Chapter 1: Sequences and Series',
-      'Chapter 2: Limits and Continuity',
-      'Chapter 3: Introduction to Calculus',
-      'Chapter 4: Vectors and Analytical Geometry'
-    ],
-    pages: 142,
-    description: 'Comprehensive Ministry Exam prep module covering differential calculus, limits, sequence notation, and solid geometry with Amharic explanations.',
-    languageSupport: 'Bilingual',
-    proRequired: false,
-    pdfUrl: 'https://fetena.net/books/grade-12/mathematics',
-    rating: 4.9
-  },
-  {
-    id: 'g12_english',
-    title: 'Grade 12 Communicative English Matric Workbook',
-    subject: 'English',
-    grade: 'Grade 12',
-    chapters: [
-      'Chapter 1: Tense & Aspect Pairing',
-      'Chapter 2: Relative Clauses & Passive Voice',
-      'Chapter 3: Direct vs Indirect Speech',
-      'Chapter 4: Vocabulary Context Clues'
-    ],
-    pages: 105,
-    description: 'Specially structured to help Ethiopian students excel in national standardized English tests, active-passive transformations, and comprehension.',
-    languageSupport: 'Bilingual',
-    proRequired: false,
-    pdfUrl: 'https://fetena.net/books/grade-12/english',
-    rating: 4.8
-  },
-  {
-    id: 'g12_physics',
-    title: 'Grade 12 Physics Electromagnetism & Quantum Guide',
-    subject: 'Physics',
-    grade: 'Grade 12',
-    chapters: [
-      'Chapter 1: Particle Dynamics',
-      'Chapter 2: Magnetic Fields & Inductance',
-      'Chapter 3: AC Circuits',
-      'Chapter 4: Atomic & Quantum Physics Theory'
-    ],
-    pages: 120,
-    description: 'Advanced matric revision guide summarizing magnetic flux equations, transformers, line spectra, photoelectric effect, and nuclear half-lives.',
-    languageSupport: 'Bilingual',
-    proRequired: false,
-    pdfUrl: 'https://fetena.net/books/grade-12/physics',
-    rating: 4.9
-  },
-  {
-    id: 'g12_chemistry',
-    title: 'Grade 12 Chemistry Organic & Electrochemistry Companion',
-    subject: 'Chemistry',
-    grade: 'Grade 12',
-    chapters: [
-      'Chapter 1: Solutions and Colloids',
-      'Chapter 2: Acid-Base Equilibria',
-      'Chapter 3: Thermodynamics & Electrochemistry',
-      'Chapter 4: Nomenclature of Organic Reactants'
-    ],
-    pages: 135,
-    description: 'Detailed study on buffer actions, pH indicators, Lewis theories, galvanic cells, and standard IUPAC nomenclature schemes.',
-    languageSupport: 'Bilingual',
-    proRequired: false,
-    pdfUrl: 'https://fetena.net/books/grade-12/chemistry',
-    rating: 4.7
-  },
-  {
-    id: 'g12_biology',
-    title: 'Grade 12 Biology Genetics, Evolution & Ecology Module',
-    subject: 'Biology',
-    grade: 'Grade 12',
-    chapters: [
-      'Chapter 1: Cell Biology and Macromolecules',
-      'Chapter 2: Mendelian Inheritance & DNA',
-      'Chapter 3: Theories of Evolution',
-      'Chapter 4: Ecological Succession & Conservation'
-    ],
-    pages: 115,
-    description: 'Targeted revision for national entrance exam genetics calculations, population genetics rules, and environmental biodiversity in Ethiopia.',
-    languageSupport: 'Bilingual',
-    proRequired: false,
-    pdfUrl: 'https://fetena.net/books/grade-12/biology',
-    rating: 4.8
-  },
-  {
-    id: 'g12_amharic',
-    title: 'Grade 12 Amharic (አማርኛ) Student Textbook',
-    subject: 'Amharic',
-    grade: 'Grade 12',
-    chapters: [
-      'Chapter 1: ስነ-ጽሁፍ እና ባህል (Literature & Culture)',
-      'Chapter 2: ንባብና መረዳት (Reading & Comprehension)',
-      'Chapter 3: የቃላት ጥናትና ሰዋስው (Vocabulary & Grammar)',
-      'Chapter 4: የጽሕፈት ስልቶች (Writing Styles)'
-    ],
-    pages: 110,
-    description: 'Official Ministry Grade 12 Amharic language companion. Study grammar, vocabulary, reading comprehension, and literature analysis.',
-    languageSupport: 'Bilingual',
-    proRequired: false,
-    pdfUrl: 'https://fetena.net/books/grade-12/amharic',
-    rating: 4.9
-  },
-  {
-    id: 'g12_aptitude',
-    title: 'Grade 12 Analytical and Quantitative Aptitude Handbook',
-    subject: 'Aptitude',
-    grade: 'Grade 12',
-    chapters: [
-      'Chapter 1: Verbal Analogies & Sentence Logic',
-      'Chapter 2: Numerical Series & Word Problems',
-      'Chapter 3: Spatial and Non-Verbal Reasoning',
-      'Chapter 4: Logic Gates & Syllogism Analysis'
-    ],
-    pages: 160,
-    description: 'Specially curated reasoning builder focusing on typical math aptitude patterns, visual sequences, and critical thinking matrices for university entrance.',
-    languageSupport: 'Bilingual',
-    proRequired: false,
-    rating: 5.0
-  },
-  {
-    id: 'g12_new_economics',
-    title: 'Grade 12 Economics Student Textbook (New Curriculum)',
-    subject: 'Economics',
-    grade: 'Grade 12 New Curriculum',
-    chapters: [
-      'Chapter 1: Theory of Consumer Behavior',
-      'Chapter 2: Market Structure and Perfect Competition',
-      'Chapter 3: Macroeconomic Indicators in Ethiopia',
-      'Chapter 4: Monetary and Fiscal Policies'
-    ],
-    pages: 168,
-    description: 'Official Ministry new curriculum guide on demand elasticities, utility maximizations, inflation thresholds, and national bank monetary tools.',
-    languageSupport: 'Bilingual',
-    proRequired: false,
-    pdfUrl: 'https://fetena.net/books/grade-12/economics',
-    rating: 4.8
-  },
-  {
-    id: 'g12_new_geography',
-    title: 'Grade 12 Geography Student Textbook (New Curriculum)',
-    subject: 'Geography',
-    grade: 'Grade 12 New Curriculum',
-    chapters: [
-      'Chapter 1: Geological Structure and Landforms of Ethiopia',
-      'Chapter 2: Climate and Weather Systems of East Africa',
-      'Chapter 3: Natural Resource Management & Conservation',
-      'Chapter 4: Population Density and Urbanization Profiles'
-    ],
-    pages: 182,
-    description: 'Comprehensive spatial analysis of Ethiopian highlands, rift valleys, traditional farming soil cycles, and regional hydrological basins.',
-    languageSupport: 'Bilingual',
-    proRequired: false,
-    pdfUrl: 'https://fetena.net/books/grade-12/geography',
-    rating: 4.7
-  },
-  {
-    id: 'g12_new_history',
-    title: 'Grade 12 History Student Textbook (New Curriculum)',
-    subject: 'History',
-    grade: 'Grade 12 New Curriculum',
-    chapters: [
-      'Chapter 1: Human Beginnings & Stone Age Cultures in the Horn',
-      'Chapter 2: State Formations, Trade and Religions (Axum, Lalibela)',
-      'Chapter 3: Modern Ethiopian State Unifications (1855-1974)',
-      'Chapter 4: The Federal Democratic Era & Contemporary Milestones'
-    ],
-    pages: 210,
-    description: 'New curriculum history resource mapping prehistoric sites like Hadar, early civilizations, Battle of Adwa victory details, and constitutional developments.',
-    languageSupport: 'Bilingual',
-    proRequired: false,
-    pdfUrl: 'https://fetena.net/books/grade-12/history',
-    rating: 4.9
-  },
-  {
-    id: 'g12_new_it',
-    title: 'Grade 12 Information Technology Student Textbook (New Curriculum)',
-    subject: 'Information Technology',
-    grade: 'Grade 12 New Curriculum',
-    chapters: [
-      'Chapter 1: Advanced Information Systems & Databases',
-      'Chapter 2: Computer Networking & Cyber-Defenses',
-      'Chapter 3: Web Development Fundamentals (HTML, CSS, JS)',
-      'Chapter 4: Algorithms, Python Scripting & Emerging Algos'
-    ],
-    pages: 154,
-    description: 'Official guide covering relational database schemas, web authoring elements, and logical block scripting paradigms for high schoolers.',
-    languageSupport: 'Bilingual',
-    proRequired: false,
-    pdfUrl: 'https://fetena.net/books/grade-12/ict',
-    rating: 4.8
-  },
-  {
-    id: 'g12_civics',
-    title: 'Grade 12 Civics and Ethical Education Student Textbook',
-    subject: 'Civics',
-    grade: 'Grade 12',
-    chapters: [
-      'Chapter 1: Building a Democratic System',
-      'Chapter 2: The Rule of Law and Judicial Organs',
-      'Chapter 3: Human and Democratic Rights',
-      'Chapter 4: Active Community Participation & Patriotism'
-    ],
-    pages: 140,
-    description: 'Official Ministry textbook on federalism models, human rights codes, constitution principles, and civic duties for high school matric.',
-    languageSupport: 'Bilingual',
-    proRequired: false,
-    pdfUrl: 'https://fetena.net/books/grade-12/civics-and-ethical-education',
-    rating: 4.7
-  },
-  {
-    id: 'g12_agriculture',
-    title: 'Grade 12 Agriculture Student Textbook (New Curriculum)',
-    subject: 'Agriculture',
-    grade: 'Grade 12 New Curriculum',
-    chapters: [
-      'Chapter 1: Crop Production & Soil Science in Ethiopia',
-      'Chapter 2: Animal Husbandry & Poultry Farming',
-      'Chapter 3: Agricultural Economics & Farm Management',
-      'Chapter 4: Modern Irrigation and Water Conservation'
-    ],
-    pages: 156,
-    description: 'Comprehensive study of agrarian science, soil conservation cycles, livestock husbandry, and smart water resources management in East Africa.',
-    languageSupport: 'Bilingual',
-    proRequired: false,
-    rating: 4.6
-  },
-  {
-    id: 'g12_business',
-    title: 'Grade 12 Business Studies Student Textbook',
-    subject: 'Business',
-    grade: 'Grade 12',
-    chapters: [
-      'Chapter 1: Nature and Scope of Business',
-      'Chapter 2: Business Environments and Ethics',
-      'Chapter 3: Forms of Business Ownership (Sole, Share)',
-      'Chapter 4: Basic Accounting Principles & Ledger Sheets'
-    ],
-    pages: 130,
-    description: 'Core concepts of entrepreneurship, financial accounting ledgers, ethical trade structures, and management frameworks in Ethiopia.',
-    languageSupport: 'Bilingual',
-    proRequired: false,
-    pdfUrl: 'https://fetena.net/books/grade-12/general-business',
-    rating: 4.7
-  },
-
-  // --- UNIVERSITY FRESHMAN & DEGREE COURSES ---
-  {
-    id: 'uni_math',
-    title: 'Freshman Mathematics for Social & Natural Sciences (Math 1011)',
-    subject: 'Mathematics',
-    grade: 'University',
-    department: 'Common Courses',
-    university: 'Wolkite & National Universities',
-    chapters: [
-      'Chapter 1: Propositional Logic and Set Theory',
-      'Chapter 2: The Real & Complex Number Systems',
-      'Chapter 3: Analytical Geometry & Conic Sections',
-      'Chapter 4: Exponential and Hyperbolic Functions'
-    ],
-    pages: 195,
-    description: 'Standard textbook matching Ethiopian public universities curriculum. Includes truth tables, complex algebra, and functions conversion guidelines with AI step solver.',
-    languageSupport: 'English Only',
-    proRequired: false,
-    rating: 4.9
-  },
-  {
-    id: 'uni_applied_math',
-    title: 'Applied Calculus I & II Engineering Courseware (Math 1012)',
-    subject: 'Applied Math',
-    grade: 'University',
-    department: 'Engineering & Technology',
-    university: 'Wolkite & National Universities',
-    chapters: [
-      'Chapter 1: Techniques of Advanced Integration',
-      'Chapter 2: Sequences & Infinite Series Tests',
-      'Chapter 3: Vectors and Partial Derivatives',
-      'Chapter 4: First Order Linear Differential Equations'
-    ],
-    pages: 240,
-    description: 'Advanced applied engineering mathematical formulas. Features trigonometric substitutions, Taylor series, and volume calculations via double integrals.',
-    languageSupport: 'English Only',
-    proRequired: false,
-    rating: 4.9
-  },
-  {
-    id: 'uni_cpp',
-    title: 'Introduction to Computer Programming & C++ (CoSc 1011)',
-    subject: 'Computer Science',
-    grade: 'University',
-    department: 'Engineering & Technology',
-    university: 'Wolkite & National Universities',
-    chapters: [
-      'Chapter 1: Algorithms, Flowcharts and Compilers',
-      'Chapter 2: C++ Variables, Types, and Conditional Statements',
-      'Chapter 3: Loops and Iteration Controls (For, While)',
-      'Chapter 4: Custom Functions, Arrays, and Memory Pointers'
-    ],
-    pages: 175,
-    description: 'Hands-on programming guide. Master logical arrays, sequential flows, parameter passing, and syntax structures with custom AI code-review solver tools.',
-    languageSupport: 'English Only',
-    proRequired: false,
-    rating: 5.0
-  },
-  {
-    id: 'uni_english',
-    title: 'Communicative English Skills I (FLEn 1011)',
-    subject: 'English',
-    grade: 'University',
-    department: 'Common Courses',
-    university: 'Wolkite & National Universities',
-    chapters: [
-      'Chapter 1: Active Reading and Note-Taking',
-      'Chapter 2: Advanced Cohesive Paragraph Building',
-      'Chapter 3: Academic Voice, Modals and Concord',
-      'Chapter 4: Public Representation Speaking Clues'
-    ],
-    pages: 98,
-    description: 'Core freshman curriculum guidebook to excel in university-level comprehension, syntactic styles, and academic arguments.',
-    languageSupport: 'English Only',
-    proRequired: false,
-    rating: 4.8
-  },
-  {
-    id: 'uni_english_2',
-    title: 'Writing Skills II Advanced Freshman English (FLEn 1012)',
-    subject: 'English',
-    grade: 'University',
-    department: 'Common Courses',
-    university: 'Wolkite & National Universities',
-    chapters: [
-      'Chapter 1: Essay Genres and Rhetorical Modes',
-      'Chapter 2: Mechanics of Academic Citations & APA',
-      'Chapter 3: Professional Correspondence & Letters',
-      'Chapter 4: Formulating Business & Research Proposals'
-    ],
-    pages: 110,
-    description: 'Focuses on peer essay editing, bibliography formatting, and writing logical, structured reports as a university scholar.',
-    languageSupport: 'English Only',
-    proRequired: false,
-    rating: 4.7
-  },
-  {
-    id: 'uni_physics',
-    title: 'General Physics Mechanics, Waves & Optics (Phys 1011)',
-    subject: 'Physics',
-    grade: 'University',
-    department: 'Natural Sciences & Engineering',
-    university: 'Wolkite & National Universities',
-    chapters: [
-      'Chapter 1: Kinematics & Work-Energy Theorems',
-      'Chapter 2: Oscillations and Wave Harmonics',
-      'Chapter 3: Laws of Thermodynamics & Heat',
-      'Chapter 4: Geometric Optics and Lenses Theory'
-    ],
-    pages: 215,
-    description: 'Rigorous freshman guide centered on physical concepts: work-kinetic calculations, harmonic pendulum frequencies, and ray tracing.',
-    languageSupport: 'English Only',
-    proRequired: false,
-    rating: 4.8
-  },
-  {
-    id: 'uni_chemistry',
-    title: 'General Chemistry Atomic Structure & Equilibria (Chem 1011)',
-    subject: 'Chemistry',
-    grade: 'University',
-    department: 'Natural Sciences & Medicine',
-    university: 'Wolkite & National Universities',
-    chapters: [
-      'Chapter 1: Quantum Chemistry & Atomic Periodicity',
-      'Chapter 2: Chemical Bonding & VSEPR Models',
-      'Chapter 3: Properties of States & Solutions',
-      'Chapter 4: Chemical Kinetics and Rate Laws'
-    ],
-    pages: 220,
-    description: 'University level molecular orbital theory, orbital hybridization, boiling point elevations, and activation energy calculations with AI solver tutorials.',
-    languageSupport: 'English Only',
-    proRequired: false,
-    rating: 4.8
-  },
-  {
-    id: 'uni_biology',
-    title: 'Freshman General Biology and Microbiology (Biol 1011)',
-    subject: 'Biology',
-    grade: 'University',
-    department: 'Medicine & Health Sciences',
-    university: 'Wolkite & National Universities',
-    chapters: [
-      'Chapter 1: Structure and Chemistry of Life',
-      'Chapter 2: Cellular Metabolism & Photosynthesis',
-      'Chapter 3: Anatomy and Systems of Animal Life',
-      'Chapter 4: Microorganisms, Fungi and Viral Pathogens'
-    ],
-    pages: 185,
-    description: 'Study of cellular respiration pathways, ATP models, enzyme activity limits, prokaryote structures, and plant physiology.',
-    languageSupport: 'English Only',
-    proRequired: false,
-    rating: 4.9
-  },
-  {
-    id: 'uni_anthropology',
-    title: 'Social Anthropology Freshman Curriculum (Anth 1012)',
-    subject: 'Anthropology',
-    grade: 'University',
-    department: 'Social Sciences & Humanities',
-    university: 'Wolkite & National Universities',
-    chapters: [
-      'Chapter 1: Concepts and Scope of Anthropology',
-      'Chapter 2: Culture, Ethnicity, and Social Identity',
-      'Chapter 3: Kinship, Marriage & Family Systems',
-      'Chapter 4: Indigenous Knowledge and Adaptation in Ethiopia'
-    ],
-    pages: 130,
-    description: 'Explore human diversity, cultural patterns, ethnographic field research methods, and pluralistic contexts in the Horn of Africa.',
-    languageSupport: 'English Only',
-    proRequired: false,
-    rating: 4.8
-  },
-  {
-    id: 'uni_logic',
-    title: 'Introduction to Logic and Critical Thinking (Phil 1011)',
-    subject: 'Logic',
-    grade: 'University',
-    department: 'Social Sciences & Humanities',
-    university: 'Wolkite & National Universities',
-    chapters: [
-      'Chapter 1: Logic, Arguments, and Premises',
-      'Chapter 2: Informal Fallacies (Ad Hominem, Strawman)',
-      'Chapter 3: Categorical Propositions and Venn Diagrams',
-      'Chapter 4: Symbolic Logic and Natural Deduction'
-    ],
-    pages: 145,
-    description: 'Unlock argumentative rigor. Learn to outline deductive logic structures, identify cognitive fallacies, and construct formal truth proofs.',
-    languageSupport: 'English Only',
-    proRequired: false,
-    rating: 4.9
-  },
-  {
-    id: 'uni_psychology',
-    title: 'Freshman General Psychology and Life Skills (Pscy 1011)',
-    subject: 'Psychology',
-    grade: 'University',
-    department: 'Common Courses',
-    university: 'Wolkite & National Universities',
-    chapters: [
-      'Chapter 1: Essence & Biological Bases of Behavior',
-      'Chapter 2: Sensation, Perception, and Human Learning',
-      'Chapter 3: Cognitive, Memory Systems and Amnesia',
-      'Chapter 4: Motivation, Emotion, Personality & Life Skills'
-    ],
-    pages: 152,
-    description: 'Deep dive into neuropsychology, Pavlovian conditioning mechanisms, cognitive memory structures, and stress management skills.',
-    languageSupport: 'English Only',
-    proRequired: false,
-    rating: 4.8
-  },
-  {
-    id: 'uni_inclusiveness',
-    title: 'Inclusiveness, Disabilities & Special Education Module (Incl 1012)',
-    subject: 'Inclusiveness',
-    grade: 'University',
-    department: 'Common Courses',
-    university: 'Wolkite & National Universities',
-    chapters: [
-      'Chapter 1: Understanding Disabilities and Vulnerabilities',
-      'Chapter 2: Overcoming Social & Institutional Barriers',
-      'Chapter 3: Collaborative Assistive Technologies',
-      'Chapter 4: National Inclusiveness Policies and Rights'
-    ],
-    pages: 112,
-    description: 'Framework of special needs learning support, behavioral adjustments, visual or hearing aids integrations, and human dignity principles.',
-    languageSupport: 'English Only',
-    proRequired: false,
-    rating: 4.7
-  },
-  {
-    id: 'uni_entrepreneurship',
-    title: 'Freshman Entrepreneurship (Mgmt 1012)',
-    subject: 'Entrepreneurship',
-    grade: 'University',
-    department: 'Business & Economics',
-    university: 'Wolkite & National Universities',
-    chapters: [
-      'Chapter 1: The Entrepreneurial Mindset & Ideation',
-      'Chapter 2: Market Audits, Feasibility and Customer Pain',
-      'Chapter 3: Structuring a Valid Lean Business Model Canvas',
-      'Chapter 4: Capital Sources and Ethiopian Microfinance Laws'
-    ],
-    pages: 138,
-    description: 'Essential entrepreneurial toolbox. Covers competitive audits, value propositions, resource constraints, startup funding, and local business taxation.',
-    languageSupport: 'English Only',
-    proRequired: false,
-    rating: 4.8
-  },
-  {
-    id: 'uni_civics',
-    title: 'Moral and Civic Education Freshman Module (MCiE 1012)',
-    subject: 'Moral and Civics',
-    grade: 'University',
-    department: 'Common Courses',
-    university: 'Wolkite & National Universities',
-    chapters: [
-      'Chapter 1: Understanding Civics, Morality, and Ethics',
-      'Chapter 2: State, Government, and Citizenship Foundations',
-      'Chapter 3: Human Rights and Constitutionalism in Ethiopia',
-      'Chapter 4: Democracy and Good Governance Indicators'
-    ],
-    pages: 165,
-    description: 'Essential freshman civic education module. Covers ethical theories, federal state structures, public responsibility, and global cooperation frameworks.',
-    languageSupport: 'English Only',
-    proRequired: false,
-    rating: 4.8
-  },
-  {
-    id: 'uni_geography',
-    title: 'Geography of Ethiopia and the Horn (GeES 1011)',
-    subject: 'Geography',
-    grade: 'University',
-    department: 'Social Sciences & Humanities',
-    university: 'Wolkite & National Universities',
-    chapters: [
-      'Chapter 1: Introduction to Geography & Spatial Coordinates',
-      'Chapter 2: Geological Structure & Physiographic Divisions',
-      'Chapter 3: Drainage Systems & Water Basins of Ethiopia',
-      'Chapter 4: Climate, Soil Systems, and Demography'
-    ],
-    pages: 188,
-    description: 'Standard freshman geography module covering tectonic plates, Abbay (Blue Nile) and Awash basins, highland soil types, and population geography.',
-    languageSupport: 'English Only',
-    proRequired: false,
-    rating: 4.8
-  },
-  {
-    id: 'uni_emerging_tech',
-    title: 'Introduction to Emerging Technologies Freshman Module (EmTe 1012)',
-    subject: 'Emerging Tech',
-    grade: 'University',
-    department: 'Engineering & Technology',
-    university: 'Wolkite & National Universities',
-    chapters: [
-      'Chapter 1: Introduction to Industry 4.0 & Digital Transformation',
-      'Chapter 2: Artificial Intelligence & Machine Learning Frameworks',
-      'Chapter 3: Internet of Things (IoT) & Smart Systems',
-      'Chapter 4: Blockchain, Cybersecurity, and Cloud Infrastructures'
-    ],
-    pages: 145,
-    description: 'Covers the 4th industrial revolution (4IR) technologies: smart actuators, deep neural networks, cryptographic ledgers, and secure cloud orchestration.',
-    languageSupport: 'English Only',
-    proRequired: false,
-    rating: 5.0
-  },
-  {
-    id: 'uni_economics',
-    title: 'Introduction to Economics Freshman Module (Econ 1011)',
-    subject: 'Economics',
-    grade: 'University',
-    department: 'Business & Economics',
-    university: 'Wolkite & National Universities',
-    chapters: [
-      'Chapter 1: Fundamental Concepts of Economics',
-      'Chapter 2: Market Demand, Supply, and Price Equilibrium',
-      'Chapter 3: Theory of Production and Cost Analysis',
-      'Chapter 4: Introduction to Macroeconomics and GDP'
-    ],
-    pages: 172,
-    description: 'Standard curriculum guide for first-year students. Explains opportunity cost, production frontiers, utility indifference curves, cost curves, and macroeconomic models.',
-    languageSupport: 'English Only',
-    proRequired: false,
-    rating: 4.9
-  }
-];
 
 /**
- * Adapt and normalize any book object from Supabase, Firestore, REST APIs, or props
- * into a standardized ModuleResource for consistent display, search, and reading.
+ * 🎓 OFFICIAL ETHIOPIAN UNIVERSITY FRESHMAN MODULES CURRICULUM
+ * Standardized across all Ethiopian Higher Education Public Universities (MoE).
  */
-export function mapToModuleResource(raw: any): ModuleResource {
-  if (!raw) {
-    return {
-      id: 'book_' + Math.random().toString(36).substring(7),
-      title: 'Academic Curriculum Module',
-      subject: 'Curriculum',
-      grade: 'University',
-      chapters: ['Chapter 1: Overview', 'Chapter 2: Core Analysis', 'Chapter 3: Exercises'],
-      pages: 120,
-      description: 'Official academic module for Ethiopian university students.',
-      languageSupport: 'Bilingual',
-      proRequired: false,
-      rating: 4.9
-    };
+export const FRESHMAN_MODULES: FreshmanModule[] = [
+  {
+    id: 'freshman_critical_thinking',
+    code: 'Phil 1011',
+    title: 'Critical Thinking',
+    amharicTitle: 'ስነ-አመክንዮ እና ሂሳዊ አስተሳሰብ',
+    stream: 'Common',
+    semester: 'Semester I',
+    subject: 'Logic & Philosophy',
+    creditHours: 3,
+    pages: 148,
+    fileSizeMb: 3.6,
+    rating: 4.9,
+    description: 'Official Ministry of Education module covering argumentative structures, premises and conclusions, deductive validity, inductive strength, and formal/informal cognitive fallacies.',
+    amharicDescription: 'የአመክንዮ መሰረቶች፣ ትክክለኛ እና ስህተት የሆኑ የመከራከሪያ ነጥቦች (Fallacies)፣ እና ሂሳዊ የአስተሳሰብ ክህሎቶችን የሚያስተምር የጋራ የዩኒቨርሲቲ ሞጁል።',
+    chapters: [
+      'Chapter 1: Introducing Philosophy, Logic and Arguments',
+      'Chapter 2: Basic Concepts of Logic and Deduction',
+      'Chapter 3: Informal Fallacies (Relevance, Weak Induction, Presumption)',
+      'Chapter 4: Categorical Propositions and Syllogisms',
+      'Chapter 5: Propositional Logic and Truth Tables'
+    ]
+  },
+  {
+    id: 'freshman_economics',
+    code: 'Econ 1011',
+    title: 'Economics',
+    amharicTitle: 'መግቢያ የኢኮኖሚክስ ትምህርት',
+    stream: 'Common',
+    semester: 'Semester I',
+    subject: 'Economics',
+    creditHours: 3,
+    pages: 176,
+    fileSizeMb: 4.2,
+    rating: 4.8,
+    description: 'Foundations of economic analysis: scarcity and choice, production possibilities frontier (PPF), market demand and supply equilibrium, consumer utility, and macroeconomic indicators.',
+    amharicDescription: 'የእጥረትና የምርጫ ህጎች፣ የፍላጎትና አቅርቦት ሚዛን፣ የተጠቃሚዎች እርካታ (Utility) እና አጠቃላይ የሀገር ኢኮኖሚ መለኪያዎች።',
+    chapters: [
+      'Chapter 1: Foundations of Economics & Scarcity',
+      'Chapter 2: Demand, Supply and Market Equilibrium',
+      'Chapter 3: Elasticity of Demand and Supply',
+      'Chapter 4: Theory of Consumer Behavior & Utility',
+      'Chapter 5: Theory of Production and Costs',
+      'Chapter 6: Macroeconomic Goals and National Income Accounting'
+    ]
+  },
+  {
+    id: 'freshman_emerging_tech',
+    code: 'EmTe 1012',
+    title: 'Emerging Technologies',
+    amharicTitle: 'መግቢያ ወደ አዳዲስ ቴክኖሎጂዎች',
+    stream: 'Common',
+    semester: 'Semester II',
+    subject: 'Technology',
+    creditHours: 3,
+    pages: 154,
+    fileSizeMb: 3.9,
+    rating: 5.0,
+    description: 'Comprehensive curriculum on the Fourth Industrial Revolution (4IR), Artificial Intelligence, Machine Learning paradigms, Internet of Things (IoT), Big Data, and Cloud/Blockchain systems.',
+    amharicDescription: 'የአራተኛው የኢንዱስትሪ አብዮት (4IR)፣ አርቴፊሻል ኢንተለጀንስ (AI)፣ የነገሮች ኢንተርኔት (IoT) እና የሳይበር ደህንነት ጽንሰ-ሀሳቦች።',
+    chapters: [
+      'Chapter 1: Introduction to the Fourth Industrial Revolution (4IR)',
+      'Chapter 2: Data Science, Big Data and Analytics',
+      'Chapter 3: Artificial Intelligence and Machine Learning',
+      'Chapter 4: Internet of Things (IoT) & Smart Ecosystems',
+      'Chapter 5: Cybersecurity, Cloud Computing and Blockchain'
+    ]
+  },
+  {
+    id: 'freshman_entrepreneurship',
+    code: 'Mgmt 1012',
+    title: 'Entrepreneurship',
+    amharicTitle: 'ስራ ፈጠራ እና የንግድ ልማት',
+    stream: 'Common',
+    semester: 'Semester II',
+    subject: 'Management',
+    creditHours: 3,
+    pages: 142,
+    fileSizeMb: 3.4,
+    rating: 4.8,
+    description: 'Principles of entrepreneurial mindset, opportunity recognition, business planning, market feasibility analysis, venture financing, and Ethiopian small and micro enterprise policies.',
+    amharicDescription: 'የስራ ፈጠራ አስተሳሰብ፣ አዋጭ የንግድ ሃሳቦችን ማፍለቅ፣ የንግድ እቅድ ዝግጅት እና በኢትዮጵያ የስራ እድል ፈጠራ ስልቶች።',
+    chapters: [
+      'Chapter 1: Nature of Entrepreneurship & Entrepreneurial Mindset',
+      'Chapter 2: Business Idea Generation and Opportunity Recognition',
+      'Chapter 3: Business Planning and Feasibility Analysis',
+      'Chapter 4: Marketing Strategies for New Ventures',
+      'Chapter 5: Financing the New Venture & Micro-Finance in Ethiopia'
+    ]
+  },
+  {
+    id: 'freshman_biology',
+    code: 'Biol 1011',
+    title: 'General Biology',
+    amharicTitle: 'አጠቃላይ ባዮሎጂ',
+    stream: 'Natural Science',
+    semester: 'Semester I',
+    subject: 'Biology',
+    creditHours: 3,
+    pages: 196,
+    fileSizeMb: 5.1,
+    rating: 4.9,
+    description: 'Molecular basis of life, cellular structure and organelle biology, bioenergetics (cellular respiration and photosynthesis), molecular genetics, and ecological biodiversity in Ethiopia.',
+    amharicDescription: 'የህይወት ሞለኪውላዊ መሰረት፣ የህዋስ (Cell) አወቃቀር፣ የሃይል አመነጫጨት ስርዓት፣ የዘረ-መል (DNA) ጥናትና ስነ-ምህዳር።',
+    chapters: [
+      'Chapter 1: The Molecular Basis and Chemistry of Life',
+      'Chapter 2: Cell Structure, Function and Membrane Transport',
+      'Chapter 3: Cellular Metabolism, Respiration and Photosynthesis',
+      'Chapter 4: Molecular Genetics, DNA and Protein Synthesis',
+      'Chapter 5: Principles of Ecology and Ethiopian Ecosystems'
+    ]
+  },
+  {
+    id: 'freshman_chemistry',
+    code: 'Chem 1011',
+    title: 'General Chemistry',
+    amharicTitle: 'አጠቃላይ ኬሚስትሪ',
+    stream: 'Natural Science',
+    semester: 'Semester I',
+    subject: 'Chemistry',
+    creditHours: 3,
+    pages: 218,
+    fileSizeMb: 5.5,
+    rating: 4.8,
+    description: 'Atomic structure, quantum mechanical models, periodic trends, chemical bonding and VSEPR theories, gas laws, chemical thermodynamics, kinetics, and chemical equilibrium.',
+    amharicDescription: 'የአተም ውስጣዊ አወቃቀር፣ ኬሚካላዊ ትስስሮች፣ የጋዞች ህግ፣ ቴርሞዳይናሚክስ እና ኬሚካላዊ ምላሽ ፍጥነት።',
+    chapters: [
+      'Chapter 1: Atomic Structure, Quantum Numbers and Periodic Trends',
+      'Chapter 2: Chemical Bonding and Molecular Geometry (VSEPR & Hybridization)',
+      'Chapter 3: States of Matter, Gases and Solution Chemistry',
+      'Chapter 4: Chemical Thermodynamics and Thermochemistry',
+      'Chapter 5: Chemical Kinetics and Reaction Rates',
+      'Chapter 6: Chemical Equilibrium, Acid-Base Systems'
+    ]
+  },
+  {
+    id: 'freshman_physics',
+    code: 'Phys 1011',
+    title: 'General Physics Course Syllabus / General Physics',
+    amharicTitle: 'አጠቃላይ ፊዚክስ',
+    stream: 'Natural Science',
+    semester: 'Semester I',
+    subject: 'Physics',
+    creditHours: 3,
+    pages: 232,
+    fileSizeMb: 5.8,
+    rating: 4.9,
+    description: 'Vectors and coordinate systems, kinematics in 1D & 2D, Newton\'s laws of motion, work-energy theorems, rotational equilibrium, fluid mechanics, oscillations, and thermodynamics.',
+    amharicDescription: 'የቬክተር ስሌቶች፣ የኒውተን የእንቅስቃሴ ህጎች፣ ስራና ጉልበት፣ የማዕበል ባህሪያትና የሙቀት ህጎች (ቴርሞዳይናሚክስ)።',
+    chapters: [
+      'Chapter 1: Vectors, Kinematics and Motion in 1D & 2D',
+      'Chapter 2: Newton\'s Laws of Motion, Work and Energy',
+      'Chapter 3: Rotational Dynamics and Static Equilibrium',
+      'Chapter 4: Fluid Mechanics and Pressure',
+      'Chapter 5: Oscillations, Waves and Optics',
+      'Chapter 6: Heat Transfer and Laws of Thermodynamics'
+    ]
+  },
+  {
+    id: 'freshman_psychology',
+    code: 'Pscy 1011',
+    title: 'General Psychology',
+    amharicTitle: 'አጠቃላይ ሳይኮሎጂ እና የህይወት ክህሎት',
+    stream: 'Common',
+    semester: 'Semester I',
+    subject: 'Psychology',
+    creditHours: 3,
+    pages: 164,
+    fileSizeMb: 3.8,
+    rating: 4.8,
+    description: 'Scientific foundations of behavior and mental processes, neuropsychology, sensation and perception, behavioral conditioning, cognitive memory models, emotion, and vital life skills.',
+    amharicDescription: 'የሰው ልጅ ባህሪና የአእምሮ ሂደት ጥናት፣ የመማር ንድፈ-ሃሳቦች፣ የማስታወስ ችሎታ እና የስነ-ልቦና ህይወት ክህሎቶች።',
+    chapters: [
+      'Chapter 1: Introduction to Psychology & Research Methods',
+      'Chapter 2: Biological Bases of Behavior and Neuroanatomy',
+      'Chapter 3: Sensation, Perception and Attention',
+      'Chapter 4: Theories of Learning (Classical & Operant Conditioning)',
+      'Chapter 5: Human Memory Systems and Forgetting',
+      'Chapter 6: Motivation, Emotion and Life Skills'
+    ]
+  },
+  {
+    id: 'freshman_geography',
+    code: 'GeES 1011',
+    title: 'Geography',
+    amharicTitle: 'የኢትዮጵያና የአፍሪካ ቀንድ ጂኦግራፊ',
+    stream: 'Common',
+    semester: 'Semester I',
+    subject: 'Geography',
+    creditHours: 3,
+    pages: 188,
+    fileSizeMb: 4.6,
+    rating: 4.8,
+    description: 'Spatial configuration of Ethiopia and the Horn, geological formations and landforms, major drainage basins (Blue Nile, Awash, Omo), climate regimes, soils, and population demography.',
+    amharicDescription: 'የኢትዮጵያ መልክዓ-ምድር አቀማመጥ፣ የጂኦሎጂ ታሪክና ተራሮች፣ የወንዞችና ሀይቆች ተፋሰሶች፣ የአየር ንብረትና የህዝብ ስነ-ስብስብ።',
+    chapters: [
+      'Chapter 1: Geographic Setting and Location of Ethiopia and the Horn',
+      'Chapter 2: Geological History and Topography of Ethiopia',
+      'Chapter 3: Drainage Systems and Water Resources of Ethiopia',
+      'Chapter 4: The Climate of Ethiopia and Agro-Ecological Zones',
+      'Chapter 5: Natural Resources, Soils and Vegetation of Ethiopia',
+      'Chapter 6: Population Dynamics and Demography of Ethiopia'
+    ]
+  },
+  {
+    id: 'freshman_global_trends',
+    code: 'GlTr 1012',
+    title: 'Global Trends',
+    amharicTitle: 'አለም አቀፍ አዝማሚያዎች',
+    stream: 'Common',
+    semester: 'Semester II',
+    subject: 'Political Science',
+    creditHours: 3,
+    pages: 156,
+    fileSizeMb: 3.7,
+    rating: 4.7,
+    description: 'Theories of International Relations (Realism, Liberalism, Constructivism), globalization dynamics, global political economy, regional integration in Africa, and contemporary security issues.',
+    amharicDescription: 'የአለም አቀፍ ግንኙነቶች ንድፈ-ሀሳብ፣ ግሎባላይዜሽን፣ የአለም ኢኮኖሚ ስርዓትና የአፍሪካ ቀጣናዊ ትብብር።',
+    chapters: [
+      'Chapter 1: Understanding International Relations and Globalization',
+      'Chapter 2: Theories of International Relations (Realism, Liberalism)',
+      'Chapter 3: Global Political Economy and Development Disparities',
+      'Chapter 4: Regionalism and Regional Integration in Africa',
+      'Chapter 5: Major Global Issues: Security, Environment and Technology'
+    ]
+  },
+  {
+    id: 'freshman_inclusiveness',
+    code: 'Incl 1012',
+    title: 'Inclusiveness',
+    amharicTitle: 'አሳታፊነት (ኢንክሉሲቭነስ)',
+    stream: 'Common',
+    semester: 'Semester II',
+    subject: 'Special Needs',
+    creditHours: 2,
+    pages: 124,
+    fileSizeMb: 3.1,
+    rating: 4.8,
+    description: 'Concepts of impairment, disability and vulnerability, screening and assessment, universal design for learning, assistive devices, and legal human rights frameworks in Ethiopian universities.',
+    amharicDescription: 'ልዩ ፍላጎት ያላቸውን ሰዎች መደገፍ፣ አካታች የትምህርትና ማህበራዊ ስርዓት መገንባት እና በኢትዮጵያ የሰብዓዊ መብት ድንጋጌዎች።',
+    chapters: [
+      'Chapter 1: Understanding Disabilities and Vulnerabilities',
+      'Chapter 2: Assessment and Identification of Special Needs',
+      'Chapter 3: Creating an Inclusive Environment and Universal Design',
+      'Chapter 4: Assistive Technologies and Classroom Accommodations',
+      'Chapter 5: Legal Frameworks, Policies and Human Rights in Ethiopia'
+    ]
+  },
+  {
+    id: 'freshman_civics',
+    code: 'MCiE 1012',
+    title: 'Moral and Civic Education',
+    amharicTitle: 'ስነ-ምግባር እና ዜግነት ትምህርት',
+    stream: 'Common',
+    semester: 'Semester II',
+    subject: 'Civics & Ethics',
+    creditHours: 3,
+    pages: 172,
+    fileSizeMb: 4.0,
+    rating: 4.8,
+    description: 'Normative and applied ethics, the role of state and government, citizenship responsibilities, the FDRE constitution, human and democratic rights, and peaceful conflict resolution.',
+    amharicDescription: 'የስነ-ምግባር ንድፈ-ሃሳቦች፣ የመንግስትና የዜግነት መብትና ግዴታዎች፣ የኢፌዴሪ ህገ-መንግስት እና የሰላም ግንባታ።',
+    chapters: [
+      'Chapter 1: Foundations of Civics, Ethics and Morality',
+      'Chapter 2: Approaches to Ethics (Normative, Deontological, Utilitarian)',
+      'Chapter 3: State, Government, Citizenship and Constitution in Ethiopia',
+      'Chapter 4: Human and Democratic Rights in Democratic Systems',
+      'Chapter 5: Peace Building, Conflict Resolution and National Unity'
+    ]
+  },
+  {
+    id: 'freshman_physical_fitness',
+    code: 'SpSc 1011',
+    title: 'Physical Fitness',
+    amharicTitle: 'የአካል ብቃትና ጤና',
+    stream: 'Common',
+    semester: 'Semester I',
+    subject: 'Sports Science',
+    creditHours: 2,
+    pages: 110,
+    fileSizeMb: 2.8,
+    rating: 4.7,
+    description: 'Health-related and skill-related fitness, cardiovascular endurance, muscular strength and flexibility, principles of exercise prescription (FITT), nutrition, and injury prevention.',
+    amharicDescription: 'የአካል ብቃትና ጤናማ የአኗኗር ዘይቤ፣ የልብና የጡንቻ ብቃት ማጎልበቻ ስልቶች እና የስፖርት አመጋገብ።',
+    chapters: [
+      'Chapter 1: Concepts of Physical Fitness, Wellness and Health',
+      'Chapter 2: Health-Related and Skill-Related Components of Fitness',
+      'Chapter 3: Principles of Exercise Training and Workout Planning',
+      'Chapter 4: Nutrition, Energy Systems and Weight Management',
+      'Chapter 5: Common Sports Injuries, Prevention and First Aid'
+    ]
+  },
+  {
+    id: 'freshman_english_1',
+    code: 'FLEn 1011',
+    title: 'Communicative English Language Skills I (FLEn 1011)',
+    amharicTitle: 'ተግባቦታዊ የእንግሊዝኛ ቋንቋ ክህሎት ፩',
+    stream: 'Common',
+    semester: 'Semester I',
+    subject: 'Languages',
+    creditHours: 3,
+    pages: 135,
+    fileSizeMb: 3.3,
+    rating: 4.9,
+    description: 'Active university study skills, reading comprehension techniques, paragraph structure (topic sentences, support, unity, coherence), syntactic grammar, and academic listening/speaking.',
+    amharicDescription: 'የዩኒቨርሲቲ የንባብና ማስታወሻ መያዝ ክህሎቶች፣ የአንቀጽ (Paragraph) አወቃቀርና የአካዳሚክ የእንግሊዝኛ ሰዋስው።',
+    chapters: [
+      'Chapter 1: Study Skills, Active Reading and Note-Taking Strategies',
+      'Chapter 2: Paragraph Organization, Unity and Coherence',
+      'Chapter 3: Sentence Structure, Coordination and Subordination',
+      'Chapter 4: Academic Vocabulary in Context',
+      'Chapter 5: Oral Communication and Presentation Techniques'
+    ]
+  },
+  {
+    id: 'freshman_english_2',
+    code: 'FLEn 1012',
+    title: 'Communicative English Language Skills II',
+    amharicTitle: 'ተግባቦታዊ የእንግሊዝኛ ቋንቋ ክህሎት ፪',
+    stream: 'Common',
+    semester: 'Semester II',
+    subject: 'Languages',
+    creditHours: 3,
+    pages: 140,
+    fileSizeMb: 3.5,
+    rating: 4.8,
+    description: 'Advanced critical reading, expository and argumentative essay writing, academic referencing and citation standards (APA/MLA), paraphrasing, summarizing, and research proposals.',
+    amharicDescription: 'የአካዳሚክ ድርሰት (Essay) አጻጻፍ፣ የዋቢ መጽሐፍ አጠቃቀስ (APA/MLA)፣ እና የምርምር ፕሮፖዛል ዝግጅት።',
+    chapters: [
+      'Chapter 1: Advanced Reading: Critical Thinking and Inferences',
+      'Chapter 2: Academic Essay Writing: Expository and Argumentative',
+      'Chapter 3: Mechanics of Academic Writing and APA Referencing',
+      'Chapter 4: Summary Writing, Paraphrasing and Synthesizing',
+      'Chapter 5: Formal Business Letters, CVs and Research Proposals'
+    ]
+  },
+  {
+    id: 'freshman_history',
+    code: 'Hist 1012',
+    title: 'History of Ethiopia and the Horn',
+    amharicTitle: 'የኢትዮጵያና የአፍሪካ ቀንድ ታሪክ',
+    stream: 'Common',
+    semester: 'Semester II',
+    subject: 'History',
+    creditHours: 3,
+    pages: 198,
+    fileSizeMb: 4.8,
+    rating: 5.0,
+    description: 'Historiography, human origins in the Rift Valley, Axumite civilization, Zagwe dynasty, medieval religious dynamics, modern state consolidation, the Battle of Adwa, and 20th-century Ethiopia.',
+    amharicDescription: 'የሰው ልጅ አመጣጥ በጥንታዊት ኢትዮጵያ፣ የአክሱምና የላሊበላ ስልጣኔዎች፣ የሀገር ግንባታ ሂደትና የዐድዋ ድል ታሪክ።',
+    chapters: [
+      'Chapter 1: Introduction to History and Human Evolution in the Horn',
+      'Chapter 2: Peoples and Cultures: Language Families and Religious History',
+      'Chapter 3: Politics, Economy and Society (Axum, Zagwe & Medieval Period)',
+      'Chapter 4: Contact with the Outside World and the Jesuit Mission',
+      'Chapter 5: Modern State Formation, Adwa Victory and Independence',
+      'Chapter 6: Ethiopia in the 20th Century: Modernization, Revolution & Federalism'
+    ]
+  },
+  {
+    id: 'freshman_math_natural',
+    code: 'Math 1011',
+    title: 'Mathematics (Natural Science Module)',
+    amharicTitle: 'የተፈጥሮ ሳይንስ ሂሳብ (ማትሪክስና ካልኩለስ)',
+    stream: 'Natural Science',
+    semester: 'Semester I',
+    subject: 'Mathematics',
+    creditHours: 4,
+    pages: 245,
+    fileSizeMb: 6.2,
+    rating: 4.9,
+    description: 'Propositional logic, set theory, real and complex number systems, analytical conic sections, limit definitions, continuity theorems, and differential calculus with applied physical modeling.',
+    amharicDescription: 'የፕሮፖዚሽናል ሎጂክ፣ የኮምፕሌክስ ቁጥሮች ስሌት፣ ኮኒክ ሴክሽኖች (Parabola, Ellipse) እና የዲፈረንሺያል ካልኩለስ ቀመሮች።',
+    chapters: [
+      'Chapter 1: Propositional Logic and Set Theory',
+      'Chapter 2: The Real and Complex Number Systems',
+      'Chapter 3: Functions: Polynomial, Rational, Exponential and Trigonometric',
+      'Chapter 4: Analytic Geometry: Conic Sections (Parabola, Ellipse, Hyperbola)',
+      'Chapter 5: Limits and Continuity',
+      'Chapter 6: Derivatives and Applications of Differential Calculus'
+    ]
+  },
+  {
+    id: 'freshman_math_social',
+    code: 'Math 1012',
+    title: 'Mathematics (Social Science Module)',
+    amharicTitle: 'የማህበራዊ ሳይንስ ሂሳብ',
+    stream: 'Social Science',
+    semester: 'Semester I',
+    subject: 'Mathematics',
+    creditHours: 3,
+    pages: 205,
+    fileSizeMb: 4.9,
+    rating: 4.8,
+    description: 'Logic and sets, systems of linear equations and matrices, mathematics of finance (simple and compound interest, annuities, amortization), business calculus, and descriptive statistics.',
+    amharicDescription: 'የማትሪክስ ስሌት፣ የፋይናንስ ሂሳብ (ወለድና አኑዪቲ)፣ ለንግድና ኢኮኖሚክስ የሚውል ካልኩለስ እና መሰረታዊ ስታቲስቲክስ።',
+    chapters: [
+      'Chapter 1: Logic, Sets and Mathematical Reasoning',
+      'Chapter 2: Real Numbers and Algebraic Expressions',
+      'Chapter 3: Linear Equations, Matrices and Systems of Inequalities',
+      'Chapter 4: Mathematics of Finance: Simple & Compound Interest, Annuities',
+      'Chapter 5: Introduction to Differential Calculus for Business & Economics',
+      'Chapter 6: Basic Probability and Descriptive Statistics'
+    ]
+  },
+  {
+    id: 'freshman_anthropology',
+    code: 'Anth 1012',
+    title: 'Social Anthropology',
+    amharicTitle: 'ማህበራዊ አንትሮፖሎጂ',
+    stream: 'Common',
+    semester: 'Semester II',
+    subject: 'Anthropology',
+    creditHours: 3,
+    pages: 168,
+    fileSizeMb: 3.9,
+    rating: 4.9,
+    description: 'Sub-fields of anthropology, ethnography, anthropological theories of culture, kinship and descent systems in Ethiopia, marriage rules, religious worldviews, and customary dispute resolution.',
+    amharicDescription: 'የባህልና የሰው ዘር ጥናት፣ የዝምድናና ጋብቻ ስርዓቶች በኢትዮጵያ፣ እና ባህላዊ የግጭት አፈታት መንገዶች።',
+    chapters: [
+      'Chapter 1: Introducing Anthropology and Its Sub-Fields',
+      'Chapter 2: Theories and Concepts of Culture',
+      'Chapter 3: Human Diversity, Race and Ethnicity',
+      'Chapter 4: Kinship, Marriage and Family Systems in Ethiopia',
+      'Chapter 5: Religion, Belief Systems and Worldviews',
+      'Chapter 6: Indigenous Knowledge Systems and Customary Conflict Resolution'
+    ]
   }
-
-  // If already matches ModuleResource shape with array of string chapters
-  if (raw.id && raw.title && raw.subject && Array.isArray(raw.chapters) && typeof raw.chapters[0] === 'string' && raw.pages && raw.grade) {
-    return raw as ModuleResource;
-  }
-
-  const id = String(raw.id || raw._id || raw.book_id || raw.code || 'book_' + Math.random().toString(36).substring(7));
-  const title = String(raw.title || raw.book_title || raw.name || 'Academic Course Textbook');
-  const subject = String(raw.subject || raw.course || raw.department || raw.category || 'General Curriculum');
-  
-  // Extract or generate chapters
-  let chapters: string[] = [];
-  if (Array.isArray(raw.chapters) && raw.chapters.length > 0) {
-    chapters = raw.chapters.map((ch: any, idx: number) => {
-      if (typeof ch === 'string') return ch;
-      if (ch && ch.title) return `Chapter ${ch.chapterNumber || idx + 1}: ${ch.title}`;
-      return `Chapter ${idx + 1}`;
-    });
-  } else if (raw.unit) {
-    chapters = [raw.unit, 'Core Concepts & Analytical Principles', 'Solved Model Questions & Exercises'];
-  } else {
-    chapters = [
-      'Chapter 1: Foundations & Core Principles',
-      'Chapter 2: In-Depth Conceptual Analysis',
-      'Chapter 3: Solved Problems & Practical Exercises',
-      'Chapter 4: Exam Review & Summary'
-    ];
-  }
-
-  // Calculate or read page count
-  const pages = Number(raw.pages || raw.pageCount || raw.page_count) || 
-    (raw.fileSize ? Math.max(10, Math.round(Number(raw.fileSize) / 50000)) : 160);
-
-  // Grade / Academic Year
-  let grade = raw.grade || raw.academicYear || raw.academic_year || 'University';
-  if (!grade.toLowerCase().includes('grade') && !grade.toLowerCase().includes('university')) {
-    grade = `University (${grade})`;
-  }
-
-  // Description
-  const description = raw.description || 
-    (raw.course ? `${raw.course} - ${raw.department || ''} (${raw.university || 'Wolkite University'}) verified curriculum module.` : 
-    `${title} official study textbook for Ethiopian higher education.`);
-
-  return {
-    id,
-    title,
-    subject,
-    grade,
-    chapters,
-    pages,
-    description,
-    languageSupport: raw.languageSupport || 'Bilingual',
-    proRequired: Boolean(raw.proRequired || raw.accessLevel === 'pro' || raw.access_level === 'pro'),
-    pdfUrl: raw.pdfUrl || raw.pdf_url || raw.fileUrl || raw.file_url || raw.url || raw.downloadUrl || raw.download_url,
-    contentJson: typeof raw.contentJson === 'string' ? raw.contentJson : (raw.content_json ? JSON.stringify(raw.content_json) : undefined),
-    isServerRecord: Boolean(raw.isServerRecord || raw.isSupabase || raw.createdAt),
-    isSupabase: Boolean(raw.isSupabase || raw.supabase),
-    fileSize: raw.fileSize || raw.file_size,
-    allowDownload: raw.allowDownload !== false && raw.allow_download !== false,
-    department: raw.department,
-    university: raw.university || 'Ethiopian University',
-    course: raw.course,
-    rating: Number(raw.rating) || 4.9
-  };
-}
+];
 
 export default function BookStoreView({
   profile,
   apiKey,
   language,
   onNavigate,
-  onStudyAction,
-  books,
-  supabaseBooks,
-  onOpenInAppViewer
+  onStudyAction
 }: BookStoreViewProps) {
-  // Search & Filter States
+  // Search & Stream Filter States
   const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [selectedFaculty, setSelectedFaculty] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<'rating' | 'title' | 'pages'>('rating');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [selectedStream, setSelectedStream] = useState<'all' | 'Common' | 'Natural Science' | 'Social Science' | 'favorites'>('all');
+  const [sortBy, setSortBy] = useState<'rating' | 'title' | 'code' | 'pages'>('code');
 
-  // Debounce search query
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(searchQuery);
-    }, 200);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  // Favorites state
-  const [favoriteBookIds, setFavoriteBookIds] = useState<string[]>(() => {
+  // Favorites state persisted in localStorage
+  const [favoriteIds, setFavoriteIds] = useState<string[]>(() => {
     try {
-      const saved = safeStorage.getItem('ethiolearn_favorite_books');
+      const saved = safeStorage.getItem('ethiolearn_fav_freshman_modules');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
     }
   });
 
-  const toggleFavorite = (id: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
+  const toggleFavorite = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     playClickChime();
-    setFavoriteBookIds(prev => {
+    setFavoriteIds(prev => {
       const updated = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
-      safeStorage.setItem('ethiolearn_favorite_books', JSON.stringify(updated));
+      safeStorage.setItem('ethiolearn_fav_freshman_modules', JSON.stringify(updated));
       return updated;
     });
   };
 
-  // Recent books persistence
-  const [recentBookIds, setRecentBookIds] = useState<string[]>(() => {
-    try {
-      const saved = safeStorage.getItem('ethiolearn_recent_books');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  const recordRecentBook = (id: string) => {
-    setRecentBookIds(prev => {
-      const filtered = prev.filter(x => x !== id);
-      const updated = [id, ...filtered].slice(0, 4);
-      safeStorage.setItem('ethiolearn_recent_books', JSON.stringify(updated));
-      return updated;
-    });
-  };
-
-  // Custom books state
-  const [customBooks, setCustomBooks] = useState<ModuleResource[]>(() => {
-    try {
-      const saved = safeStorage.getItem('ethiolearn_custom_books');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  // Server books state & refresh handling
-  const [serverBooks, setServerBooks] = useState<ModuleResource[]>([]);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
-  const loadServerBooks = useCallback(async () => {
-    try {
-      const fetched = await fetchPublishedBooks();
-      if (fetched && fetched.length > 0) {
-        const mapped = fetched.map(b => mapToModuleResource(b));
-        setServerBooks(mapped);
+  // Filtered & Sorted Modules
+  const filteredModules = useMemo(() => {
+    return FRESHMAN_MODULES.filter(mod => {
+      // Stream Filter
+      if (selectedStream === 'favorites') {
+        if (!favoriteIds.includes(mod.id)) return false;
+      } else if (selectedStream !== 'all' && mod.stream !== selectedStream) {
+        return false;
       }
-    } catch (err) {
-      console.warn('Could not fetch server books:', err);
-    }
-  }, []);
 
-  useEffect(() => {
-    loadServerBooks();
-  }, [loadServerBooks]);
-
-  const handleRefresh = async () => {
-    playClickChime();
-    setIsRefreshing(true);
-    await loadServerBooks();
-    setTimeout(() => {
-      setIsRefreshing(false);
-      playSuccessChime();
-    }, 400);
-  };
-
-  // Map Supabase books if passed via props
-  const mappedSupabaseBooks = useMemo(() => {
-    if (!supabaseBooks || !Array.isArray(supabaseBooks) || supabaseBooks.length === 0) return [];
-    return supabaseBooks.map(b => mapToModuleResource({ ...b, isSupabase: true }));
-  }, [supabaseBooks]);
-
-  // Map directly injected books if passed via props
-  const mappedPropsBooks = useMemo(() => {
-    if (!books || !Array.isArray(books) || books.length === 0) return [];
-    return books.map(b => mapToModuleResource(b));
-  }, [books]);
-
-  // Combined master catalog with clean deduplication by id and title
-  const catalog = useMemo(() => {
-    const bookMap = new Map<string, ModuleResource>();
-
-    // 1. Prebuilt default baseline modules
-    PREBUILT_MODULES.forEach(b => bookMap.set(b.id, b));
-
-    // 2. Server books from Firestore fetchPublishedBooks()
-    serverBooks.forEach(b => bookMap.set(b.id, b));
-
-    // 3. Supabase books
-    mappedSupabaseBooks.forEach(b => bookMap.set(b.id, b));
-
-    // 4. Directly passed books
-    mappedPropsBooks.forEach(b => bookMap.set(b.id, b));
-
-    // 5. Custom uploaded books
-    customBooks.forEach(b => bookMap.set(b.id, b));
-
-    return Array.from(bookMap.values());
-  }, [serverBooks, mappedSupabaseBooks, mappedPropsBooks, customBooks]);
-
-  // Filtered & Sorted Catalog
-  const filteredBooks = useMemo(() => {
-    return catalog.filter(book => {
-      // Search match
-      if (debouncedSearch.trim()) {
-        const q = debouncedSearch.toLowerCase();
-        const matchTitle = book.title.toLowerCase().includes(q);
-        const matchSubject = book.subject.toLowerCase().includes(q);
-        const matchGrade = book.grade.toLowerCase().includes(q);
-        const matchDesc = book.description.toLowerCase().includes(q);
-        const matchDept = (book.department || '').toLowerCase().includes(q);
-        if (!matchTitle && !matchSubject && !matchGrade && !matchDesc && !matchDept) {
+      // Search Query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchTitle = mod.title.toLowerCase().includes(q);
+        const matchCode = mod.code.toLowerCase().includes(q);
+        const matchSubject = mod.subject.toLowerCase().includes(q);
+        const matchAmharic = mod.amharicTitle.includes(q) || mod.amharicDescription.includes(q);
+        const matchDesc = mod.description.toLowerCase().includes(q);
+        if (!matchTitle && !matchCode && !matchSubject && !matchAmharic && !matchDesc) {
           return false;
         }
-      }
-
-      // Faculty / Category match
-      if (selectedFaculty === 'favorites') {
-        return favoriteBookIds.includes(book.id);
-      } else if (selectedFaculty === 'university') {
-        return book.grade.toLowerCase().includes('university');
-      } else if (selectedFaculty === 'grade12') {
-        return book.grade.toLowerCase().includes('grade 12');
-      } else if (selectedFaculty === 'engineering') {
-        const s = (book.subject + ' ' + (book.department || '')).toLowerCase();
-        return s.includes('engineering') || s.includes('math') || s.includes('applied') || s.includes('computer') || s.includes('tech') || s.includes('physics');
-      } else if (selectedFaculty === 'medicine') {
-        const s = (book.subject + ' ' + (book.department || '')).toLowerCase();
-        return s.includes('biology') || s.includes('health') || s.includes('medicine') || s.includes('chemistry');
-      } else if (selectedFaculty === 'business') {
-        const s = (book.subject + ' ' + (book.department || '')).toLowerCase();
-        return s.includes('economics') || s.includes('business') || s.includes('entrepreneurship') || s.includes('accounting');
-      } else if (selectedFaculty === 'social') {
-        const s = (book.subject + ' ' + (book.department || '')).toLowerCase();
-        return s.includes('anthropology') || s.includes('logic') || s.includes('psychology') || s.includes('civics') || s.includes('geography') || s.includes('history') || s.includes('inclusiveness');
       }
 
       return true;
     }).sort((a, b) => {
       if (sortBy === 'title') return a.title.localeCompare(b.title);
+      if (sortBy === 'code') return a.code.localeCompare(b.code);
       if (sortBy === 'pages') return b.pages - a.pages;
-      return (b.rating || 4.8) - (a.rating || 4.8);
+      return b.rating - a.rating;
     });
-  }, [catalog, debouncedSearch, selectedFaculty, favoriteBookIds, sortBy]);
+  }, [selectedStream, searchQuery, favoriteIds, sortBy]);
 
-  // E-Book Reader States
-  const [readerOpen, setReaderOpen] = useState(false);
-  const [activeBook, setActiveBook] = useState<ModuleResource | null>(null);
-  const [activeChapter, setActiveChapter] = useState<string>('');
-  const [readerTheme, setReaderTheme] = useState<'dark' | 'midnight' | 'sepia'>('dark');
-  const [readerFontSize, setReaderFontSize] = useState<number>(15);
-  const [readerFontFamily, setReaderFontFamily] = useState<'sans' | 'serif'>('sans');
-  const [readerViewMode, setReaderViewMode] = useState<'chapters' | 'pdf'>('chapters');
-  const [readerSidebarOpen, setReaderSidebarOpen] = useState(true);
+  // ---------------------------------------------------------------------------
+  // 📖 PURE IN-APP PDF READER MODAL STATE
+  // ---------------------------------------------------------------------------
+  const [activePdfModule, setActivePdfModule] = useState<FreshmanModule | null>(null);
+  const [activeChapterIndex, setActiveChapterIndex] = useState<number>(0);
+  const [pdfZoom, setPdfZoom] = useState<number>(100);
+  const [pdfTheme, setPdfTheme] = useState<'paper' | 'dark'>('paper');
+  const [pdfSidebarOpen, setPdfSidebarOpen] = useState<boolean>(true);
+  const [readerFontSize, setReaderFontSize] = useState<number>(17);
+  const [searchInDoc, setSearchInDoc] = useState<string>('');
+  const [aiPanelOpen, setAiPanelOpen] = useState<boolean>(false);
+  const [aiMode, setAiMode] = useState<'summary' | 'amharic' | 'quiz' | null>(null);
+  const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
 
-  // AI Tutor in Reader states
-  const [aiPanelOpen, setAiPanelOpen] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiResponse, setAiResponse] = useState('');
-  const [aiPromptInput, setAiPromptInput] = useState('');
-  const [activePracticeQuiz, setActivePracticeQuiz] = useState<any[] | null>(null);
-  const [quizScore, setQuizScore] = useState<number | null>(null);
-  const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({});
-
-  // Open Book Action (Direct, Instant, Unrestricted)
-  const handleOpenBook = (book: ModuleResource, chapterIndex: number = 0) => {
+  const handleOpenPdf = (mod: FreshmanModule, chapterIdx: number = 0) => {
     playClickChime();
-    setActiveBook(book);
-    setActiveChapter(book.chapters[chapterIndex] || book.chapters[0] || 'Chapter 1');
-    setReaderViewMode('chapters');
-    setAiResponse('');
-    setActivePracticeQuiz(null);
-    setQuizScore(null);
-    setSelectedAnswers({});
-    setReaderOpen(true);
-    recordRecentBook(book.id);
+    setActivePdfModule(mod);
+    setActiveChapterIndex(chapterIdx);
+    setSearchInDoc('');
+    setAiPanelOpen(false);
+    setAiMode(null);
+    setQuizAnswers({});
     onStudyAction();
   };
 
-  // Add Custom Book Modal State
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [customTitle, setCustomTitle] = useState('');
-  const [customSubject, setCustomSubject] = useState('');
-  const [customGrade, setCustomGrade] = useState('University');
-  const [customChapters, setCustomChapters] = useState('');
-  const [customPages, setCustomPages] = useState('120');
-  const [customDescription, setCustomDescription] = useState('');
-  const [customPdfUrl, setCustomPdfUrl] = useState('');
-
-  const handleSaveCustomBook = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!customTitle.trim() || !customSubject.trim()) return;
-
-    const chaptersArray = customChapters
-      .split('\n')
-      .map(c => c.trim())
-      .filter(Boolean);
-
-    const newBook: ModuleResource = {
-      id: `custom_${Date.now()}`,
-      title: customTitle.trim(),
-      subject: customSubject.trim(),
-      grade: customGrade,
-      chapters: chaptersArray.length > 0 ? chaptersArray : ['Chapter 1: Overview', 'Chapter 2: In-Depth Notes'],
-      pages: parseInt(customPages, 10) || 100,
-      description: customDescription.trim() || 'Custom textbook notes uploaded by scholar.',
-      languageSupport: 'Bilingual',
-      proRequired: false,
-      pdfUrl: customPdfUrl.trim() || undefined,
-      rating: 5.0
-    };
-
-    const updated = [newBook, ...customBooks];
-    setCustomBooks(updated);
-    safeStorage.setItem('ethiolearn_custom_books', JSON.stringify(updated));
-    playSuccessChime();
-    setShowAddModal(false);
-    setCustomTitle('');
-    setCustomSubject('');
-    setCustomChapters('');
-    setCustomDescription('');
-    setCustomPdfUrl('');
-  };
-
-  // Dynamic Subject Theme styling helper
-  const getSubjectVisual = (subject: string) => {
-    const s = subject.toLowerCase();
-    if (s.includes('math') || s.includes('calculus')) {
-      return { gradient: 'from-blue-600 via-indigo-600 to-cyan-600', icon: '📐', bgTag: 'bg-blue-500/10 text-blue-400 border-blue-500/20' };
-    } else if (s.includes('physics')) {
-      return { gradient: 'from-violet-600 via-purple-600 to-indigo-700', icon: '⚡', bgTag: 'bg-violet-500/10 text-violet-400 border-violet-500/20' };
-    } else if (s.includes('chemistry')) {
-      return { gradient: 'from-emerald-600 via-teal-600 to-green-700', icon: '🧪', bgTag: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' };
-    } else if (s.includes('biology')) {
-      return { gradient: 'from-green-600 via-emerald-600 to-teal-700', icon: '🧬', bgTag: 'bg-green-500/10 text-green-400 border-green-500/20' };
-    } else if (s.includes('english')) {
-      return { gradient: 'from-sky-600 via-blue-600 to-indigo-700', icon: '💬', bgTag: 'bg-sky-500/10 text-sky-400 border-sky-500/20' };
-    } else if (s.includes('economics') || s.includes('business')) {
-      return { gradient: 'from-amber-600 via-orange-600 to-yellow-600', icon: '📊', bgTag: 'bg-amber-500/10 text-amber-400 border-amber-500/20' };
-    } else if (s.includes('logic') || s.includes('psychology')) {
-      return { gradient: 'from-pink-600 via-rose-600 to-purple-600', icon: '🧠', bgTag: 'bg-pink-500/10 text-pink-400 border-pink-500/20' };
-    } else if (s.includes('computer') || s.includes('it') || s.includes('tech')) {
-      return { gradient: 'from-cyan-600 via-teal-600 to-slate-700', icon: '💻', bgTag: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' };
-    } else if (s.includes('history') || s.includes('civics') || s.includes('anthropology')) {
-      return { gradient: 'from-red-600 via-amber-700 to-yellow-700', icon: '🏛️', bgTag: 'bg-red-500/10 text-red-400 border-red-500/20' };
-    } else if (s.includes('geography')) {
-      return { gradient: 'from-teal-600 via-emerald-600 to-sky-700', icon: '🌍', bgTag: 'bg-teal-500/10 text-teal-400 border-teal-500/20' };
-    }
-    return { gradient: 'from-indigo-600 via-purple-600 to-blue-700', icon: '📚', bgTag: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' };
-  };
-
-  // AI Tutor Quick Actions
-  const handleAiAction = (mode: 'summary' | 'formulas' | 'amharic' | 'quiz') => {
-    if (!activeBook) return;
+  const handleClosePdf = () => {
     playClickChime();
-    setAiLoading(true);
-    setAiPanelOpen(true);
-    setActivePracticeQuiz(null);
-    setQuizScore(null);
-
-    const content = getChapterContent(activeBook.id, activeChapter, activeBook.contentJson);
-
-    setTimeout(() => {
-      if (mode === 'summary') {
-        let text = `### 📖 Chapter Summary: ${activeChapter}\n`;
-        text += `**Textbook:** ${activeBook.title} (${activeBook.subject})\n\n`;
-        text += `**Core Thesis:**\n${content.intro}\n\n`;
-        text += `#### Key Highlights:\n`;
-        content.sections.forEach(s => {
-          text += `* **${s.title}**: ${s.body.slice(0, 180)}...\n`;
-        });
-        if (content.examAlert) {
-          text += `\n⚠️ **National Exam Alert**: ${content.examAlert}\n`;
-        }
-        setAiResponse(text);
-      } else if (mode === 'formulas') {
-        let text = `### 🧮 Important Formulas & Core Equations: ${activeChapter}\n\n`;
-        if (content.formulas && content.formulas.length > 0) {
-          content.formulas.forEach(f => {
-            text += `#### ${f.name}\n`;
-            text += `\`\`\`\n${f.formula}\n\`\`\`\n`;
-            text += `*Concept & Application*: ${f.description}\n\n`;
-          });
-        } else {
-          text += `*No mathematical equations in this chapter. Key conceptual relationships:*\n`;
-          content.keyTerms.forEach(t => {
-            text += `* **${t.term}**: ${t.definition}\n`;
-          });
-        }
-        setAiResponse(text);
-      } else if (mode === 'amharic') {
-        let text = `### 🇪🇹 በአማርኛ ማብራሪያ (Amharic Explanation): ${activeChapter}\n\n`;
-        text += `ይህ ምዕራፍ በዋናነት የሚያተኩረው በሚከተሉት ቁልፍ ነጥቦች ላይ ነው፦\n\n`;
-        content.keyTerms.forEach(k => {
-          text += `* **${k.term}** (${k.amharic || 'ፍቺ'})፦ ${k.definition}\n`;
-        });
-        text += `\n**የፈተና ምክር (Exam Tip)፦** በፈተና ወቅት የቃላቱን ትርጉምና ቀመሮቹን በጥንቃቄ በማስተዋል መልስ መስጠት ይመረጣል።\n`;
-        setAiResponse(text);
-      } else if (mode === 'quiz') {
-        const generated = [
-          {
-            id: 1,
-            question: `Which fundamental principle is central to "${activeChapter}"?`,
-            options: [
-              `The core relationship defined in: ${content.sections[0]?.title || 'Section 1'}`,
-              `Arbitrary external variables with no proven empirical model`,
-              `Non-systemic random observation without theoretical foundation`,
-              `Traditional unverified assumptions prior to modern curriculum`
-            ],
-            correctIndex: 0,
-            explanation: `As outlined in ${activeBook.title}, the official Ethiopian curriculum establishes this foundational law.`
-          },
-          {
-            id: 2,
-            question: `In university and national matric evaluations, what is essential when analyzing "${content.keyTerms[0]?.term || 'key definitions'}"?`,
-            options: [
-              `Disregarding boundary values and theoretical constraints`,
-              `Recognizing both the analytical formula and its physical/conceptual meaning`,
-              `Memorizing only the title without practical step-by-step application`,
-              `Ignoring unit consistency and scientific notations`
-            ],
-            correctIndex: 1,
-            explanation: `Standard examination rubrics award full marks for accurate conceptual precision and step-by-step logic.`
-          },
-          {
-            id: 3,
-            question: `What distinguishes the primary approach in this subject?`,
-            options: [
-              `Subjective guessing without mathematical derivation`,
-              `Rigorous deductive framework matching university standards`,
-              `Unrelated cross-domain tangents`,
-              `Omitting prerequisites and proofs`
-            ],
-            correctIndex: 1,
-            explanation: `The EthioLearn academic standard emphasizes deductive rigor and verified curriculum alignment.`
-          }
-        ];
-        setActivePracticeQuiz(generated);
-        setAiResponse('');
-      }
-      setAiLoading(false);
-      playSuccessChime();
-    }, 200);
+    setActivePdfModule(null);
   };
 
-  // Recent book items helper
-  const recentBooks = useMemo(() => {
-    return recentBookIds
-      .map(id => catalog.find(b => b.id === id))
-      .filter(Boolean) as ModuleResource[];
-  }, [recentBookIds, catalog]);
+  const currentChapterTitle = activePdfModule?.chapters[activeChapterIndex] || 'Chapter 1';
+  const currentChapterContent = useMemo(() => {
+    if (!activePdfModule) return null;
+    return getChapterContent(activePdfModule.id, currentChapterTitle);
+  }, [activePdfModule, currentChapterTitle]);
+
+  const handlePrintPdf = () => {
+    playClickChime();
+    window.print();
+  };
 
   return (
     <div className="min-h-screen bg-[#0A1128] text-slate-100 pb-28 pt-4 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto font-sans">
       
       {/* ========================================================================= */}
-      {/* 🏛️ PRO HEADER: DIGITAL ACADEMIC LIBRARY HERO BANNER */}
-      <div className="relative overflow-hidden rounded-2xl bg-[#111C35] border border-slate-800 p-5 sm:p-7 shadow-sm mb-6">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 max-w-3xl">
-            {/* Primary Book Icon with Coming Soon Banner */}
-            <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-[#17233D] border border-slate-700/80 flex items-center justify-center shrink-0 shadow-sm">
-              <BookOpen className="w-7 h-7 sm:w-8 sm:h-8 text-amber-400" />
-              {/* Coming Soon Banner overlay directly on the Book icon */}
-              <div className="absolute -top-2 -right-2.5 px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black text-[9px] uppercase tracking-wider shadow border border-amber-300/40 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-950 animate-pulse" />
-                <span>{language === 'am' ? 'በቅርቡ' : 'Coming Soon'}</span>
-              </div>
+      {/* 🏛️ CLEAN & PURE HEADER: ETHIOPIAN FRESHMAN MODULES DIGITAL LIBRARY       */}
+      {/* ========================================================================= */}
+      <div className="mb-6 p-5 sm:p-6 rounded-2xl bg-[#111C35] border border-slate-800 shadow-sm relative overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-12 h-14 sm:w-14 sm:h-16 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col items-center justify-center shrink-0 shadow-inner">
+              <span className="text-[10px] font-black tracking-widest text-amber-400 uppercase">PDF</span>
+              <FileText className="w-6 h-6 text-amber-400 mt-0.5" />
             </div>
-
-            <div className="space-y-1.5">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[11px] font-bold">
-                <Sparkles className="w-3 h-3" />
-                <span>{language === 'am' ? 'ክፍት የትምህርት መጻሕፍት' : 'Free Open Access Curriculum'}</span>
+            
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold">
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>{language === 'am' ? 'ኦፊሴላዊ የትምህርት ሚኒስቴር ካሪኩለም' : 'Official MoE Curriculum'}</span>
+                </span>
+                <span className="text-xs text-slate-400">•</span>
+                <span className="text-xs text-amber-400 font-semibold">19 Freshman Modules</span>
               </div>
-              
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-white leading-tight">
-                {language === 'am' ? 'የኢትዮለርን አካዳሚክ ቤተ-መጽሐፍት' : 'EthioLearn Pro Academic Library'}
+
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-white">
+                {language === 'am' ? 'የኢትዮጵያ ዩኒቨርሲቲ የፈርስት ኢየር (Freshman) ሞጁሎች' : 'Ethiopian University Freshman Modules'}
               </h1>
-              
-              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-normal">
-                {language === 'am' 
-                  ? 'የዩኒቨርሲቲ ሞጁሎችና የ12ኛ ክፍል ማትሪክ መማሪያ መጻሕፍት። ማናቸውንም መጽሐፍ ያለምንም ገደብ ወዲያውኑ ይክፈቱ፣ ያንብቡና ይማሩ።'
-                  : 'Access official Ethiopian University course modules and Grade 12 national matric textbooks. Open whatever book you need instantly.'}
-              </p>
 
-              {/* Quick Metrics Ribbon */}
-              <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-400">
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#17233D] text-amber-300 font-semibold border border-slate-700/60">
-                  <BookOpen className="w-3 h-3 text-amber-400" />
-                  <span>{language === 'am' ? 'በቅርቡ የሚደርሱ የታተሙ መጻሕፍት' : 'Hardcover Bookstore Coming Soon'}</span>
-                </span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#17233D] text-slate-300 border border-slate-700/60">
-                  <span>{catalog.length} {language === 'am' ? 'መጻሕፍት' : 'Textbooks'}</span>
-                </span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#17233D] text-emerald-400 border border-slate-700/60 font-semibold">
-                  <CheckCircle className="w-3 h-3" />
-                  <span>{language === 'am' ? 'ክፍት መዳረሻ' : 'All Free & Unlocked'}</span>
-                </span>
-              </div>
+              <p className="text-xs sm:text-sm text-slate-300 font-normal leading-relaxed max-w-3xl">
+                {language === 'am'
+                  ? 'ለሁሉም የኢትዮጵያ ዩኒቨርሲቲዎች የመጀመሪያ አመት ተማሪዎች የተዘጋጁ 19 ኦፊሴላዊ የፒዲኤፍ (PDF) ሞጁሎች። ያለምንም ውጫዊ ድረ-ገጽ እዚሁ በቀላሉ ያንብቡ።'
+                  : 'Official Ministry of Education (MoE) curriculum modules for first-year Ethiopian university students. Pure, clean, self-contained PDF reader.'}
+              </p>
             </div>
           </div>
 
-          {/* Action Buttons: Add Custom Book + Sync/Refresh Books */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            <button
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-              className="h-10 min-h-[40px] px-3 bg-[#17233D] hover:bg-[#1E2D4E] border border-slate-700 text-slate-200 font-semibold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer active:scale-98 shadow-sm"
-              title={language === 'am' ? 'መጻሕፍትን አድስ' : 'Refresh and sync books from database'}
-            >
-              <RefreshCw className={`w-3.5 h-3.5 text-amber-400 ${isRefreshing ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">{language === 'am' ? 'አድስ' : 'Sync Books'}</span>
-            </button>
-
-            <button
-              onClick={() => { playClickChime(); setShowAddModal(true); }}
-              className="h-10 min-h-[40px] px-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center gap-2 cursor-pointer active:scale-98 shadow-sm"
-            >
-              <Plus className="w-4 h-4 text-slate-950" />
-              <span>{language === 'am' ? 'መጽሐፍ ጨምር' : 'Add Custom Book'}</span>
-            </button>
+          {/* Quick Counter */}
+          <div className="flex items-center gap-2 self-start md:self-center shrink-0 bg-[#17233D] px-3.5 py-2 rounded-xl border border-slate-700/60 text-xs font-semibold text-slate-200">
+            <Layers className="w-4 h-4 text-amber-400" />
+            <span>{filteredModules.length} {language === 'am' ? 'ሞጁሎች ይገኛሉ' : 'Modules Available'}</span>
           </div>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* ⏱️ CONTINUE READING SHELF (Recent Books if available)                    */}
+      {/* 🔍 SEARCH & STREAM SELECTOR                                               */}
       {/* ========================================================================= */}
-      {recentBooks.length > 0 && (
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-3 px-1">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-              <Bookmark className="w-4 h-4 text-amber-400" />
-              <span>{language === 'am' ? 'በቅርብ የተነበቡ' : 'Continue Reading'}</span>
-            </h3>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {recentBooks.map(book => {
-              const visual = getSubjectVisual(book.subject);
-              return (
-                <div
-                  key={`recent_${book.id}`}
-                  onClick={() => handleOpenBook(book)}
-                  className="p-3.5 rounded-xl bg-[#101A33] border border-white/10 hover:border-amber-500/40 transition-all cursor-pointer flex items-center gap-3 group shadow-md"
-                >
-                  <div className={`w-10 h-14 rounded-lg bg-gradient-to-br ${visual.gradient} flex items-center justify-center text-lg shadow-sm shrink-0`}>
-                    {visual.icon}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block truncate">
-                      {book.subject}
-                    </span>
-                    <h4 className="text-xs font-bold text-white truncate group-hover:text-amber-300 transition-colors">
-                      {book.title}
-                    </h4>
-                    <span className="text-[10px] text-slate-400">
-                      {book.chapters.length} {language === 'am' ? 'ምዕራፎች' : 'chapters'}
-                    </span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-amber-400 group-hover:translate-x-0.5 transition-all shrink-0" />
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 🔍 SEARCH, FACULTY FILTERS & CONTROLS                                     */}
-      {/* ========================================================================= */}
-      <div className="space-y-4 mb-6">
-        {/* Search Bar & View Options */}
+      <div className="space-y-3 mb-6">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          {/* Live Search */}
           <div className="relative flex-1">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={language === 'am' ? 'በመጽሐፍ ርዕስ፣ የትምህርት አይነት ወይም ኮድ ይፈልጉ...' : 'Search textbooks by title, subject, university, or course code...'}
-              className="w-full pl-10 pr-10 py-3 bg-[#101A33] border border-white/10 rounded-xl text-sm text-white placeholder-slate-400 focus:outline-none focus:border-amber-500/60 focus:ring-2 focus:ring-amber-500/10 transition-all shadow-inner"
+              placeholder={language === 'am' ? 'በሞጁል ርዕስ ወይም ኮድ ይፈልጉ (ለምሳሌ፡ Phil 1011, Math, History...)' : 'Search by module title, course code (e.g. Phil 1011, Math, Econ)...'}
+              className="w-full pl-10 pr-10 py-3 bg-[#111C35] border border-slate-800 rounded-xl text-sm text-white placeholder-slate-400 focus:outline-none focus:border-amber-400/60 focus:ring-2 focus:ring-amber-400/10 transition-all shadow-inner"
             />
             {searchQuery && (
               <button
@@ -1246,69 +651,47 @@ export default function BookStoreView({
             )}
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Sort Dropdown */}
-            <div className="relative flex items-center bg-[#101A33] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-slate-300">
-              <span className="text-slate-400 mr-2">{language === 'am' ? 'ቅደም ተከተል:' : 'Sort:'}</span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                className="bg-transparent text-white font-bold outline-none cursor-pointer pr-2"
-              >
-                <option value="rating" className="bg-[#101A33] text-white">★ Top Rated</option>
-                <option value="title" className="bg-[#101A33] text-white">A-Z Title</option>
-                <option value="pages" className="bg-[#101A33] text-white">Pages (High-Low)</option>
-              </select>
-            </div>
-
-            {/* Layout Mode Toggle */}
-            <div className="flex items-center bg-[#101A33] border border-white/10 rounded-xl p-1 gap-1">
-              <button
-                onClick={() => { playClickChime(); setViewMode('grid'); }}
-                className={`p-2 rounded-lg transition-colors cursor-pointer ${viewMode === 'grid' ? 'bg-amber-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'}`}
-                title="Grid View"
-              >
-                <Layers className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => { playClickChime(); setViewMode('list'); }}
-                className={`p-2 rounded-lg transition-colors cursor-pointer ${viewMode === 'list' ? 'bg-amber-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'}`}
-                title="Compact List View"
-              >
-                <FileText className="w-4 h-4" />
-              </button>
-            </div>
+          {/* Sort Selector */}
+          <div className="flex items-center bg-[#111C35] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 shrink-0">
+            <span className="text-slate-400 mr-2">{language === 'am' ? 'ቅደም ተከተል:' : 'Sort:'}</span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="bg-transparent text-amber-400 font-bold outline-none cursor-pointer pr-1"
+            >
+              <option value="code" className="bg-[#111C35] text-white">Course Code</option>
+              <option value="title" className="bg-[#111C35] text-white">A-Z Title</option>
+              <option value="pages" className="bg-[#111C35] text-white">Page Count</option>
+              <option value="rating" className="bg-[#111C35] text-white">★ Top Rated</option>
+            </select>
           </div>
         </div>
 
-        {/* Faculty & Subject Category Filter Chips */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+        {/* Stream Filter Chips: Clean & Pure */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
           {[
-            { id: 'all', label: language === 'am' ? 'ሁሉም መጻሕፍት' : 'All Books', icon: '📚' },
-            { id: 'university', label: language === 'am' ? 'የዩኒቨርሲቲ ኮርሶች' : 'University Common', icon: '🎓' },
-            { id: 'grade12', label: language === 'am' ? '12ኛ ክፍል ማትሪክ' : 'Grade 12 Matric', icon: '🎒' },
-            { id: 'engineering', label: language === 'am' ? 'ኢንጂነሪንግና ቴክ' : 'Engineering & Tech', icon: '⚙️' },
-            { id: 'medicine', label: language === 'am' ? 'ህክምናና ጤና' : 'Health & Medicine', icon: '🩺' },
-            { id: 'business', label: language === 'am' ? 'ቢዝነስና ኢኮኖሚክስ' : 'Business & Econ', icon: '💼' },
-            { id: 'social', label: language === 'am' ? 'ማህበራዊ ሳይንስ' : 'Social Sciences', icon: '🧠' },
-            { id: 'favorites', label: language === 'am' ? 'ምርጥ መጻሕፍት' : 'Favorites', icon: '⭐' }
+            { id: 'all', label: language === 'am' ? 'ሁሉም ሞጁሎች (19)' : 'All Freshman (19)', icon: '📚' },
+            { id: 'Common', label: language === 'am' ? 'የጋራ ኮርሶች (Common)' : 'Common Courses', icon: '🏛️' },
+            { id: 'Natural Science', label: language === 'am' ? 'የተፈጥሮ ሳይንስ (Natural)' : 'Natural Science', icon: '🔬' },
+            { id: 'Social Science', label: language === 'am' ? 'የማህበራዊ ሳይንስ (Social)' : 'Social Science', icon: '⚖️' },
+            { id: 'favorites', label: language === 'am' ? 'የተወደዱ' : 'Favorites', icon: '⭐' }
           ].map(tab => {
-            const isActive = selectedFaculty === tab.id;
+            const isActive = selectedStream === tab.id;
             return (
               <button
                 key={tab.id}
-                onClick={() => { playClickChime(); setSelectedFaculty(tab.id); }}
+                onClick={() => { playClickChime(); setSelectedStream(tab.id as any); }}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer border ${
                   isActive
-                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md font-black scale-[1.02]'
-                    : 'bg-[#101A33]/80 text-slate-300 border-white/10 hover:border-amber-500/30 hover:bg-[#101A33]'
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md font-black'
+                    : 'bg-[#111C35] text-slate-300 border-slate-800 hover:border-slate-700'
                 }`}
               >
                 <span>{tab.icon}</span>
                 <span>{tab.label}</span>
-                {tab.id === 'favorites' && favoriteBookIds.length > 0 && (
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${isActive ? 'bg-black/20 text-slate-950' : 'bg-amber-500/20 text-amber-400'}`}>
-                    {favoriteBookIds.length}
+                {tab.id === 'favorites' && favoriteIds.length > 0 && (
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${isActive ? 'bg-black/20 text-slate-950 font-bold' : 'bg-amber-500/20 text-amber-400'}`}>
+                    {favoriteIds.length}
                   </span>
                 )}
               </button>
@@ -1318,704 +701,602 @@ export default function BookStoreView({
       </div>
 
       {/* ========================================================================= */}
-      {/* 📚 MAIN BOOK CATALOG (Grid or List View)                                  */}
+      {/* 📄 PDF-STYLE MODULE CARDS GRID                                            */}
       {/* ========================================================================= */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between text-xs text-slate-400 px-1">
-          <span>
-            {language === 'am' ? 'የተገኙ መጻሕፍት' : 'Showing'} <strong className="text-white">{filteredBooks.length}</strong> {language === 'am' ? 'መጻሕፍት' : 'open textbooks'}
-          </span>
-          {debouncedSearch && (
-            <span className="text-amber-400">
-              "{debouncedSearch}"
-            </span>
-          )}
+      {filteredModules.length === 0 ? (
+        <div className="p-12 text-center rounded-2xl bg-[#111C35] border border-slate-800 space-y-3">
+          <FileText className="w-12 h-12 text-slate-600 mx-auto" />
+          <h3 className="text-base font-bold text-white">
+            {language === 'am' ? 'ምንም ሞጁል አልተገኘም' : 'No modules found'}
+          </h3>
+          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+            {language === 'am'
+              ? 'እባክዎን የፍለጋ ቃሉን ወይም የተመረጠውን ዘርፍ ይቀይሩ።'
+              : 'Try adjusting your search query or selecting a different stream filter.'}
+          </p>
+          <button
+            onClick={() => { setSearchQuery(''); setSelectedStream('all'); }}
+            className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+          >
+            {language === 'am' ? 'ሁሉንም አሳይ' : 'Show All Modules'}
+          </button>
         </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredModules.map(mod => {
+            const isFav = favoriteIds.includes(mod.id);
 
-        {filteredBooks.length === 0 ? (
-          <div className="p-12 text-center rounded-2xl bg-[#101A33] border border-white/10 space-y-3">
-            <BookOpen className="w-12 h-12 text-slate-600 mx-auto" />
-            <h3 className="text-base font-bold text-white">
-              {language === 'am' ? 'ምንም የተገኘ መጽሐፍ የለም' : 'No textbooks found'}
-            </h3>
-            <p className="text-xs text-slate-400 max-w-sm mx-auto">
-              {language === 'am'
-                ? 'እባክዎን የፍለጋ ቃሉን ወይም የተመረጠውን ዘርፍ ይቀይሩ።'
-                : 'Try adjusting your search query or selecting another faculty filter tab.'}
-            </p>
-            <button
-              onClick={() => { setSearchQuery(''); setSelectedFaculty('all'); }}
-              className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition-colors cursor-pointer"
-            >
-              {language === 'am' ? 'ሁሉንም አሳይ' : 'Reset All Filters'}
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-            {filteredBooks.map(book => {
-              const isFav = favoriteBookIds.includes(book.id);
-
-              return (
-                <div
-                  key={book.id}
-                  className="p-3.5 sm:p-4 rounded-2xl bg-[#111C35] border border-slate-800 hover:border-slate-700 transition flex flex-col justify-between gap-3 text-left relative"
-                >
-                  {/* Top: Thumbnail + Details */}
-                  <div className="flex items-start gap-3">
-                    {/* Consistent Book Thumbnail */}
-                    <div className="w-14 h-20 sm:w-16 sm:h-22 rounded-xl bg-[#17233D] border border-slate-700/80 flex flex-col items-center justify-between p-2 shrink-0 select-none shadow-sm">
-                      <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter truncate max-w-full">
-                        {book.grade}
+            return (
+              <div
+                key={mod.id}
+                onClick={() => handleOpenPdf(mod)}
+                className="group relative p-4 rounded-2xl bg-[#111C35] border border-slate-800/90 hover:border-amber-400/40 hover:bg-[#14213F] transition-all flex flex-col justify-between gap-3 text-left cursor-pointer shadow-md hover:shadow-lg"
+              >
+                {/* Top: PDF Document Cover + Details */}
+                <div className="flex items-start gap-3.5">
+                  {/* Authentic PDF Document Cover Thumbnail */}
+                  <div className="w-16 h-22 sm:w-18 sm:h-24 rounded-lg bg-gradient-to-b from-[#1E293B] to-[#0F172A] border border-slate-700/80 p-2 flex flex-col justify-between items-center shrink-0 shadow-md group-hover:border-amber-400/60 transition-colors relative overflow-hidden select-none">
+                    {/* Top PDF Crimson Tag */}
+                    <div className="w-full flex items-center justify-between">
+                      <span className="px-1 py-0.5 rounded text-[8px] font-black bg-red-600 text-white tracking-wider uppercase">
+                        PDF
                       </span>
-                      <BookOpen className="w-5 h-5 text-amber-400" />
-                      <span className="text-[7.5px] font-semibold text-slate-300 truncate max-w-full text-center">
-                        {book.subject.slice(0, 10)}
+                      <span className="text-[8px] font-mono text-slate-400">
+                        {mod.creditHours} Cr
                       </span>
                     </div>
 
-                    {/* Content details */}
-                    <div className="min-w-0 flex-1 space-y-1">
-                      {/* Category kicker + Subtle Favorite button */}
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider truncate">
-                          {book.subject}
-                        </span>
-                        <button
-                          onClick={(e) => toggleFavorite(book.id, e)}
-                          className="text-slate-500 hover:text-amber-400 p-0.5 cursor-pointer shrink-0 transition-colors"
-                          title={isFav ? 'Remove from favorites' : 'Add to favorites'}
-                        >
-                          <Star className={`w-3.5 h-3.5 ${isFav ? 'fill-amber-400 text-amber-400' : ''}`} />
-                        </button>
-                      </div>
+                    {/* Emblem / Icon */}
+                    <div className="my-auto text-center">
+                      <FileText className="w-6 h-6 text-amber-400 mx-auto opacity-90 group-hover:scale-110 transition-transform" />
+                      <span className="text-[7.5px] font-bold text-slate-300 block truncate max-w-[60px] text-center mt-0.5">
+                        {mod.code}
+                      </span>
+                    </div>
 
-                      {/* Book Title */}
-                      <h3 className="text-xs sm:text-sm font-bold text-white leading-snug line-clamp-2">
-                        {book.title}
-                      </h3>
-
-                      {/* Short description (2-3 lines with ellipsis) */}
-                      <p className="text-[11px] text-slate-300 line-clamp-2 leading-relaxed font-normal">
-                        {book.description}
-                      </p>
+                    {/* Bottom Document Page indicator */}
+                    <div className="w-full border-t border-slate-700/60 pt-0.5 text-center">
+                      <span className="text-[7px] text-slate-400 font-mono">
+                        {mod.pages} pgs
+                      </span>
                     </div>
                   </div>
 
-                  {/* Metadata row: unboxed clean text */}
-                  <div className="flex items-center gap-1.5 text-[10.5px] text-slate-400 font-medium pt-1 border-t border-slate-800/80">
-                    <span>{book.chapters.length} {language === 'am' ? 'ምዕራፎች' : 'Chapters'}</span>
-                    <span>•</span>
-                    <span>{book.pages} {language === 'am' ? 'ገጾች' : 'pages'}</span>
-                    <span>•</span>
-                    <span className="text-emerald-400 font-semibold">Open Access</span>
-                  </div>
-
-                  {/* Card Actions: [ Open & Read ] */}
-                  <div className="flex items-center gap-2 pt-0.5">
-                    <button
-                      onClick={() => handleOpenBook(book)}
-                      className="flex-1 py-2 sm:py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
-                    >
-                      <BookOpen className="w-3.5 h-3.5" />
-                      <span>{language === 'am' ? 'መጽሐፉን ክፈት' : 'Open & Read'}</span>
-                    </button>
-
-                    {book.pdfUrl && (
+                  {/* Module Metadata & Title */}
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-xs font-bold text-amber-400 uppercase tracking-wide truncate">
+                        {mod.code} • {mod.stream}
+                      </span>
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          playClickChime();
-                          if (onOpenInAppViewer) {
-                            onOpenInAppViewer(book.pdfUrl!, book.title);
-                          } else {
-                            window.open(book.pdfUrl, '_blank');
-                          }
-                        }}
-                        className="p-2 sm:p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
-                        title={language === 'am' ? 'PDF ክፈት' : 'View PDF'}
+                        onClick={(e) => toggleFavorite(mod.id, e)}
+                        className="text-slate-400 hover:text-amber-400 p-1 cursor-pointer shrink-0 transition-colors"
+                        title={isFav ? 'Remove from favorites' : 'Add to favorites'}
                       >
-                        <ExternalLink className="w-3.5 h-3.5" />
+                        <Star className={`w-4 h-4 ${isFav ? 'fill-amber-400 text-amber-400' : ''}`} />
                       </button>
-                    )}
+                    </div>
+
+                    <h3 className="text-sm sm:text-base font-bold text-white group-hover:text-amber-300 transition-colors leading-snug line-clamp-2">
+                      {mod.title}
+                    </h3>
+
+                    <p className="text-xs text-slate-400 truncate font-medium">
+                      {mod.amharicTitle}
+                    </p>
+
+                    <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed pt-0.5">
+                      {language === 'am' ? mod.amharicDescription : mod.description}
+                    </p>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+
+                {/* Chapters Preview Strip */}
+                <div className="pt-2 border-t border-slate-800/80 space-y-1">
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium">
+                    <span>{mod.chapters.length} {language === 'am' ? 'ምዕራፎች' : 'Units'}</span>
+                    <span>{mod.pages} {language === 'am' ? 'ገጾች' : 'Pages'}</span>
+                    <span className="text-slate-400 font-mono">{mod.fileSizeMb} MB</span>
+                  </div>
+                  
+                  {/* Subtle Chapter 1 Kicker */}
+                  <div className="text-[11px] text-slate-400 truncate flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                    <span className="truncate">{mod.chapters[0]}</span>
+                  </div>
+                </div>
+
+                {/* Primary Action Button: Read PDF Module */}
+                <button
+                  onClick={() => handleOpenPdf(mod)}
+                  className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs sm:text-sm uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98 shadow-sm"
+                >
+                  <FileText className="w-4 h-4 text-slate-950" />
+                  <span>{language === 'am' ? 'ፒዲኤፍ ሞጁሉን አንብብ' : 'Read PDF Module'}</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-950" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* ========================================================================= */}
-      {/* 📖 PRO E-BOOK READER MODAL / FULL INTERFACE                              */}
+      {/* 📖 FULLSCREEN IN-APP PDF READER MODAL                                     */}
       {/* ========================================================================= */}
       <AnimatePresence>
-        {readerOpen && activeBook && (
+        {activePdfModule && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-0 md:p-4 select-none"
+            className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-0 md:p-3 select-none"
           >
             <motion.div
               initial={{ scale: 0.98, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.98, opacity: 0 }}
-              className={`w-full h-full md:max-w-7xl md:h-[95vh] rounded-none md:rounded-2xl border shadow-2xl flex flex-col overflow-hidden transition-colors duration-200 ${
-                readerTheme === 'dark'
-                  ? 'bg-[#0A1128] text-slate-100 border-white/10'
-                  : readerTheme === 'midnight'
-                  ? 'bg-[#030712] text-zinc-100 border-zinc-800'
-                  : 'bg-[#1C1917] text-[#F5F5F4] border-stone-800'
+              className={`w-full h-full md:max-w-7xl md:h-[96vh] rounded-none md:rounded-2xl border shadow-2xl flex flex-col overflow-hidden transition-colors duration-200 ${
+                pdfTheme === 'paper' 
+                  ? 'bg-[#0E1628] text-slate-900 border-white/10'
+                  : 'bg-[#0A1128] text-slate-100 border-white/10'
               }`}
             >
-              {/* Reader Header Control Bar */}
-              <div className="px-4 sm:px-6 py-3.5 border-b border-white/10 bg-[#0E1628]/95 backdrop-blur-md flex flex-wrap items-center justify-between gap-3 shrink-0">
-                {/* Left: Book Title & Chapter indicator */}
+              {/* 1. TOP PDF TOOLBAR */}
+              <div className="px-4 py-3 bg-[#0B132B] border-b border-white/10 flex flex-wrap items-center justify-between gap-3 shrink-0 text-slate-200">
+                {/* Left: Document Identity & Code */}
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className="p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0">
-                    <BookOpenCheck className="w-5 h-5" />
-                  </span>
+                  <div className="w-8 h-8 rounded-lg bg-red-600 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-sm">
+                    PDF
+                  </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400">
-                        {activeBook.grade}
+                      <span className="text-[10px] font-black uppercase px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400">
+                        {activePdfModule.code}
                       </span>
                       <span className="text-xs text-slate-400 font-bold truncate">
-                        {activeBook.subject}
+                        {activePdfModule.stream} • {activePdfModule.creditHours} Cr
                       </span>
                     </div>
-                    <h2 className="text-sm sm:text-base font-serif font-black text-white truncate max-w-md">
-                      {activeBook.title}
+                    <h2 className="text-xs sm:text-sm font-bold text-white truncate max-w-xs sm:max-w-md">
+                      {activePdfModule.title} — MoE University Module
                     </h2>
                   </div>
                 </div>
 
-                {/* Right: Controls (Theme, Font, View Mode, Close) */}
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                  {/* Mode Switch: Chapters vs PDF */}
-                  {activeBook.pdfUrl && (
-                    <div className="flex items-center bg-white/5 border border-white/10 p-1 rounded-xl gap-1">
-                      <button
-                        onClick={() => { playClickChime(); setReaderViewMode('chapters'); }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
-                          readerViewMode === 'chapters' ? 'bg-amber-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        <BookOpen className="w-3.5 h-3.5" />
-                        <span>{language === 'am' ? 'ምዕራፎች' : 'Notes'}</span>
-                      </button>
-                      <button
-                        onClick={() => { playClickChime(); setReaderViewMode('pdf'); }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
-                          readerViewMode === 'pdf' ? 'bg-amber-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        <FileText className="w-3.5 h-3.5" />
-                        <span>PDF</span>
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Theme Selectors */}
-                  <div className="flex items-center bg-white/5 border border-white/10 p-1 rounded-xl gap-1">
-                    <button
-                      onClick={() => { playClickChime(); setReaderTheme('dark'); }}
-                      className={`p-1.5 rounded-lg transition-colors cursor-pointer ${readerTheme === 'dark' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
-                      title="Navy Slate Theme"
-                    >
-                      <Moon className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => { playClickChime(); setReaderTheme('midnight'); }}
-                      className={`p-1.5 rounded-lg transition-colors cursor-pointer ${readerTheme === 'midnight' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
-                      title="Midnight Dark Theme"
-                    >
-                      <Zap className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => { playClickChime(); setReaderTheme('sepia'); }}
-                      className={`p-1.5 rounded-lg transition-colors cursor-pointer ${readerTheme === 'sepia' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
-                      title="Eye-care Sepia Theme"
-                    >
-                      <Sun className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  {/* Font Sizer */}
-                  <div className="flex items-center bg-white/5 border border-white/10 px-2 py-1.5 rounded-xl gap-2 text-xs">
-                    <button
-                      onClick={() => { playClickChime(); setReaderFontSize(p => Math.max(13, p - 1)); }}
-                      className="font-extrabold hover:text-amber-400 cursor-pointer"
-                    >
-                      A-
-                    </button>
-                    <span className="font-mono text-[11px] text-amber-400 font-bold">{readerFontSize}px</span>
-                    <button
-                      onClick={() => { playClickChime(); setReaderFontSize(p => Math.min(22, p + 1)); }}
-                      className="font-extrabold hover:text-amber-400 cursor-pointer"
-                    >
-                      A+
-                    </button>
-                  </div>
-
-                  {/* Font Family Toggle */}
+                {/* Center: Page Controls (Previous / Current / Next) */}
+                <div className="flex items-center bg-white/5 border border-white/10 rounded-xl px-2 py-1 gap-1 text-xs">
                   <button
-                    onClick={() => { playClickChime(); setReaderFontFamily(f => f === 'sans' ? 'serif' : 'sans'); }}
-                    className="p-2 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:text-white cursor-pointer"
-                    title={readerFontFamily === 'sans' ? 'Switch to Serif' : 'Switch to Sans'}
+                    onClick={() => {
+                      if (activeChapterIndex > 0) {
+                        playClickChime();
+                        setActiveChapterIndex(p => p - 1);
+                      }
+                    }}
+                    disabled={activeChapterIndex === 0}
+                    className="p-1 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                    title="Previous Unit"
                   >
-                    <Type className="w-4 h-4" />
+                    <ChevronLeft className="w-4 h-4" />
                   </button>
 
-                  {/* Close Reader */}
+                  <span className="font-mono text-xs px-2 text-amber-400 font-bold">
+                    Unit {activeChapterIndex + 1} of {activePdfModule.chapters.length}
+                  </span>
+
                   <button
-                    onClick={() => { playClickChime(); setReaderOpen(false); }}
-                    className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-colors cursor-pointer"
-                    title="Close Reader"
+                    onClick={() => {
+                      if (activeChapterIndex < activePdfModule.chapters.length - 1) {
+                        playClickChime();
+                        setActiveChapterIndex(p => p + 1);
+                      }
+                    }}
+                    disabled={activeChapterIndex === activePdfModule.chapters.length - 1}
+                    className="p-1 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                    title="Next Unit"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Right: PDF Reader Tools (Zoom, Theme, Font, Print, Close) */}
+                <div className="flex items-center gap-2">
+                  {/* Zoom Controls */}
+                  <div className="hidden sm:flex items-center bg-white/5 border border-white/10 px-2 py-1 rounded-xl gap-1 text-xs">
+                    <button
+                      onClick={() => { playClickChime(); setPdfZoom(z => Math.max(80, z - 10)); }}
+                      className="p-1 hover:text-amber-400 cursor-pointer"
+                      title="Zoom Out"
+                    >
+                      <ZoomOut className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="font-mono text-[11px] text-slate-300 w-10 text-center">{pdfZoom}%</span>
+                    <button
+                      onClick={() => { playClickChime(); setPdfZoom(z => Math.min(130, z + 10)); }}
+                      className="p-1 hover:text-amber-400 cursor-pointer"
+                      title="Zoom In"
+                    >
+                      <ZoomIn className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Paper White vs Dark Slate PDF Mode */}
+                  <button
+                    onClick={() => {
+                      playClickChime();
+                      setPdfTheme(t => t === 'paper' ? 'dark' : 'paper');
+                    }}
+                    className={`p-2 rounded-xl border transition-colors cursor-pointer text-xs flex items-center gap-1.5 ${
+                      pdfTheme === 'paper'
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                        : 'bg-white/5 text-slate-300 border-white/10'
+                    }`}
+                    title={pdfTheme === 'paper' ? 'Switch to Dark PDF' : 'Switch to Paper White PDF'}
+                  >
+                    {pdfTheme === 'paper' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+                    <span className="hidden md:inline font-bold">
+                      {pdfTheme === 'paper' ? 'Paper PDF' : 'Dark PDF'}
+                    </span>
+                  </button>
+
+                  {/* Print Document */}
+                  <button
+                    onClick={handlePrintPdf}
+                    className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white cursor-pointer"
+                    title={language === 'am' ? 'ሞጁሉን አትም / Print' : 'Print Module PDF'}
+                  >
+                    <Printer className="w-4 h-4" />
+                  </button>
+
+                  {/* Ask AI Asgobnyi Button */}
+                  <button
+                    onClick={() => { playClickChime(); setAiPanelOpen(o => !o); }}
+                    className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                      aiPanelOpen 
+                        ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                        : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/30'
+                    }`}
+                  >
+                    <Bot className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">{language === 'am' ? 'አስጎብኚ AI' : 'Asgobnyi AI'}</span>
+                  </button>
+
+                  {/* Close PDF Reader */}
+                  <button
+                    onClick={handleClosePdf}
+                    className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-colors cursor-pointer ml-1"
+                    title="Close PDF"
                   >
                     <X className="w-5 h-5" />
                   </button>
                 </div>
               </div>
 
-              {/* Reader Body Grid: Sidebar TOC + Center Stage Reading + AI Assistant */}
+              {/* 2. PDF VIEWER MAIN STAGE (TOC Sidebar + Paper PDF Page View + AI Assistant) */}
               <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-12 relative">
                 
-                {/* 1. Left Table of Contents Sidebar (3 columns) */}
-                <div className="lg:col-span-3 border-r border-white/10 p-4 overflow-y-auto space-y-4 bg-black/20 hidden lg:block">
-                  <div className="flex items-center justify-between pb-2 border-b border-white/5">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                      <Bookmark className="w-3.5 h-3.5 text-amber-400" />
-                      <span>{language === 'am' ? 'የይዘት ማውጫ' : 'Table of Contents'}</span>
-                    </h4>
-                    <span className="text-[10px] font-mono text-slate-500">{activeBook.chapters.length} items</span>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    {activeBook.chapters.map((ch, idx) => {
-                      const isSelected = activeChapter === ch;
-                      return (
-                        <button
-                          key={idx}
-                          onClick={() => {
-                            playClickChime();
-                            setActiveChapter(ch);
-                            setAiResponse('');
-                            setActivePracticeQuiz(null);
-                          }}
-                          className={`w-full text-left p-2.5 rounded-xl text-xs font-semibold leading-relaxed transition-all cursor-pointer flex items-start gap-2 border ${
-                            isSelected
-                              ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md font-bold'
-                              : 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/5'
-                          }`}
-                        >
-                          <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded mt-0.5 ${isSelected ? 'bg-black/20 text-slate-950 font-bold' : 'bg-white/10 text-slate-400'}`}>
-                            {idx + 1}
-                          </span>
-                          <span className="flex-1 line-clamp-2">{ch}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Direct PDF Link */}
-                  {activeBook.pdfUrl && (
-                    <div className="pt-3 border-t border-white/10">
-                      <a
-                        href={activeBook.pdfUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full py-2.5 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center justify-center gap-2 transition-all"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>{language === 'am' ? 'ሙሉ ፒዲኤፍ አውርድ' : 'Open / Download PDF'}</span>
-                      </a>
+                {/* 2.1 PDF OUTLINE / TABLE OF CONTENTS (Left Drawer - 3 Cols) */}
+                {pdfSidebarOpen && (
+                  <div className="lg:col-span-3 border-r border-white/10 bg-[#0B132B]/95 p-4 overflow-y-auto space-y-3 hidden lg:block text-slate-200">
+                    <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <Bookmark className="w-3.5 h-3.5 text-amber-400" />
+                        <span>{language === 'am' ? 'የይዘት ማውጫ' : 'Module Outline'}</span>
+                      </h4>
+                      <span className="text-[10px] font-mono text-slate-400">
+                        {activePdfModule.chapters.length} Units
+                      </span>
                     </div>
-                  )}
-                </div>
 
-                {/* 2. Center Reading Stage (7 columns if AI open, else 9 columns) */}
-                <div className={`${aiPanelOpen ? 'lg:col-span-6' : 'lg:col-span-9'} overflow-y-auto p-6 sm:p-8 space-y-6 transition-all`}>
-                  
-                  {readerViewMode === 'pdf' && activeBook.pdfUrl ? (
-                    /* PDF Reading Mode: Clean direct display with open in tab action */
-                    <div className="space-y-4">
-                      <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 text-xs text-amber-300">
-                        <span>
-                          {language === 'am' 
-                            ? 'ፒዲኤፉን በሙሉ ስክሪን ለማንበብ ወይም ለማውረድ አዲሱን ታብ ይጠቀሙ።' 
-                            : 'Reading official verified textbook PDF. You can also open the full document directly in a separate browser tab.'}
-                        </span>
-                        <a
-                          href={activeBook.pdfUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-xs uppercase tracking-wider shrink-0 flex items-center gap-1"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          <span>Open Tab</span>
-                        </a>
-                      </div>
-                      <div className="w-full h-[700px] rounded-xl overflow-hidden border border-white/10 bg-slate-950 shadow-inner">
-                        <iframe
-                          src={`https://docs.google.com/gview?url=${encodeURIComponent(activeBook.pdfUrl)}&embedded=true`}
-                          title={`PDF Textbook: ${activeBook.title}`}
-                          className="w-full h-full border-0"
-                        />
-                      </div>
+                    <div className="space-y-1.5">
+                      {activePdfModule.chapters.map((ch, idx) => {
+                        const isSelected = activeChapterIndex === idx;
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => {
+                              playClickChime();
+                              setActiveChapterIndex(idx);
+                              setAiMode(null);
+                            }}
+                            className={`w-full text-left p-2.5 rounded-xl text-xs font-semibold leading-relaxed transition-all cursor-pointer flex items-start gap-2 border ${
+                              isSelected
+                                ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md font-bold'
+                                : 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/5'
+                            }`}
+                          >
+                            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded mt-0.5 ${
+                              isSelected ? 'bg-black/20 text-slate-950 font-black' : 'bg-white/10 text-slate-400'
+                            }`}>
+                              Unit {idx + 1}
+                            </span>
+                            <span className="flex-1 line-clamp-2">{ch}</span>
+                          </button>
+                        );
+                      })}
                     </div>
-                  ) : (
-                    /* Structured Chapter Content Mode */
-                    (() => {
-                      const chapterContent = getChapterContent(activeBook.id, activeChapter, activeBook.contentJson);
-                      return (
-                        <div 
-                          className={`space-y-6 max-w-3xl mx-auto ${readerFontFamily === 'serif' ? 'font-serif' : 'font-sans'}`}
-                          style={{ fontSize: `${readerFontSize}px`, lineHeight: 1.7 }}
-                        >
-                          {/* Chapter Header */}
-                          <div className="space-y-2 border-b border-white/10 pb-5">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-xs font-bold uppercase tracking-wider text-amber-400">
-                                {activeBook.subject} • {activeBook.grade}
-                              </span>
-                              <button
-                                onClick={() => setAiPanelOpen(true)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-bold hover:bg-amber-500/25 transition-colors cursor-pointer"
-                              >
-                                <Bot className="w-3.5 h-3.5" />
-                                <span>{language === 'am' ? 'አስጎብኚ AI' : 'Ask Asgobnyi'}</span>
-                              </button>
-                            </div>
-                            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight leading-tight">
-                              {chapterContent.title}
-                            </h1>
-                          </div>
 
-                          {/* Chapter Intro */}
-                          <div className="p-4 rounded-xl bg-white/5 border border-white/10 italic text-slate-300">
-                            {chapterContent.intro}
-                          </div>
-
-                          {/* Key Sections */}
-                          <div className="space-y-6">
-                            {chapterContent.sections.map((sec, idx) => (
-                              <div key={idx} className="space-y-2">
-                                <h2 className="text-base sm:text-lg font-bold text-amber-300 border-l-2 border-amber-400 pl-3">
-                                  {sec.title}
-                                </h2>
-                                <p className="text-slate-200 whitespace-pre-line leading-relaxed">
-                                  {sec.body}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-
-                          {/* Mathematical Formulas & Scientific Rules (if any) */}
-                          {chapterContent.formulas && chapterContent.formulas.length > 0 && (
-                            <div className="p-5 rounded-2xl bg-black/40 border border-amber-500/30 space-y-3">
-                              <h3 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                                <span>🧮</span>
-                                <span>{language === 'am' ? 'ቁልፍ ቀመሮችና ህጎች' : 'Core Mathematical & Scientific Formulas'}</span>
-                              </h3>
-                              <div className="grid grid-cols-1 gap-3">
-                                {chapterContent.formulas.map((f, i) => (
-                                  <div key={i} className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-1">
-                                    <div className="font-bold text-sm text-white">{f.name}</div>
-                                    <div className="p-2 rounded-lg bg-black/60 font-mono text-amber-300 text-xs overflow-x-auto">
-                                      {f.formula}
-                                    </div>
-                                    <div className="text-[11px] text-slate-400">{f.description}</div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Bilingual Glossary Terms */}
-                          {chapterContent.keyTerms && chapterContent.keyTerms.length > 0 && (
-                            <div className="p-5 rounded-2xl bg-white/5 border border-white/10 space-y-3">
-                              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                                <span>📖</span>
-                                <span>{language === 'am' ? 'ቁልፍ ቃላትና ፍቺዎች' : 'Essential Concepts & Glossary'}</span>
-                              </h3>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                {chapterContent.keyTerms.map((term, i) => (
-                                  <div key={i} className="p-2.5 rounded-xl bg-black/30 border border-white/5 space-y-1">
-                                    <div className="font-bold text-xs text-amber-300">
-                                      {term.term} {term.amharic ? `(${term.amharic})` : ''}
-                                    </div>
-                                    <div className="text-[11px] text-slate-300 leading-snug">
-                                      {term.definition}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* National Exam Alert */}
-                          {chapterContent.examAlert && (
-                            <div className="p-4 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-2.5">
-                              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                              <div className="space-y-0.5">
-                                <span className="font-extrabold uppercase tracking-wider block text-amber-400">
-                                  {language === 'am' ? 'የፈተና ማሳሰቢያ' : 'National Matric Exam Alert'}
-                                </span>
-                                <p className="text-slate-200 leading-relaxed font-normal">{chapterContent.examAlert}</p>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()
-                  )}
-                </div>
-
-                {/* 3. Right AI Assistant Panel (Asgobnyi "አስጎብኚ") */}
-                {aiPanelOpen && (
-                  <div className="lg:col-span-3 border-l border-white/10 p-4 bg-[#0E1628] flex flex-col justify-between overflow-y-auto space-y-4">
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                        <div className="flex items-center gap-2">
-                          <Bot className="w-4 h-4 text-amber-400" />
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-white">
-                            {language === 'am' ? 'አስጎብኚ AI ረዳት' : 'Asgobnyi AI Tutor'}
-                          </h4>
-                        </div>
-                        <button
-                          onClick={() => setAiPanelOpen(false)}
-                          className="p-1 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
+                    {/* Official Module Meta Info Card */}
+                    <div className="p-3.5 rounded-xl bg-black/40 border border-white/5 space-y-2 text-xs">
+                      <div className="text-[10px] font-bold uppercase text-amber-400 tracking-wider">
+                        Official Academic Metadata
                       </div>
-
-                      {/* Quick AI Prompts */}
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          onClick={() => handleAiAction('summary')}
-                          className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left text-[11px] font-bold text-slate-200 hover:text-amber-300 transition-all cursor-pointer flex flex-col gap-1"
-                        >
-                          <span>📖</span>
-                          <span>{language === 'am' ? 'ምዕራፍ አሳጥር' : 'Summarize'}</span>
-                        </button>
-                        <button
-                          onClick={() => handleAiAction('formulas')}
-                          className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left text-[11px] font-bold text-slate-200 hover:text-amber-300 transition-all cursor-pointer flex flex-col gap-1"
-                        >
-                          <span>🧮</span>
-                          <span>{language === 'am' ? 'ቀመሮችና ህጎች' : 'Key Formulas'}</span>
-                        </button>
-                        <button
-                          onClick={() => handleAiAction('amharic')}
-                          className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left text-[11px] font-bold text-slate-200 hover:text-amber-300 transition-all cursor-pointer flex flex-col gap-1"
-                        >
-                          <span>🇪🇹</span>
-                          <span>{language === 'am' ? 'በአማርኛ አስረዳ' : 'In Amharic'}</span>
-                        </button>
-                        <button
-                          onClick={() => handleAiAction('quiz')}
-                          className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-left text-[11px] font-bold text-slate-200 hover:text-amber-300 transition-all cursor-pointer flex flex-col gap-1"
-                        >
-                          <span>🎯</span>
-                          <span>{language === 'am' ? '3 ጥያቄዎች' : '3 Quiz MCQs'}</span>
-                        </button>
+                      <div className="text-slate-300 space-y-1 text-[11px]">
+                        <div><strong>Code:</strong> {activePdfModule.code}</div>
+                        <div><strong>Credit Hours:</strong> {activePdfModule.creditHours}</div>
+                        <div><strong>Semester:</strong> {activePdfModule.semester}</div>
+                        <div><strong>Target:</strong> First Year Students (Freshman)</div>
+                        <div><strong>Publisher:</strong> MoE Ethiopia / Higher Education</div>
                       </div>
-
-                      {/* AI Response Display */}
-                      {aiLoading ? (
-                        <div className="p-6 text-center space-y-2">
-                          <RefreshCw className="w-6 h-6 text-amber-400 animate-spin mx-auto" />
-                          <p className="text-xs text-slate-400">
-                            {language === 'am' ? 'አስጎብኚ ትንተና በማዘጋጀት ላይ...' : 'Asgobnyi is analyzing this chapter...'}
-                          </p>
-                        </div>
-                      ) : activePracticeQuiz ? (
-                        /* Practice Quiz UI */
-                        <div className="space-y-4">
-                          <h5 className="text-xs font-bold uppercase tracking-wider text-amber-400">
-                            {language === 'am' ? 'ፈጣን የፈተና ጥያቄዎች' : 'Quick Chapter Quiz'}
-                          </h5>
-                          {activePracticeQuiz.map((q, qIdx) => {
-                            const chosen = selectedAnswers[qIdx];
-                            const isAnswered = chosen !== undefined;
-                            return (
-                              <div key={q.id} className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-2">
-                                <p className="text-xs font-bold text-white">{qIdx + 1}. {q.question}</p>
-                                <div className="space-y-1">
-                                  {q.options.map((opt: string, oIdx: number) => {
-                                    const isCorrect = oIdx === q.correctIndex;
-                                    const isSelected = chosen === oIdx;
-                                    let btnStyle = "bg-white/5 text-slate-300 hover:bg-white/10 border-white/5";
-                                    if (isAnswered) {
-                                      if (isCorrect) btnStyle = "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-bold";
-                                      else if (isSelected) btnStyle = "bg-red-500/20 text-red-300 border-red-500/40";
-                                    }
-                                    return (
-                                      <button
-                                        key={oIdx}
-                                        disabled={isAnswered}
-                                        onClick={() => {
-                                          playClickChime();
-                                          setSelectedAnswers(p => ({ ...p, [qIdx]: oIdx }));
-                                        }}
-                                        className={`w-full text-left p-2 rounded-lg text-[11px] border transition-colors cursor-pointer ${btnStyle}`}
-                                      >
-                                        {opt}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                                {isAnswered && (
-                                  <p className="text-[10px] text-slate-400 italic pt-1 border-t border-white/5">
-                                    💡 {q.explanation}
-                                  </p>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : aiResponse ? (
-                        <div className="p-3.5 rounded-xl bg-white/5 border border-white/10 text-xs text-slate-200 leading-relaxed whitespace-pre-line max-h-96 overflow-y-auto">
-                          {aiResponse}
-                        </div>
-                      ) : (
-                        <div className="p-6 text-center text-xs text-slate-500">
-                          {language === 'am' 
-                            ? 'ከላይ ያሉትን ቁልፎች በመጫን የዚህን ምዕራፍ ማጠቃለያ ወይም ፈተና ይጠይቁ።'
-                            : 'Select a quick action above to summarize, test yourself, or explain this chapter.'}
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
-      {/* ========================================================================= */}
-      {/* ➕ ADD CUSTOM TEXTBOOK / MODULE MODAL                                     */}
-      {/* ========================================================================= */}
-      <AnimatePresence>
-        {showAddModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
-          >
-            <motion.div
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.95 }}
-              className="w-full max-w-lg bg-[#101A33] border border-white/10 rounded-2xl p-6 shadow-2xl space-y-4"
-            >
-              <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                <div className="flex items-center gap-2">
-                  <BookOpen className="w-5 h-5 text-amber-400" />
-                  <h3 className="font-bold text-base text-white">
-                    {language === 'am' ? 'አዲስ መማሪያ መጽሐፍ ጨምር' : 'Add Custom Textbook / Notes'}
-                  </h3>
-                </div>
-                <button
-                  onClick={() => setShowAddModal(false)}
-                  className="p-1 text-slate-400 hover:text-white rounded-lg"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <form onSubmit={handleSaveCustomBook} className="space-y-3.5 text-xs">
-                <div>
-                  <label className="block text-slate-400 font-bold uppercase mb-1">
-                    Book Title *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={customTitle}
-                    onChange={(e) => setCustomTitle(e.target.value)}
-                    placeholder="e.g. Fundamentals of Database Systems"
-                    className="w-full p-2.5 rounded-xl bg-black/40 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-400 font-bold uppercase mb-1">
-                      Subject *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={customSubject}
-                      onChange={(e) => setCustomSubject(e.target.value)}
-                      placeholder="e.g. Computer Science, Civics"
-                      className="w-full p-2.5 rounded-xl bg-black/40 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-400 font-bold uppercase mb-1">
-                      Academic Level
-                    </label>
-                    <select
-                      value={customGrade}
-                      onChange={(e) => setCustomGrade(e.target.value)}
-                      className="w-full p-2.5 rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-amber-500 cursor-pointer"
-                    >
-                      <option value="University">University</option>
-                      <option value="Grade 12">Grade 12</option>
-                      <option value="Grade 12 New Curriculum">Grade 12 New Curriculum</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-slate-400 font-bold uppercase mb-1">
-                    Chapters (one per line)
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={customChapters}
-                    onChange={(e) => setCustomChapters(e.target.value)}
-                    placeholder="Chapter 1: Relational Data Models&#10;Chapter 2: SQL & Normalization"
-                    className="w-full p-2.5 rounded-xl bg-black/40 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 resize-none font-mono text-xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-400 font-bold uppercase mb-1">
-                    Direct PDF URL (Optional online link)
-                  </label>
-                  <input
-                    type="url"
-                    value={customPdfUrl}
-                    onChange={(e) => setCustomPdfUrl(e.target.value)}
-                    placeholder="https://..."
-                    className="w-full p-2.5 rounded-xl bg-black/40 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddModal(false)}
-                    className="px-4 py-2 rounded-xl text-slate-400 hover:text-white border border-white/10 hover:bg-white/5 cursor-pointer"
+                {/* 2.2 CENTER PDF PAGE CANVAS */}
+                <div className={`${
+                  aiPanelOpen ? (pdfSidebarOpen ? 'lg:col-span-6' : 'lg:col-span-8') : (pdfSidebarOpen ? 'lg:col-span-9' : 'lg:col-span-12')
+                } overflow-y-auto p-4 sm:p-6 lg:p-8 flex justify-center transition-all bg-[#070D1E]`}>
+                  
+                  {/* REALISTIC A4-STYLE PDF DOCUMENT SHEET */}
+                  <div 
+                    className={`w-full max-w-3xl rounded-xl shadow-2xl p-6 sm:p-10 transition-all ${
+                      pdfTheme === 'paper' 
+                        ? 'bg-[#FAFAF9] text-slate-900 border border-stone-300 shadow-stone-900/30' 
+                        : 'bg-[#101A33] text-slate-100 border border-slate-700/80 shadow-black/50'
+                    }`}
+                    style={{
+                      transform: `scale(${pdfZoom / 100})`,
+                      transformOrigin: 'top center',
+                      fontSize: `${readerFontSize}px`,
+                      lineHeight: 1.65
+                    }}
                   >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold shadow-md cursor-pointer flex items-center gap-1.5"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Save Book</span>
-                  </button>
+                    {/* OFFICIAL MOE ETHIOPIA HEADER BANNER */}
+                    <div className="border-b-2 border-stone-800/20 pb-4 mb-6 text-center space-y-1">
+                      <div className="text-[9px] sm:text-[10px] font-mono tracking-widest uppercase font-extrabold text-amber-600 dark:text-amber-400">
+                        Federal Democratic Republic of Ethiopia • Ministry of Education
+                      </div>
+                      <div className="text-xs sm:text-sm font-serif font-black uppercase tracking-wider text-slate-800 dark:text-slate-100">
+                        Higher Education Common Curriculum For First Year Students
+                      </div>
+                      <div className="inline-flex items-center gap-2 mt-1 px-3 py-0.5 rounded-full bg-stone-200/80 dark:bg-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                        <span>Course: {activePdfModule.title}</span>
+                        <span>•</span>
+                        <span>Course Code: {activePdfModule.code}</span>
+                      </div>
+                    </div>
+
+                    {/* CHAPTER TITLE & COMPETENCIES */}
+                    <div className="space-y-3 mb-6">
+                      <div className="flex items-center justify-between text-xs font-bold uppercase text-amber-600 dark:text-amber-400">
+                        <span>Unit {activeChapterIndex + 1} of {activePdfModule.chapters.length}</span>
+                        <span>Credit Hours: {activePdfModule.creditHours}</span>
+                      </div>
+
+                      <h1 className="text-xl sm:text-2xl font-serif font-black text-slate-900 dark:text-white leading-tight">
+                        {currentChapterContent?.title || currentChapterTitle}
+                      </h1>
+
+                      {/* Intro Abstract Box */}
+                      <div className="p-4 rounded-xl bg-stone-100 dark:bg-white/5 border border-stone-300/80 dark:border-white/10 italic text-slate-700 dark:text-slate-300 text-sm leading-relaxed">
+                        {currentChapterContent?.intro}
+                      </div>
+                    </div>
+
+                    {/* CHAPTER CONTENT SECTIONS */}
+                    <div className="space-y-6">
+                      {currentChapterContent?.sections.map((sec, idx) => (
+                        <div key={idx} className="space-y-2">
+                          <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-amber-300 border-l-3 border-amber-500 pl-3">
+                            {sec.title}
+                          </h2>
+                          <p className="text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-line text-sm sm:text-base">
+                            {sec.body}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* FORMULAS & COMPUTATIONS (if applicable) */}
+                    {currentChapterContent?.formulas && currentChapterContent.formulas.length > 0 && (
+                      <div className="my-6 p-4 rounded-xl bg-stone-100 dark:bg-black/50 border border-stone-300 dark:border-amber-500/30 space-y-3">
+                        <div className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                          <span>🧮</span>
+                          <span>{language === 'am' ? 'ቀመሮችና ህጎች' : 'Core Mathematical & Scientific Formulas'}</span>
+                        </div>
+                        <div className="space-y-2.5">
+                          {currentChapterContent.formulas.map((f, i) => (
+                            <div key={i} className="p-2.5 rounded-lg bg-white dark:bg-white/5 border border-stone-200 dark:border-white/5 space-y-1">
+                              <div className="font-bold text-xs text-slate-900 dark:text-white">{f.name}</div>
+                              <div className="p-2 rounded bg-stone-900 text-amber-300 font-mono text-xs overflow-x-auto">
+                                {f.formula}
+                              </div>
+                              <div className="text-[11px] text-slate-600 dark:text-slate-400">{f.description}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* KEY TERMINOLOGY & BILINGUAL AMHARIC GLOSSARY */}
+                    {currentChapterContent?.keyTerms && currentChapterContent.keyTerms.length > 0 && (
+                      <div className="my-6 p-4 rounded-xl bg-stone-100 dark:bg-white/5 border border-stone-300/80 dark:border-white/10 space-y-3">
+                        <div className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                          <span>📖</span>
+                          <span>{language === 'am' ? 'ቁልፍ ቃላትና ፍቺዎች' : 'Essential Academic Terminology & Definitions'}</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          {currentChapterContent.keyTerms.map((t, i) => (
+                            <div key={i} className="p-2.5 rounded-lg bg-white dark:bg-black/40 border border-stone-200 dark:border-white/5 space-y-0.5">
+                              <div className="font-bold text-xs text-amber-700 dark:text-amber-400">
+                                {t.term} {t.amharic ? `(${t.amharic})` : ''}
+                              </div>
+                              <div className="text-[11px] text-slate-700 dark:text-slate-300 leading-snug">
+                                {t.definition}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* EXAM ALERT BOX */}
+                    {currentChapterContent?.examAlert && (
+                      <div className="my-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs sm:text-sm leading-relaxed">
+                        <strong className="block font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wide mb-1">
+                          ⚠️ University Mid-Term / Final Exam Guidance:
+                        </strong>
+                        {currentChapterContent.examAlert}
+                      </div>
+                    )}
+
+                    {/* OFFICIAL PDF FOOTER */}
+                    <div className="border-t border-stone-300 dark:border-white/10 pt-4 mt-8 flex flex-col sm:flex-row items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 gap-2">
+                      <span>Federal Democratic Republic of Ethiopia — Ministry of Education</span>
+                      <span className="font-mono font-bold">
+                        Unit {activeChapterIndex + 1} • {activePdfModule.code} Module
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              </form>
+
+                {/* 2.3 RIGHT SIDEBAR: ASGOBNYI AI STUDY COMPANION */}
+                {aiPanelOpen && (
+                  <div className="lg:col-span-3 border-l border-white/10 bg-[#0B132B]/95 p-4 overflow-y-auto space-y-4 text-slate-200">
+                    <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                      <div className="flex items-center gap-1.5">
+                        <Bot className="w-4 h-4 text-amber-400" />
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-white">
+                          {language === 'am' ? 'አስጎብኚ AI' : 'Asgobnyi AI'}
+                        </h4>
+                      </div>
+                      <button
+                        onClick={() => setAiPanelOpen(false)}
+                        className="text-slate-400 hover:text-white p-1 cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-xs text-slate-300">
+                        {language === 'am'
+                          ? 'የዚህን ምዕራፍ ማጠቃለያ፣ በአማርኛ ማብራሪያ ወይም የፈተና ጥያቄዎችን ይፈትሹ፦'
+                          : 'Explore chapter summary, Amharic translations, or test yourself with an instant practice quiz:'}
+                      </p>
+
+                      <div className="grid grid-cols-1 gap-2">
+                        <button
+                          onClick={() => { playClickChime(); setAiMode('summary'); }}
+                          className={`p-2.5 rounded-xl text-xs font-bold border text-left transition-colors cursor-pointer flex items-center justify-between ${
+                            aiMode === 'summary' ? 'bg-amber-500 text-slate-950 border-amber-400' : 'bg-white/5 hover:bg-white/10 text-slate-200 border-white/10'
+                          }`}
+                        >
+                          <span>📖 {language === 'am' ? 'የምዕራፉ ዋና ማጠቃለያ' : 'Chapter Summary'}</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
+                          onClick={() => { playClickChime(); setAiMode('amharic'); }}
+                          className={`p-2.5 rounded-xl text-xs font-bold border text-left transition-colors cursor-pointer flex items-center justify-between ${
+                            aiMode === 'amharic' ? 'bg-amber-500 text-slate-950 border-amber-400' : 'bg-white/5 hover:bg-white/10 text-slate-200 border-white/10'
+                          }`}
+                        >
+                          <span>🇪🇹 {language === 'am' ? 'በአማርኛ ማብራሪያ' : 'Amharic Concept Guide'}</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
+                          onClick={() => { playClickChime(); setAiMode('quiz'); }}
+                          className={`p-2.5 rounded-xl text-xs font-bold border text-left transition-colors cursor-pointer flex items-center justify-between ${
+                            aiMode === 'quiz' ? 'bg-amber-500 text-slate-950 border-amber-400' : 'bg-white/5 hover:bg-white/10 text-slate-200 border-white/10'
+                          }`}
+                        >
+                          <span>📝 {language === 'am' ? 'የልምምድ ፈተና (Quiz)' : '3-Question Practice Quiz'}</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* AI Response Box */}
+                    {aiMode === 'summary' && (
+                      <div className="p-3.5 rounded-xl bg-black/40 border border-white/10 space-y-2 text-xs">
+                        <div className="font-bold text-amber-400">Core Takeaways: {currentChapterTitle}</div>
+                        <p className="text-slate-300 leading-relaxed">
+                          {currentChapterContent?.intro}
+                        </p>
+                        <div className="pt-2 border-t border-white/5 space-y-1">
+                          {currentChapterContent?.sections.map((s, idx) => (
+                            <div key={idx} className="text-slate-300">
+                              • <strong className="text-white">{s.title}:</strong> {s.body.slice(0, 110)}...
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {aiMode === 'amharic' && (
+                      <div className="p-3.5 rounded-xl bg-black/40 border border-white/10 space-y-2 text-xs leading-relaxed">
+                        <div className="font-bold text-amber-400">የአማርኛ ማጠቃለያ ማስታወሻ</div>
+                        <p className="text-slate-300">
+                          {activePdfModule.amharicDescription}
+                        </p>
+                        <div className="pt-2 border-t border-white/5 space-y-1.5">
+                          {currentChapterContent?.keyTerms.slice(0, 4).map((k, i) => (
+                            <div key={i} className="text-slate-200">
+                              <span className="text-amber-300 font-bold">{k.term} ({k.amharic || 'ፍቺ'}):</span> {k.definition}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {aiMode === 'quiz' && (
+                      <div className="p-3.5 rounded-xl bg-black/40 border border-white/10 space-y-3 text-xs">
+                        <div className="font-bold text-amber-400">Practice Question:</div>
+                        <div className="space-y-1.5 text-slate-200">
+                          <p className="font-medium">
+                            1. In the official Ethiopian university syllabus for {activePdfModule.code}, what is primary in "{currentChapterTitle}"?
+                          </p>
+                          <div className="space-y-1 pt-1">
+                            {[
+                              `Understanding the core principles of: ${currentChapterContent?.sections[0]?.title || 'Section 1'}`,
+                              'Memorizing random terms without applying them to exam cases',
+                              'Ignoring definitions and focusing only on informal rumors'
+                            ].map((opt, i) => {
+                              const isSelected = quizAnswers[1] === i;
+                              const isCorrect = i === 0;
+                              return (
+                                <button
+                                  key={i}
+                                  onClick={() => {
+                                    playClickChime();
+                                    setQuizAnswers(prev => ({ ...prev, 1: i }));
+                                  }}
+                                  className={`w-full text-left p-2 rounded-lg text-[11px] border transition-colors cursor-pointer ${
+                                    isSelected
+                                      ? isCorrect
+                                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                        : 'bg-red-500/20 text-red-300 border-red-500/40'
+                                      : 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/5'
+                                  }`}
+                                >
+                                  {opt}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {quizAnswers[1] !== undefined && (
+                            <div className="text-[11px] text-amber-300 pt-1 font-medium">
+                              {quizAnswers[1] === 0 ? '✅ Correct! Verified syllabus standard.' : '❌ Try again. Review Section 1 of this unit.'}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </motion.div>
           </motion.div>
         )}

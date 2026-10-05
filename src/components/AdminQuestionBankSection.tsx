@@ -25,7 +25,9 @@ import {
   deleteQuestion,
   bulkDeleteQuestions,
   bulkPublishQuestions,
-  exportQuestions
+  exportQuestions,
+  generateAiQuestionDrafts,
+  OFFICIAL_19_SUBJECTS
 } from '../utils/supabaseQuestions';
 import { SAMPLE_10_TEST_BATCH_JSON_STRING } from '../data/seedQuestions';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
@@ -76,6 +78,28 @@ export const AdminQuestionBankSection: React.FC<AdminQuestionBankSectionProps> =
   const [importProgress, setImportProgress] = useState<{ active: boolean; current: number; total: number; statusText: string } | null>(null);
   const [importSummaryReport, setImportSummaryReport] = useState<{ imported: number; duplicates: number; invalid: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ─── AI QUESTION GENERATOR WORKFLOW STATE ───
+  const [showAiModal, setShowAiModal] = useState<boolean>(false);
+  const [aiSubject, setAiSubject] = useState<string>("General Biology");
+  const [aiCourse, setAiCourse] = useState<string>("General Biology Module");
+  const [aiUnit, setAiUnit] = useState<string>("Cell Biology");
+  const [aiTopic, setAiTopic] = useState<string>("Cell Structure & Function");
+  const [aiCount, setAiCount] = useState<number>(10);
+  const [aiEasyPct, setAiEasyPct] = useState<number>(40);
+  const [aiMedPct, setAiMedPct] = useState<number>(40);
+  const [aiHardPct, setAiHardPct] = useState<number>(20);
+  const [aiQuestionType, setAiQuestionType] = useState<string>("multiple_choice");
+  const [aiSource, setAiSource] = useState<string>("General Biology Module");
+  const [aiSourceUnit, setAiSourceUnit] = useState<string>("Cell Biology");
+  const [aiSourceFile, setAiSourceFile] = useState<string>("general_biology_module.pdf");
+  const [aiSourceExcerpt, setAiSourceExcerpt] = useState<string>("");
+  const [isGeneratingAi, setIsGeneratingAi] = useState<boolean>(false);
+  const [aiReviewQuestions, setAiReviewQuestions] = useState<any[]>([]);
+  const [aiApprovalMap, setAiApprovalMap] = useState<Record<number, boolean>>({});
+  const [aiActiveStep, setAiActiveStep] = useState<'config' | 'review'>('config');
+  const [editingAiIdx, setEditingAiIdx] = useState<number | null>(null);
+  const [editingAiItem, setEditingAiItem] = useState<any | null>(null);
 
   // Notification toast
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -383,6 +407,153 @@ export const AdminQuestionBankSection: React.FC<AdminQuestionBankSectionProps> =
     showToast('Downloaded question batch template');
   };
 
+  // ─── AI QUESTION GENERATOR WORKFLOW HANDLERS ───
+  const handleGenerateAiQuestions = async () => {
+    if (!aiSubject || !aiUnit || !aiTopic) {
+      showToast('Subject, Unit, and Topic are required', 'error');
+      return;
+    }
+    playClickChime();
+    setIsGeneratingAi(true);
+
+    try {
+      const res = await generateAiQuestionDrafts({
+        subject: aiSubject,
+        course: aiCourse,
+        unit: aiUnit,
+        topic: aiTopic,
+        count: aiCount,
+        difficultyDistribution: {
+          easy: aiEasyPct,
+          medium: aiMedPct,
+          hard: aiHardPct
+        },
+        questionType: aiQuestionType,
+        source: aiSource,
+        sourceUnit: aiSourceUnit,
+        sourceFile: aiSourceFile,
+        sourceExcerpt: aiSourceExcerpt
+      });
+
+      if (!res.success || res.questions.length === 0) {
+        throw new Error(res.error || 'No questions generated. Check network or parameters.');
+      }
+
+      setAiReviewQuestions(res.questions);
+      // Default all generated questions to approved initially so admin can reject or edit
+      const initialMap: Record<number, boolean> = {};
+      res.questions.forEach((_, idx) => {
+        initialMap[idx] = true;
+      });
+      setAiApprovalMap(initialMap);
+      setAiActiveStep('review');
+      playSuccessChime();
+      showToast(`Generated ${res.questions.length} questions ready for review!`);
+    } catch (e: any) {
+      playFailureChime();
+      showToast(e.message || 'Generation failed', 'error');
+    } finally {
+      setIsGeneratingAi(false);
+    }
+  };
+
+  const handleToggleAiApproval = (idx: number) => {
+    playClickChime();
+    setAiApprovalMap(prev => ({
+      ...prev,
+      [idx]: !prev[idx]
+    }));
+  };
+
+  const handleApproveAllAi = () => {
+    playClickChime();
+    const map: Record<number, boolean> = {};
+    aiReviewQuestions.forEach((_, idx) => { map[idx] = true; });
+    setAiApprovalMap(map);
+  };
+
+  const handleRejectAllAi = () => {
+    playClickChime();
+    const map: Record<number, boolean> = {};
+    aiReviewQuestions.forEach((_, idx) => { map[idx] = false; });
+    setAiApprovalMap(map);
+  };
+
+  const handleSaveAiInlineEdit = (idx: number, updatedItem: any) => {
+    playClickChime();
+    const copy = [...aiReviewQuestions];
+    copy[idx] = updatedItem;
+    setAiReviewQuestions(copy);
+    setEditingAiIdx(null);
+    setEditingAiItem(null);
+    showToast('Question details updated in review list');
+  };
+
+  const handlePublishApprovedAiQuestions = async () => {
+    const approved = aiReviewQuestions.filter((_, idx) => aiApprovalMap[idx]);
+    if (approved.length === 0) {
+      showToast('Please approve at least one question before publishing.', 'error');
+      return;
+    }
+
+    playClickChime();
+    const recordsToImport: QuestionBankRecord[] = approved.map(q => {
+      const optionTexts = Array.isArray(q.options) 
+        ? q.options.map((o: any) => typeof o === 'string' ? o : o.text)
+        : [];
+      
+      let correctAnsText = String(q.correct_answer || '');
+      if (/^[A-D]$/i.test(correctAnsText)) {
+        const letterIdx = correctAnsText.toUpperCase().charCodeAt(0) - 65;
+        if (optionTexts[letterIdx]) {
+          correctAnsText = optionTexts[letterIdx];
+        }
+      }
+
+      return {
+        id: q.id || `q_ai_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        subject: q.subject,
+        course: q.course || q.subject,
+        unit: q.unit || 'Unit 1',
+        topic: q.topic || 'General Topic',
+        chapter: q.source_unit || q.unit,
+        question: q.question,
+        question_text: q.question,
+        question_type: q.question_type || 'multiple_choice',
+        options: optionTexts,
+        options_raw: Array.isArray(q.options) && typeof q.options[0] === 'object' ? q.options : optionTexts.map((t: string, i: number) => ({ id: String.fromCharCode(65 + i), text: t })),
+        correct_answer: correctAnsText,
+        explanation: q.explanation || '',
+        difficulty: q.difficulty || 'medium',
+        exam_category: 'practice_exam',
+        source: q.source || 'Curriculum Module',
+        source_unit: q.source_unit || q.unit,
+        source_file: q.source_file || '',
+        batch_id: q.batch_id || `ai_approved_${new Date().toISOString().slice(0, 10)}`,
+        is_published: true, // Only approved questions are published!
+        is_pro: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+    });
+
+    try {
+      const res = await importQuestionsBatch(recordsToImport);
+      if (res.success) {
+        playSuccessChime();
+        showToast(`Published ${res.importedCount} approved questions directly into Question Bank!`);
+        setShowAiModal(false);
+        setAiActiveStep('config');
+        setAiReviewQuestions([]);
+        loadData();
+        onRefreshStats?.();
+      }
+    } catch (err: any) {
+      playFailureChime();
+      showToast(err.message || 'Failed to publish questions', 'error');
+    }
+  };
+
   // ─── SAVE EDIT OR CREATE MODAL ───
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -483,6 +654,18 @@ export const AdminQuestionBankSection: React.FC<AdminQuestionBankSectionProps> =
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export Bank</span>
+          </button>
+
+          <button
+            onClick={() => {
+              playClickChime();
+              setShowAiModal(true);
+            }}
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-black flex items-center gap-1.5 shadow-lg shadow-purple-900/30 transition-all cursor-pointer"
+            title="Generate curriculum questions using AI, review each item, and publish approved questions"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+            <span>AI Generator & Review</span>
           </button>
 
           <button
@@ -1011,6 +1194,556 @@ export const AdminQuestionBankSection: React.FC<AdminQuestionBankSectionProps> =
           </div>
         </div>
       </div>
+
+      {/* ================================================================ */}
+      {/* MODAL 0: AI QUESTION GENERATION WORKFLOW WITH MANDATORY REVIEW  */}
+      {/* ================================================================ */}
+      <AnimatePresence>
+        {showAiModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-slate-900 border border-slate-800 rounded-3xl max-w-4xl w-full p-6 space-y-6 shadow-2xl relative my-8 text-white max-h-[90vh] flex flex-col"
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between border-b border-slate-800 pb-4 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-2xl bg-gradient-to-br from-purple-500/20 to-amber-500/20 text-amber-400 border border-amber-500/30">
+                    <Sparkles className="w-6 h-6 text-amber-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-white flex items-center gap-2">
+                      Curriculum AI Question Generator
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                        aiActiveStep === 'config' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      }`}>
+                        {aiActiveStep === 'config' ? '1. Generation Config' : `2. Review Screen (${Object.values(aiApprovalMap).filter(Boolean).length}/${aiReviewQuestions.length} Approved)`}
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      {aiActiveStep === 'config' 
+                        ? 'Generate rigorous questions based on official Ethiopian higher education syllabus modules.'
+                        : 'Review, edit, or reject candidate questions. Only approved questions will be published to Supabase.'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowAiModal(false);
+                    setAiActiveStep('config');
+                    setAiReviewQuestions([]);
+                  }}
+                  className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white cursor-pointer transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="flex-1 overflow-y-auto space-y-5 pr-1">
+                {aiActiveStep === 'config' ? (
+                  <div className="space-y-4">
+                    {/* Subject & Course Selection */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-bold text-slate-300 block mb-1">
+                          Curriculum Subject <span className="text-amber-400">*</span>
+                        </label>
+                        <select
+                          value={aiSubject}
+                          onChange={(e) => {
+                            const sub = e.target.value;
+                            setAiSubject(sub);
+                            setAiCourse(`${sub} Module`);
+                            setAiSource(`${sub} Module`);
+                          }}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                        >
+                          {OFFICIAL_19_SUBJECTS.map(s => (
+                            <option key={s.id} value={s.name}>{s.name} ({s.code})</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-bold text-slate-300 block mb-1">
+                          Module / Course Name
+                        </label>
+                        <input
+                          type="text"
+                          value={aiCourse}
+                          onChange={(e) => setAiCourse(e.target.value)}
+                          placeholder="e.g. Logic & Critical Thinking (Phil 1011)"
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Unit & Topic */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-bold text-slate-300 block mb-1">
+                          Unit / Chapter <span className="text-amber-400">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={aiUnit}
+                          onChange={(e) => {
+                            setAiUnit(e.target.value);
+                            setAiSourceUnit(e.target.value);
+                          }}
+                          placeholder="e.g. Unit 1: Introduction to Logic"
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-bold text-slate-300 block mb-1">
+                          Specific Topic <span className="text-amber-400">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={aiTopic}
+                          onChange={(e) => setAiTopic(e.target.value)}
+                          placeholder="e.g. Deductive Validity & Soundness"
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Question Count & Type */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-bold text-slate-300 block mb-1">
+                          Number of Questions: <span className="text-amber-400 font-mono font-black">{aiCount}</span>
+                        </label>
+                        <div className="flex gap-2">
+                          {[5, 10, 15, 20, 30].map(cnt => (
+                            <button
+                              key={cnt}
+                              type="button"
+                              onClick={() => setAiCount(cnt)}
+                              className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
+                                aiCount === cnt
+                                  ? 'bg-amber-500 text-slate-950 shadow-md font-black'
+                                  : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white'
+                              }`}
+                            >
+                              {cnt}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-bold text-slate-300 block mb-1">
+                          Question Format
+                        </label>
+                        <select
+                          value={aiQuestionType}
+                          onChange={(e) => setAiQuestionType(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                        >
+                          <option value="multiple_choice">Multiple Choice (4 options: A, B, C, D)</option>
+                          <option value="true_false">True / False</option>
+                          <option value="multiple_select">Multiple Select</option>
+                          <option value="fill_in_the_blank">Fill in the Blank</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Difficulty Distribution */}
+                    <div className="p-4 bg-slate-950/70 border border-slate-800/80 rounded-2xl space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-300">Target Difficulty Distribution</span>
+                        <span className="text-[11px] font-mono text-slate-400">Total: {aiEasyPct + aiMedPct + aiHardPct}%</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-emerald-400">Easy ({aiEasyPct}%)</label>
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            step="5"
+                            value={aiEasyPct}
+                            onChange={(e) => setAiEasyPct(Number(e.target.value))}
+                            className="w-full accent-emerald-500"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-amber-400">Medium ({aiMedPct}%)</label>
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            step="5"
+                            value={aiMedPct}
+                            onChange={(e) => setAiMedPct(Number(e.target.value))}
+                            className="w-full accent-amber-500"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-rose-400">Hard ({aiHardPct}%)</label>
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            step="5"
+                            value={aiHardPct}
+                            onChange={(e) => setAiHardPct(Number(e.target.value))}
+                            className="w-full accent-rose-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Source Traceability & Excerpt */}
+                    <div className="p-4 bg-slate-950/70 border border-slate-800/80 rounded-2xl space-y-3">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                        <span className="text-xs font-bold text-slate-300">Source Traceability & Curriculum Context</span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-[11px] font-bold text-slate-400 block mb-0.5">Source Module</label>
+                          <input
+                            type="text"
+                            value={aiSource}
+                            onChange={(e) => setAiSource(e.target.value)}
+                            placeholder="e.g. General Biology Module"
+                            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-bold text-slate-400 block mb-0.5">Source Unit</label>
+                          <input
+                            type="text"
+                            value={aiSourceUnit}
+                            onChange={(e) => setAiSourceUnit(e.target.value)}
+                            placeholder="e.g. Unit 1: Cell Biology"
+                            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-bold text-slate-400 block mb-0.5">Source File Name</label>
+                          <input
+                            type="text"
+                            value={aiSourceFile}
+                            onChange={(e) => setAiSourceFile(e.target.value)}
+                            placeholder="e.g. general_biology_freshman.pdf"
+                            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-400 block mb-0.5">
+                          Textbook Excerpt / Syllabus Notes (Optional Context)
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={aiSourceExcerpt}
+                          onChange={(e) => setAiSourceExcerpt(e.target.value)}
+                          placeholder="Paste syllabus concepts, textbook definition paragraphs, or specific formulas here to ground questions strictly in source material..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 resize-none font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* REVIEW SCREEN */
+                  <div className="space-y-4">
+                    {/* Review Controls Header */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-slate-950 border border-slate-800">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleApproveAllAi}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs font-bold border border-emerald-500/30 flex items-center gap-1 cursor-pointer"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Approve All</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleRejectAllAi}
+                          className="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-bold border border-rose-500/30 flex items-center gap-1 cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          <span>Reject All</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAiActiveStep('config')}
+                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold border border-slate-700 flex items-center gap-1 cursor-pointer"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                          <span>Back to Config</span>
+                        </button>
+                      </div>
+
+                      <div className="text-xs text-slate-400">
+                        <span className="font-bold text-emerald-400">{Object.values(aiApprovalMap).filter(Boolean).length}</span> Approved &bull;{' '}
+                        <span className="font-bold text-rose-400">{Object.values(aiApprovalMap).filter(v => !v).length}</span> Rejected
+                      </div>
+                    </div>
+
+                    {/* Question Cards List */}
+                    <div className="space-y-3">
+                      {aiReviewQuestions.map((q, idx) => {
+                        const isApproved = aiApprovalMap[idx];
+                        const isEditingThis = editingAiIdx === idx;
+
+                        return (
+                          <div
+                            key={idx}
+                            className={`p-4 rounded-2xl border transition-all ${
+                              isApproved 
+                                ? 'bg-slate-950/80 border-emerald-500/40' 
+                                : 'bg-slate-950/40 border-rose-500/30 opacity-70'
+                            }`}
+                          >
+                            {/* Card Top: Badges & Actions */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-800/80">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-xs font-mono font-black px-2 py-0.5 rounded-md bg-slate-800 text-slate-300">
+                                  Q{idx + 1}
+                                </span>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase ${
+                                  q.difficulty === 'easy' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
+                                  q.difficulty === 'hard' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
+                                  'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                }`}>
+                                  {q.difficulty}
+                                </span>
+                                <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded-md border border-slate-800">
+                                  {q.subject} &bull; {q.unit}
+                                </span>
+                                {q.source && (
+                                  <span className="text-[10px] text-slate-500">
+                                    Source: {q.source}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleAiApproval(idx)}
+                                  className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                                    isApproved 
+                                      ? 'bg-emerald-500 text-slate-950 font-black shadow-md' 
+                                      : 'bg-rose-950 text-rose-300 border border-rose-500/40 hover:bg-rose-900'
+                                  }`}
+                                >
+                                  {isApproved ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                                  <span>{isApproved ? 'Approved' : 'Rejected'}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (isEditingThis) {
+                                      setEditingAiIdx(null);
+                                      setEditingAiItem(null);
+                                    } else {
+                                      setEditingAiIdx(idx);
+                                      setEditingAiItem(JSON.parse(JSON.stringify(q)));
+                                    }
+                                  }}
+                                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs cursor-pointer"
+                                  title="Edit Question"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Card Content or Inline Editor */}
+                            {isEditingThis && editingAiItem ? (
+                              <div className="space-y-3 pt-2">
+                                <div>
+                                  <label className="text-[11px] font-bold text-slate-400 block mb-1">Question Text</label>
+                                  <textarea
+                                    rows={2}
+                                    value={editingAiItem.question}
+                                    onChange={(e) => setEditingAiItem({ ...editingAiItem, question: e.target.value })}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"
+                                  />
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {editingAiItem.options.map((opt: any, optIdx: number) => (
+                                    <div key={optIdx}>
+                                      <label className="text-[10px] font-bold text-slate-400 block mb-0.5">
+                                        Option {opt.id || String.fromCharCode(65 + optIdx)}
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={typeof opt === 'string' ? opt : opt.text}
+                                        onChange={(e) => {
+                                          const copy = [...editingAiItem.options];
+                                          if (typeof copy[optIdx] === 'string') copy[optIdx] = e.target.value;
+                                          else copy[optIdx] = { ...copy[optIdx], text: e.target.value };
+                                          setEditingAiItem({ ...editingAiItem, options: copy });
+                                        }}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="text-[11px] font-bold text-slate-400 block mb-1">Correct Answer ID (A, B, C, D)</label>
+                                    <input
+                                      type="text"
+                                      value={editingAiItem.correct_answer}
+                                      onChange={(e) => setEditingAiItem({ ...editingAiItem, correct_answer: e.target.value })}
+                                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-[11px] font-bold text-slate-400 block mb-1">Difficulty</label>
+                                    <select
+                                      value={editingAiItem.difficulty}
+                                      onChange={(e) => setEditingAiItem({ ...editingAiItem, difficulty: e.target.value })}
+                                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                                    >
+                                      <option value="easy">easy</option>
+                                      <option value="medium">medium</option>
+                                      <option value="hard">hard</option>
+                                    </select>
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="text-[11px] font-bold text-slate-400 block mb-1">Explanation</label>
+                                  <textarea
+                                    rows={2}
+                                    value={editingAiItem.explanation || ''}
+                                    onChange={(e) => setEditingAiItem({ ...editingAiItem, explanation: e.target.value })}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white"
+                                  />
+                                </div>
+                                <div className="flex justify-end gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => { setEditingAiIdx(null); setEditingAiItem(null); }}
+                                    className="px-3 py-1 rounded-lg text-xs bg-slate-800 text-slate-300"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveAiInlineEdit(idx, editingAiItem)}
+                                    className="px-3 py-1 rounded-lg text-xs bg-amber-500 text-slate-950 font-bold"
+                                  >
+                                    Save Changes
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div>
+                                <p className="text-xs font-bold text-white mb-2.5">{q.question}</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                                  {Array.isArray(q.options) && q.options.map((opt: any, optIdx: number) => {
+                                    const optId = typeof opt === 'object' && opt.id ? opt.id : String.fromCharCode(65 + optIdx);
+                                    const optText = typeof opt === 'string' ? opt : opt.text;
+                                    const isCorrect = optId === q.correct_answer || optText === q.correct_answer;
+
+                                    return (
+                                      <div
+                                        key={optIdx}
+                                        className={`px-3 py-2 rounded-xl text-xs flex items-start gap-2 border ${
+                                          isCorrect
+                                            ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-200 font-bold'
+                                            : 'bg-slate-900/60 border-slate-800 text-slate-300'
+                                        }`}
+                                      >
+                                        <span className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] shrink-0 ${
+                                          isCorrect ? 'bg-emerald-500 text-slate-950 font-black' : 'bg-slate-800 text-slate-400'
+                                        }`}>
+                                          {optId}
+                                        </span>
+                                        <span>{optText}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                {q.explanation && (
+                                  <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-[11px] text-slate-300">
+                                    <span className="font-bold text-amber-400">Explanation: </span>
+                                    {q.explanation}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex items-center justify-between border-t border-slate-800 pt-4 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAiModal(false);
+                    setAiActiveStep('config');
+                    setAiReviewQuestions([]);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+
+                {aiActiveStep === 'config' ? (
+                  <button
+                    type="button"
+                    disabled={isGeneratingAi}
+                    onClick={handleGenerateAiQuestions}
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 text-xs font-black flex items-center gap-2 shadow-lg shadow-amber-500/20 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {isGeneratingAi ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+                        <span>Generating Rigorous Questions...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4 text-slate-950" />
+                        <span>Generate {aiCount} Questions & Open Review</span>
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setAiActiveStep('config')}
+                      className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold cursor-pointer"
+                    >
+                      Back to Setup
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handlePublishApprovedAiQuestions}
+                      className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black flex items-center gap-2 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-4 h-4 text-slate-950" />
+                      <span>Publish Approved ({Object.values(aiApprovalMap).filter(Boolean).length}) to Supabase</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* ================================================================ */}
       {/* MODAL 1: IMPORT QUESTIONS (JSON/CSV) WITH LIVE VALIDATION        */}

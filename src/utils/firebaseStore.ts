@@ -70,6 +70,8 @@ import { compressImageToBase64 } from './imageCompressor';
  */
 export function getActiveFirebaseConfig(): any {
   const env = typeof import.meta !== 'undefined' && (import.meta as any).env ? (import.meta as any).env : {};
+  const isCustomDomain = typeof window !== 'undefined' && 
+    (window.location.hostname.toLowerCase().includes('etlearn') || window.location.hostname.toLowerCase().includes('vercel.app'));
 
   // Priority 1: Vercel production environment variables
   if (env.VITE_FIREBASE_API_KEY && env.VITE_FIREBASE_PROJECT_ID) {
@@ -79,13 +81,13 @@ export function getActiveFirebaseConfig(): any {
       projectId: env.VITE_FIREBASE_PROJECT_ID,
       storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || `${env.VITE_FIREBASE_PROJECT_ID}.firebasestorage.app`,
       messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
-      appId: env.VITE_FIREBASE_APP_ID || GOOGLE_SERVICES_PROJECT.webAppId,
+      appId: env.VITE_FIREBASE_APP_ID || (GOOGLE_SERVICES_PROJECT as any)?.webAppId || "",
       measurementId: env.VITE_FIREBASE_MEASUREMENT_ID || ""
     };
   }
 
-  // Priority 2: etlearn-7b27d project credentials (user's target Firebase project)
-  if (GOOGLE_SERVICES_PROJECT && GOOGLE_SERVICES_PROJECT.projectId === 'etlearn-7b27d') {
+  // Priority 2: When deployed to Vercel/etlearn custom domain, use etlearn-7b27d project credentials
+  if (isCustomDomain && GOOGLE_SERVICES_PROJECT && GOOGLE_SERVICES_PROJECT.projectId === 'etlearn-7b27d') {
     return {
       projectId: GOOGLE_SERVICES_PROJECT.projectId,
       apiKey: env.VITE_FIREBASE_API_KEY || GOOGLE_SERVICES_PROJECT.apiKey,
@@ -97,7 +99,7 @@ export function getActiveFirebaseConfig(): any {
     };
   }
 
-  // Priority 3: Fallback configuration from firebase-applet-config.json
+  // Priority 3: Local applet preview configuration (firebase-applet-config.json)
   return firebaseConfig;
 }
 
@@ -202,8 +204,8 @@ export function formatFirebaseAuthError(err: any, lang: 'en' | 'am' = 'en'): str
   const code = err?.code || '';
   const msg = String(err?.message || '');
 
-  // Log detailed error for developers and debuggers
-  console.error('[Firebase Auth Error Detail]:', { code, message: msg, raw: err });
+  // Log detail for debugging without flagging as fatal runtime error
+  console.warn('[Firebase Auth Notice]:', { code, message: msg });
 
   if (code === 'auth/network-request-failed' || msg.includes('network-request-failed') || msg.includes('network')) {
     return lang === 'am'
@@ -616,12 +618,24 @@ export async function fetchNotesFromFirestore(userId: string): Promise<CustomNot
 
 export const DEFAULT_PROMOTIONS: Promotion[] = [
   {
-    code: 'WKU2026',
-    title: 'Wolkite University Promo',
-    description: 'Exclusive 30% discount for Wolkite University students',
-    discountPercentage: 30,
-    maxUses: 500,
-    usedCount: 18,
+    code: 'FRESHMAN100',
+    title: '100% Freshman Full Scholarship',
+    description: '100% Free full scholarship access for Ethiopian university freshman students',
+    discountPercentage: 100,
+    fixedDiscountETB: 349,
+    maxUses: 5000,
+    usedCount: 142,
+    expiresAt: '2026-12-31',
+    isActive: true
+  },
+  {
+    code: 'WKU100',
+    title: 'Wolkite University 100% Free Campus Access',
+    description: '100% Free Pro access for Wolkite University campus students',
+    discountPercentage: 100,
+    fixedDiscountETB: 349,
+    maxUses: 2000,
+    usedCount: 88,
     expiresAt: '2026-12-31',
     isActive: true
   },
@@ -630,39 +644,69 @@ export const DEFAULT_PROMOTIONS: Promotion[] = [
     title: '50% Semester Discount',
     description: 'Half-price promo code on all subscription tiers',
     discountPercentage: 50,
-    maxUses: 250,
+    maxUses: 1000,
     usedCount: 42,
     expiresAt: '2026-12-31',
     isActive: true
   },
   {
-    code: 'FRESHMAN25',
-    title: 'Freshman Welcome 25%',
-    description: '25% discount for freshman university scholars',
-    discountPercentage: 25,
+    code: 'WKU2026',
+    title: 'Wolkite University 40% Discount',
+    description: 'Special 40% discount for Wolkite University scholars',
+    discountPercentage: 40,
+    maxUses: 1500,
+    usedCount: 56,
+    expiresAt: '2026-12-31',
+    isActive: true
+  },
+  {
+    code: 'TELEBIRR30',
+    title: 'Telebirr 30% Off',
+    description: '30% instant discount when paying with Telebirr',
+    discountPercentage: 30,
     maxUses: 1000,
-    usedCount: 75,
+    usedCount: 61,
+    expiresAt: '2026-12-31',
+    isActive: true
+  },
+  {
+    code: 'CBEBIRR30',
+    title: 'CBE Birr 30% Off',
+    description: '30% instant discount when paying with Commercial Bank of Ethiopia',
+    discountPercentage: 30,
+    maxUses: 1000,
+    usedCount: 39,
+    expiresAt: '2026-12-31',
+    isActive: true
+  },
+  {
+    code: 'AAU2026',
+    title: 'Addis Ababa University 35% Off',
+    description: '35% student discount for AAU scholars',
+    discountPercentage: 35,
+    maxUses: 1000,
+    usedCount: 27,
+    expiresAt: '2026-12-31',
+    isActive: true
+  },
+  {
+    code: 'CAMPUS40',
+    title: 'Campus Ambassador 40% Off',
+    description: '40% discount with campus representative voucher',
+    discountPercentage: 40,
+    maxUses: 500,
+    usedCount: 19,
     expiresAt: '2026-12-31',
     isActive: true
   },
   {
     code: 'EXAMPASS40',
-    title: 'Exam Season Flat 40 ETB',
+    title: 'Exam Season Flat 40 ETB Off',
     description: 'Flat 40 ETB discount on any subscription package',
     discountPercentage: 0,
     fixedDiscountETB: 40,
-    maxUses: 300,
-    usedCount: 29,
-    expiresAt: '2026-12-31',
-    isActive: true
-  },
-  {
-    code: 'TELEBIRR10',
-    title: 'Telebirr 10% Off',
-    description: '10% instant promo code when paying with Telebirr',
-    discountPercentage: 10,
     maxUses: 500,
-    usedCount: 33,
+    usedCount: 45,
     expiresAt: '2026-12-31',
     isActive: true
   }
@@ -1427,6 +1471,28 @@ export async function fetchQuestionsForExamFromFirestore(examId: string): Promis
   return Array.from(qMap.values()).sort((a, b) => a.questionNumber - b.questionNumber);
 }
 
+export async function fetchQuestionsFromFirestore(subject?: string): Promise<FirestoreQuestion[]> {
+  const currentDb = getDb();
+  let dbQuestions: FirestoreQuestion[] = [];
+
+  if (currentDb) {
+    try {
+      const snap = await getDocs(collection(currentDb, 'questions'));
+      snap.forEach(docSnap => {
+        const item = docSnap.data() as FirestoreQuestion;
+        const qSub = ((item as any).subject || item.examId || '').toLowerCase();
+        if (!subject || qSub.includes(subject.toLowerCase()) || subject.toLowerCase().includes(qSub)) {
+          dbQuestions.push({ ...item, id: docSnap.id });
+        }
+      });
+    } catch (e) {
+      console.warn('[Firestore Questions query]:', e);
+    }
+  }
+
+  return dbQuestions;
+}
+
 export async function saveQuestionToFirestore(question: Partial<FirestoreQuestion>): Promise<{ success: boolean; question?: FirestoreQuestion; error?: string }> {
   const currentDb = getDb();
   if (!currentDb) return { success: false, error: 'Database service unavailable' };
@@ -1440,6 +1506,7 @@ export async function saveQuestionToFirestore(question: Partial<FirestoreQuestio
   const cleanQuestion: FirestoreQuestion = {
     id,
     examId: question.examId,
+    subject: question.subject || undefined,
     questionNumber: Number(question.questionNumber || 1),
     text: question.text?.trim() || 'Question text',
     textAmharic: question.textAmharic?.trim() || '',
@@ -1461,7 +1528,7 @@ export async function saveQuestionToFirestore(question: Partial<FirestoreQuestio
     await setDoc(doc(currentDb, 'questions', id), cleanQuestion);
     return { success: true, question: cleanQuestion };
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+    return handleFirestoreError(error, OperationType.WRITE, path);
   }
 }
 

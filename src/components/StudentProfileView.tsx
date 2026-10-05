@@ -40,6 +40,8 @@ interface StudentProfileViewProps {
   onSignOut?: () => void;
   onNavigateToUpgrade?: () => void;
   onOpenAdmin?: () => void;
+  textSize?: 'normal' | 'moderate' | 'large' | 'xlarge';
+  onUpdateTextSize?: (size: 'normal' | 'moderate' | 'large' | 'xlarge') => void;
 }
 
 export default function StudentProfileView({
@@ -55,7 +57,9 @@ export default function StudentProfileView({
   triggerPWAInstall,
   onSignOut,
   onNavigateToUpgrade,
-  onOpenAdmin
+  onOpenAdmin,
+  textSize = 'moderate',
+  onUpdateTextSize
 }: StudentProfileViewProps) {
   
   // Tab Navigation State
@@ -1291,6 +1295,51 @@ export default function StudentProfileView({
                             {isSelected && <Check className="w-3.5 h-3.5 text-amber-400" />}
                           </div>
                           <span className="text-[9px] text-slate-400 font-mono uppercase">ID Badge</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 3. Student Text Size Preference */}
+                <div className="space-y-2 pt-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs sm:text-sm font-bold text-slate-200 uppercase tracking-wider block">
+                      {language === 'en' ? "Reading Text Size" : "የጽሁፍ / ፊደል መጠን"}
+                    </label>
+                    <span className="text-xs text-amber-400 font-semibold">
+                      {textSize === 'moderate' ? (language === 'en' ? 'Moderate (Default)' : 'መካከለኛ (የተመከረ)') : textSize.toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    {[
+                      { id: 'normal', name: 'Normal', am: 'መደበኛ', size: '15px' },
+                      { id: 'moderate', name: 'Moderate', am: 'መካከለኛ ★', size: '16.5px' },
+                      { id: 'large', name: 'Large', am: 'ትልቅ', size: '18px' },
+                      { id: 'xlarge', name: 'Extra Large', am: 'በጣም ትልቅ', size: '19.5px' }
+                    ].map((s) => {
+                      const isSelected = textSize === s.id;
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => {
+                            playClickChime();
+                            onUpdateTextSize?.(s.id as any);
+                          }}
+                          className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-amber-500/15 border-amber-400 text-amber-300 ring-2 ring-amber-400/40'
+                              : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-xs sm:text-sm font-bold truncate">
+                              {language === 'en' ? s.name : s.am}
+                            </span>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-amber-400" />}
+                          </div>
+                          <span className="text-xs text-slate-400 font-mono font-medium">{s.size}</span>
                         </button>
                       );
                     })}

@@ -331,17 +331,17 @@ export default function ExamBrowserView({
                   </div>
 
                   {/* Exam Title (Main Focus) */}
-                  <h3 className="text-sm font-bold text-white group-hover:text-amber-300 transition-colors leading-snug line-clamp-2">
+                  <h3 className="text-sm sm:text-base font-bold text-white group-hover:text-amber-300 transition-colors leading-snug line-clamp-2">
                     {sheet.title}
                   </h3>
 
                   {/* University Name */}
-                  <div className="text-xs font-medium text-slate-300 truncate">
+                  <div className="text-xs sm:text-sm font-medium text-slate-200 truncate">
                     {sheet.university}
                   </div>
 
                   {/* Subject • Department */}
-                  <div className="text-[11px] text-slate-400 truncate">
+                  <div className="text-xs text-slate-400 truncate">
                     <span>{sheet.subject}</span>
                     {sheet.department && sheet.department !== sheet.subject && (
                       <span> • {sheet.department}</span>
@@ -350,8 +350,8 @@ export default function ExamBrowserView({
                 </div>
 
                 {/* Bottom Row: Metadata + Action Button */}
-                <div className="space-y-2.5 pt-2 border-t border-slate-800/80">
-                  <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium">
+                <div className="space-y-2.5 pt-2.5 border-t border-slate-800/80">
+                  <div className="flex items-center justify-between text-xs text-slate-300 font-medium">
                     <span>
                       {sheet.questions.length} {sheet.questions.length === 1 ? 'Question' : 'Questions'}
                     </span>
@@ -365,10 +365,10 @@ export default function ExamBrowserView({
                       playClickChime();
                       onOpenExam(sheet.id);
                     }}
-                    className="w-full py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
+                    className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs sm:text-sm uppercase tracking-wider rounded-xl transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
                   >
                     <span>{language === 'am' ? 'ፈተናውን ክፈትና አጥና' : 'Open Exam & Study'}</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
+                    <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
               </div>

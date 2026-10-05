@@ -1584,72 +1584,6 @@ app.post(['/api/auth/reset-password', '/api/auth/reset-password/'], async (req: 
   }
 });
 
-// Student Email Login Endpoint (Email + Password Authorization)
-app.post(['/api/auth/login', '/api/auth/login/'], async (req: Request, res: Response) => {
-  try {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Student email and password are required.' });
-    }
-
-    const cleanEmail = email.toLowerCase().trim();
-    const cleanPass = password.trim();
-
-    const supabase = getSupabaseAdmin();
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('student_profiles')
-          .select('*')
-          .eq('email', cleanEmail)
-          .maybeSingle();
-
-        if (data) {
-          const pd = data.profile_data || {};
-          if (pd.password && pd.password !== cleanPass) {
-            return res.status(401).json({ error: 'Incorrect password for this student account.' });
-          }
-
-          return res.json({
-            success: true,
-            user: {
-              id: data.id || `std_${cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')}`,
-              email: data.email,
-              phone: data.phone || pd.phone,
-              name: pd.name || data.email.split('@')[0],
-              university: pd.university || 'Wolkite University (WKU)',
-              year: pd.year || 'Freshman (1st Year)',
-              subjects: pd.subjects || ['Emerging Technologies', 'Communicative English', 'Mathematics'],
-              role: pd.userRole || (cleanEmail === PRIMARY_ADMIN_EMAIL.toLowerCase() ? 'super_admin' : 'student'),
-              is_pro: Boolean(pd.isPro || pd.is_pro)
-            }
-          });
-        }
-      } catch (dbErr) {
-        console.warn('[Supabase Login Query Warning]:', dbErr);
-      }
-    }
-
-    // Default student user object
-    return res.json({
-      success: true,
-      user: {
-        id: `std_${cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')}`,
-        email: cleanEmail,
-        name: cleanEmail.split('@')[0],
-        university: 'Wolkite University (WKU)',
-        year: 'Freshman (1st Year)',
-        subjects: ['Emerging Technologies', 'Communicative English', 'Mathematics'],
-        role: cleanEmail === PRIMARY_ADMIN_EMAIL.toLowerCase() ? 'super_admin' : 'student',
-        is_pro: false
-      }
-    });
-  } catch (e: any) {
-    console.error('[Login Endpoint Error]:', e);
-    return res.status(500).json({ error: e.message || 'Internal login error' });
-  }
-});
-
 // Endpoint to handle "Accept Authorization" link click from verification email card
 app.get(['/api/auth/accept-verification', '/api/auth/accept-verification/'], (req: Request, res: Response) => {
   try {
@@ -1889,6 +1823,419 @@ Instructions:
     console.error('[Asgobnyi AI Ask Error]:', e);
     return res.status(500).json({ success: false, error: e.message || 'Failed to process AI request' });
   }
+});
+
+// Manual Question Database Endpoints (0 API Key Required)
+const MANUAL_QUESTIONS_FILE = path.join(process.cwd(), 'data', 'manual_questions.json');
+
+function loadServerManualQuestions(): any[] {
+  try {
+    if (fs.existsSync(MANUAL_QUESTIONS_FILE)) {
+      const data = fs.readFileSync(MANUAL_QUESTIONS_FILE, 'utf-8');
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+  } catch (e) {
+    console.warn('[Manual Questions File] Read notice:', e);
+  }
+  return [];
+}
+
+function saveServerManualQuestions(questions: any[]) {
+  try {
+    const dir = path.dirname(MANUAL_QUESTIONS_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(MANUAL_QUESTIONS_FILE, JSON.stringify(questions, null, 2), 'utf-8');
+  } catch (e) {
+    console.warn('[Manual Questions File] Write notice:', e);
+  }
+}
+
+// In-memory cache synced with disk
+let serverQuestionsCache: any[] = loadServerManualQuestions();
+
+app.get(['/api/questions', '/api/questions/'], (req: Request, res: Response) => {
+  const { subject } = req.query;
+  if (typeof subject === 'string' && subject.trim()) {
+    const s = subject.trim().toLowerCase();
+    const filtered = serverQuestionsCache.filter(q => 
+      (q.subject && q.subject.toLowerCase().includes(s)) ||
+      (q.topic && q.topic.toLowerCase().includes(s))
+    );
+    return res.json({ success: true, count: filtered.length, questions: filtered });
+  }
+  return res.json({ success: true, count: serverQuestionsCache.length, questions: serverQuestionsCache });
+});
+
+app.post(['/api/questions', '/api/questions/'], (req: Request, res: Response) => {
+  try {
+    const item = req.body;
+    if (!item || !item.subject || !item.questionText) {
+      return res.status(400).json({ success: false, error: 'Subject and Question Text are required.' });
+    }
+
+    const id = item.id || `manual_q_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const newQuestion = {
+      ...item,
+      id,
+      createdAt: item.createdAt || new Date().toISOString()
+    };
+
+    // Upsert
+    const idx = serverQuestionsCache.findIndex(q => q.id === id);
+    if (idx >= 0) {
+      serverQuestionsCache[idx] = newQuestion;
+    } else {
+      serverQuestionsCache.unshift(newQuestion);
+    }
+
+    saveServerManualQuestions(serverQuestionsCache);
+    return res.json({ success: true, question: newQuestion });
+  } catch (err: any) {
+    console.error('[Questions POST Error]:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to save question' });
+  }
+});
+
+app.delete(['/api/questions/:id', '/api/questions/:id/'], (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ success: false, error: 'Question ID required' });
+    serverQuestionsCache = serverQuestionsCache.filter(q => q.id !== id);
+    saveServerManualQuestions(serverQuestionsCache);
+    return res.json({ success: true, deletedId: id });
+  } catch (err: any) {
+    console.error('[Questions DELETE Error]:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to delete question' });
+  }
+});
+
+app.post(['/api/questions/batch', '/api/questions/batch/'], (req: Request, res: Response) => {
+  try {
+    const { questions: incomingQuestions } = req.body;
+    if (!Array.isArray(incomingQuestions)) {
+      return res.status(400).json({ success: false, error: 'Expected "questions" array in request body.' });
+    }
+
+    let importedCount = 0;
+    let duplicateCount = 0;
+    const existingFingerprints = new Set(
+      serverQuestionsCache.map(q => {
+        const text = (q.question || q.questionText || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const sub = (q.subject || '').toLowerCase().trim();
+        return `${sub}::${text}`;
+      })
+    );
+
+    for (const q of incomingQuestions) {
+      const qText = (q.question || q.questionText || '').trim();
+      const subject = (q.subject || 'General').trim();
+      if (!qText) continue;
+
+      const normText = qText.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const fp = `${subject.toLowerCase()}::${normText}`;
+
+      if (existingFingerprints.has(fp)) {
+        duplicateCount++;
+        continue;
+      }
+
+      existingFingerprints.add(fp);
+      const id = q.id || `q_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const normalizedQ = {
+        id,
+        subject,
+        course: q.course || subject,
+        unit: q.unit || 'Unit 1',
+        topic: q.topic || 'General Topic',
+        difficulty: q.difficulty || 'medium',
+        question_type: q.question_type || 'multiple_choice',
+        question: qText,
+        questionText: qText,
+        options: q.options || [],
+        options_raw: q.options_raw || [],
+        correct_answer: q.correct_answer || q.correctAnswer || '',
+        correctAnswer: q.correct_answer || q.correctAnswer || '',
+        explanation: q.explanation || '',
+        source: q.source || 'Curriculum Module',
+        source_unit: q.source_unit || q.unit || '',
+        source_file: q.source_file || '',
+        is_published: q.is_published !== false,
+        is_pro: Boolean(q.is_pro),
+        batch_id: q.batch_id || 'manual_batch_import',
+        createdAt: q.created_at || new Date().toISOString()
+      };
+
+      serverQuestionsCache.unshift(normalizedQ);
+      importedCount++;
+    }
+
+    saveServerManualQuestions(serverQuestionsCache);
+    return res.json({
+      success: true,
+      importedCount,
+      duplicateCount,
+      totalRemaining: serverQuestionsCache.length
+    });
+  } catch (err: any) {
+    console.error('[Questions Batch POST Error]:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to batch save questions' });
+  }
+});
+
+// Admin AI Question Generation Workflow Endpoint (Draft Only -> Review Screen)
+app.post(['/api/questions/ai-generate-draft', '/api/questions/ai-generate-draft/'], async (req: Request, res: Response) => {
+  try {
+    const { 
+      subject, 
+      course, 
+      unit, 
+      topic, 
+      count = 5, 
+      difficultyDistribution = { easy: 40, medium: 40, hard: 20 },
+      questionType = 'multiple_choice',
+      source,
+      sourceUnit,
+      sourceFile,
+      sourceExcerpt,
+      apiKey
+    } = req.body;
+
+    if (!subject || typeof subject !== 'string' || !subject.trim()) {
+      return res.status(400).json({ success: false, error: 'Subject is required.' });
+    }
+
+    const questionCount = Math.min(Math.max(Number(count) || 5, 1), 30);
+    const resolvedCourse = course?.trim() || `${subject} Freshman Module`;
+    const resolvedUnit = unit?.trim() || 'Core Unit';
+    const resolvedTopic = topic?.trim() || 'General Concepts';
+    const resolvedSource = source?.trim() || 'Ethiopian University Curriculum Module';
+    const resolvedSourceUnit = sourceUnit?.trim() || resolvedUnit;
+    const resolvedSourceFile = sourceFile?.trim() || '';
+
+    const systemInstruction = `You are a Senior Curriculum Professor at Wolkite University / Addis Ababa University in Ethiopia.
+Your task is to generate rigorous, authentic academic exam questions strictly following the Ethiopian Higher Education common course syllabus.
+
+QUALITY RULES:
+1. Test understanding, logical analysis, application, and problem solving, not pure shallow memorization.
+2. Natural, professional university-level English.
+3. Multiple Choice questions MUST have EXACTLY 4 options with IDs "A", "B", "C", and "D".
+4. For calculation-based subjects (Mathematics, General Physics, General Chemistry, Economics):
+   - Include realistic numerical problems.
+   - Show step-by-step formula derivations and calculations in the explanation.
+   - Ensure calculations and arithmetic are 100% mathematically correct.
+5. Provide ONE unambiguously correct answer and three plausible distractors. Avoid "all of the above" or "none of the above".
+6. Return JSON only conforming to the exact schema requested. Do not include markdown code block syntax or commentary.`;
+
+    const userPrompt = `Generate exactly ${questionCount} academic exam questions for:
+Subject: ${subject}
+Course: ${resolvedCourse}
+Unit: ${resolvedUnit}
+Topic: ${resolvedTopic}
+Question Type: ${questionType}
+Source Document / Context: ${resolvedSource} (${resolvedSourceUnit}) ${sourceExcerpt ? `\nReference Excerpt:\n"${sourceExcerpt}"` : ''}
+
+Target Difficulty Distribution:
+- Easy: ~${difficultyDistribution.easy || 40}%
+- Medium: ~${difficultyDistribution.medium || 40}%
+- Hard: ~${difficultyDistribution.hard || 20}%
+
+Output format: Return a valid JSON array of question objects where each object has this EXACT structure:
+[
+  {
+    "subject": "${subject}",
+    "course": "${resolvedCourse}",
+    "unit": "${resolvedUnit}",
+    "topic": "${resolvedTopic}",
+    "difficulty": "easy" | "medium" | "hard",
+    "question_type": "multiple_choice",
+    "question": "Question text...",
+    "options": [
+      { "id": "A", "text": "Option A" },
+      { "id": "B", "text": "Option B" },
+      { "id": "C", "text": "Option C" },
+      { "id": "D", "text": "Option D" }
+    ],
+    "correct_answer": "A" | "B" | "C" | "D",
+    "explanation": "Clear explanation referencing academic concepts or calculations...",
+    "source": "${resolvedSource}",
+    "source_unit": "${resolvedSourceUnit}",
+    "source_file": "${resolvedSourceFile}"
+  }
+]`;
+
+    const aiRes = await generateSingleAIResponse(
+      [{ role: 'user', content: userPrompt }],
+      systemInstruction,
+      apiKey
+    );
+
+    const rawText = aiRes.text?.trim() || '';
+    // Strip markdown code fences if present
+    const cleanedJson = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
+    
+    let generatedQuestions: any[] = [];
+    try {
+      const parsed = JSON.parse(cleanedJson);
+      if (Array.isArray(parsed)) {
+        generatedQuestions = parsed;
+      } else if (parsed && Array.isArray(parsed.questions)) {
+        generatedQuestions = parsed.questions;
+      }
+    } catch (parseErr) {
+      console.warn('[AI Draft Generation JSON Parse Error]:', parseErr, rawText.slice(0, 300));
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Failed to parse AI output into structured JSON. Please try again with fewer questions.' 
+      });
+    }
+
+    // Attach draft status & unique IDs for review screen
+    const draftIdBatch = `draft_ai_${Date.now()}`;
+    const reviewReady = generatedQuestions.map((q, idx) => ({
+      ...q,
+      id: `draft_q_${Date.now()}_${idx + 1}`,
+      batch_id: draftIdBatch,
+      is_published: false, // DRAFT ONLY! Admin must review and approve before publishing
+      status: 'pending_review',
+      created_at: new Date().toISOString()
+    }));
+
+    return res.json({
+      success: true,
+      batchId: draftIdBatch,
+      count: reviewReady.length,
+      questions: reviewReady
+    });
+  } catch (err: any) {
+    console.error('[AI Question Generation Error]:', err);
+    return res.status(500).json({ success: false, error: err.message || 'AI Generation failed' });
+  }
+});
+
+// Student Question Progress & Bookmarks (Server-side persistence fallback)
+const PROGRESS_FILE = path.join(process.cwd(), 'data', 'question_progress.json');
+const BOOKMARKS_FILE = path.join(process.cwd(), 'data', 'question_bookmarks.json');
+
+function loadJsonFile(filePath: string): any[] {
+  try {
+    if (fs.existsSync(filePath)) {
+      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    }
+  } catch (e) {
+    console.warn(`[Read File Warning] ${filePath}:`, e);
+  }
+  return [];
+}
+
+function saveJsonFile(filePath: string, data: any) {
+  try {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (e) {
+    console.warn(`[Write File Warning] ${filePath}:`, e);
+  }
+}
+
+let serverProgressCache = loadJsonFile(PROGRESS_FILE);
+let serverBookmarksCache = loadJsonFile(BOOKMARKS_FILE);
+
+app.post(['/api/questions/progress', '/api/questions/progress/'], (req: Request, res: Response) => {
+  try {
+    const { userId, questionId, isCorrect, chosenAnswer } = req.body;
+    if (!userId || !questionId) {
+      return res.status(400).json({ success: false, error: 'userId and questionId are required.' });
+    }
+
+    const existingIdx = serverProgressCache.findIndex(p => p.user_id === userId && p.question_id === questionId);
+    const now = new Date().toISOString();
+
+    if (existingIdx >= 0) {
+      const p = serverProgressCache[existingIdx];
+      p.attempts = (p.attempts || 1) + 1;
+      if (isCorrect) p.correct_attempts = (p.correct_attempts || 0) + 1;
+      else p.incorrect_attempts = (p.incorrect_attempts || 0) + 1;
+      p.last_answer = chosenAnswer || p.last_answer;
+      p.last_attempt_at = now;
+      serverProgressCache[existingIdx] = p;
+    } else {
+      serverProgressCache.push({
+        id: `prog_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        user_id: userId,
+        question_id: questionId,
+        attempts: 1,
+        correct_attempts: isCorrect ? 1 : 0,
+        incorrect_attempts: isCorrect ? 0 : 1,
+        last_answer: chosenAnswer || '',
+        last_attempt_at: now
+      });
+    }
+
+    saveJsonFile(PROGRESS_FILE, serverProgressCache);
+    return res.json({ success: true });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get(['/api/questions/progress', '/api/questions/progress/'], (req: Request, res: Response) => {
+  const { userId } = req.query;
+  if (!userId || typeof userId !== 'string') {
+    return res.json({ success: true, progress: [] });
+  }
+  const userProg = serverProgressCache.filter(p => p.user_id === userId);
+  return res.json({ success: true, progress: userProg });
+});
+
+app.post(['/api/questions/bookmarks', '/api/questions/bookmarks/'], (req: Request, res: Response) => {
+  try {
+    const { userId, questionId } = req.body;
+    if (!userId || !questionId) {
+      return res.status(400).json({ success: false, error: 'userId and questionId are required.' });
+    }
+
+    const idx = serverBookmarksCache.findIndex(b => b.user_id === userId && b.question_id === questionId);
+    let isBookmarked = false;
+
+    if (idx >= 0) {
+      serverBookmarksCache.splice(idx, 1);
+      isBookmarked = false;
+    } else {
+      serverBookmarksCache.push({
+        id: `bm_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        user_id: userId,
+        question_id: questionId,
+        created_at: new Date().toISOString()
+      });
+      isBookmarked = true;
+    }
+
+    saveJsonFile(BOOKMARKS_FILE, serverBookmarksCache);
+    return res.json({ success: true, isBookmarked });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get(['/api/questions/bookmarks', '/api/questions/bookmarks/'], (req: Request, res: Response) => {
+  const { userId } = req.query;
+  if (!userId || typeof userId !== 'string') {
+    return res.json({ success: true, bookmarkedQuestionIds: [] });
+  }
+  const ids = serverBookmarksCache.filter(b => b.user_id === userId).map(b => b.question_id);
+  return res.json({ success: true, bookmarkedQuestionIds: ids });
+});
+
+app.get(['/api/questions/stats', '/api/questions/stats/'], (_req: Request, res: Response) => {
+  const counts: Record<string, number> = {};
+  for (const q of serverQuestionsCache) {
+    const sub = q.subject || 'Other';
+    counts[sub] = (counts[sub] || 0) + 1;
+  }
+  return res.json({ success: true, total: serverQuestionsCache.length, counts });
 });
 
 // Dedicated Subject-Pure Academic Quiz Generation Endpoint (Gemini AI + Curated Fallback)

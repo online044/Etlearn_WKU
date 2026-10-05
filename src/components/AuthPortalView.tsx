@@ -518,25 +518,20 @@ export default function AuthPortalView({
           return;
         }
       } catch (fbErr: any) {
-        console.error('[Firebase Auth Login error]:', fbErr?.code, fbErr?.message);
-        playFailureChime();
-        setLoading(false);
-        if (fbErr?.code === 'auth/wrong-password' || fbErr?.code === 'auth/invalid-credential') {
-          setPasswordError(lang === 'am' ? "የተሳሳተ ኢሜይል ወይም የይለፍ ቃል።" : "Invalid email or password.");
-          return;
-        } else if (fbErr?.code === 'auth/user-not-found') {
-          setAuthError(lang === 'am' ? "በዚህ ኢሜይል የተመዘገበ ተማሪ አልተገኘም። እባክዎ 'አካውንት ፍጠር' የሚለውን ይጫኑ።" : "No user found with this email. Switch to 'Create Account' to register.");
-          return;
-        } else if (fbErr?.code === 'auth/too-many-requests') {
+        console.warn('[Firebase Auth Login notice]:', fbErr?.code, fbErr?.message);
+        if (fbErr?.code === 'auth/too-many-requests') {
+          playFailureChime();
+          setLoading(false);
           setAuthError(lang === 'am' ? "ተደጋጋሚ ሙከራ ተደርጓል። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ ወይም የይለፍ ቃልዎን ይቀይሩ።" : "Too many failed attempts. Access temporarily restricted. Try resetting your password.");
           return;
         } else if (fbErr?.code === 'auth/network-request-failed') {
+          playFailureChime();
+          setLoading(false);
           setAuthError(lang === 'am' ? "የኢንተርኔት ግንኙነት ችግር አጋጥሟል። እባክዎን ግንኙነትዎን ፈትሸው እንደገና ይሞክሩ።" : "Internet connection problem. Please check your connection and try again.");
           return;
-        } else {
-          setAuthError(formatFirebaseAuthError(fbErr, lang));
-          return;
         }
+        // For credentials errors (such as auth/invalid-credential, auth/user-not-found, auth/wrong-password),
+        // continue to Step 2 to verify against server login endpoint and local saved accounts.
       }
     }
 
@@ -791,7 +786,7 @@ export default function AuthPortalView({
           }
         }
       } catch (fbErr: any) {
-        console.error('[Firebase Auth Registration Error]:', fbErr?.code, fbErr?.message);
+        console.warn('[Firebase Auth Registration notice]:', fbErr?.code, fbErr?.message);
         playFailureChime();
         setLoading(false);
         if (fbErr?.code === 'auth/email-already-in-use') {

@@ -1350,13 +1350,14 @@ export default function SplashOnboarding({ onComplete, initialProfile }: SplashO
           return;
         }
       } catch (fbErr: any) {
-        console.warn('[Firebase Auth Login attempt]:', fbErr?.message || fbErr);
-        if (fbErr?.code === 'auth/wrong-password' || fbErr?.code === 'auth/invalid-credential') {
-          setPasswordError(preferredLanguage === 'am' ? "የይለፍ ቃል የተሳሳተ ነው። እባክዎ እንደገና ይሞክሩ ወይም 'የይለፍ ቃል ረሱ?' የሚለውን ይጫኑ።" : "Incorrect password. Please verify your credentials or reset your password.");
+        console.warn('[Firebase Auth Login attempt]:', fbErr?.code || fbErr?.message || fbErr);
+        if (fbErr?.code === 'auth/too-many-requests') {
+          setPasswordError(preferredLanguage === 'am' ? "ተደጋጋሚ ሙከራ ተደርጓል። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።" : "Too many attempts. Please wait a moment and try again.");
           playFailureChime();
           setLoading(false);
           return;
         }
+        // If auth/wrong-password or auth/invalid-credential, continue to Step 5 (Supabase) and Step 6 (Server/Local)
       }
     }
 

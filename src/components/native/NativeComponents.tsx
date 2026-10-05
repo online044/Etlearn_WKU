@@ -30,7 +30,7 @@ export function SubjectChip({
         playClickChime();
         onClick();
       }}
-      className={`px-2.5 min-[360px]:px-3 py-1.5 min-[360px]:py-2 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-all cursor-pointer border select-none ${
+      className={`px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 shrink-0 transition-all cursor-pointer border select-none ${
         isSelected
           ? 'bg-amber-400 text-slate-950 border-amber-300 font-bold shadow-sm shadow-amber-400/20'
           : 'bg-slate-850 bg-[#131D33] text-slate-300 border-slate-700/80 hover:bg-slate-800 hover:text-white'
@@ -39,13 +39,13 @@ export function SubjectChip({
       {icon && <span className="shrink-0">{icon}</span>}
       <span className="truncate">{label}</span>
       {typeof count === 'number' && (
-        <span className={`text-[9px] min-[360px]:text-[10px] px-1.5 py-0.2 rounded-md ${
-          isSelected ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
+        <span className={`text-[10px] sm:text-xs px-2 py-0.5 rounded-md font-medium ${
+          isSelected ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-300'
         }`}>
           {count}
         </span>
       )}
-      {isLocked && <Lock className="w-3 h-3 text-amber-400 shrink-0 ml-0.5" />}
+      {isLocked && <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0 ml-0.5" />}
     </button>
   );
 }
@@ -82,25 +82,25 @@ export function QuickAction({
         playClickChime();
         onClick();
       }}
-      className="p-3 rounded-xl bg-[#111C35] border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between items-start text-left cursor-pointer group active:scale-[0.98] min-h-[80px] w-full"
+      className="p-3.5 rounded-xl bg-[#111C35] border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between items-start text-left cursor-pointer group active:scale-[0.98] min-h-[88px] w-full"
     >
       <div className="flex items-center justify-between w-full mb-2">
         <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${colorMap[colorTheme]}`}>
           <Icon className="w-4 h-4" />
         </div>
         {badge && (
-          <span className="text-[9px] font-semibold text-slate-400">
+          <span className="text-[10px] sm:text-xs font-semibold text-slate-300">
             {badge}
           </span>
         )}
       </div>
 
       <div className="w-full">
-        <h4 className="text-xs font-bold text-slate-100 group-hover:text-amber-400 transition-colors leading-tight truncate w-full">
+        <h4 className="text-sm font-bold text-slate-100 group-hover:text-amber-400 transition-colors leading-tight truncate w-full">
           {label}
         </h4>
         {sublabel && (
-          <p className="text-[10px] text-slate-400 mt-0.5 leading-tight truncate w-full">
+          <p className="text-xs text-slate-300 mt-1 leading-tight truncate w-full font-medium">
             {sublabel}
           </p>
         )}
@@ -141,29 +141,29 @@ export function CourseCard({
         playClickChime();
         onSelect();
       }}
-      className="p-3.5 rounded-2xl bg-[#111C35] border border-slate-800 hover:border-slate-700 transition-all cursor-pointer group active:scale-[0.99] flex flex-col justify-between"
+      className="p-4 rounded-2xl bg-[#111C35] border border-slate-800 hover:border-slate-700 transition-all cursor-pointer group active:scale-[0.99] flex flex-col justify-between"
     >
       <div>
-        <div className="flex items-center justify-between gap-2 mb-1.5">
-          <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-md border border-amber-400/20">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <span className="text-xs font-black uppercase tracking-wider text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-md border border-amber-400/20">
             {subject}
           </span>
           {level && (
-            <span className="text-[10px] text-slate-400 font-medium">
+            <span className="text-xs text-slate-300 font-medium">
               {level}
             </span>
           )}
         </div>
 
-        <h3 className="text-sm font-bold text-slate-100 group-hover:text-amber-400 transition-colors line-clamp-2 leading-snug">
+        <h3 className="text-base font-bold text-slate-100 group-hover:text-amber-400 transition-colors line-clamp-2 leading-snug">
           {title}
         </h3>
       </div>
 
       <div className="mt-3 pt-2.5 border-t border-slate-800/80">
-        <div className="flex items-center justify-between text-[10.5px] text-slate-400 mb-1 font-medium">
+        <div className="flex items-center justify-between text-xs text-slate-300 mb-1.5 font-medium">
           <span>{isAmharic ? 'ሂደት' : 'Progress'}</span>
-          <span className="text-slate-200 font-bold">{progressPercentage}%</span>
+          <span className="text-slate-100 font-bold">{progressPercentage}%</span>
         </div>
         <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
           <div
@@ -193,30 +193,30 @@ export function ProgressCard({
   const isAmharic = language === 'am';
 
   return (
-    <div className="p-2 min-[360px]:p-3 rounded-xl sm:rounded-2xl bg-[#111C35] border border-slate-800 grid grid-cols-3 gap-1.5 min-[360px]:gap-2 text-center select-none w-full">
-      <div className="p-1.5 min-[360px]:p-2 rounded-lg sm:rounded-xl bg-slate-900/60 border border-slate-800/60 flex flex-col justify-center">
-        <span className="text-sm min-[360px]:text-base sm:text-lg font-black text-amber-400 block leading-tight font-mono">
+    <div className="p-3 rounded-2xl bg-[#111C35] border border-slate-800 grid grid-cols-3 gap-2 text-center select-none w-full">
+      <div className="p-2 sm:p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/60 flex flex-col justify-center">
+        <span className="text-base sm:text-lg font-black text-amber-400 block leading-tight font-mono">
           🔥 {streak}
         </span>
-        <span className="text-[8.5px] min-[360px]:text-[9.5px] sm:text-[10px] text-slate-400 font-medium mt-0.5 block truncate leading-tight">
+        <span className="text-xs text-slate-300 font-medium mt-1 block truncate leading-tight">
           {isAmharic ? 'ተከታታይነት' : 'Day Streak'}
         </span>
       </div>
 
-      <div className="p-1.5 min-[360px]:p-2 rounded-lg sm:rounded-xl bg-slate-900/60 border border-slate-800/60 flex flex-col justify-center">
-        <span className="text-sm min-[360px]:text-base sm:text-lg font-black text-blue-400 block leading-tight font-mono">
+      <div className="p-2 sm:p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/60 flex flex-col justify-center">
+        <span className="text-base sm:text-lg font-black text-blue-400 block leading-tight font-mono">
           ⏱️ {studyHours}h
         </span>
-        <span className="text-[8.5px] min-[360px]:text-[9.5px] sm:text-[10px] text-slate-400 font-medium mt-0.5 block truncate leading-tight">
+        <span className="text-xs text-slate-300 font-medium mt-1 block truncate leading-tight">
           {isAmharic ? 'የጥናት ሰዓት' : 'Study Time'}
         </span>
       </div>
 
-      <div className="p-1.5 min-[360px]:p-2 rounded-lg sm:rounded-xl bg-slate-900/60 border border-slate-800/60 flex flex-col justify-center">
-        <span className="text-sm min-[360px]:text-base sm:text-lg font-black text-emerald-400 block leading-tight font-mono">
+      <div className="p-2 sm:p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/60 flex flex-col justify-center">
+        <span className="text-base sm:text-lg font-black text-emerald-400 block leading-tight font-mono">
           📊 {completionRate}%
         </span>
-        <span className="text-[8.5px] min-[360px]:text-[9.5px] sm:text-[10px] text-slate-400 font-medium mt-0.5 block truncate leading-tight">
+        <span className="text-xs text-slate-300 font-medium mt-1 block truncate leading-tight">
           {isAmharic ? 'የተጠናቀቀ' : 'Completed'}
         </span>
       </div>
