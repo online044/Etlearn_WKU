@@ -8,7 +8,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   FileText, Search, Star, Bookmark, BookOpen, ChevronRight, ChevronLeft,
   X, Check, Bot, Sparkles, Printer, ZoomIn, ZoomOut, Maximize2, Minimize2,
-  Download, Moon, Sun, Layers, HelpCircle, CheckCircle2, RotateCcw, Share2
+  Download, Moon, Sun, Layers, HelpCircle, CheckCircle2, RotateCcw, Share2,
+  ExternalLink, Folder, CloudDownload, Eye, ShieldCheck
 } from 'lucide-react';
 import { StudentProfile } from '../types';
 import { playClickChime, playSuccessChime } from '../utils/audio';
@@ -26,6 +27,22 @@ export interface BookStoreViewProps {
   onOpenInAppViewer?: (url: string, title: string) => void;
 }
 
+// ─── GOOGLE DRIVE REPOSITORY INTEGRATION ───
+export const GOOGLE_DRIVE_FOLDER_ID = '1k7l9mQ0nFUnUIn7CrJwqERAUG0UeVsAF';
+export const GOOGLE_DRIVE_FOLDER_URL = 'https://drive.google.com/drive/folders/1k7l9mQ0nFUnUIn7CrJwqERAUG0UeVsAF?usp=sharing';
+
+export function getGoogleDrivePreviewUrl(fileId: string): string {
+  return `https://drive.google.com/file/d/${fileId}/preview`;
+}
+
+export function getGoogleDriveViewUrl(fileId: string): string {
+  return `https://drive.google.com/file/d/${fileId}/view?usp=sharing`;
+}
+
+export function getGoogleDriveDownloadUrl(fileId: string): string {
+  return `https://drive.google.com/uc?export=download&id=${fileId}`;
+}
+
 export interface FreshmanModule {
   id: string;
   code: string;
@@ -41,6 +58,9 @@ export interface FreshmanModule {
   description: string;
   amharicDescription: string;
   rating: number;
+  googleDriveFileId?: string;
+  googleDriveFileName?: string;
+  googleDriveAltFileId?: string;
 }
 
 /**
@@ -60,6 +80,8 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
     pages: 148,
     fileSizeMb: 3.6,
     rating: 4.9,
+    googleDriveFileId: '124Fl_yC-lWM4JiKuFwMItJUDJM5NmV9F',
+    googleDriveFileName: 'CRITICAL THINKING module.pdf',
     description: 'Official Ministry of Education module covering argumentative structures, premises and conclusions, deductive validity, inductive strength, and formal/informal cognitive fallacies.',
     amharicDescription: 'የአመክንዮ መሰረቶች፣ ትክክለኛ እና ስህተት የሆኑ የመከራከሪያ ነጥቦች (Fallacies)፣ እና ሂሳዊ የአስተሳሰብ ክህሎቶችን የሚያስተምር የጋራ የዩኒቨርሲቲ ሞጁል።',
     chapters: [
@@ -82,6 +104,8 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
     pages: 176,
     fileSizeMb: 4.2,
     rating: 4.8,
+    googleDriveFileId: '1nTlrUtAVzOSOsoeG4AX883sVlIxkfDrz',
+    googleDriveFileName: 'ECONOMICS module.pdf',
     description: 'Foundations of economic analysis: scarcity and choice, production possibilities frontier (PPF), market demand and supply equilibrium, consumer utility, and macroeconomic indicators.',
     amharicDescription: 'የእጥረትና የምርጫ ህጎች፣ የፍላጎትና አቅርቦት ሚዛን፣ የተጠቃሚዎች እርካታ (Utility) እና አጠቃላይ የሀገር ኢኮኖሚ መለኪያዎች።',
     chapters: [
@@ -105,6 +129,8 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
     pages: 154,
     fileSizeMb: 3.9,
     rating: 5.0,
+    googleDriveFileId: '1sqKFF2o8ORHOnoF9VRy4x5hgY7lp-Uub',
+    googleDriveFileName: 'EMERGING TECHNOLOGIES module.pdf',
     description: 'Comprehensive curriculum on the Fourth Industrial Revolution (4IR), Artificial Intelligence, Machine Learning paradigms, Internet of Things (IoT), Big Data, and Cloud/Blockchain systems.',
     amharicDescription: 'የአራተኛው የኢንዱስትሪ አብዮት (4IR)፣ አርቴፊሻል ኢንተለጀንስ (AI)፣ የነገሮች ኢንተርኔት (IoT) እና የሳይበር ደህንነት ጽንሰ-ሀሳቦች።',
     chapters: [
@@ -127,6 +153,8 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
     pages: 142,
     fileSizeMb: 3.4,
     rating: 4.8,
+    googleDriveFileId: '14DKK75SxkylV4sLdaYTu_6dj7Y1nXKWu',
+    googleDriveFileName: 'ENTREPRENEURSHIP module.pdf',
     description: 'Principles of entrepreneurial mindset, opportunity recognition, business planning, market feasibility analysis, venture financing, and Ethiopian small and micro enterprise policies.',
     amharicDescription: 'የስራ ፈጠራ አስተሳሰብ፣ አዋጭ የንግድ ሃሳቦችን ማፍለቅ፣ የንግድ እቅድ ዝግጅት እና በኢትዮጵያ የስራ እድል ፈጠራ ስልቶች።',
     chapters: [
@@ -149,6 +177,8 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
     pages: 196,
     fileSizeMb: 5.1,
     rating: 4.9,
+    googleDriveFileId: '1On4zzWIFDWypb7kU-HMTOmx6SRwp-K7Q',
+    googleDriveFileName: 'GENERAL BIOLOGY module.pdf',
     description: 'Molecular basis of life, cellular structure and organelle biology, bioenergetics (cellular respiration and photosynthesis), molecular genetics, and ecological biodiversity in Ethiopia.',
     amharicDescription: 'የህይወት ሞለኪውላዊ መሰረት፣ የህዋስ (Cell) አወቃቀር፣ የሃይል አመነጫጨት ስርዓት፣ የዘረ-መል (DNA) ጥናትና ስነ-ምህዳር።',
     chapters: [
@@ -171,6 +201,8 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
     pages: 218,
     fileSizeMb: 5.5,
     rating: 4.8,
+    googleDriveFileId: '1gm0FrHxIQhxto8pfrf0Fy8NnHLDAdU0S',
+    googleDriveFileName: 'GENERAL CHEMISTRY module.pdf',
     description: 'Atomic structure, quantum mechanical models, periodic trends, chemical bonding and VSEPR theories, gas laws, chemical thermodynamics, kinetics, and chemical equilibrium.',
     amharicDescription: 'የአተም ውስጣዊ አወቃቀር፣ ኬሚካላዊ ትስስሮች፣ የጋዞች ህግ፣ ቴርሞዳይናሚክስ እና ኬሚካላዊ ምላሽ ፍጥነት።',
     chapters: [
@@ -185,7 +217,7 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
   {
     id: 'freshman_physics',
     code: 'Phys 1011',
-    title: 'General Physics Course Syllabus / General Physics',
+    title: 'General Physics',
     amharicTitle: 'አጠቃላይ ፊዚክስ',
     stream: 'Natural Science',
     semester: 'Semester I',
@@ -194,6 +226,9 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
     pages: 232,
     fileSizeMb: 5.8,
     rating: 4.9,
+    googleDriveFileId: '1JUJ1wclP4yNyyv1bb8kNXOsfHDKvJqXJ',
+    googleDriveFileName: 'GENERAL PHYSICS module.pdf',
+    googleDriveAltFileId: '1cLpYcabSSWrtOp6zAS5ZL2b1NtD9nAem',
     description: 'Vectors and coordinate systems, kinematics in 1D & 2D, Newton\'s laws of motion, work-energy theorems, rotational equilibrium, fluid mechanics, oscillations, and thermodynamics.',
     amharicDescription: 'የቬክተር ስሌቶች፣ የኒውተን የእንቅስቃሴ ህጎች፣ ስራና ጉልበት፣ የማዕበል ባህሪያትና የሙቀት ህጎች (ቴርሞዳይናሚክስ)።',
     chapters: [
@@ -217,6 +252,8 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
     pages: 164,
     fileSizeMb: 3.8,
     rating: 4.8,
+    googleDriveFileId: '1FAVXFQheYxYKFh_PI2RkcW31HZa-SdTm',
+    googleDriveFileName: 'GENERAL PYSYCHOLOGY module.pdf',
     description: 'Scientific foundations of behavior and mental processes, neuropsychology, sensation and perception, behavioral conditioning, cognitive memory models, emotion, and vital life skills.',
     amharicDescription: 'የሰው ልጅ ባህሪና የአእምሮ ሂደት ጥናት፣ የመማር ንድፈ-ሃሳቦች፣ የማስታወስ ችሎታ እና የስነ-ልቦና ህይወት ክህሎቶች።',
     chapters: [
@@ -231,7 +268,7 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
   {
     id: 'freshman_geography',
     code: 'GeES 1011',
-    title: 'Geography',
+    title: 'Geography of Ethiopia and the Horn',
     amharicTitle: 'የኢትዮጵያና የአፍሪካ ቀንድ ጂኦግራፊ',
     stream: 'Common',
     semester: 'Semester I',
@@ -240,6 +277,8 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
     pages: 188,
     fileSizeMb: 4.6,
     rating: 4.8,
+    googleDriveFileId: '1gJJgwSipt30xDslO7JAvMMWz2QNVMtHN',
+    googleDriveFileName: 'Geography Module.pdf',
     description: 'Spatial configuration of Ethiopia and the Horn, geological formations and landforms, major drainage basins (Blue Nile, Awash, Omo), climate regimes, soils, and population demography.',
     amharicDescription: 'የኢትዮጵያ መልክዓ-ምድር አቀማመጥ፣ የጂኦሎጂ ታሪክና ተራሮች፣ የወንዞችና ሀይቆች ተፋሰሶች፣ የአየር ንብረትና የህዝብ ስነ-ስብስብ።',
     chapters: [
@@ -263,6 +302,8 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
     pages: 156,
     fileSizeMb: 3.7,
     rating: 4.7,
+    googleDriveFileId: '1t4g5MyBhPhXRsXPXA01Zc6GfxAB9LVAq',
+    googleDriveFileName: 'GLOBAL TRENDS module.pdf',
     description: 'Theories of International Relations (Realism, Liberalism, Constructivism), globalization dynamics, global political economy, regional integration in Africa, and contemporary security issues.',
     amharicDescription: 'የአለም አቀፍ ግንኙነቶች ንድፈ-ሀሳብ፣ ግሎባላይዜሽን፣ የአለም ኢኮኖሚ ስርዓትና የአፍሪካ ቀጣናዊ ትብብር።',
     chapters: [
@@ -285,6 +326,8 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
     pages: 124,
     fileSizeMb: 3.1,
     rating: 4.8,
+    googleDriveFileId: '1hWYVvjJB3LkndfAlbGJDtlVBzmBgkY3i',
+    googleDriveFileName: 'INCLUSIVENESS Module.pdf',
     description: 'Concepts of impairment, disability and vulnerability, screening and assessment, universal design for learning, assistive devices, and legal human rights frameworks in Ethiopian universities.',
     amharicDescription: 'ልዩ ፍላጎት ያላቸውን ሰዎች መደገፍ፣ አካታች የትምህርትና ማህበራዊ ስርዓት መገንባት እና በኢትዮጵያ የሰብዓዊ መብት ድንጋጌዎች።',
     chapters: [
@@ -307,6 +350,8 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
     pages: 172,
     fileSizeMb: 4.0,
     rating: 4.8,
+    googleDriveFileId: '1irrsbxQWb2ZbTscmXp0hF9qzgDrZCQoV',
+    googleDriveFileName: 'MORAL and CIVIC module.pdf',
     description: 'Normative and applied ethics, the role of state and government, citizenship responsibilities, the FDRE constitution, human and democratic rights, and peaceful conflict resolution.',
     amharicDescription: 'የስነ-ምግባር ንድፈ-ሃሳቦች፣ የመንግስትና የዜግነት መብትና ግዴታዎች፣ የኢፌዴሪ ህገ-መንግስት እና የሰላም ግንባታ።',
     chapters: [
@@ -329,6 +374,8 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
     pages: 110,
     fileSizeMb: 2.8,
     rating: 4.7,
+    googleDriveFileId: '18MIM7eTALuYt3NoRD7UeaS0mFeKcQTKg',
+    googleDriveFileName: 'PHYSICAL FITNESS module.pdf',
     description: 'Health-related and skill-related fitness, cardiovascular endurance, muscular strength and flexibility, principles of exercise prescription (FITT), nutrition, and injury prevention.',
     amharicDescription: 'የአካል ብቃትና ጤናማ የአኗኗር ዘይቤ፣ የልብና የጡንቻ ብቃት ማጎልበቻ ስልቶች እና የስፖርት አመጋገብ።',
     chapters: [
@@ -342,7 +389,7 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
   {
     id: 'freshman_english_1',
     code: 'FLEn 1011',
-    title: 'Communicative English Language Skills I (FLEn 1011)',
+    title: 'Communicative English Language Skills I',
     amharicTitle: 'ተግባቦታዊ የእንግሊዝኛ ቋንቋ ክህሎት ፩',
     stream: 'Common',
     semester: 'Semester I',
@@ -351,6 +398,8 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
     pages: 135,
     fileSizeMb: 3.3,
     rating: 4.9,
+    googleDriveFileId: '1Jq2IhWPcEoXg9If7sDlP8caqwqcjfNDk',
+    googleDriveFileName: 'Communicative English Language Skills I (FLEn 1011).pdf',
     description: 'Active university study skills, reading comprehension techniques, paragraph structure (topic sentences, support, unity, coherence), syntactic grammar, and academic listening/speaking.',
     amharicDescription: 'የዩኒቨርሲቲ የንባብና ማስታወሻ መያዝ ክህሎቶች፣ የአንቀጽ (Paragraph) አወቃቀርና የአካዳሚክ የእንግሊዝኛ ሰዋስው።',
     chapters: [
@@ -373,6 +422,8 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
     pages: 140,
     fileSizeMb: 3.5,
     rating: 4.8,
+    googleDriveFileId: '1Ih7e_MhTWbKk9Gw-UaW1Cbs_J47cyOZp',
+    googleDriveFileName: 'Communicative_English_Language_Skills_II.pdf',
     description: 'Advanced critical reading, expository and argumentative essay writing, academic referencing and citation standards (APA/MLA), paraphrasing, summarizing, and research proposals.',
     amharicDescription: 'የአካዳሚክ ድርሰት (Essay) አጻጻፍ፣ የዋቢ መጽሐፍ አጠቃቀስ (APA/MLA)፣ እና የምርምር ፕሮፖዛል ዝግጅት።',
     chapters: [
@@ -395,6 +446,8 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
     pages: 198,
     fileSizeMb: 4.8,
     rating: 5.0,
+    googleDriveFileId: '1kM_myBDzTTw9gt76uhhEzCdlpJXrMIZD',
+    googleDriveFileName: 'History of Ethiopian and the Horn October 2022 Final Omotic revised and final_compressed.pdf',
     description: 'Historiography, human origins in the Rift Valley, Axumite civilization, Zagwe dynasty, medieval religious dynamics, modern state consolidation, the Battle of Adwa, and 20th-century Ethiopia.',
     amharicDescription: 'የሰው ልጅ አመጣጥ በጥንታዊት ኢትዮጵያ፣ የአክሱምና የላሊበላ ስልጣኔዎች፣ የሀገር ግንባታ ሂደትና የዐድዋ ድል ታሪክ።',
     chapters: [
@@ -418,6 +471,8 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
     pages: 245,
     fileSizeMb: 6.2,
     rating: 4.9,
+    googleDriveFileId: '1JvIpwqFCHhcme03f_MFOH7hG2x4zV9JP',
+    googleDriveFileName: 'MATHEMATICS NATURAL SCIENCE MODULE_compressed.pdf',
     description: 'Propositional logic, set theory, real and complex number systems, analytical conic sections, limit definitions, continuity theorems, and differential calculus with applied physical modeling.',
     amharicDescription: 'የፕሮፖዚሽናል ሎጂክ፣ የኮምፕሌክስ ቁጥሮች ስሌት፣ ኮኒክ ሴክሽኖች (Parabola, Ellipse) እና የዲፈረንሺያል ካልኩለስ ቀመሮች።',
     chapters: [
@@ -441,6 +496,8 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
     pages: 205,
     fileSizeMb: 4.9,
     rating: 4.8,
+    googleDriveFileId: '1r--ekd2ZqN5eKuRInRh7geVCVso1FrNr',
+    googleDriveFileName: 'MATHEMATICS SOCIAL SCIENCE MODULE_compressed.pdf',
     description: 'Logic and sets, systems of linear equations and matrices, mathematics of finance (simple and compound interest, annuities, amortization), business calculus, and descriptive statistics.',
     amharicDescription: 'የማትሪክስ ስሌት፣ የፋይናንስ ሂሳብ (ወለድና አኑዪቲ)፣ ለንግድና ኢኮኖሚክስ የሚውል ካልኩለስ እና መሰረታዊ ስታቲስቲክስ።',
     chapters: [
@@ -464,6 +521,8 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
     pages: 168,
     fileSizeMb: 3.9,
     rating: 4.9,
+    googleDriveFileId: '1ZFRYrwL3hrd5jT_rtwvHXq7240qhbCtM',
+    googleDriveFileName: 'Social Antropology_compressed.pdf',
     description: 'Sub-fields of anthropology, ethnography, anthropological theories of culture, kinship and descent systems in Ethiopia, marriage rules, religious worldviews, and customary dispute resolution.',
     amharicDescription: 'የባህልና የሰው ዘር ጥናት፣ የዝምድናና ጋብቻ ስርዓቶች በኢትዮጵያ፣ እና ባህላዊ የግጭት አፈታት መንገዶች።',
     chapters: [
@@ -554,11 +613,13 @@ export default function BookStoreView({
   const [aiPanelOpen, setAiPanelOpen] = useState<boolean>(false);
   const [aiMode, setAiMode] = useState<'summary' | 'amharic' | 'quiz' | null>(null);
   const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
+  const [readerTab, setReaderTab] = useState<'drive' | 'notes'>('drive');
 
-  const handleOpenPdf = (mod: FreshmanModule, chapterIdx: number = 0) => {
+  const handleOpenPdf = (mod: FreshmanModule, chapterIdx: number = 0, defaultTab: 'drive' | 'notes' = 'drive') => {
     playClickChime();
     setActivePdfModule(mod);
     setActiveChapterIndex(chapterIdx);
+    setReaderTab(defaultTab);
     setSearchInDoc('');
     setAiPanelOpen(false);
     setAiMode(null);
