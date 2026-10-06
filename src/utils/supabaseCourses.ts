@@ -1403,17 +1403,29 @@ export async function updatePaymentStatus(paymentId: string, status: 'completed'
     // Also update Supabase student profile if available
     if (supabase) {
       try {
-        let query = supabase.from('student_profiles').select('profile_data, email, phone');
+        let query = supabase.from('student_profiles').select('profile_data, email');
         if (targetEmail) {
           query = query.eq('email', targetEmail);
         } else if (targetPhone) {
-          query = query.or(`phone.eq.${targetPhone},email.eq.${targetPhone}`);
+          query = query.or(`email.eq.${targetPhone},email.eq.${targetPhone}@student.ethiolearn.edu.et`);
         }
 
-        const { data: existingRecords } = await query.limit(1);
+        let { data: existingRecords } = await query.limit(1);
+
+        if ((!existingRecords || existingRecords.length === 0) && targetPhone) {
+          const { data: phoneRecords } = await supabase
+            .from('student_profiles')
+            .select('profile_data, email')
+            .filter('profile_data->>phone', 'eq', targetPhone)
+            .limit(1);
+          if (phoneRecords && phoneRecords.length > 0) {
+            existingRecords = phoneRecords;
+          }
+        }
+
         const existingProf = existingRecords && existingRecords[0];
 
-        if (existingProf) {
+        if (existingProf && existingProf.email) {
           const updatedProfileData = {
             ...(existingProf.profile_data || {}),
             isPro: true,
@@ -1423,7 +1435,7 @@ export async function updatePaymentStatus(paymentId: string, status: 'completed'
           await supabase
             .from('student_profiles')
             .update({ profile_data: updatedProfileData, updated_at: new Date().toISOString() })
-            .match(existingProf.email ? { email: existingProf.email } : { phone: existingProf.phone });
+            .eq('email', existingProf.email);
         }
       } catch (dbEx) {
         console.warn('Supabase student pro upgrade notice:', dbEx);

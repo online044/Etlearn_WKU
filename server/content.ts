@@ -166,10 +166,54 @@ export async function getPublishedBooks(req: Request, res: Response) {
   try {
     const { university, department, academicYear, course, subject, accessLevel, search } = req.query;
 
-    let books = readBooksFromStore();
+    let books: any[] = [];
+    const supabase = getSupabaseAdmin();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('books')
+          .select('*')
+          .order('title', { ascending: true });
+
+        if (!error && data && data.length > 0) {
+          books = data.map((b: any) => ({
+            id: b.id,
+            title: (b.title || '').trim(),
+            subject: (b.subject || '').trim(),
+            academicYear: b.grade || 'Freshman',
+            course: (b.title || '').trim(),
+            department: b.department || 'General',
+            university: b.university || 'Wolkite University & Nationwide Universities',
+            accessLevel: 'free',
+            status: 'published',
+            description: b.description || `Official Ethiopian higher education ${b.subject || ''} curriculum module textbook.`,
+            coverUrl: b.cover_url,
+            cover_url: b.cover_url,
+            pdfUrl: b.pdf_url,
+            pdf_url: b.pdf_url,
+            pageCount: 180,
+            allowDownload: true,
+            createdAt: b.created_at || new Date().toISOString()
+          }));
+        }
+      } catch (sbErr) {
+        console.warn('[Content API] Supabase books fetch fallback:', sbErr);
+      }
+    }
+
+    // Merge with any local storage books if available
+    const localBooks = readBooksFromStore().filter(b => b.status === 'published');
+    if (localBooks.length > 0) {
+      const existingIds = new Set(books.map(b => b.id));
+      for (const lb of localBooks) {
+        if (!existingIds.has(lb.id)) {
+          books.push(lb);
+        }
+      }
+    }
 
     // Filter strictly for published books for students
-    books = books.filter(b => b.status === 'published');
+    books = books.filter(b => b.status === 'published' || !b.status);
 
     // Apply university filter
     if (university && typeof university === 'string' && university !== 'all' && university !== 'All Universities') {

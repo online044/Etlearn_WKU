@@ -22,7 +22,14 @@ export default function InAppViewerModal({ url, title, onClose }: InAppViewerMod
     if (isLocalEndpoint) {
       return url;
     }
-    if (viewerMode === 'embed' && isPdf) {
+    // If it's already a Google Drive preview or embed link, render directly
+    if (url.includes('drive.google.com/file') && url.includes('/preview')) {
+      return url;
+    }
+    if (url.includes('drive.google.com/drive/folders/')) {
+      return url;
+    }
+    if (viewerMode === 'embed' && isPdf && !url.includes('drive.google.com')) {
       return `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`;
     }
     return url;

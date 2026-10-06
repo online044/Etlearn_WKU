@@ -14,7 +14,10 @@ import {
   Trash2, Search, Filter, BookOpen, Layers, Check, X,
   Clock, Trophy, AlertCircle, Share2, Eye, Bookmark, BookmarkCheck,
   Flag, ChevronLeft, ChevronRight, Zap, BookMarked, SlidersHorizontal,
-  GraduationCap, CheckSquare
+  GraduationCap, CheckSquare, Dna, Atom, FlaskConical, BrainCircuit,
+  TrendingUp, Cpu, Lightbulb, Activity, Compass, Globe, Users,
+  ShieldCheck, UserCheck, Code2, Calculator, Binary, PieChart,
+  Languages, FileText, Sliders, LayoutGrid
 } from 'lucide-react';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
 import { safeStorage } from '../utils/safeStorage';
@@ -36,6 +39,262 @@ import {
   saveManualQuestionToDatabase, 
   deleteManualQuestionFromDatabase
 } from '../utils/questionDatabase';
+
+export interface FreshmanSubjectItem {
+  id: string;
+  name: string;
+  amharicName: string;
+  code: string;
+  stream: 'common' | 'natural' | 'social';
+  semester: 'Semester I' | 'Semester II';
+  unitsCount: number;
+  popularUnits: string[];
+  icon: any;
+  color: string;
+}
+
+export const FRESHMAN_SUBJECT_CATALOG: FreshmanSubjectItem[] = [
+  {
+    id: 'biology',
+    name: 'General Biology',
+    amharicName: 'አጠቃላይ ባዮሎጂ',
+    code: 'Biol 1011',
+    stream: 'natural',
+    semester: 'Semester I',
+    unitsCount: 5,
+    popularUnits: ['Cell Biology', 'Metabolism & Respiration', 'Molecular Genetics', 'Principles of Ecology'],
+    icon: Dna,
+    color: 'from-emerald-500/20 to-teal-500/10 text-emerald-400 border-emerald-500/30'
+  },
+  {
+    id: 'physics',
+    name: 'General Physics',
+    amharicName: 'አጠቃላይ ፊዚክስ',
+    code: 'Phys 1011',
+    stream: 'natural',
+    semester: 'Semester I',
+    unitsCount: 6,
+    popularUnits: ['Vectors & Kinematics', 'Newton\'s Laws & Work', 'Rotational Dynamics', 'Fluid Mechanics', 'Thermodynamics'],
+    icon: Atom,
+    color: 'from-amber-500/20 to-yellow-500/10 text-amber-400 border-amber-500/30'
+  },
+  {
+    id: 'chemistry',
+    name: 'General Chemistry',
+    amharicName: 'አጠቃላይ ኬሚስትሪ',
+    code: 'Chem 1011',
+    stream: 'natural',
+    semester: 'Semester I',
+    unitsCount: 6,
+    popularUnits: ['Atomic Structure & Periodicity', 'Chemical Bonding & VSEPR', 'States of Matter', 'Thermodynamics', 'Kinetics'],
+    icon: FlaskConical,
+    color: 'from-cyan-500/20 to-blue-500/10 text-cyan-400 border-cyan-500/30'
+  },
+  {
+    id: 'critical_thinking',
+    name: 'Critical Thinking',
+    amharicName: 'ስነ-አመክንዮ እና ሂሳዊ አስተሳሰብ',
+    code: 'Phil 1011',
+    stream: 'common',
+    semester: 'Semester I',
+    unitsCount: 5,
+    popularUnits: ['Logic & Arguments', 'Deductive & Inductive', 'Informal Fallacies', 'Categorical Propositions', 'Truth Tables'],
+    icon: BrainCircuit,
+    color: 'from-purple-500/20 to-indigo-500/10 text-purple-400 border-purple-500/30'
+  },
+  {
+    id: 'economics',
+    name: 'Economics',
+    amharicName: 'መግቢያ የኢኮኖሚክስ ትምህርት',
+    code: 'Econ 1011',
+    stream: 'common',
+    semester: 'Semester I',
+    unitsCount: 6,
+    popularUnits: ['Scarcity & Choice', 'Demand & Supply', 'Elasticity', 'Consumer Utility', 'Production Costs', 'Macroeconomics'],
+    icon: TrendingUp,
+    color: 'from-amber-500/20 to-orange-500/10 text-amber-400 border-amber-500/30'
+  },
+  {
+    id: 'emerging_tech',
+    name: 'Emerging Technologies',
+    amharicName: 'መግቢያ ወደ አዳዲስ ቴክኖሎጂዎች',
+    code: 'EmTe 1012',
+    stream: 'common',
+    semester: 'Semester II',
+    unitsCount: 5,
+    popularUnits: ['4IR Overview', 'Data Science & Big Data', 'Artificial Intelligence', 'Internet of Things (IoT)', 'Cloud & Blockchain'],
+    icon: Cpu,
+    color: 'from-blue-500/20 to-indigo-500/10 text-blue-400 border-blue-500/30'
+  },
+  {
+    id: 'math_natural',
+    name: 'Mathematics — Natural Science',
+    amharicName: 'ሂሳብ ለተፈጥሮ ሳይንስ',
+    code: 'Math 1011',
+    stream: 'natural',
+    semester: 'Semester I',
+    unitsCount: 5,
+    popularUnits: ['Propositional Logic', 'Relations & Functions', 'Analytic Geometry', 'Matrices & Determinants', 'Limits & Derivatives'],
+    icon: Calculator,
+    color: 'from-emerald-500/20 to-green-500/10 text-emerald-400 border-emerald-500/30'
+  },
+  {
+    id: 'math_applied',
+    name: 'Applied Mathematics',
+    amharicName: 'የተግባራዊ ሂሳብ ትምህርት',
+    code: 'Math 1012',
+    stream: 'natural',
+    semester: 'Semester II',
+    unitsCount: 5,
+    popularUnits: ['Vector Calculus', 'Matrices & Eigenvalues', 'Integral Calculus', 'Sequences & Series', 'Differential Equations'],
+    icon: Binary,
+    color: 'from-teal-500/20 to-cyan-500/10 text-teal-400 border-teal-500/30'
+  },
+  {
+    id: 'math_social',
+    name: 'Mathematics — Social Science',
+    amharicName: 'ሂሳብ ለማህበራዊ ሳይንስ',
+    code: 'Math 1011S',
+    stream: 'social',
+    semester: 'Semester I',
+    unitsCount: 5,
+    popularUnits: ['Matrices & Systems', 'Linear Programming', 'Financial Mathematics', 'Probability & Statistics'],
+    icon: PieChart,
+    color: 'from-purple-500/20 to-pink-500/10 text-purple-400 border-purple-500/30'
+  },
+  {
+    id: 'entrepreneurship',
+    name: 'Entrepreneurship',
+    amharicName: 'ስራ ፈጠራ እና የንግድ ልማት',
+    code: 'Mgmt 1012',
+    stream: 'common',
+    semester: 'Semester II',
+    unitsCount: 5,
+    popularUnits: ['Entrepreneurial Mindset', 'Opportunity Recognition', 'Business Planning', 'Marketing Strategies', 'Venture Financing'],
+    icon: Lightbulb,
+    color: 'from-yellow-500/20 to-amber-500/10 text-yellow-400 border-yellow-500/30'
+  },
+  {
+    id: 'psychology',
+    name: 'General Psychology',
+    amharicName: 'አጠቃላይ ሳይኮሎጂ እና የህይወት ክህሎት',
+    code: 'Pscy 1011',
+    stream: 'common',
+    semester: 'Semester I',
+    unitsCount: 6,
+    popularUnits: ['Biological Bases of Behavior', 'Sensation & Perception', 'Theories of Learning', 'Memory & Forgetting', 'Emotion & Life Skills'],
+    icon: Activity,
+    color: 'from-rose-500/20 to-pink-500/10 text-rose-400 border-rose-500/30'
+  },
+  {
+    id: 'geography',
+    name: 'Geography of Ethiopia and the Horn',
+    amharicName: 'የኢትዮጵያና የአፍሪካ ቀንድ ጂኦግራፊ',
+    code: 'GeES 1011',
+    stream: 'common',
+    semester: 'Semester I',
+    unitsCount: 6,
+    popularUnits: ['Geographic Setting', 'Geology & Topography', 'Drainage Systems', 'Climate & Zones', 'Natural Resources', 'Population Demography'],
+    icon: Compass,
+    color: 'from-emerald-500/20 to-teal-500/10 text-emerald-400 border-emerald-500/30'
+  },
+  {
+    id: 'history',
+    name: 'History of Ethiopia and the Horn',
+    amharicName: 'የኢትዮጵያ እና የቀንዱ ታሪክ',
+    code: 'Hist 1012',
+    stream: 'social',
+    semester: 'Semester II',
+    unitsCount: 6,
+    popularUnits: ['Peoples & Cultures', 'Ancient States', 'Medieval Ethiopia', 'State Formation', 'Ethio-Italian Wars', 'Modern Transformations'],
+    icon: BookOpen,
+    color: 'from-amber-500/20 to-yellow-500/10 text-amber-400 border-amber-500/30'
+  },
+  {
+    id: 'english1',
+    name: 'Communicative English Skills I',
+    amharicName: 'የእንግሊዝኛ መግባቢያ ክህሎት I',
+    code: 'EnLa 1011',
+    stream: 'common',
+    semester: 'Semester I',
+    unitsCount: 6,
+    popularUnits: ['Study Reading', 'Grammar in Context', 'Vocabulary Building', 'Sentence Construction', 'Paragraph Development'],
+    icon: Languages,
+    color: 'from-indigo-500/20 to-blue-500/10 text-indigo-400 border-indigo-500/30'
+  },
+  {
+    id: 'english2',
+    name: 'Communicative English Skills II',
+    amharicName: 'የእንግሊዝኛ መግባቢያ ክህሎት II',
+    code: 'EnLa 1012',
+    stream: 'common',
+    semester: 'Semester II',
+    unitsCount: 6,
+    popularUnits: ['Advanced Reading', 'Syntax & Cohesion', 'Expository Essay Writing', 'Academic Oral Presentation'],
+    icon: FileText,
+    color: 'from-indigo-500/20 to-blue-500/10 text-indigo-400 border-indigo-500/30'
+  },
+  {
+    id: 'global_trends',
+    name: 'Global Trends',
+    amharicName: 'አለም አቀፍ አዝማሚያዎች',
+    code: 'GlTr 1012',
+    stream: 'common',
+    semester: 'Semester II',
+    unitsCount: 5,
+    popularUnits: ['Theories of IR', 'Globalization Dynamics', 'Global Political Economy', 'Regionalism in Africa', 'Global Security Issues'],
+    icon: Globe,
+    color: 'from-sky-500/20 to-cyan-500/10 text-sky-400 border-sky-500/30'
+  },
+  {
+    id: 'inclusiveness',
+    name: 'Inclusiveness',
+    amharicName: 'አካታችነት',
+    code: 'Incl 1012',
+    stream: 'common',
+    semester: 'Semester II',
+    unitsCount: 5,
+    popularUnits: ['Understanding Impairment', 'Human Rights Approach', 'Universal Design', 'Inclusive Education & Livelihood'],
+    icon: Users,
+    color: 'from-emerald-500/20 to-green-500/10 text-emerald-400 border-emerald-500/30'
+  },
+  {
+    id: 'civics',
+    name: 'Moral and Civics Education',
+    amharicName: 'ስነ-ምግባር እና ዜግነት ትምህርት',
+    code: 'MCED 1012',
+    stream: 'common',
+    semester: 'Semester II',
+    unitsCount: 5,
+    popularUnits: ['Ethics & Moral Philosophy', 'Constitutionalism', 'Democracy & Governance', 'Citizenship & Human Rights'],
+    icon: ShieldCheck,
+    color: 'from-blue-500/20 to-indigo-500/10 text-blue-400 border-blue-500/30'
+  },
+  {
+    id: 'anthropology',
+    name: 'Social Anthropology',
+    amharicName: 'ማህበራዊ አንትሮፖሎጂ',
+    code: 'Anth 1012',
+    stream: 'social',
+    semester: 'Semester II',
+    unitsCount: 5,
+    popularUnits: ['Concept of Culture', 'Human Evolution & Diversity', 'Kinship, Family & Marriage', 'Traditional Institutions in Ethiopia'],
+    icon: UserCheck,
+    color: 'from-purple-500/20 to-violet-500/10 text-purple-400 border-purple-500/30'
+  },
+  {
+    id: 'programming',
+    name: 'Computer Programming & CS',
+    amharicName: 'ኮምፒውተር ፕሮግራሚንግ',
+    code: 'CoSc 1012',
+    stream: 'natural',
+    semester: 'Semester II',
+    unitsCount: 5,
+    popularUnits: ['Computer Fundamentals', 'Algorithms & Problem Solving', 'C++ Syntax & Control Flow', 'Functions & Arrays', 'Pointers & I/O'],
+    icon: Code2,
+    color: 'from-cyan-500/20 to-teal-500/10 text-cyan-400 border-cyan-500/30'
+  }
+];
 
 interface ExamPrepProps {
   apiKey?: string;
@@ -69,12 +328,18 @@ export default function ExamPrep({
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
 
   // ─── QUIZ GENERATOR CONFIGURATION STATE ───
-  const [selectedSubject, setSelectedSubject] = useState<string>("Critical Thinking");
+  const [selectedSubject, setSelectedSubject] = useState<string>("General Biology");
   const [selectedUnit, setSelectedUnit] = useState<string>("All Units");
   const [selectedTopic, setSelectedTopic] = useState<string>("All Topics");
   const [selectedDifficulty, setSelectedDifficulty] = useState<'all' | 'easy' | 'medium' | 'hard'>('all');
   const [questionCount, setQuestionCount] = useState<number>(10);
   const [quizMode, setQuizMode] = useState<'practice' | 'exam'>('practice');
+  const [showConfigModal, setShowConfigModal] = useState<boolean>(false);
+
+  // ─── UNI-EXAM STYLE BROWSER FILTERS ───
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [streamFilter, setStreamFilter] = useState<'all' | 'common' | 'natural' | 'social' | 'bookmarked'>('all');
+  const [launcherSubTab, setLauncherSubTab] = useState<'browse' | 'custom'>('browse');
 
   // ─── ACTIVE QUIZ RUNTIME STATE ───
   const [quizState, setQuizState] = useState<'config' | 'active' | 'results' | 'review'>('config');
@@ -283,6 +548,128 @@ export default function ExamPrep({
     }
   };
 
+  // ─── UNI-EXAM STYLE INSTANT COURSE LAUNCHER ───
+  const handleQuickStartCourse = async (
+    courseName: string, 
+    unitName?: string, 
+    mode: 'practice' | 'exam' = 'practice',
+    count: number = 10
+  ) => {
+    setSelectedSubject(courseName);
+    if (unitName && unitName !== 'All Units') {
+      setSelectedUnit(unitName);
+    } else {
+      setSelectedUnit('All Units');
+    }
+    setSelectedTopic('All Topics');
+    setQuizMode(mode);
+    setQuestionCount(count);
+    playClickChime();
+
+    try {
+      let candidates = await generateRandomExamQuestions({
+        subject: courseName,
+        unit: unitName && unitName !== 'All Units' ? unitName : undefined,
+        totalQuestions: count
+      });
+
+      if (!candidates || candidates.length === 0) {
+        candidates = await generateRandomExamQuestions({
+          subject: courseName,
+          totalQuestions: count
+        });
+      }
+
+      if (!candidates || candidates.length === 0) {
+        alert(language === 'en' 
+          ? `No questions currently found for ${courseName}. Try another course or build custom questions in Manage DB.` 
+          : `ለ ${courseName} ምንም ጥያቄ አልተገኘም። እባክዎን ሌላ ይምረጡ።`
+        );
+        return;
+      }
+
+      let questionsToUse = candidates;
+      if (!isPro) {
+        const freeCandidates = candidates.filter(c => !c.is_pro);
+        if (freeCandidates.length >= 3) {
+          questionsToUse = freeCandidates;
+        }
+      }
+
+      const randomizedItems: RandomizedQuizQuestion[] = questionsToUse.map(randomizeQuestionWithMappedAnswer);
+
+      setActiveQuestions(randomizedItems);
+      setCurrentIndex(0);
+      setUserAnswers({});
+      setUserAnswerTexts({});
+      setFlaggedIndices(new Set());
+      setIsAnswerRevealed(false);
+
+      const allocatedSeconds = mode === 'exam' ? Math.max(randomizedItems.length * 72, 300) : 0;
+      setTimeRemaining(allocatedSeconds);
+      setTotalExamTime(allocatedSeconds);
+      setExamStartTimestamp(Date.now());
+
+      if (mode === 'exam') {
+        clearInterval(examTimerRef.current);
+        examTimerRef.current = setInterval(() => {
+          setTimeRemaining((prev) => {
+            if (prev <= 1) {
+              clearInterval(examTimerRef.current);
+              handleFinishQuizAuto();
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      }
+
+      setQuizState('active');
+      playSuccessChime();
+    } catch (e: any) {
+      console.warn('[Quick Start Error]:', e);
+      alert('Failed to launch quiz: ' + (e?.message || 'Network error'));
+    }
+  };
+
+  // Bookmarked questions list
+  const bookmarkedQuestionsList = useMemo(() => {
+    return allQuestions.filter(q => bookmarkedIds.has(q.id));
+  }, [allQuestions, bookmarkedIds]);
+
+  // Pre-calculate count of questions per course
+  const courseQuestionCountMap = useMemo(() => {
+    const map = new Map<string, number>();
+    allQuestions.forEach(q => {
+      const s = (q.subject || '').toLowerCase().trim();
+      map.set(s, (map.get(s) || 0) + 1);
+    });
+    return map;
+  }, [allQuestions]);
+
+  // Filtered Course Catalog matching Uni-Exam browse system
+  const filteredCatalog = useMemo(() => {
+    return FRESHMAN_SUBJECT_CATALOG.filter(sub => {
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesName = sub.name.toLowerCase().includes(q);
+        const matchesAmharic = sub.amharicName.toLowerCase().includes(q);
+        const matchesCode = sub.code.toLowerCase().includes(q);
+        const matchesUnits = sub.popularUnits.some(u => u.toLowerCase().includes(q));
+        if (!matchesName && !matchesAmharic && !matchesCode && !matchesUnits) return false;
+      }
+
+      if (streamFilter === 'common') return sub.stream === 'common';
+      if (streamFilter === 'natural') return sub.stream === 'natural';
+      if (streamFilter === 'social') return sub.stream === 'social';
+      if (streamFilter === 'bookmarked') {
+        return bookmarkedQuestionsList.some(q => q.subject.toLowerCase().includes(sub.name.toLowerCase()));
+      }
+
+      return true;
+    });
+  }, [searchQuery, streamFilter, bookmarkedQuestionsList]);
+
   // ─── BOOKMARK TOGGLE ───
   const handleToggleBookmark = async (questionId: string) => {
     playClickChime();
@@ -464,11 +851,6 @@ export default function ExamPrep({
     }
   };
 
-  // Bookmarked questions list
-  const bookmarkedQuestionsList = useMemo(() => {
-    return allQuestions.filter(q => bookmarkedIds.has(q.id));
-  }, [allQuestions, bookmarkedIds]);
-
   // Format time remaining MM:SS
   const formatTime = (secs: number) => {
     const mins = Math.floor(secs / 60);
@@ -576,7 +958,7 @@ export default function ExamPrep({
       {activeTab === 'quiz_launcher' && (
         <>
           {/* ================================================================ */}
-          {/* 1. QUIZ CONFIGURATION / GENERATOR SCREEN                         */}
+          {/* 1. QUIZ CONFIGURATION / GENERATOR SCREEN (UNIEXAM STYLE BROWSER) */}
           {/* ================================================================ */}
           {quizState === 'config' && (
             <motion.div
@@ -584,235 +966,477 @@ export default function ExamPrep({
               animate={{ opacity: 1, y: 0 }}
               className="space-y-6"
             >
-              {/* Hero Banner Card */}
-              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-amber-950/40 border border-slate-800 p-6 sm:p-8">
-                <div className="max-w-2xl space-y-3 relative z-10">
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Curriculum Question Bank (19 University Freshman Subjects)</span>
-                  </div>
-                  <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                    Instant Quiz & Timed Exam Engine
-                  </h2>
-                  <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                    Select any subject, unit, and difficulty to load pre-verified questions from Supabase. 
-                    Practice with explanations or challenge yourself in timed Exam Mode.
-                  </p>
+              {/* Top UniExam-Style Mode Switcher */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 p-3 sm:p-4 rounded-2xl">
+                <div className="flex items-center gap-1.5 p-1 bg-slate-950 border border-slate-800 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => { playClickChime(); setLauncherSubTab('browse'); }}
+                    className={`px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                      launcherSubTab === 'browse'
+                        ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <LayoutGrid className="w-3.5 h-3.5" />
+                    <span>{language === 'am' ? 'የትምህርት ካታሎግ' : 'Course Catalog'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { playClickChime(); setLauncherSubTab('custom'); }}
+                    className={`px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                      launcherSubTab === 'custom'
+                        ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5" />
+                    <span>{language === 'am' ? 'ብጁ ፈተና አመንጪ' : 'Custom Quiz Builder'}</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <span className="font-mono font-bold text-amber-400">{allQuestions.length} Questions</span>
+                  <span>&bull;</span>
+                  <span>19 Freshman Courses</span>
                 </div>
               </div>
 
-              {/* Quiz Setup Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Left 2 Cols: Subject, Unit, Topic Selectors */}
-                <div className="lg:col-span-2 space-y-5 bg-slate-900/80 border border-slate-800 p-6 rounded-3xl">
-                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-                    <h3 className="text-sm font-black text-white flex items-center gap-2">
-                      <GraduationCap className="w-4 h-4 text-amber-400" />
-                      1. Select Course & Topic
-                    </h3>
-                    <span className="text-xs font-mono font-bold text-amber-400">
-                      {matchingQuestionsCount} Questions Available
-                    </span>
-                  </div>
-
-                  {/* Subject Dropdown */}
-                  <div>
-                    <label className="text-xs font-bold text-slate-300 block mb-1.5">
-                      Academic Subject
-                    </label>
-                    <select
-                      value={selectedSubject}
-                      onChange={(e) => {
-                        setSelectedSubject(e.target.value);
-                        setSelectedUnit('All Units');
-                        setSelectedTopic('All Topics');
-                      }}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-sm font-semibold text-white focus:outline-none focus:border-amber-500 transition-colors"
-                    >
-                      {subjectList.map((sub, i) => (
-                        <option key={i} value={sub}>{sub}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Unit & Topic Dropdowns */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-xs font-bold text-slate-300 block mb-1.5">
-                        Module Unit / Chapter
-                      </label>
-                      <select
-                        value={selectedUnit}
-                        onChange={(e) => {
-                          setSelectedUnit(e.target.value);
-                          setSelectedTopic('All Topics');
-                        }}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-xs font-semibold text-white focus:outline-none focus:border-amber-500 transition-colors"
-                      >
-                        {availableUnits.map((u, i) => (
-                          <option key={i} value={u}>{u}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-bold text-slate-300 block mb-1.5">
-                        Specific Topic
-                      </label>
-                      <select
-                        value={selectedTopic}
-                        onChange={(e) => setSelectedTopic(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-xs font-semibold text-white focus:outline-none focus:border-amber-500 transition-colors"
-                      >
-                        {availableTopics.map((t, i) => (
-                          <option key={i} value={t}>{t}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Quick Subject Chips for Quick Tap */}
-                  <div>
-                    <span className="text-xs font-bold text-slate-400 block mb-2">
-                      Popular Freshman Modules:
-                    </span>
-                    <div className="flex flex-wrap gap-2">
-                      {[
-                        "Critical Thinking",
-                        "General Biology",
-                        "General Physics",
-                        "General Chemistry",
-                        "Economics",
-                        "Emerging Technologies",
-                        "Mathematics — Natural Science",
-                        "History of Ethiopia and the Horn"
-                      ].map((subName) => (
+              {/* VIEW A: UNIEXAM-STYLE COURSE BROWSER & INSTANT QUIZZES */}
+              {launcherSubTab === 'browse' && (
+                <div className="space-y-5">
+                  {/* Search Bar & Stream Filters */}
+                  <div className="bg-slate-900 border border-slate-800 p-4 sm:p-5 rounded-3xl space-y-3.5">
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder={language === 'am' ? 'የትምህርት ስም፣ ምዕራፍ፣ ወይም ኮድ ይፈልጉ (ምሳሌ፦ Biology, Math, Logic...)' : 'Search 19 freshman courses, units, or codes (e.g. Biology, Math 1011, Logic)...'}
+                        className="w-full pl-10 pr-10 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400 transition-colors"
+                      />
+                      {searchQuery && (
                         <button
-                          key={subName}
-                          onClick={() => {
-                            setSelectedSubject(subName);
+                          type="button"
+                          onClick={() => setSearchQuery('')}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Stream Filter Pills */}
+                    <div className="flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-slate-800/80">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {[
+                          { id: 'all', label: language === 'am' ? 'ሁሉም (19)' : 'All Courses (19)' },
+                          { id: 'common', label: language === 'am' ? 'የጋራ ትምህርቶች' : 'Common Courses' },
+                          { id: 'natural', label: language === 'am' ? 'ተፈጥሮ ሳይንስ' : 'Natural Science' },
+                          { id: 'social', label: language === 'am' ? 'ማህበራዊ ሳይንስ' : 'Social Science' },
+                        ].map(st => (
+                          <button
+                            key={st.id}
+                            type="button"
+                            onClick={() => { playClickChime(); setStreamFilter(st.id as any); }}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                              streamFilter === st.id
+                                ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
+                                : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                            }`}
+                          >
+                            {st.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleQuickStartCourse('Critical Thinking', undefined, 'practice', 10)}
+                        className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/40 text-amber-400 hover:text-amber-300 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <Zap className="w-3.5 h-3.5 fill-amber-400" />
+                        <span>{language === 'am' ? 'ፈጣን ድብልቅ ልምምድ (10 ጥያቄዎች)' : 'Surprise Mixed Drill (10 Qs)'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Course Cards Grid */}
+                  {filteredCatalog.length === 0 ? (
+                    <div className="text-center py-12 px-4 rounded-3xl bg-slate-900 border border-slate-800 space-y-3">
+                      <Search className="w-8 h-8 text-slate-500 mx-auto" />
+                      <h3 className="text-sm font-bold text-white">
+                        {language === 'am' ? 'ምንም የሚመሳሰል ትምህርት አልተገኘም' : 'No matching university courses found'}
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => { setSearchQuery(''); setStreamFilter('all'); }}
+                        className="px-4 py-2 bg-amber-500 text-slate-950 font-bold text-xs rounded-xl"
+                      >
+                        {language === 'am' ? 'ሁሉንም አሳይ' : 'Reset Search & Show All'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {filteredCatalog.map(sub => {
+                        const IconComponent = sub.icon || BookOpen;
+                        const qCount = courseQuestionCountMap.get(sub.name.toLowerCase()) || sub.unitsCount * 15;
+
+                        return (
+                          <div
+                            key={sub.id}
+                            className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-3xl p-4 sm:p-5 transition-all flex flex-col justify-between gap-4 text-left group hover:shadow-xl hover:shadow-black/40"
+                          >
+                            <div className="space-y-3">
+                              {/* Card Header: Code, Stream & Semester */}
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center bg-gradient-to-br ${sub.color}`}>
+                                    <IconComponent className="w-5 h-5" />
+                                  </div>
+                                  <div>
+                                    <span className="font-mono text-xs font-black text-amber-400">
+                                      {sub.code}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 block font-medium">
+                                      {sub.semester}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                                  sub.stream === 'natural' 
+                                    ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' 
+                                    : sub.stream === 'social'
+                                    ? 'bg-purple-500/10 text-purple-400 border-purple-500/30'
+                                    : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                }`}>
+                                  {sub.stream}
+                                </span>
+                              </div>
+
+                              {/* Title */}
+                              <div>
+                                <h3 className="text-base font-black text-white group-hover:text-amber-300 transition-colors leading-tight">
+                                  {sub.name}
+                                </h3>
+                                <p className="text-xs text-slate-400 font-medium mt-0.5">
+                                  {sub.amharicName}
+                                </p>
+                              </div>
+
+                              {/* Questions badge & Unit Count */}
+                              <div className="flex items-center justify-between text-xs text-slate-400 border-t border-slate-800/80 pt-2.5">
+                                <span className="font-mono font-bold text-slate-300">
+                                  {qCount}+ Questions Available
+                                </span>
+                                <span>{sub.unitsCount} Units</span>
+                              </div>
+
+                              {/* Clickable Unit Pills: 1-Tap Practice */}
+                              <div className="space-y-1.5">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                                  {language === 'am' ? 'በምዕራፍ አጥና (1-ጠቅታ):' : 'Drill by Unit (1-Tap):'}
+                                </span>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {Array.from({ length: sub.unitsCount }).map((_, uIdx) => {
+                                    const uName = `Unit ${uIdx + 1}`;
+                                    const topicName = sub.popularUnits[uIdx] || uName;
+                                    return (
+                                      <button
+                                        key={uName}
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleQuickStartCourse(sub.name, uName, 'practice', 10);
+                                        }}
+                                        className="px-2 py-1 rounded-lg bg-slate-950 hover:bg-amber-500 hover:text-slate-950 border border-slate-800 text-[10px] font-bold text-slate-300 transition-colors cursor-pointer"
+                                        title={`Practice ${uName}: ${topicName}`}
+                                      >
+                                        U{uIdx + 1}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Action Buttons Row */}
+                            <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                              <div className="grid grid-cols-2 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickStartCourse(sub.name, undefined, 'practice', 10)}
+                                  className="py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer active:scale-98"
+                                >
+                                  <Play className="w-3.5 h-3.5 fill-slate-950" />
+                                  <span>{language === 'am' ? 'ልምምድ (10)' : 'Practice (10)'}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickStartCourse(sub.name, undefined, 'exam', 20)}
+                                  className="py-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98"
+                                >
+                                  <Clock className="w-3.5 h-3.5 text-amber-400" />
+                                  <span>{language === 'am' ? 'ፈተና (20)' : 'Exam (20)'}</span>
+                                </button>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedSubject(sub.name);
+                                  setSelectedUnit('All Units');
+                                  setLauncherSubTab('custom');
+                                }}
+                                className="w-full py-1.5 text-[11px] text-slate-400 hover:text-amber-400 flex items-center justify-center gap-1 transition-colors cursor-pointer font-medium"
+                              >
+                                <SlidersHorizontal className="w-3 h-3" />
+                                <span>{language === 'am' ? 'ብጁ ፈተና አመንጪ ክፈት' : 'Configure Custom Settings'}</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* VIEW B: CUSTOM QUIZ BUILDER (Advanced Dropdowns & Options) */}
+              {launcherSubTab === 'custom' && (
+                <div className="space-y-6">
+                  {/* Back to course catalog banner */}
+                  <div className="flex items-center justify-between p-3.5 bg-slate-900/90 border border-slate-800 rounded-2xl">
+                    <button
+                      type="button"
+                      onClick={() => { playClickChime(); setLauncherSubTab('browse'); }}
+                      className="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      <span>{language === 'am' ? 'ወደ ካታሎግ ተመለስ' : 'Back to Course Catalog'}</span>
+                    </button>
+                    <span className="text-xs text-slate-400">
+                      Fine-grained subject, unit, and difficulty constraints
+                    </span>
+                  </div>
+
+                  {/* Quiz Setup Grid */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Left 2 Cols: Subject, Unit, Topic Selectors */}
+                    <div className="lg:col-span-2 space-y-5 bg-slate-900/80 border border-slate-800 p-6 rounded-3xl">
+                      <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                        <h3 className="text-sm font-black text-white flex items-center gap-2">
+                          <GraduationCap className="w-4 h-4 text-amber-400" />
+                          1. Select Course & Topic
+                        </h3>
+                        <span className="text-xs font-mono font-bold text-amber-400">
+                          {matchingQuestionsCount} Questions Available
+                        </span>
+                      </div>
+
+                      {/* Subject Dropdown */}
+                      <div>
+                        <label className="text-xs font-bold text-slate-300 block mb-1.5">
+                          Academic Subject
+                        </label>
+                        <select
+                          value={selectedSubject}
+                          onChange={(e) => {
+                            setSelectedSubject(e.target.value);
                             setSelectedUnit('All Units');
                             setSelectedTopic('All Topics');
                           }}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                            selectedSubject === subName
-                              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-                              : 'bg-slate-950 border border-slate-800 text-slate-300 hover:text-white'
-                          }`}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-sm font-semibold text-white focus:outline-none focus:border-amber-500 transition-colors"
                         >
-                          {subName}
-                        </button>
-                      ))}
+                          {subjectList.map((sub, i) => (
+                            <option key={i} value={sub}>{sub}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Unit & Topic Dropdowns */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-xs font-bold text-slate-300 block mb-1.5">
+                            Module Unit / Chapter
+                          </label>
+                          <select
+                            value={selectedUnit}
+                            onChange={(e) => {
+                              setSelectedUnit(e.target.value);
+                              setSelectedTopic('All Topics');
+                            }}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-xs font-semibold text-white focus:outline-none focus:border-amber-500 transition-colors"
+                          >
+                            {availableUnits.map((u, i) => (
+                              <option key={i} value={u}>{u}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-bold text-slate-300 block mb-1.5">
+                            Specific Topic
+                          </label>
+                          <select
+                            value={selectedTopic}
+                            onChange={(e) => setSelectedTopic(e.target.value)}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-xs font-semibold text-white focus:outline-none focus:border-amber-500 transition-colors"
+                          >
+                            {availableTopics.map((t, i) => (
+                              <option key={i} value={t}>{t}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Quick Subject Chips */}
+                      <div>
+                        <span className="text-xs font-bold text-slate-400 block mb-2">
+                          Popular Freshman Modules:
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            "Critical Thinking",
+                            "General Biology",
+                            "General Physics",
+                            "General Chemistry",
+                            "Economics",
+                            "Emerging Technologies",
+                            "Mathematics — Natural Science",
+                            "History of Ethiopia and the Horn"
+                          ].map((subName) => (
+                            <button
+                              key={subName}
+                              type="button"
+                              onClick={() => {
+                                setSelectedSubject(subName);
+                                setSelectedUnit('All Units');
+                                setSelectedTopic('All Topics');
+                              }}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                selectedSubject === subName
+                                  ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                                  : 'bg-slate-950 border border-slate-800 text-slate-300 hover:text-white'
+                              }`}
+                            >
+                              {subName}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Col: Mode, Count & Launch */}
+                    <div className="space-y-5 bg-slate-900/80 border border-slate-800 p-6 rounded-3xl flex flex-col justify-between">
+                      <div className="space-y-4">
+                        <div className="border-b border-slate-800/80 pb-3">
+                          <h3 className="text-sm font-black text-white flex items-center gap-2">
+                            <SlidersHorizontal className="w-4 h-4 text-amber-400" />
+                            2. Quiz Mode & Constraints
+                          </h3>
+                        </div>
+
+                        {/* Mode Toggle: Practice vs Exam */}
+                        <div>
+                          <label className="text-xs font-bold text-slate-300 block mb-1.5">
+                            Simulation Mode
+                          </label>
+                          <div className="grid grid-cols-2 gap-2 p-1 bg-slate-950 border border-slate-800 rounded-2xl">
+                            <button
+                              type="button"
+                              onClick={() => setQuizMode('practice')}
+                              className={`py-2 rounded-xl text-xs font-bold flex flex-col items-center gap-0.5 transition-all cursor-pointer ${
+                                quizMode === 'practice'
+                                  ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                                  : 'text-slate-400 hover:text-white'
+                              }`}
+                            >
+                              <BookOpen className="w-3.5 h-3.5" />
+                              <span>Practice Mode</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setQuizMode('exam')}
+                              className={`py-2 rounded-xl text-xs font-bold flex flex-col items-center gap-0.5 transition-all cursor-pointer ${
+                                quizMode === 'exam'
+                                  ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                                  : 'text-slate-400 hover:text-white'
+                              }`}
+                            >
+                              <Clock className="w-3.5 h-3.5" />
+                              <span>Exam Mode</span>
+                            </button>
+                          </div>
+                          <p className="text-[11px] text-slate-400 mt-1">
+                            {quizMode === 'practice' 
+                              ? 'Immediate feedback & explanations after each answer.' 
+                              : 'Strict countdown timer & full exam submission at the end.'}
+                          </p>
+                        </div>
+
+                        {/* Number of Questions */}
+                        <div>
+                          <label className="text-xs font-bold text-slate-300 block mb-1.5">
+                            Question Count
+                          </label>
+                          <div className="grid grid-cols-4 gap-1.5 min-[360px]:gap-2">
+                            {[5, 10, 20, 50].map(cnt => (
+                              <button
+                                key={cnt}
+                                type="button"
+                                onClick={() => setQuestionCount(cnt)}
+                                className={`py-2 rounded-lg sm:rounded-xl text-xs font-bold transition-all cursor-pointer text-center ${
+                                  questionCount === cnt
+                                    ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                                    : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white'
+                                }`}
+                              >
+                                {cnt}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Difficulty Selection */}
+                        <div>
+                          <label className="text-xs font-bold text-slate-300 block mb-1.5">
+                            Difficulty Level
+                          </label>
+                          <div className="grid grid-cols-4 gap-1.5 min-[360px]:gap-2">
+                            {(['all', 'easy', 'medium', 'hard'] as const).map(diff => (
+                              <button
+                                key={diff}
+                                type="button"
+                                onClick={() => setSelectedDifficulty(diff)}
+                                className={`py-2 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold uppercase transition-all cursor-pointer text-center ${
+                                  selectedDifficulty === diff
+                                    ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                                    : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white'
+                                }`}
+                              >
+                                {diff}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Launch Button */}
+                      <button
+                        onClick={() => handleStartQuiz()}
+                        disabled={loadingQuestions}
+                        className="w-full py-3.5 sm:py-4 rounded-xl sm:rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xl shadow-amber-500/20 transition-all cursor-pointer disabled:opacity-50 min-h-[48px]"
+                      >
+                        <Play className="w-4 h-4 fill-slate-950" />
+                        <span>Start {quizMode === 'exam' ? 'Timed Exam' : 'Practice Quiz'}</span>
+                      </button>
                     </div>
                   </div>
                 </div>
-
-                {/* Right Col: Mode, Count & Launch */}
-                <div className="space-y-5 bg-slate-900/80 border border-slate-800 p-6 rounded-3xl flex flex-col justify-between">
-                  <div className="space-y-4">
-                    <div className="border-b border-slate-800/80 pb-3">
-                      <h3 className="text-sm font-black text-white flex items-center gap-2">
-                        <SlidersHorizontal className="w-4 h-4 text-amber-400" />
-                        2. Quiz Mode & Constraints
-                      </h3>
-                    </div>
-
-                    {/* Mode Toggle: Practice vs Exam */}
-                    <div>
-                      <label className="text-xs font-bold text-slate-300 block mb-1.5">
-                        Simulation Mode
-                      </label>
-                      <div className="grid grid-cols-2 gap-2 p-1 bg-slate-950 border border-slate-800 rounded-2xl">
-                        <button
-                          type="button"
-                          onClick={() => setQuizMode('practice')}
-                          className={`py-2 rounded-xl text-xs font-bold flex flex-col items-center gap-0.5 transition-all cursor-pointer ${
-                            quizMode === 'practice'
-                              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-                              : 'text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          <BookOpen className="w-3.5 h-3.5" />
-                          <span>Practice Mode</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setQuizMode('exam')}
-                          className={`py-2 rounded-xl text-xs font-bold flex flex-col items-center gap-0.5 transition-all cursor-pointer ${
-                            quizMode === 'exam'
-                              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-                              : 'text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          <Clock className="w-3.5 h-3.5" />
-                          <span>Exam Mode</span>
-                        </button>
-                      </div>
-                      <p className="text-[11px] text-slate-400 mt-1">
-                        {quizMode === 'practice' 
-                          ? 'Immediate feedback & explanations after each answer.' 
-                          : 'Strict countdown timer & full exam submission at the end.'}
-                      </p>
-                    </div>
-
-                    {/* Number of Questions */}
-                    <div>
-                      <label className="text-xs font-bold text-slate-300 block mb-1.5">
-                        Question Count
-                      </label>
-                      <div className="flex gap-2">
-                        {[5, 10, 15, 20, 30].map(cnt => (
-                          <button
-                            key={cnt}
-                            type="button"
-                            onClick={() => setQuestionCount(cnt)}
-                            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                              questionCount === cnt
-                                ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-                                : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white'
-                            }`}
-                          >
-                            {cnt}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Difficulty Selection */}
-                    <div>
-                      <label className="text-xs font-bold text-slate-300 block mb-1.5">
-                        Difficulty Level
-                      </label>
-                      <div className="grid grid-cols-4 gap-2">
-                        {(['all', 'easy', 'medium', 'hard'] as const).map(diff => (
-                          <button
-                            key={diff}
-                            type="button"
-                            onClick={() => setSelectedDifficulty(diff)}
-                            className={`py-2 rounded-xl text-xs font-bold uppercase transition-all cursor-pointer ${
-                              selectedDifficulty === diff
-                                ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-                                : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white'
-                            }`}
-                          >
-                            {diff}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Launch Button */}
-                  <button
-                    onClick={() => handleStartQuiz()}
-                    disabled={loadingQuestions}
-                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-xl shadow-amber-500/20 transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    <Play className="w-4 h-4 fill-slate-950" />
-                    <span>Start {quizMode === 'exam' ? 'Timed Exam' : 'Practice Quiz'}</span>
-                  </button>
-                </div>
-              </div>
+              )}
             </motion.div>
           )}
 
@@ -826,8 +1450,8 @@ export default function ExamPrep({
               className="space-y-6"
             >
               {/* Question Header & Timer Bar */}
-              <div className="flex items-center justify-between p-4 bg-slate-900 border border-slate-800 rounded-3xl">
-                <div className="flex items-center gap-3">
+              <div className="flex items-center justify-between p-3 min-[360px]:p-4 bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl gap-2">
+                <div className="flex items-center gap-2 min-[360px]:gap-3 min-w-0 flex-1">
                   <button
                     onClick={() => {
                       if (window.confirm('Leave active quiz? Your current session answers will be lost.')) {
@@ -835,21 +1459,21 @@ export default function ExamPrep({
                         setQuizState('config');
                       }
                     }}
-                    className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
+                    className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer shrink-0"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
-                  <div>
-                    <span className="text-xs font-bold text-amber-400 font-mono">
+                  <div className="min-w-0 flex-1">
+                    <span className="text-[11px] sm:text-xs font-bold text-amber-400 font-mono block">
                       Question {currentIndex + 1} of {activeQuestions.length}
                     </span>
-                    <h3 className="text-sm font-black text-white truncate max-w-[200px] sm:max-w-md">
+                    <h3 className="text-xs sm:text-sm font-black text-white truncate max-w-[140px] min-[360px]:max-w-[190px] sm:max-w-md">
                       {activeQuestions[currentIndex].subject} &bull; {activeQuestions[currentIndex].unit}
                     </h3>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-1.5 min-[360px]:gap-2 shrink-0">
                   {/* Bookmark Button */}
                   <button
                     type="button"
@@ -896,17 +1520,16 @@ export default function ExamPrep({
                     </div>
                   )}
 
-                  {/* Question Palette Trigger (Exam Mode) */}
-                  {quizMode === 'exam' && (
-                    <button
-                      type="button"
-                      onClick={() => setShowQuestionPalette(true)}
-                      className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold border border-slate-700 cursor-pointer hidden sm:flex items-center gap-1.5"
-                    >
-                      <Layers className="w-3.5 h-3.5" />
-                      <span>Palette</span>
-                    </button>
-                  )}
+                  {/* Question Palette Trigger (Always Accessible) */}
+                  <button
+                    type="button"
+                    onClick={() => setShowQuestionPalette(true)}
+                    className="px-2.5 sm:px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold border border-slate-700 cursor-pointer flex items-center gap-1.5"
+                    title="View Question Palette"
+                  >
+                    <Layers className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="hidden min-[360px]:inline">Palette</span>
+                  </button>
                 </div>
               </div>
 
@@ -918,16 +1541,49 @@ export default function ExamPrep({
                 />
               </div>
 
+              {/* Quick 1-Tap Question Jump Palette (UniExam Style) */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5 no-scrollbar px-0.5">
+                {activeQuestions.map((_, idx) => {
+                  const isCurrent = idx === currentIndex;
+                  const isAnswered = userAnswers[idx] !== undefined;
+                  const isFlagged = flaggedIndices.has(idx);
+
+                  return (
+                    <button
+                      key={`quick_jump_${idx}`}
+                      type="button"
+                      onClick={() => {
+                        playClickChime();
+                        setCurrentIndex(idx);
+                        setIsAnswerRevealed(Boolean(userAnswers[idx]));
+                      }}
+                      className={`min-w-[32px] h-8 px-2 rounded-xl text-xs font-mono font-bold shrink-0 transition-all cursor-pointer flex items-center justify-center ${
+                        isCurrent
+                          ? 'bg-amber-500 text-slate-950 font-black shadow-md scale-105'
+                          : isFlagged
+                          ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                          : isAnswered
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                          : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                      }`}
+                      title={`Jump to Question ${idx + 1}`}
+                    >
+                      {idx + 1}
+                    </button>
+                  );
+                })}
+              </div>
+
               {/* Question Card */}
               {(() => {
                 const q = activeQuestions[currentIndex];
                 const selectedOptionId = userAnswers[currentIndex];
 
                 return (
-                  <div className="bg-slate-900 border border-slate-800 p-6 sm:p-8 rounded-3xl space-y-6 shadow-xl">
+                  <div className="bg-slate-900 border border-slate-800 p-4 min-[360px]:p-5 sm:p-8 rounded-2xl sm:rounded-3xl space-y-4 sm:space-y-6 shadow-xl">
                     {/* Meta Badges */}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+                    <div className="flex flex-wrap items-center gap-1.5 min-[360px]:gap-2">
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
                         q.difficulty === 'easy' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
                         q.difficulty === 'hard' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
                         'bg-amber-500/10 text-amber-400 border border-amber-500/20'
@@ -935,7 +1591,7 @@ export default function ExamPrep({
                         {q.difficulty}
                       </span>
                       {q.topic && (
-                        <span className="text-[11px] text-slate-400 bg-slate-950 px-2.5 py-0.5 rounded-full border border-slate-800">
+                        <span className="text-[10px] min-[360px]:text-[11px] text-slate-400 bg-slate-950 px-2 py-0.5 rounded-full border border-slate-800 truncate max-w-[160px] min-[360px]:max-w-none">
                           {q.topic}
                         </span>
                       )}
@@ -945,19 +1601,19 @@ export default function ExamPrep({
                         </span>
                       )}
                       {q.source && (
-                        <span className="text-[10px] text-slate-500 ml-auto">
+                        <span className="text-[9px] min-[360px]:text-[10px] text-slate-500 ml-auto hidden min-[400px]:inline">
                           Source: {q.source}
                         </span>
                       )}
                     </div>
 
                     {/* Question Text */}
-                    <h2 className="text-lg sm:text-xl font-bold text-white leading-relaxed">
+                    <h2 className="text-base min-[360px]:text-lg sm:text-xl font-bold text-white leading-relaxed break-words">
                       {q.question}
                     </h2>
 
                     {/* 4 Choices */}
-                    <div className="grid grid-cols-1 gap-3 pt-2">
+                    <div className="grid grid-cols-1 gap-2.5 sm:gap-3 pt-1">
                       {q.options.map((opt) => {
                         const isSelected = selectedOptionId === opt.id;
                         let optionStyle = 'bg-slate-950 border-slate-800/90 text-slate-200 hover:border-slate-700';
@@ -979,16 +1635,16 @@ export default function ExamPrep({
                             key={opt.id}
                             type="button"
                             onClick={() => handleSelectAnswer(opt.id, opt.text)}
-                            className={`p-4 rounded-2xl border text-left flex items-start gap-3 transition-all cursor-pointer min-h-[48px] ${optionStyle}`}
+                            className={`p-3 min-[360px]:p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border text-left flex items-start gap-2.5 min-[360px]:gap-3 transition-all cursor-pointer min-h-[48px] ${optionStyle}`}
                           >
-                            <span className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-black shrink-0 ${
+                            <span className={`w-6 h-6 min-[360px]:w-7 min-[360px]:h-7 rounded-lg sm:rounded-xl flex items-center justify-center text-xs font-black shrink-0 ${
                               isSelected 
                                 ? 'bg-amber-500 text-slate-950' 
                                 : 'bg-slate-800 text-slate-400'
                             }`}>
                               {opt.id}
                             </span>
-                            <span className="text-sm pt-0.5 leading-relaxed">{opt.text}</span>
+                            <span className="text-xs min-[360px]:text-sm sm:text-base pt-0.5 leading-relaxed break-words">{opt.text}</span>
                           </button>
                         );
                       })}
@@ -999,21 +1655,21 @@ export default function ExamPrep({
                       <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className={`p-4 rounded-2xl border text-xs sm:text-sm leading-relaxed ${
+                        className={`p-3.5 min-[360px]:p-4 rounded-xl sm:rounded-2xl border text-xs sm:text-sm leading-relaxed break-words ${
                           selectedOptionId === q.correct_answer_id
                             ? 'bg-emerald-950/50 border-emerald-500/40 text-emerald-200'
                             : 'bg-rose-950/50 border-rose-500/40 text-rose-200'
                         }`}
                       >
-                        <div className="font-black flex items-center gap-1.5 mb-1 text-sm">
+                        <div className="font-black flex items-center gap-1.5 mb-1 text-xs min-[360px]:text-sm">
                           {selectedOptionId === q.correct_answer_id ? (
                             <>
-                              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                               <span>Correct! Excellent Reasoning</span>
                             </>
                           ) : (
                             <>
-                              <XCircle className="w-4 h-4 text-rose-400" />
+                              <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
                               <span>Incorrect. Correct Answer is Option {q.correct_answer_id}</span>
                             </>
                           )}
@@ -1032,12 +1688,12 @@ export default function ExamPrep({
                     )}
 
                     {/* Navigation Buttons */}
-                    <div className="flex items-center justify-between pt-4 border-t border-slate-800/80">
+                    <div className="flex items-center justify-between pt-3 sm:pt-4 border-t border-slate-800/80 gap-2">
                       <button
                         type="button"
                         onClick={handlePrev}
                         disabled={currentIndex === 0}
-                        className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5"
+                        className="px-3 min-[360px]:px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1 min-h-[44px]"
                       >
                         <ChevronLeft className="w-4 h-4" />
                         <span>Previous</span>
@@ -1051,7 +1707,7 @@ export default function ExamPrep({
                               handleFinishQuiz();
                             }
                           }}
-                          className="px-4 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-bold border border-rose-500/40 cursor-pointer"
+                          className="px-3 min-[360px]:px-4 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-bold border border-rose-500/40 cursor-pointer min-h-[44px]"
                         >
                           Submit Exam
                         </button>
@@ -1060,9 +1716,9 @@ export default function ExamPrep({
                       <button
                         type="button"
                         onClick={handleNext}
-                        className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black flex items-center gap-1.5 shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
+                        className="px-4 min-[360px]:px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs min-[360px]:text-sm font-black flex items-center gap-1.5 shadow-lg shadow-amber-500/20 transition-all cursor-pointer min-h-[44px]"
                       >
-                        <span>{currentIndex === activeQuestions.length - 1 ? (quizMode === 'exam' ? 'Submit Exam' : 'Finish Quiz') : 'Next Question'}</span>
+                        <span>{currentIndex === activeQuestions.length - 1 ? (quizMode === 'exam' ? 'Submit Exam' : 'Finish Quiz') : 'Next'}</span>
                         <ChevronRight className="w-4 h-4" />
                       </button>
                     </div>

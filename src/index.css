@@ -8,18 +8,19 @@
   --font-serif: "Georgia", "Playfair Display", serif;
   --font-mono: "JetBrains Mono", monospace;
   
-  --text-xs: 0.8125rem; /* ~13.4px */
-  --text-xs--line-height: 1.5;
-  --text-sm: 0.9375rem; /* 15.5px */
-  --text-sm--line-height: 1.55;
-  --text-base: 1.0625rem; /* 17.5px */
-  --text-base--line-height: 1.65;
-  --text-lg: 1.2rem; /* 19.8px */
-  --text-lg--line-height: 1.6;
-  --text-xl: 1.375rem; /* 22.7px */
-  --text-xl--line-height: 1.5;
-  --text-2xl: 1.625rem; /* 26.8px */
-  --text-2xl--line-height: 1.4;
+  --text-2xs: 0.6875rem; /* 11px */
+  --text-xs: 0.75rem; /* 12px */
+  --text-xs--line-height: 1.45;
+  --text-sm: 0.875rem; /* 14px */
+  --text-sm--line-height: 1.5;
+  --text-base: 1rem; /* 16px */
+  --text-base--line-height: 1.6;
+  --text-lg: 1.125rem; /* 18px */
+  --text-lg--line-height: 1.5;
+  --text-xl: 1.25rem; /* 20px */
+  --text-xl--line-height: 1.4;
+  --text-2xl: 1.5rem; /* 24px */
+  --text-2xl--line-height: 1.35;
   
   --color-gold-cream: #F0EDE8;
   --color-gold-muted: #8A8480;
@@ -43,27 +44,56 @@
   box-sizing: border-box;
 }
 
-/* Student Readability Scale: Moderate by default for comfortable university study */
+/* Phone-First Fluid Base Scale: smoothly scales across all phone widths (320px to 430px+) */
 :root {
-  font-size: 16.5px;
-  line-height: 1.65;
+  font-size: clamp(14px, 3.8vw, 16px);
+  line-height: 1.6;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+@media (min-width: 640px) {
+  :root {
+    font-size: 16px;
+  }
 }
 
 html[data-text-size="normal"] {
-  font-size: 15px;
+  font-size: clamp(13px, 3.4vw, 15px);
+}
+@media (min-width: 640px) {
+  html[data-text-size="normal"] {
+    font-size: 15px;
+  }
 }
 
 html[data-text-size="moderate"],
 html:not([data-text-size]) {
-  font-size: 16.5px;
+  font-size: clamp(14px, 3.8vw, 16px);
+}
+@media (min-width: 640px) {
+  html[data-text-size="moderate"],
+  html:not([data-text-size]) {
+    font-size: 16px;
+  }
 }
 
 html[data-text-size="large"] {
-  font-size: 18px;
+  font-size: clamp(15px, 4.2vw, 17.5px);
+}
+@media (min-width: 640px) {
+  html[data-text-size="large"] {
+    font-size: 17.5px;
+  }
 }
 
 html[data-text-size="xlarge"] {
-  font-size: 19.5px;
+  font-size: clamp(16px, 4.6vw, 19px);
+}
+@media (min-width: 640px) {
+  html[data-text-size="xlarge"] {
+    font-size: 19px;
+  }
 }
 
 html {
@@ -495,21 +525,11 @@ html, body {
 }
 
 /* ============================================================================ */
-/* 🎓 STUDENT ACCESSIBILITY & MODERATE READABILITY OVERRIDES                     */
+/* 🎓 PHONE-FIRST STUDENT ACCESSIBILITY & BILINGUAL READABILITY                 */
 /* ============================================================================ */
-/* Ensure micro labels, chips, and sub-text never collapse into illegible sizes */
-.text-\[9\.5px\],
-.text-\[10px\],
-.text-\[10\.5px\],
-.text-\[11px\] {
-  font-size: 0.8125rem !important; /* ~13.4px */
-  line-height: 1.5 !important;
-}
-
-.text-\[12px\],
-.text-xs {
-  font-size: 0.84375rem !important; /* ~13.9px */
-  line-height: 1.55 !important;
+/* Fluid text wrapping and word breaking on narrow mobile screens */
+p, h1, h2, h3, h4, h5, h6, span, label, button, a {
+  overflow-wrap: break-word;
 }
 
 /* Ensure Amharic / Ge'ez text has ample vertical height so diacritics and ascenders never clip */
@@ -518,6 +538,14 @@ html, body {
 .font-amharic {
   line-height: 1.68 !important;
   font-feature-settings: "kern" 1;
+}
+
+/* Phone-first touch target compliance (>= 44px touch targets on mobile) */
+@media (max-width: 640px) {
+  .touch-target-mobile {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }
 
 

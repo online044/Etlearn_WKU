@@ -925,22 +925,43 @@ export default function App() {
   // Fetch curriculum books list from 'books' table in Supabase
   useEffect(() => {
     async function fetchBooks() {
-      const supaClient = getSupabase();
-      if (!supaClient) {
-        console.log('New Supabase client is not initialized (missing environment keys).');
-        return;
-      }
+      // 1. Fetch from server endpoint /api/books (which queries Supabase)
       try {
-        const { data, error } = await supaClient
-          .from('books')
-          .select('*')
-          .order('title', { ascending: true });
+        const res = await fetch('/api/books');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.books && Array.isArray(json.books) && json.books.length > 0) {
+            setSupabaseBooks(json.books.map((b: any) => ({
+              id: b.id,
+              title: b.title,
+              subject: b.subject,
+              grade: b.academicYear || b.grade || 'Freshman',
+              description: b.description,
+              cover_url: b.coverUrl || b.cover_url,
+              pdf_url: b.pdfUrl || b.pdf_url,
+              created_at: b.createdAt || b.created_at
+            })));
+          }
+        }
+      } catch (err) {
+        console.warn('Could not fetch books from /api/books:', err);
+      }
 
-        if (error) {
-          console.warn('Error fetching books list from "books" table in App.tsx:', error);
-        } else if (data) {
-          setSupabaseBooks(data);
-          console.log('Successfully fetched curriculum books list from Supabase in App.tsx:', data);
+      // 2. Also ensure direct client Supabase sync
+      try {
+        await initSupabaseConfig();
+        const supaClient = getSupabase();
+        if (supaClient) {
+          const { data, error } = await supaClient
+            .from('books')
+            .select('*')
+            .order('title', { ascending: true });
+
+          if (error) {
+            console.warn('Error fetching books list from "books" table in App.tsx:', error);
+          } else if (data && data.length > 0) {
+            setSupabaseBooks(data);
+          }
         }
       } catch (err) {
         console.error('Failed to coordinate Supabase request in App.tsx:', err);
@@ -1262,7 +1283,7 @@ export default function App() {
       >
         <div className="w-full max-w-7xl mx-auto px-2 min-[360px]:px-3 sm:px-4 h-14 sm:h-16 flex justify-between items-center gap-1.5 sm:gap-4 relative">
           
-          <div className="flex items-center gap-1.5 min-[360px]:gap-2 sm:gap-3 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             {/* 📱 App Sidebar & Info Menu Toggle Button */}
             <button
               type="button"
@@ -1277,23 +1298,30 @@ export default function App() {
               <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
 
-            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-              <div className="shrink-0 cursor-pointer" onClick={() => { playClickChime(); setIsSidebarOpen(true); }}>
-                <span className="hidden sm:inline-block">
-                  <EthioLearnLogo size={40} showCardBackground={true} iconOnly={true} className="hover:rotate-6 duration-300 transition-all" />
+            {/* 🎓 App Logo & Brand Title */}
+            <div 
+              className="flex items-center gap-2 sm:gap-2.5 min-w-0 cursor-pointer group"
+              onClick={() => { playClickChime(); setIsSidebarOpen(true); }}
+              title="EthioLearn Pro"
+            >
+              <div className="shrink-0 flex items-center justify-center">
+                <span className="hidden sm:inline-flex items-center justify-center w-[42px] h-[42px]">
+                  <EthioLearnLogo size={42} showCardBackground={false} iconOnly={true} className="w-full h-full group-hover:scale-105 duration-300 transition-all drop-shadow-md" />
                 </span>
-                <span className="sm:hidden inline-block">
-                  <EthioLearnLogo size={32} showCardBackground={true} iconOnly={true} className="hover:rotate-6 duration-300 transition-all" />
+                <span className="sm:hidden inline-flex items-center justify-center w-[36px] h-[36px]">
+                  <EthioLearnLogo size={36} showCardBackground={false} iconOnly={true} className="w-full h-full group-hover:scale-105 duration-300 transition-all drop-shadow-sm" />
                 </span>
               </div>
-              <div className="leading-none text-left min-w-0">
-                <div className="flex items-center">
-                  <span className="font-serif font-black text-slate-900 dark:text-white text-base sm:text-lg tracking-tight">ET_LEARN</span>
-                  {profile.isPro && (
-                    <span className="text-[#F59E0B] text-[9px] sm:text-[10px] font-extrabold px-1 sm:px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-500 ml-1 font-sans">PRO</span>
+              <div className="leading-tight text-left min-w-0">
+                <div className="flex items-center gap-1">
+                  <span className="font-serif font-black text-slate-900 dark:text-white text-base sm:text-lg tracking-tight">EthioLearn</span>
+                  {profile.isPro ? (
+                    <span className="text-[#F59E0B] text-[9px] sm:text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-500 font-sans tracking-wide">PRO</span>
+                  ) : (
+                    <span className="text-slate-400 dark:text-zinc-400 text-[9px] sm:text-[10px] font-bold px-1 py-0.2 rounded bg-slate-200 dark:bg-zinc-800 font-sans">CAMPUS</span>
                   )}
                 </div>
-                <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-zinc-400 font-semibold truncate max-w-[80px] min-[360px]:max-w-[120px] sm:max-w-none block">
+                <span className="text-[9.5px] sm:text-[10px] text-slate-500 dark:text-zinc-400 font-semibold truncate max-w-[95px] min-[360px]:max-w-[130px] sm:max-w-none block">
                   {profile.university || 'Wolkite University'}
                 </span>
               </div>
@@ -1732,14 +1760,14 @@ export default function App() {
           {/* Home Tab */}
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('home'); }}
-            className={`flex flex-col items-center justify-center w-full min-h-[48px] py-1 transition-colors cursor-pointer rounded-xl px-1 ${
+            className={`flex flex-col items-center justify-center w-full min-h-[48px] py-1 transition-colors cursor-pointer rounded-xl px-0.5 min-[360px]:px-1 ${
               currentPage === 'home' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <div className={`px-3 py-1 rounded-full transition-colors ${currentPage === 'home' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
-              <HomeIcon className="w-5 h-5 shrink-0" />
+            <div className={`px-2 min-[360px]:px-3 py-0.5 min-[360px]:py-1 rounded-full transition-colors ${currentPage === 'home' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
+              <HomeIcon className="w-4 h-4 min-[360px]:w-5 min-[360px]:h-5 shrink-0" />
             </div>
-            <span className={`text-xs mt-0.5 truncate max-w-[76px] sm:max-w-[88px] text-center ${currentPage === 'home' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
+            <span className={`text-[10px] min-[360px]:text-[11px] sm:text-xs mt-0.5 truncate max-w-[58px] min-[360px]:max-w-[76px] sm:max-w-[88px] text-center leading-tight ${currentPage === 'home' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
               {language === 'en' ? 'Home' : 'ዋና'}
             </span>
           </button>
@@ -1747,14 +1775,14 @@ export default function App() {
           {/* Quizzes Tab */}
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('quiz'); }}
-            className={`flex flex-col items-center justify-center w-full min-h-[48px] py-1 transition-colors cursor-pointer rounded-xl px-1 ${
+            className={`flex flex-col items-center justify-center w-full min-h-[48px] py-1 transition-colors cursor-pointer rounded-xl px-0.5 min-[360px]:px-1 ${
               currentPage === 'quiz' || currentPage === 'tutor' || currentPage === 'examprep' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <div className={`px-3 py-1 rounded-full transition-colors ${currentPage === 'quiz' || currentPage === 'tutor' || currentPage === 'examprep' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
-              <Trophy className="w-5 h-5 shrink-0" />
+            <div className={`px-2 min-[360px]:px-3 py-0.5 min-[360px]:py-1 rounded-full transition-colors ${currentPage === 'quiz' || currentPage === 'tutor' || currentPage === 'examprep' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
+              <Trophy className="w-4 h-4 min-[360px]:w-5 min-[360px]:h-5 shrink-0" />
             </div>
-            <span className={`text-xs mt-0.5 truncate max-w-[76px] sm:max-w-[88px] text-center ${currentPage === 'quiz' || currentPage === 'tutor' || currentPage === 'examprep' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
+            <span className={`text-[10px] min-[360px]:text-[11px] sm:text-xs mt-0.5 truncate max-w-[58px] min-[360px]:max-w-[76px] sm:max-w-[88px] text-center leading-tight ${currentPage === 'quiz' || currentPage === 'tutor' || currentPage === 'examprep' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
               {language === 'en' ? 'Quizzes' : 'ፈተናዎች'}
             </span>
           </button>
@@ -1762,14 +1790,14 @@ export default function App() {
           {/* Book Store Tab */}
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('bookstore'); }}
-            className={`flex flex-col items-center justify-center w-full min-h-[48px] py-1 transition-colors cursor-pointer rounded-xl px-1 ${
+            className={`flex flex-col items-center justify-center w-full min-h-[48px] py-1 transition-colors cursor-pointer rounded-xl px-0.5 min-[360px]:px-1 ${
               currentPage === 'bookstore' || currentPage === 'notes' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <div className={`px-3 py-1 rounded-full transition-colors ${currentPage === 'bookstore' || currentPage === 'notes' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
-              <BookOpen className="w-5 h-5 shrink-0" />
+            <div className={`px-2 min-[360px]:px-3 py-0.5 min-[360px]:py-1 rounded-full transition-colors ${currentPage === 'bookstore' || currentPage === 'notes' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
+              <BookOpen className="w-4 h-4 min-[360px]:w-5 min-[360px]:h-5 shrink-0" />
             </div>
-            <span className={`text-xs mt-0.5 truncate max-w-[76px] sm:max-w-[88px] text-center ${currentPage === 'bookstore' || currentPage === 'notes' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
+            <span className={`text-[10px] min-[360px]:text-[11px] sm:text-xs mt-0.5 truncate max-w-[58px] min-[360px]:max-w-[76px] sm:max-w-[88px] text-center leading-tight ${currentPage === 'bookstore' || currentPage === 'notes' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
               {language === 'en' ? 'Books' : 'መጽሐፍት'}
             </span>
           </button>
@@ -1777,15 +1805,15 @@ export default function App() {
           {/* University past exams Tab */}
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('university'); }}
-            className={`flex flex-col items-center justify-center w-full min-h-[48px] py-1 transition-colors cursor-pointer rounded-xl px-1 ${
+            className={`flex flex-col items-center justify-center w-full min-h-[48px] py-1 transition-colors cursor-pointer rounded-xl px-0.5 min-[360px]:px-1 ${
               currentPage === 'university' || currentPage === 'examengine' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'
             }`}
             title="University Exams"
           >
-            <div className={`px-3 py-1 rounded-full transition-colors ${currentPage === 'university' || currentPage === 'examengine' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
-              <Award className="w-5 h-5 shrink-0" />
+            <div className={`px-2 min-[360px]:px-3 py-0.5 min-[360px]:py-1 rounded-full transition-colors ${currentPage === 'university' || currentPage === 'examengine' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
+              <Award className="w-4 h-4 min-[360px]:w-5 min-[360px]:h-5 shrink-0" />
             </div>
-            <span className={`text-xs mt-0.5 truncate max-w-[76px] sm:max-w-[88px] text-center ${currentPage === 'university' || currentPage === 'examengine' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
+            <span className={`text-[10px] min-[360px]:text-[11px] sm:text-xs mt-0.5 truncate max-w-[58px] min-[360px]:max-w-[76px] sm:max-w-[88px] text-center leading-tight ${currentPage === 'university' || currentPage === 'examengine' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
               {language === 'en' ? 'Uni Exam' : 'ዩኒቨርሲቲ'}
             </span>
           </button>
@@ -1793,19 +1821,19 @@ export default function App() {
           {/* Profile Tab */}
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('profile'); }}
-            className={`flex flex-col items-center justify-center w-full min-h-[48px] py-1 transition-colors cursor-pointer rounded-xl px-1 ${
+            className={`flex flex-col items-center justify-center w-full min-h-[48px] py-1 transition-colors cursor-pointer rounded-xl px-0.5 min-[360px]:px-1 ${
               currentPage === 'profile' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <div className={`px-2 py-0.5 rounded-full transition-colors ${currentPage === 'profile' ? 'bg-amber-400/15' : ''}`}>
+            <div className={`px-1.5 min-[360px]:px-2 py-0.5 rounded-full transition-colors ${currentPage === 'profile' ? 'bg-amber-400/15' : ''}`}>
               <StudentAvatar 
                 avatar={profile.avatar} 
                 name={profile.name} 
-                size={22} 
+                size={20} 
                 className={`transition-all ${currentPage === 'profile' ? 'border-2 border-amber-400 scale-105' : 'border border-slate-700 opacity-80'}`}
               />
             </div>
-            <span className={`text-xs mt-0.5 truncate max-w-[76px] sm:max-w-[88px] text-center ${currentPage === 'profile' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
+            <span className={`text-[10px] min-[360px]:text-[11px] sm:text-xs mt-0.5 truncate max-w-[58px] min-[360px]:max-w-[76px] sm:max-w-[88px] text-center leading-tight ${currentPage === 'profile' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
               {language === 'en' ? 'Profile' : 'መገለጫ'}
             </span>
           </button>

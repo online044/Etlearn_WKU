@@ -38,6 +38,7 @@ CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles (email);
 CREATE TABLE IF NOT EXISTS public.student_profiles (
   email TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  phone TEXT,
   university TEXT DEFAULT 'Wolkite University',
   year TEXT DEFAULT 'Freshman',
   subjects JSONB DEFAULT '[]'::jsonb,
@@ -52,6 +53,9 @@ CREATE TABLE IF NOT EXISTS public.student_profiles (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Ensure phone column exists if table was created in an earlier migration
+ALTER TABLE IF EXISTS public.student_profiles ADD COLUMN IF NOT EXISTS phone TEXT;
 
 -- 3. Create courses table (Curriculum & CMS)
 CREATE TABLE IF NOT EXISTS public.courses (

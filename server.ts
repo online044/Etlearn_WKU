@@ -258,15 +258,26 @@ app.post(['/api/auth/login', '/api/auth/login/'], authLimiter, async (req: Reque
     let studentProfile: any = null;
 
     if (supabase) {
-      // Query by phone or email
+      // Query by email or phone (phone is matched via synthetic email or inside profile_data)
       let query = supabase.from('student_profiles').select('*');
       if (idInfo.type === 'email') {
         query = query.eq('email', idInfo.value);
       } else {
-        query = query.or(`phone.eq.${idInfo.value},phone.eq.${idInfo.display},email.eq.${idInfo.value}`);
+        query = query.or(`email.eq.${idInfo.value},email.eq.${idInfo.display}@student.ethiolearn.edu.et`);
       }
 
-      const { data: records, error: dbError } = await query.limit(1);
+      let { data: records, error: dbError } = await query.limit(1);
+
+      if ((!records || records.length === 0) && idInfo.type === 'phone') {
+        const { data: phoneRecords } = await supabase
+          .from('student_profiles')
+          .select('*')
+          .filter('profile_data->>phone', 'eq', idInfo.display)
+          .limit(1);
+        if (phoneRecords && phoneRecords.length > 0) {
+          records = phoneRecords;
+        }
+      }
 
       if (dbError) {
         console.warn('[Supabase Login Warning]:', dbError.message);
@@ -1215,11 +1226,21 @@ app.post(['/api/db/student-profile', '/api/db/student-profile/'], async (req: Re
         .eq('email', cleanEmail)
         .maybeSingle();
     } else if (cleanPhone) {
+      // First check by synthetic student email
       existingDataRes = await supabase
         .from('student_profiles')
         .select('profile_data, study_sessions, notes_data, performance_data')
-        .eq('phone', cleanPhone)
+        .eq('email', `${cleanPhone}@student.ethiolearn.edu.et`)
         .maybeSingle();
+
+      // If not found, lookup by phone inside JSONB profile_data
+      if (!existingDataRes?.data) {
+        existingDataRes = await supabase
+          .from('student_profiles')
+          .select('profile_data, study_sessions, notes_data, performance_data')
+          .filter('profile_data->>phone', 'eq', cleanPhone)
+          .maybeSingle();
+      }
     }
 
     const existingProfileData = existingDataRes?.data?.profile_data || {};
@@ -1236,9 +1257,16 @@ app.post(['/api/db/student-profile', '/api/db/student-profile/'], async (req: Re
       referralCode: referralCode || existingProfileData.referralCode || null
     };
 
+    const targetEmail = cleanEmail || `${cleanPhone}@student.ethiolearn.edu.et`;
+
+    // Standard database record matching Supabase student_profiles table schema (no top-level phone column)
     const dbRecord: any = {
-      email: cleanEmail || `${cleanPhone}@student.ethiolearn.edu.et`,
-      phone: cleanPhone || null,
+      email: targetEmail,
+      name: cleanName || 'Student',
+      university: mergedProfileData.university || 'Wolkite University',
+      year: mergedProfileData.year || 'Freshman',
+      is_pro: Boolean(mergedProfileData.isPro),
+      user_role: mergedProfileData.userRole || 'student',
       profile_data: mergedProfileData,
       study_sessions: (profileData && profileData.studySessions) || existingDataRes?.data?.study_sessions || [],
       notes_data: (profileData && profileData.notesData) || existingDataRes?.data?.notes_data || [],
@@ -1246,11 +1274,28 @@ app.post(['/api/db/student-profile', '/api/db/student-profile/'], async (req: Re
       updated_at: new Date().toISOString()
     };
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('student_profiles')
       .upsert(dbRecord, { onConflict: 'email' })
       .select()
       .maybeSingle();
+
+    // Resilient fallback: if the table schema lacks some columns (e.g. name, university), write essential columns
+    if (error && (error.message.includes('column') || error.message.includes('schema cache'))) {
+      console.warn('[Server DB Student Profile Schema Adaptation]:', error.message);
+      const minimalPayload = {
+        email: targetEmail,
+        profile_data: mergedProfileData,
+        updated_at: new Date().toISOString()
+      };
+      const retryRes = await supabase
+        .from('student_profiles')
+        .upsert(minimalPayload, { onConflict: 'email' })
+        .select()
+        .maybeSingle();
+      error = retryRes.error;
+      data = retryRes.data;
+    }
 
     if (error) {
       console.warn('[Server DB Student Profile Upsert Error]:', error.message);
@@ -1543,31 +1588,40 @@ app.post(['/api/auth/reset-password', '/api/auth/reset-password/'], async (req: 
         if (idInfo.type === 'email') {
           query = query.eq('email', idInfo.value);
         } else {
-          query = query.or(`phone.eq.${idInfo.value},phone.eq.${idInfo.display},email.eq.${idInfo.value}`);
+          query = query.or(`email.eq.${idInfo.value},email.eq.${idInfo.display}@student.ethiolearn.edu.et`);
         }
 
-        const { data: existingRecords } = await query.limit(1);
+        let { data: existingRecords } = await query.limit(1);
+
+        if ((!existingRecords || existingRecords.length === 0) && idInfo.type === 'phone') {
+          const { data: phoneRecords } = await supabase
+            .from('student_profiles')
+            .select('*')
+            .filter('profile_data->>phone', 'eq', idInfo.display)
+            .limit(1);
+          if (phoneRecords && phoneRecords.length > 0) {
+            existingRecords = phoneRecords;
+          }
+        }
+
         const existing = existingRecords && existingRecords[0];
+        const studentEmail = idInfo.type === 'email' ? idInfo.value : (existing?.email || `${idInfo.display}@student.ethiolearn.edu.et`);
 
         const updatedProfileData = {
           ...(existing?.profile_data || {}),
-          phone: idInfo.type === 'phone' ? idInfo.display : existing?.phone,
-          email: idInfo.type === 'email' ? idInfo.value : existing?.email,
+          phone: idInfo.type === 'phone' ? idInfo.display : (existing?.profile_data?.phone || existing?.phone),
+          email: studentEmail,
           password: cleanPass
         };
 
         const upsertPayload: any = {
+          email: studentEmail,
+          name: existing?.name || existing?.profile_data?.name || 'Student',
           profile_data: updatedProfileData,
           updated_at: new Date().toISOString()
         };
-        if (idInfo.type === 'email') {
-          upsertPayload.email = idInfo.value;
-        } else {
-          upsertPayload.phone = idInfo.display;
-          if (existing?.email) upsertPayload.email = existing.email;
-        }
 
-        await supabase.from('student_profiles').upsert(upsertPayload);
+        await supabase.from('student_profiles').upsert(upsertPayload, { onConflict: 'email' });
       } catch (dbErr) {
         console.warn('[Supabase Password Reset Warning]:', dbErr);
       }

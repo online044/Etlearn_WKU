@@ -9,12 +9,13 @@ import {
   FileText, Search, Star, Bookmark, BookOpen, ChevronRight, ChevronLeft,
   X, Check, Bot, Sparkles, Printer, ZoomIn, ZoomOut, Maximize2, Minimize2,
   Download, Moon, Sun, Layers, HelpCircle, CheckCircle2, RotateCcw, Share2,
-  ExternalLink, Folder, CloudDownload, Eye, ShieldCheck
+  ExternalLink, Folder, CloudDownload, Eye, ShieldCheck, LayoutGrid, List, RefreshCw
 } from 'lucide-react';
 import { StudentProfile } from '../types';
 import { playClickChime, playSuccessChime } from '../utils/audio';
 import { getChapterContent } from '../data/textbookChapterContent';
 import { safeStorage } from '../utils/safeStorage';
+import { fetchSupabaseBooks } from '../utils/supabaseClient';
 
 export interface BookStoreViewProps {
   profile: StudentProfile;
@@ -25,6 +26,127 @@ export interface BookStoreViewProps {
   books?: any[];
   supabaseBooks?: any[];
   onOpenInAppViewer?: (url: string, title: string) => void;
+}
+
+// ─── THEMATIC ACADEMIC COVER IMAGES (Curated Fallbacks) ───
+export const THEMATIC_BOOK_COVERS: Record<string, string> = {
+  physics: 'https://images.unsplash.com/photo-1636466497217-26a8cbeaf0aa?w=600&q=80',
+  mathematics: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?w=600&q=80',
+  math: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?w=600&q=80',
+  chemistry: 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=600&q=80',
+  biology: 'https://images.unsplash.com/photo-1530026405186-ed1f139313f8?w=600&q=80',
+  history: 'https://images.unsplash.com/photo-1596495578065-6e0763fa1178?w=600&q=80',
+  geography: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=600&q=80',
+  fitness: 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=600&q=80',
+  economics: 'https://images.unsplash.com/photo-1507413245164-6160d8298b31?w=600&q=80',
+  emerging: 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=600&q=80',
+  it: 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=600&q=80',
+  technology: 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=600&q=80',
+  entrepreneurship: 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=600&q=80',
+  business: 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=600&q=80',
+  anthropology: 'https://images.unsplash.com/photo-1528372444006-1bc09c6c2b18?w=600&q=80',
+  trends: 'https://images.unsplash.com/photo-1544380904-c686aad2fc40?w=600&q=80',
+  global: 'https://images.unsplash.com/photo-1544380904-c686aad2fc40?w=600&q=80',
+  logic: 'https://images.unsplash.com/photo-1507537297725-24a1c029d3ca?w=600&q=80',
+  critical: 'https://images.unsplash.com/photo-1507537297725-24a1c029d3ca?w=600&q=80',
+  psychology: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=600&q=80',
+  inclusiveness: 'https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?w=600&q=80',
+  english: 'https://images.unsplash.com/photo-1457369804613-52c61a468e7d?w=600&q=80',
+  civics: 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=600&q=80'
+};
+
+export function resolveBookCover(book: { cover_url?: string | null; pdf_url?: string | null; subject?: string; title?: string }): string {
+  if (book.cover_url && typeof book.cover_url === 'string' && book.cover_url.trim().length > 0) {
+    const raw = book.cover_url.trim().replace(/^['"]+|['"]+$/g, '');
+
+    // Convert Google Drive thumbnail or preview link to high-performance direct CDN image
+    const driveMatch = raw.match(/[?&]id=([a-zA-Z0-9_-]+)/) || raw.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (driveMatch && driveMatch[1]) {
+      return `https://lh3.googleusercontent.com/d/${driveMatch[1]}=w600-h800`;
+    }
+    return raw;
+  }
+
+  // If cover_url is not set, derive directly from pdf_url Google Drive file ID
+  if (book.pdf_url && typeof book.pdf_url === 'string') {
+    const idMatch = book.pdf_url.match(/[?&]id=([a-zA-Z0-9_-]+)/) || book.pdf_url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (idMatch && idMatch[1]) {
+      return `https://lh3.googleusercontent.com/d/${idMatch[1]}=w600-h800`;
+    }
+  }
+
+  const text = `${book.subject || ''} ${book.title || ''}`.toLowerCase();
+  for (const [key, url] of Object.entries(THEMATIC_BOOK_COVERS)) {
+    if (text.includes(key)) {
+      return url;
+    }
+  }
+  return 'https://images.unsplash.com/photo-1532012164546-f432f2e3777a?w=600&q=80';
+}
+
+export function getBookPdfLinks(rawUrl?: string) {
+  if (!rawUrl || typeof rawUrl !== 'string') {
+    return {
+      pdfUrl: '',
+      previewUrl: '',
+      downloadUrl: '',
+      isDrive: false
+    };
+  }
+
+  const clean = rawUrl.trim();
+  const idMatch = clean.match(/[?&]id=([a-zA-Z0-9_-]+)/) || clean.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (idMatch && idMatch[1]) {
+    const fileId = idMatch[1];
+    return {
+      pdfUrl: clean,
+      previewUrl: `https://drive.google.com/file/d/${fileId}/preview`,
+      downloadUrl: `https://drive.google.com/uc?export=download&id=${fileId}`,
+      isDrive: true,
+      fileId
+    };
+  }
+
+  if (clean.includes('drive.google.com/drive/folders/')) {
+    return {
+      pdfUrl: clean,
+      previewUrl: clean,
+      downloadUrl: clean,
+      isDrive: true
+    };
+  }
+
+  return {
+    pdfUrl: clean,
+    previewUrl: clean,
+    downloadUrl: clean,
+    isDrive: false
+  };
+}
+
+export interface UnifiedBookItem {
+  id: string;
+  code: string;
+  title: string;
+  amharicTitle: string;
+  subject: string;
+  grade: string;
+  stream: 'Common' | 'Natural Science' | 'Social Science';
+  semester: 'Semester I' | 'Semester II';
+  coverUrl: string;
+  pdfUrl: string;
+  previewUrl: string;
+  downloadUrl: string;
+  description: string;
+  amharicDescription: string;
+  chapters: string[];
+  pages: number;
+  creditHours: number;
+  fileSizeMb: number;
+  rating: number;
+  isDrive: boolean;
+  isFromSupabase: boolean;
+  originalModule?: FreshmanModule;
 }
 
 // ─── GOOGLE DRIVE REPOSITORY INTEGRATION ───
@@ -541,12 +663,47 @@ export default function BookStoreView({
   apiKey,
   language,
   onNavigate,
-  onStudyAction
+  onStudyAction,
+  books,
+  supabaseBooks = [],
+  onOpenInAppViewer
 }: BookStoreViewProps) {
+  // Live Supabase Books state
+  const [supabaseList, setSupabaseList] = useState<any[]>(supabaseBooks || []);
+  const [isSyncingSupabase, setIsSyncingSupabase] = useState<boolean>(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string>('Just now');
+  const [viewMode, setViewMode] = useState<'covers' | 'list'>('covers');
+
   // Search & Stream Filter States
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStream, setSelectedStream] = useState<'all' | 'Common' | 'Natural Science' | 'Social Science' | 'favorites'>('all');
   const [sortBy, setSortBy] = useState<'rating' | 'title' | 'code' | 'pages'>('code');
+
+  // Load books from Supabase if prop was empty or on manual sync
+  const loadSupabaseBooks = async () => {
+    setIsSyncingSupabase(true);
+    playClickChime();
+    try {
+      const data = await fetchSupabaseBooks();
+      if (data && data.length > 0) {
+        setSupabaseList(data);
+        setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        playSuccessChime();
+      }
+    } catch (err) {
+      console.warn('Failed to load books from Supabase:', err);
+    } finally {
+      setIsSyncingSupabase(false);
+    }
+  };
+
+  useEffect(() => {
+    if (supabaseBooks && supabaseBooks.length > 0) {
+      setSupabaseList(supabaseBooks);
+    } else {
+      loadSupabaseBooks();
+    }
+  }, [supabaseBooks]);
 
   // Favorites state persisted in localStorage
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => {
@@ -568,24 +725,133 @@ export default function BookStoreView({
     });
   };
 
+  // ─── UNIFIED BOOKS REPOSITORY (Supabase Live Table + Curriculum Metadata) ───
+  const unifiedBooks = useMemo(() => {
+    const list: UnifiedBookItem[] = [];
+    const matchedModuleIds = new Set<string>();
+
+    // 1. Process all books from Supabase table first
+    (supabaseList || []).forEach((sbBook) => {
+      const sbTitle = (sbBook.title || '').trim();
+      const sbSubject = (sbBook.subject || '').trim();
+      const normTitle = sbTitle.toLowerCase();
+      const normSub = sbSubject.toLowerCase();
+
+      // Find matching curriculum module for chapters and rich metadata
+      const match = FRESHMAN_MODULES.find(m => {
+        const mTitle = m.title.toLowerCase();
+        const mSub = m.subject.toLowerCase();
+        return (
+          mTitle === normTitle ||
+          mTitle.includes(normTitle) ||
+          normTitle.includes(mTitle) ||
+          mSub.includes(normSub) ||
+          normSub.includes(mSub)
+        );
+      });
+
+      if (match) {
+        matchedModuleIds.add(match.id);
+      }
+
+      const pdfLinks = getBookPdfLinks(
+        sbBook.pdf_url || (match?.googleDriveFileId ? `https://drive.google.com/uc?export=download&id=${match.googleDriveFileId}` : '')
+      );
+
+      const coverUrl = resolveBookCover({
+        cover_url: sbBook.cover_url,
+        pdf_url: sbBook.pdf_url || (match?.googleDriveFileId ? `https://drive.google.com/uc?export=download&id=${match.googleDriveFileId}` : ''),
+        subject: sbSubject || match?.subject,
+        title: sbTitle || match?.title
+      });
+
+      list.push({
+        id: sbBook.id || match?.id || `sb_${Math.random()}`,
+        code: match?.code || (sbSubject ? `${sbSubject.slice(0, 4).toUpperCase()} 1011` : 'MOD 1011'),
+        title: sbTitle || match?.title || 'University Textbook',
+        amharicTitle: match?.amharicTitle || (language === 'am' ? 'የዩኒቨርሲቲ ሞጁል' : ''),
+        subject: sbSubject || match?.subject || 'University Curriculum',
+        grade: sbBook.grade || 'Freshman',
+        stream: match?.stream || (normSub.includes('phys') || normSub.includes('chem') || normSub.includes('bio') || normSub.includes('math') ? 'Natural Science' : normSub.includes('soc') || normSub.includes('econ') || normSub.includes('hist') || normSub.includes('anth') ? 'Social Science' : 'Common'),
+        semester: match?.semester || 'Semester I',
+        coverUrl,
+        pdfUrl: pdfLinks.pdfUrl,
+        previewUrl: pdfLinks.previewUrl,
+        downloadUrl: pdfLinks.downloadUrl,
+        description: sbBook.description || match?.description || 'Official Ethiopian higher education university curriculum module textbook.',
+        amharicDescription: match?.amharicDescription || 'ኦፊሴላዊ የኢትዮጵያ ከፍተኛ ትምህርት ተቋማት የመጀመሪያ ዓመት ካሪኩለም መማሪያ መጽሐፍ።',
+        chapters: match?.chapters || ['Unit 1: Fundamentals & Scope', 'Unit 2: Theoretical Foundations', 'Unit 3: Applied Principles & Analysis', 'Unit 4: Review, Problems & Assessment'],
+        pages: match?.pages || 160,
+        creditHours: match?.creditHours || 3,
+        fileSizeMb: match?.fileSizeMb || 4.2,
+        rating: match?.rating || 4.9,
+        isDrive: pdfLinks.isDrive,
+        isFromSupabase: true,
+        originalModule: match
+      });
+    });
+
+    // 2. Append any curriculum modules that were not in Supabase yet
+    FRESHMAN_MODULES.forEach(mod => {
+      if (!matchedModuleIds.has(mod.id)) {
+        const pdfLinks = getBookPdfLinks(
+          mod.googleDriveFileId ? `https://drive.google.com/uc?export=download&id=${mod.googleDriveFileId}` : ''
+        );
+        const coverUrl = resolveBookCover({
+          cover_url: null,
+          pdf_url: mod.googleDriveFileId ? `https://drive.google.com/uc?export=download&id=${mod.googleDriveFileId}` : '',
+          subject: mod.subject,
+          title: mod.title
+        });
+
+        list.push({
+          id: mod.id,
+          code: mod.code,
+          title: mod.title,
+          amharicTitle: mod.amharicTitle,
+          subject: mod.subject,
+          grade: 'Freshman',
+          stream: mod.stream,
+          semester: mod.semester,
+          coverUrl,
+          pdfUrl: pdfLinks.pdfUrl,
+          previewUrl: pdfLinks.previewUrl,
+          downloadUrl: pdfLinks.downloadUrl,
+          description: mod.description,
+          amharicDescription: mod.amharicDescription,
+          chapters: mod.chapters,
+          pages: mod.pages,
+          creditHours: mod.creditHours,
+          fileSizeMb: mod.fileSizeMb,
+          rating: mod.rating,
+          isDrive: pdfLinks.isDrive,
+          isFromSupabase: false,
+          originalModule: mod
+        });
+      }
+    });
+
+    return list;
+  }, [supabaseList, language]);
+
   // Filtered & Sorted Modules
-  const filteredModules = useMemo(() => {
-    return FRESHMAN_MODULES.filter(mod => {
+  const filteredBooks = useMemo(() => {
+    return unifiedBooks.filter(book => {
       // Stream Filter
       if (selectedStream === 'favorites') {
-        if (!favoriteIds.includes(mod.id)) return false;
-      } else if (selectedStream !== 'all' && mod.stream !== selectedStream) {
+        if (!favoriteIds.includes(book.id)) return false;
+      } else if (selectedStream !== 'all' && book.stream !== selectedStream) {
         return false;
       }
 
       // Search Query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const matchTitle = mod.title.toLowerCase().includes(q);
-        const matchCode = mod.code.toLowerCase().includes(q);
-        const matchSubject = mod.subject.toLowerCase().includes(q);
-        const matchAmharic = mod.amharicTitle.includes(q) || mod.amharicDescription.includes(q);
-        const matchDesc = mod.description.toLowerCase().includes(q);
+        const matchTitle = book.title.toLowerCase().includes(q);
+        const matchCode = book.code.toLowerCase().includes(q);
+        const matchSubject = book.subject.toLowerCase().includes(q);
+        const matchAmharic = (book.amharicTitle && book.amharicTitle.includes(q)) || (book.amharicDescription && book.amharicDescription.includes(q));
+        const matchDesc = book.description.toLowerCase().includes(q);
         if (!matchTitle && !matchCode && !matchSubject && !matchAmharic && !matchDesc) {
           return false;
         }
@@ -598,12 +864,13 @@ export default function BookStoreView({
       if (sortBy === 'pages') return b.pages - a.pages;
       return b.rating - a.rating;
     });
-  }, [selectedStream, searchQuery, favoriteIds, sortBy]);
+  }, [unifiedBooks, selectedStream, searchQuery, favoriteIds, sortBy]);
 
   // ---------------------------------------------------------------------------
   // 📖 PURE IN-APP PDF READER MODAL STATE
   // ---------------------------------------------------------------------------
-  const [activePdfModule, setActivePdfModule] = useState<FreshmanModule | null>(null);
+  const [activePdfBook, setActivePdfBook] = useState<UnifiedBookItem | null>(null);
+  const [coverModalBook, setCoverModalBook] = useState<UnifiedBookItem | null>(null);
   const [activeChapterIndex, setActiveChapterIndex] = useState<number>(0);
   const [pdfZoom, setPdfZoom] = useState<number>(100);
   const [pdfTheme, setPdfTheme] = useState<'paper' | 'dark'>('paper');
@@ -613,11 +880,13 @@ export default function BookStoreView({
   const [aiPanelOpen, setAiPanelOpen] = useState<boolean>(false);
   const [aiMode, setAiMode] = useState<'summary' | 'amharic' | 'quiz' | null>(null);
   const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
-  const [readerTab, setReaderTab] = useState<'drive' | 'notes'>('drive');
+  const [readerTab, setReaderTab] = useState<'cover' | 'drive' | 'notes'>('cover');
 
-  const handleOpenPdf = (mod: FreshmanModule, chapterIdx: number = 0, defaultTab: 'drive' | 'notes' = 'drive') => {
+  const activePdfModule = activePdfBook;
+
+  const handleOpenBook = (book: UnifiedBookItem, chapterIdx: number = 0, defaultTab: 'cover' | 'drive' | 'notes' = 'cover') => {
     playClickChime();
-    setActivePdfModule(mod);
+    setActivePdfBook(book);
     setActiveChapterIndex(chapterIdx);
     setReaderTab(defaultTab);
     setSearchInDoc('');
@@ -627,16 +896,18 @@ export default function BookStoreView({
     onStudyAction();
   };
 
-  const handleClosePdf = () => {
+  const handleCloseBook = () => {
     playClickChime();
-    setActivePdfModule(null);
+    setActivePdfBook(null);
   };
+  const handleClosePdf = handleCloseBook;
 
-  const currentChapterTitle = activePdfModule?.chapters[activeChapterIndex] || 'Chapter 1';
+  const currentChapterTitle = activePdfBook?.chapters[activeChapterIndex] || 'Chapter 1';
   const currentChapterContent = useMemo(() => {
-    if (!activePdfModule) return null;
-    return getChapterContent(activePdfModule.id, currentChapterTitle);
-  }, [activePdfModule, currentChapterTitle]);
+    if (!activePdfBook) return null;
+    const modId = activePdfBook.originalModule?.id || activePdfBook.id;
+    return getChapterContent(modId, currentChapterTitle);
+  }, [activePdfBook, currentChapterTitle]);
 
   const handlePrintPdf = () => {
     playClickChime();
@@ -658,13 +929,17 @@ export default function BookStoreView({
             </div>
             
             <div className="space-y-1">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold">
                   <CheckCircle2 className="w-3 h-3" />
                   <span>{language === 'am' ? 'ኦፊሴላዊ የትምህርት ሚኒስቴር ካሪኩለም' : 'Official MoE Curriculum'}</span>
                 </span>
-                <span className="text-xs text-slate-400">•</span>
-                <span className="text-xs text-amber-400 font-semibold">19 Freshman Modules</span>
+                
+                {/* Live Supabase Sync Tag */}
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>{supabaseList.length} {language === 'am' ? 'መጽሐፍት ከሱፓቤዝ ተመሳስለዋል' : 'Live Supabase Textbooks'}</span>
+                </span>
               </div>
 
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-white">
@@ -673,22 +948,34 @@ export default function BookStoreView({
 
               <p className="text-xs sm:text-sm text-slate-300 font-normal leading-relaxed max-w-3xl">
                 {language === 'am'
-                  ? 'ለሁሉም የኢትዮጵያ ዩኒቨርሲቲዎች የመጀመሪያ አመት ተማሪዎች የተዘጋጁ 19 ኦፊሴላዊ የፒዲኤፍ (PDF) ሞጁሎች። ያለምንም ውጫዊ ድረ-ገጽ እዚሁ በቀላሉ ያንብቡ።'
-                  : 'Official Ministry of Education (MoE) curriculum modules for first-year Ethiopian university students. Pure, clean, self-contained PDF reader.'}
+                  ? 'ለሁሉም የኢትዮጵያ ዩኒቨርሲቲዎች የመጀመሪያ አመት ተማሪዎች የተዘጋጁ ኦፊሴላዊ የፒዲኤፍ (PDF) ሞጁሎች ከነ ሽፋን ገጻቸው (Cover Page)። በቀጥታ ያንብቡ ወይም ያውርዱ።'
+                  : 'Official Ministry of Education curriculum modules with authentic cover pages and direct PDF downloads powered by Supabase.'}
               </p>
             </div>
           </div>
 
-          {/* Quick Counter */}
-          <div className="flex items-center gap-2 self-start md:self-center shrink-0 bg-[#17233D] px-3.5 py-2 rounded-xl border border-slate-700/60 text-xs font-semibold text-slate-200">
-            <Layers className="w-4 h-4 text-amber-400" />
-            <span>{filteredModules.length} {language === 'am' ? 'ሞጁሎች ይገኛሉ' : 'Modules Available'}</span>
+          {/* Quick Counter & Live Refresh */}
+          <div className="flex items-center gap-2 self-start md:self-center shrink-0">
+            <button
+              onClick={loadSupabaseBooks}
+              disabled={isSyncingSupabase}
+              className="flex items-center gap-1.5 bg-[#17233D] hover:bg-[#1f3054] px-3.5 py-2 rounded-xl border border-slate-700/60 text-xs font-semibold text-slate-200 transition-colors cursor-pointer"
+              title="Sync latest book URLs and covers from Supabase"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-amber-400 ${isSyncingSupabase ? 'animate-spin' : ''}`} />
+              <span>{isSyncingSupabase ? 'Syncing...' : (language === 'am' ? 'አድስ (Supabase)' : 'Sync Supabase')}</span>
+            </button>
+
+            <div className="flex items-center gap-2 bg-[#17233D] px-3.5 py-2 rounded-xl border border-slate-700/60 text-xs font-semibold text-slate-200">
+              <Layers className="w-4 h-4 text-amber-400" />
+              <span>{filteredBooks.length} {language === 'am' ? 'መጽሐፍት' : 'Books'}</span>
+            </div>
           </div>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* 🔍 SEARCH & STREAM SELECTOR                                               */}
+      {/* 🔍 SEARCH, STREAM SELECTOR & VIEW MODE TOGGLE                             */}
       {/* ========================================================================= */}
       <div className="space-y-3 mb-6">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
@@ -699,7 +986,7 @@ export default function BookStoreView({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={language === 'am' ? 'በሞጁል ርዕስ ወይም ኮድ ይፈልጉ (ለምሳሌ፡ Phil 1011, Math, History...)' : 'Search by module title, course code (e.g. Phil 1011, Math, Econ)...'}
+              placeholder={language === 'am' ? 'በመጽሐፍ ርዕስ፣ የትምህርት ዘርፍ ወይም ኮድ ይፈልጉ (ለምሳሌ፡ Physics, Math, History)...' : 'Search by book title, subject, or code (e.g. Physics, Math, History)...'}
               className="w-full pl-10 pr-10 py-3 bg-[#111C35] border border-slate-800 rounded-xl text-sm text-white placeholder-slate-400 focus:outline-none focus:border-amber-400/60 focus:ring-2 focus:ring-amber-400/10 transition-all shadow-inner"
             />
             {searchQuery && (
@@ -710,6 +997,30 @@ export default function BookStoreView({
                 <X className="w-4 h-4" />
               </button>
             )}
+          </div>
+
+          {/* View Mode Toggle (Covers Gallery vs List) */}
+          <div className="flex items-center bg-[#111C35] border border-slate-800 rounded-xl p-1 shrink-0">
+            <button
+              onClick={() => { playClickChime(); setViewMode('covers'); }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'covers' ? 'bg-amber-500 text-slate-950 shadow-sm font-black' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Display with large textbook cover pages"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>{language === 'am' ? 'የሽፋን ገጽ (Covers)' : 'Cover Bookshelf'}</span>
+            </button>
+            <button
+              onClick={() => { playClickChime(); setViewMode('list'); }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'list' ? 'bg-amber-500 text-slate-950 shadow-sm font-black' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Detailed list view"
+            >
+              <List className="w-3.5 h-3.5" />
+              <span>{language === 'am' ? 'ዝርዝር (List)' : 'Detail List'}</span>
+            </button>
           </div>
 
           {/* Sort Selector */}
@@ -731,7 +1042,7 @@ export default function BookStoreView({
         {/* Stream Filter Chips: Clean & Pure */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
           {[
-            { id: 'all', label: language === 'am' ? 'ሁሉም ሞጁሎች (19)' : 'All Freshman (19)', icon: '📚' },
+            { id: 'all', label: language === 'am' ? `ሁሉም (${unifiedBooks.length})` : `All Books (${unifiedBooks.length})`, icon: '📚' },
             { id: 'Common', label: language === 'am' ? 'የጋራ ኮርሶች (Common)' : 'Common Courses', icon: '🏛️' },
             { id: 'Natural Science', label: language === 'am' ? 'የተፈጥሮ ሳይንስ (Natural)' : 'Natural Science', icon: '🔬' },
             { id: 'Social Science', label: language === 'am' ? 'የማህበራዊ ሳይንስ (Social)' : 'Social Science', icon: '⚖️' },
@@ -762,13 +1073,13 @@ export default function BookStoreView({
       </div>
 
       {/* ========================================================================= */}
-      {/* 📄 PDF-STYLE MODULE CARDS GRID                                            */}
+      {/* 📚 BOOKSTORE CONTENT: COVERS GALLERY OR DETAILED LIST                     */}
       {/* ========================================================================= */}
-      {filteredModules.length === 0 ? (
+      {filteredBooks.length === 0 ? (
         <div className="p-12 text-center rounded-2xl bg-[#111C35] border border-slate-800 space-y-3">
           <FileText className="w-12 h-12 text-slate-600 mx-auto" />
           <h3 className="text-base font-bold text-white">
-            {language === 'am' ? 'ምንም ሞጁል አልተገኘም' : 'No modules found'}
+            {language === 'am' ? 'ምንም መጽሐፍ አልተገኘም' : 'No books found'}
           </h3>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
             {language === 'am'
@@ -779,58 +1090,224 @@ export default function BookStoreView({
             onClick={() => { setSearchQuery(''); setSelectedStream('all'); }}
             className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition-colors cursor-pointer"
           >
-            {language === 'am' ? 'ሁሉንም አሳይ' : 'Show All Modules'}
+            {language === 'am' ? 'ሁሉንም አሳይ' : 'Show All Books'}
           </button>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredModules.map(mod => {
-            const isFav = favoriteIds.includes(mod.id);
+      ) : viewMode === 'covers' ? (
+        /* 🖼️ VIEW MODE 1: DIGITAL BOOKSHELF GALLERY (WITH AUTHENTIC COVER PAGES) */
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5">
+          {filteredBooks.map(book => {
+            const isFav = favoriteIds.includes(book.id);
 
             return (
               <div
-                key={mod.id}
-                onClick={() => handleOpenPdf(mod)}
+                key={book.id}
+                onClick={() => handleOpenBook(book, 0, 'cover')}
+                className="group relative bg-[#111C35] hover:bg-[#142344] border border-slate-800/90 hover:border-amber-400/50 rounded-2xl p-3 sm:p-3.5 transition-all duration-200 flex flex-col justify-between gap-3 cursor-pointer shadow-md hover:shadow-xl hover:-translate-y-1"
+              >
+                {/* 3D Realistic Textbook Cover Page */}
+                <div className="relative w-full aspect-[3/4] rounded-xl overflow-hidden shadow-lg border border-white/10 group-hover:border-amber-400/50 transition-all bg-slate-900 select-none">
+                  {/* High-Resolution Cover Image */}
+                  <img
+                    src={book.coverUrl}
+                    alt={book.title}
+                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    loading="lazy"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1532012164546-f432f2e3777a?w=600&q=80';
+                    }}
+                  />
+
+                  {/* 3D Book Spine Shadow on Left Edge */}
+                  <div className="absolute left-0 top-0 bottom-0 w-3 sm:w-4 bg-gradient-to-r from-black/70 via-black/30 to-transparent pointer-events-none" />
+                  
+                  {/* Diagonal Gloss Sheen Overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 pointer-events-none" />
+
+                  {/* Top Left: PDF Tag */}
+                  <div className="absolute top-2 left-2 z-10">
+                    <span className="px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-black bg-red-600 text-white tracking-wider uppercase shadow-md flex items-center gap-1">
+                      <FileText className="w-2.5 h-2.5" />
+                      <span>PDF</span>
+                    </span>
+                  </div>
+
+                  {/* Top Right: Favorite Star */}
+                  <button
+                    onClick={(e) => toggleFavorite(book.id, e)}
+                    className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-black/60 hover:bg-black/90 text-slate-300 hover:text-amber-400 backdrop-blur-sm transition-colors cursor-pointer shadow-md"
+                    title={isFav ? 'Remove from favorites' : 'Add to favorites'}
+                  >
+                    <Star className={`w-3.5 h-3.5 ${isFav ? 'fill-amber-400 text-amber-400' : ''}`} />
+                  </button>
+
+                  {/* Bottom Right: Quick Zoom Cover Preview Button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCoverModalBook(book);
+                    }}
+                    className="absolute bottom-11 right-2 z-10 p-1.5 rounded-lg bg-black/75 hover:bg-amber-500 hover:text-slate-950 text-amber-300 backdrop-blur-sm transition-all cursor-pointer shadow-md border border-white/10"
+                    title={language === 'am' ? 'የሽፋን ገጽ አጉላ / View Cover' : 'Zoom Cover Page'}
+                  >
+                    <Maximize2 className="w-3 h-3" />
+                  </button>
+
+                  {/* Bottom Overlay: Course Code & Grade */}
+                  <div className="absolute bottom-0 inset-x-0 p-2.5 bg-gradient-to-t from-black/95 via-black/70 to-transparent text-left">
+                    <span className="text-[11px] font-mono font-bold text-amber-300 block truncate drop-shadow">
+                      {book.code}
+                    </span>
+                    <span className="text-[9.5px] text-slate-300 font-medium truncate block">
+                      {book.grade} • {book.subject}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Book Metadata & Title */}
+                <div className="space-y-1 text-left flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded border ${
+                      book.stream === 'Natural Science' 
+                        ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+                        : book.stream === 'Social Science'
+                        ? 'bg-purple-500/10 text-purple-400 border-purple-500/30'
+                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                    }`}>
+                      {book.stream}
+                    </span>
+                    {book.isFromSupabase && (
+                      <span className="text-[8.5px] font-bold text-amber-400 flex items-center gap-0.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>Supabase</span>
+                      </span>
+                    )}
+                  </div>
+
+                  <h3 className="text-xs sm:text-sm font-bold text-white group-hover:text-amber-300 transition-colors leading-snug line-clamp-2">
+                    {book.title}
+                  </h3>
+
+                  {book.amharicTitle && (
+                    <p className="text-[11px] text-slate-400 truncate font-medium">
+                      {book.amharicTitle}
+                    </p>
+                  )}
+                </div>
+
+                {/* Action Buttons Row */}
+                <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
+                  <div className="grid grid-cols-3 gap-1">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenBook(book, 0, 'cover');
+                      }}
+                      className="py-1.5 px-1 bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold text-[10.5px] rounded-lg transition-all flex items-center justify-center gap-1 border border-slate-700 cursor-pointer"
+                      title={language === 'am' ? 'የመጽሐፉን ሽፋን ገጽ እይ' : 'View Cover Page'}
+                    >
+                      <BookOpen className="w-3 h-3 text-amber-400 shrink-0" />
+                      <span className="truncate">{language === 'am' ? 'ሽፋን' : 'Cover'}</span>
+                    </button>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onOpenInAppViewer && book.previewUrl) {
+                          onOpenInAppViewer(book.previewUrl, `${book.title} (Official PDF)`);
+                        } else {
+                          handleOpenBook(book, 0, 'drive');
+                        }
+                      }}
+                      className="py-1.5 px-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[10.5px] rounded-lg transition-all flex items-center justify-center gap-1 shadow-sm cursor-pointer"
+                      title={language === 'am' ? 'ፒዲኤፍ አንብብ' : 'Read PDF'}
+                    >
+                      <Eye className="w-3 h-3 text-slate-950 shrink-0" />
+                      <span className="truncate">{language === 'am' ? 'አንብብ' : 'Read'}</span>
+                    </button>
+
+                    {book.downloadUrl ? (
+                      <a
+                        href={book.downloadUrl}
+                        download
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="py-1.5 px-1 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-[10.5px] rounded-lg transition-all flex items-center justify-center gap-1 border border-slate-700 cursor-pointer"
+                        title={language === 'am' ? 'ፒዲኤፍ አውርድ' : 'Download PDF'}
+                      >
+                        <Download className="w-3 h-3 text-amber-400 shrink-0" />
+                        <span className="truncate">{language === 'am' ? 'አውርድ' : 'Download'}</span>
+                      </a>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenBook(book, 0, 'notes');
+                        }}
+                        className="py-1.5 px-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[10.5px] rounded-lg transition-all flex items-center justify-center gap-1 border border-slate-700 cursor-pointer"
+                      >
+                        <Layers className="w-3 h-3 text-amber-400 shrink-0" />
+                        <span className="truncate">{language === 'am' ? 'ማስታወሻ' : 'Notes'}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* 📑 VIEW MODE 2: DETAILED LIST CARDS (WITH COVER THUMBNAIL) */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredBooks.map(book => {
+            const isFav = favoriteIds.includes(book.id);
+
+            return (
+              <div
+                key={book.id}
+                onClick={() => handleOpenBook(book, 0, 'cover')}
                 className="group relative p-4 rounded-2xl bg-[#111C35] border border-slate-800/90 hover:border-amber-400/40 hover:bg-[#14213F] transition-all flex flex-col justify-between gap-3 text-left cursor-pointer shadow-md hover:shadow-lg"
               >
-                {/* Top: PDF Document Cover + Details */}
+                {/* Top: Cover Thumbnail + Metadata */}
                 <div className="flex items-start gap-3.5">
-                  {/* Authentic PDF Document Cover Thumbnail */}
-                  <div className="w-16 h-22 sm:w-18 sm:h-24 rounded-lg bg-gradient-to-b from-[#1E293B] to-[#0F172A] border border-slate-700/80 p-2 flex flex-col justify-between items-center shrink-0 shadow-md group-hover:border-amber-400/60 transition-colors relative overflow-hidden select-none">
-                    {/* Top PDF Crimson Tag */}
-                    <div className="w-full flex items-center justify-between">
-                      <span className="px-1 py-0.5 rounded text-[8px] font-black bg-red-600 text-white tracking-wider uppercase">
-                        PDF
-                      </span>
-                      <span className="text-[8px] font-mono text-slate-400">
-                        {mod.creditHours} Cr
-                      </span>
-                    </div>
-
-                    {/* Emblem / Icon */}
-                    <div className="my-auto text-center">
-                      <FileText className="w-6 h-6 text-amber-400 mx-auto opacity-90 group-hover:scale-110 transition-transform" />
-                      <span className="text-[7.5px] font-bold text-slate-300 block truncate max-w-[60px] text-center mt-0.5">
-                        {mod.code}
-                      </span>
-                    </div>
-
-                    {/* Bottom Document Page indicator */}
-                    <div className="w-full border-t border-slate-700/60 pt-0.5 text-center">
-                      <span className="text-[7px] text-slate-400 font-mono">
-                        {mod.pages} pgs
-                      </span>
-                    </div>
+                  {/* Cover Page Thumbnail */}
+                  <div 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCoverModalBook(book);
+                    }}
+                    className="w-20 h-28 sm:w-22 sm:h-30 rounded-lg overflow-hidden border border-slate-700/80 shrink-0 shadow-md group-hover:border-amber-400/60 transition-colors relative select-none bg-slate-900 group/cover cursor-zoom-in"
+                    title={language === 'am' ? 'የሽፋን ገጽ አጉላ' : 'Click to inspect cover page'}
+                  >
+                    <img
+                      src={book.coverUrl}
+                      alt={book.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                      loading="lazy"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1532012164546-f432f2e3777a?w=600&q=80';
+                      }}
+                    />
+                    {/* Spine Shadow */}
+                    <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-gradient-to-r from-black/70 to-transparent" />
+                    {/* Corner Tag */}
+                    <span className="absolute top-1 left-1 px-1 py-0.2 rounded text-[7px] font-black bg-red-600 text-white uppercase">
+                      PDF
+                    </span>
+                    <span className="absolute bottom-1 right-1 p-0.5 rounded bg-black/70 text-amber-300 opacity-0 group-hover/cover:opacity-100 transition-opacity">
+                      <Maximize2 className="w-2.5 h-2.5" />
+                    </span>
                   </div>
 
                   {/* Module Metadata & Title */}
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex items-center justify-between gap-1">
                       <span className="text-xs font-bold text-amber-400 uppercase tracking-wide truncate">
-                        {mod.code} • {mod.stream}
+                        {book.code} • {book.stream}
                       </span>
                       <button
-                        onClick={(e) => toggleFavorite(mod.id, e)}
+                        onClick={(e) => toggleFavorite(book.id, e)}
                         className="text-slate-400 hover:text-amber-400 p-1 cursor-pointer shrink-0 transition-colors"
                         title={isFav ? 'Remove from favorites' : 'Add to favorites'}
                       >
@@ -839,15 +1316,17 @@ export default function BookStoreView({
                     </div>
 
                     <h3 className="text-sm sm:text-base font-bold text-white group-hover:text-amber-300 transition-colors leading-snug line-clamp-2">
-                      {mod.title}
+                      {book.title}
                     </h3>
 
-                    <p className="text-xs text-slate-400 truncate font-medium">
-                      {mod.amharicTitle}
-                    </p>
+                    {book.amharicTitle && (
+                      <p className="text-xs text-slate-400 truncate font-medium">
+                        {book.amharicTitle}
+                      </p>
+                    )}
 
                     <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed pt-0.5">
-                      {language === 'am' ? mod.amharicDescription : mod.description}
+                      {language === 'am' ? book.amharicDescription : book.description}
                     </p>
                   </div>
                 </div>
@@ -855,27 +1334,72 @@ export default function BookStoreView({
                 {/* Chapters Preview Strip */}
                 <div className="pt-2 border-t border-slate-800/80 space-y-1">
                   <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium">
-                    <span>{mod.chapters.length} {language === 'am' ? 'ምዕራፎች' : 'Units'}</span>
-                    <span>{mod.pages} {language === 'am' ? 'ገጾች' : 'Pages'}</span>
-                    <span className="text-slate-400 font-mono">{mod.fileSizeMb} MB</span>
+                    <span>{book.chapters.length} {language === 'am' ? 'ምዕራፎች' : 'Units'}</span>
+                    <span>{book.pages} {language === 'am' ? 'ገጾች' : 'Pages'}</span>
+                    <span className="text-slate-400 font-mono">{book.fileSizeMb} MB</span>
                   </div>
                   
-                  {/* Subtle Chapter 1 Kicker */}
-                  <div className="text-[11px] text-slate-400 truncate flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
-                    <span className="truncate">{mod.chapters[0]}</span>
-                  </div>
+                  {book.chapters[0] && (
+                    <div className="text-[11px] text-slate-400 truncate flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                      <span className="truncate">{book.chapters[0]}</span>
+                    </div>
+                  )}
                 </div>
 
-                {/* Primary Action Button: Read PDF Module */}
-                <button
-                  onClick={() => handleOpenPdf(mod)}
-                  className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs sm:text-sm uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98 shadow-sm"
-                >
-                  <FileText className="w-4 h-4 text-slate-950" />
-                  <span>{language === 'am' ? 'ፒዲኤፍ ሞጁሉን አንብብ' : 'Read PDF Module'}</span>
-                  <ChevronRight className="w-3.5 h-3.5 text-slate-950" />
-                </button>
+                {/* Primary Action Button Row */}
+                <div className="grid grid-cols-3 gap-1.5 pt-1">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenBook(book, 0, 'cover');
+                    }}
+                    className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1 border border-slate-700 cursor-pointer"
+                  >
+                    <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{language === 'am' ? 'ሽፋን' : 'Cover'}</span>
+                  </button>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onOpenInAppViewer && book.previewUrl) {
+                        onOpenInAppViewer(book.previewUrl, `${book.title} (Official PDF)`);
+                      } else {
+                        handleOpenBook(book, 0, 'drive');
+                      }
+                    }}
+                    className="w-full py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-98 shadow-sm"
+                  >
+                    <Eye className="w-3.5 h-3.5 text-slate-950" />
+                    <span>{language === 'am' ? 'አንብብ' : 'Read'}</span>
+                  </button>
+
+                  {book.downloadUrl ? (
+                    <a
+                      href={book.downloadUrl}
+                      download
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1 border border-slate-700 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5 text-amber-400" />
+                      <span>{language === 'am' ? 'አውርድ' : 'Download'}</span>
+                    </a>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenBook(book, 0, 'notes');
+                      }}
+                      className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1 border border-slate-700 cursor-pointer"
+                    >
+                      <Layers className="w-3.5 h-3.5 text-amber-400" />
+                      <span>{language === 'am' ? 'ማስታወሻ' : 'Notes'}</span>
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -925,40 +1449,81 @@ export default function BookStoreView({
                   </div>
                 </div>
 
-                {/* Center: Page Controls (Previous / Current / Next) */}
-                <div className="flex items-center bg-white/5 border border-white/10 rounded-xl px-2 py-1 gap-1 text-xs">
+                {/* Center: Mode Tabs (Cover Page | Official PDF | Units & Notes) */}
+                <div className="flex items-center bg-white/5 border border-white/10 rounded-xl p-1 gap-1 text-xs">
                   <button
-                    onClick={() => {
-                      if (activeChapterIndex > 0) {
-                        playClickChime();
-                        setActiveChapterIndex(p => p - 1);
-                      }
-                    }}
-                    disabled={activeChapterIndex === 0}
-                    className="p-1 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                    title="Previous Unit"
+                    onClick={() => { playClickChime(); setReaderTab('cover'); }}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      readerTab === 'cover'
+                        ? 'bg-amber-500 text-slate-950 shadow-sm'
+                        : 'text-slate-300 hover:text-white'
+                    }`}
                   >
-                    <ChevronLeft className="w-4 h-4" />
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>{language === 'am' ? 'የሽፋን ገጽ' : 'Cover Page'}</span>
                   </button>
 
-                  <span className="font-mono text-xs px-2 text-amber-400 font-bold">
-                    Unit {activeChapterIndex + 1} of {activePdfModule.chapters.length}
-                  </span>
+                  <button
+                    onClick={() => { playClickChime(); setReaderTab('drive'); }}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      readerTab === 'drive'
+                        ? 'bg-amber-500 text-slate-950 shadow-sm'
+                        : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>{language === 'am' ? 'ኦፊሴላዊ ፒዲኤፍ' : 'Official PDF'}</span>
+                  </button>
 
                   <button
-                    onClick={() => {
-                      if (activeChapterIndex < activePdfModule.chapters.length - 1) {
-                        playClickChime();
-                        setActiveChapterIndex(p => p + 1);
-                      }
-                    }}
-                    disabled={activeChapterIndex === activePdfModule.chapters.length - 1}
-                    className="p-1 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                    title="Next Unit"
+                    onClick={() => { playClickChime(); setReaderTab('notes'); }}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      readerTab === 'notes'
+                        ? 'bg-amber-500 text-slate-950 shadow-sm'
+                        : 'text-slate-300 hover:text-white'
+                    }`}
                   >
-                    <ChevronRight className="w-4 h-4" />
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>{language === 'am' ? 'ማስታወሻዎች' : 'Units & Notes'}</span>
                   </button>
                 </div>
+
+                {/* Optional Unit Navigator (When viewing units & notes) */}
+                {readerTab === 'notes' && (
+                  <div className="hidden sm:flex items-center bg-white/5 border border-white/10 rounded-xl px-2 py-1 gap-1 text-xs">
+                    <button
+                      onClick={() => {
+                        if (activeChapterIndex > 0) {
+                          playClickChime();
+                          setActiveChapterIndex(p => p - 1);
+                        }
+                      }}
+                      disabled={activeChapterIndex === 0}
+                      className="p-1 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                      title="Previous Unit"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+
+                    <span className="font-mono text-xs px-2 text-amber-400 font-bold">
+                      Unit {activeChapterIndex + 1} of {activePdfModule.chapters.length}
+                    </span>
+
+                    <button
+                      onClick={() => {
+                        if (activeChapterIndex < activePdfModule.chapters.length - 1) {
+                          playClickChime();
+                          setActiveChapterIndex(p => p + 1);
+                        }
+                      }}
+                      disabled={activeChapterIndex === activePdfModule.chapters.length - 1}
+                      className="p-1 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                      title="Next Unit"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
 
                 {/* Right: PDF Reader Tools (Zoom, Theme, Font, Print, Close) */}
                 <div className="flex items-center gap-2">
@@ -1098,7 +1663,249 @@ export default function BookStoreView({
                   aiPanelOpen ? (pdfSidebarOpen ? 'lg:col-span-6' : 'lg:col-span-8') : (pdfSidebarOpen ? 'lg:col-span-9' : 'lg:col-span-12')
                 } overflow-y-auto p-4 sm:p-6 lg:p-8 flex justify-center transition-all bg-[#070D1E]`}>
                   
-                  {/* REALISTIC A4-STYLE PDF DOCUMENT SHEET */}
+                  {/* TAB 1: 🖼️ AUTHENTIC TEXTBOOK COVER PAGE */}
+                  {readerTab === 'cover' && (
+                    <div className="w-full max-w-4xl py-4 flex flex-col md:flex-row items-center md:items-start justify-center gap-8 animate-fadeIn">
+                      {/* Realistic 3D Book Cover Presentation */}
+                      <div className="relative w-64 sm:w-72 md:w-80 aspect-[3/4] rounded-2xl overflow-hidden shadow-2xl border-2 border-amber-500/40 bg-slate-900 shrink-0 select-none group">
+                        <img
+                          src={activePdfBook.coverUrl}
+                          alt={activePdfBook.title}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1532012164546-f432f2e3777a?w=600&q=80';
+                          }}
+                        />
+                        <div className="absolute left-0 top-0 bottom-0 w-5 bg-gradient-to-r from-black/80 via-black/40 to-transparent pointer-events-none" />
+                        <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 pointer-events-none" />
+
+                        <div className="absolute top-3 left-3 right-3 flex items-center justify-between z-10">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-black bg-red-600 text-white tracking-widest uppercase shadow-md flex items-center gap-1">
+                            <FileText className="w-3 h-3" />
+                            <span>OFFICIAL PDF</span>
+                          </span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-500 text-slate-950 uppercase shadow-md font-mono">
+                            {activePdfBook.code}
+                          </span>
+                        </div>
+
+                        <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/95 via-black/80 to-transparent text-left">
+                          <div className="text-[10px] font-bold text-amber-400 uppercase tracking-widest">
+                            Ethiopian Higher Education
+                          </div>
+                          <div className="text-sm font-bold text-white leading-snug drop-shadow">
+                            {activePdfBook.title}
+                          </div>
+                          <div className="text-[11px] text-slate-300">
+                            {activePdfBook.grade} Curriculum Module
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Book Overview, Curriculum Metadata & Quick Actions */}
+                      <div className="flex-1 space-y-4 text-left max-w-xl">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                              {activePdfBook.code}
+                            </span>
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                              {activePdfBook.stream}
+                            </span>
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>Verified in Supabase</span>
+                            </span>
+                          </div>
+
+                          <h1 className="text-xl sm:text-2xl font-black text-white leading-snug">
+                            {activePdfBook.title}
+                          </h1>
+                          {activePdfBook.amharicTitle && (
+                            <h2 className="text-sm sm:text-base font-bold text-amber-300 mt-0.5">
+                              {activePdfBook.amharicTitle}
+                            </h2>
+                          )}
+                        </div>
+
+                        <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                          {language === 'am' ? activePdfBook.amharicDescription : activePdfBook.description}
+                        </p>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 p-3.5 rounded-xl bg-white/5 border border-white/10 text-xs">
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Department</span>
+                            <span className="text-white font-medium">{activePdfBook.subject}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Semester</span>
+                            <span className="text-white font-medium">{activePdfBook.semester}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Credit Hours</span>
+                            <span className="text-amber-400 font-bold">{activePdfBook.creditHours} Cr</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Course Units</span>
+                            <span className="text-white font-medium">{activePdfBook.chapters.length} Units</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Page Count</span>
+                            <span className="text-white font-medium">~{activePdfBook.pages} Pages</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Digital Source</span>
+                            <span className="text-emerald-400 font-medium">Google Drive / Supabase</span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 pt-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <button
+                              onClick={() => {
+                                playClickChime();
+                                setReaderTab('drive');
+                              }}
+                              className="w-full py-3 px-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-98"
+                            >
+                              <Eye className="w-4 h-4 text-slate-950" />
+                              <span>{language === 'am' ? 'ኦፊሴላዊ ፒዲኤፍ አንብብ' : 'Read Official PDF'}</span>
+                            </button>
+
+                            {activePdfBook.downloadUrl ? (
+                              <a
+                                href={activePdfBook.downloadUrl}
+                                download
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="w-full py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 border border-slate-700 cursor-pointer"
+                              >
+                                <Download className="w-4 h-4 text-amber-400" />
+                                <span>{language === 'am' ? 'ፒዲኤፍ አውርድ' : 'Download PDF File'}</span>
+                              </a>
+                            ) : null}
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                playClickChime();
+                                setReaderTab('notes');
+                              }}
+                              className="flex-1 py-2.5 px-3 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white font-semibold text-xs rounded-xl border border-white/10 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                            >
+                              <Layers className="w-3.5 h-3.5 text-amber-400" />
+                              <span>{language === 'am' ? 'የምዕራፍ ማስታወሻዎች እና አስጎብኚ' : 'Interactive Units & Notes'}</span>
+                            </button>
+
+                            {activePdfBook.pdfUrl && (
+                              <a
+                                href={activePdfBook.pdfUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="py-2.5 px-3 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white font-semibold text-xs rounded-xl border border-white/10 transition-colors flex items-center gap-1.5 cursor-pointer"
+                                title="Open Google Drive URL"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5 text-amber-400" />
+                                <span>Drive</span>
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 2: 📄 EMBEDDED GOOGLE DRIVE OFFICIAL PDF VIEWER */}
+                  {readerTab === 'drive' && (
+                    <div className="w-full h-full min-h-[620px] flex flex-col rounded-xl overflow-hidden border border-white/10 bg-[#0B132B] animate-fadeIn">
+                      <div className="px-4 py-2.5 bg-black/60 border-b border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0">
+                        <div className="flex items-center gap-2 text-slate-300 min-w-0">
+                          <FileText className="w-4 h-4 text-amber-400 shrink-0" />
+                          <span className="font-bold text-white truncate max-w-xs sm:max-w-md">{activePdfBook.title}</span>
+                          <span className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded font-mono shrink-0">
+                            Official PDF
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setReaderTab('cover')}
+                            className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-slate-200 font-bold rounded-lg text-xs flex items-center gap-1 cursor-pointer"
+                          >
+                            <BookOpen className="w-3 h-3 text-amber-400" />
+                            <span>{language === 'am' ? 'ሽፋን' : 'Cover'}</span>
+                          </button>
+                          {activePdfBook.downloadUrl && (
+                            <a
+                              href={activePdfBook.downloadUrl}
+                              download
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1 cursor-pointer shadow-sm"
+                            >
+                              <Download className="w-3 h-3 text-slate-950" />
+                              <span>{language === 'am' ? 'አውርድ' : 'Download'}</span>
+                            </a>
+                          )}
+                          {activePdfBook.pdfUrl && (
+                            <a
+                              href={activePdfBook.pdfUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white font-bold rounded-lg text-xs flex items-center gap-1 cursor-pointer"
+                            >
+                              <ExternalLink className="w-3 h-3 text-amber-400" />
+                              <span>{language === 'am' ? 'ክፈት' : 'Open'}</span>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+
+                      {activePdfBook.previewUrl ? (
+                        <div className="flex-1 w-full min-h-[560px] relative bg-slate-950">
+                          <iframe
+                            src={activePdfBook.previewUrl}
+                            title={activePdfBook.title}
+                            className="w-full h-full min-h-[560px] border-0"
+                            allow="autoplay; fullscreen"
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex-1 flex flex-col items-center justify-center p-12 text-center space-y-3">
+                          <FileText className="w-12 h-12 text-slate-500" />
+                          <h3 className="text-base font-bold text-white">Google Drive PDF Ready</h3>
+                          <p className="text-xs text-slate-400 max-w-md">
+                            {language === 'am'
+                              ? 'ይህ መጽሐፍ በGoogle Drive ማከማቻ ላይ ይገኛል። በቀጥታ ማውረድ ወይም ማንበብ ይችላሉ።'
+                              : 'This module is hosted in the official Google Drive repository. You can download it directly or open in Drive.'}
+                          </p>
+                          <div className="flex items-center gap-2">
+                            {activePdfBook.pdfUrl && (
+                              <a
+                                href={activePdfBook.pdfUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-4 py-2 bg-amber-500 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1.5"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                <span>{language === 'am' ? 'በGoogle Drive ክፈት' : 'Open in Google Drive'}</span>
+                              </a>
+                            )}
+                            <button
+                              onClick={() => setReaderTab('notes')}
+                              className="px-4 py-2 bg-slate-800 text-slate-200 font-bold text-xs rounded-xl flex items-center gap-1.5"
+                            >
+                              <Layers className="w-3.5 h-3.5 text-amber-400" />
+                              <span>{language === 'am' ? 'ወደ ማስታወሻ ቀይር' : 'Switch to Notes'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* TAB 3: 📝 A4 STYLE INTERACTIVE CURRICULUM NOTES SHEET */}
+                  {readerTab === 'notes' && (
                   <div 
                     className={`w-full max-w-3xl rounded-xl shadow-2xl p-6 sm:p-10 transition-all ${
                       pdfTheme === 'paper' 
@@ -1219,6 +2026,7 @@ export default function BookStoreView({
                       </span>
                     </div>
                   </div>
+                  )}
                 </div>
 
                 {/* 2.3 RIGHT SIDEBAR: ASGOBNYI AI STUDY COMPANION */}
@@ -1357,6 +2165,145 @@ export default function BookStoreView({
                     )}
                   </div>
                 )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ========================================================================= */}
+      {/* 🖼️ DEDICATED FULLSCREEN COVER PAGE MODAL OVERLAY                          */}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {coverModalBook && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setCoverModalBook(null)}
+            className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 cursor-pointer select-none"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#0B132B] border border-amber-500/30 rounded-2xl max-w-4xl w-full max-h-[92vh] overflow-y-auto shadow-2xl flex flex-col md:flex-row gap-6 p-6 sm:p-8 cursor-default text-left"
+            >
+              {/* Left: 3D Authentic Cover Graphic */}
+              <div className="relative w-64 sm:w-72 aspect-[3/4] rounded-2xl overflow-hidden shadow-2xl border-2 border-amber-500/50 bg-slate-900 shrink-0 mx-auto select-none group">
+                <img
+                  src={coverModalBook.coverUrl}
+                  alt={coverModalBook.title}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1532012164546-f432f2e3777a?w=600&q=80';
+                  }}
+                />
+                <div className="absolute left-0 top-0 bottom-0 w-5 bg-gradient-to-r from-black/80 via-black/40 to-transparent pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 pointer-events-none" />
+                <div className="absolute top-3 left-3">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-red-600 text-white tracking-widest uppercase shadow-md flex items-center gap-1">
+                    <FileText className="w-3 h-3" />
+                    <span>PDF</span>
+                  </span>
+                </div>
+                <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/95 via-black/80 to-transparent text-left">
+                  <span className="text-xs font-mono font-bold text-amber-300 block">{coverModalBook.code}</span>
+                  <span className="text-[11px] text-slate-300">{coverModalBook.grade} • {coverModalBook.subject}</span>
+                </div>
+              </div>
+
+              {/* Right: Detailed Metadata & Fast Actions */}
+              <div className="flex-1 flex flex-col justify-between space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                        {coverModalBook.code}
+                      </span>
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                        {coverModalBook.stream}
+                      </span>
+                      <span className="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded font-bold flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>Supabase Live</span>
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={() => setCoverModalBook(null)}
+                      className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-black text-white leading-tight">
+                      {coverModalBook.title}
+                    </h2>
+                    {coverModalBook.amharicTitle && (
+                      <h3 className="text-sm font-bold text-amber-300 mt-0.5">
+                        {coverModalBook.amharicTitle}
+                      </h3>
+                    )}
+                  </div>
+
+                  <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                    {language === 'am' ? coverModalBook.amharicDescription : coverModalBook.description}
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-2 p-3 rounded-xl bg-white/5 border border-white/10 text-xs text-slate-300">
+                    <div><strong>Course Code:</strong> {coverModalBook.code}</div>
+                    <div><strong>Credit Hours:</strong> {coverModalBook.creditHours} Cr</div>
+                    <div><strong>Stream:</strong> {coverModalBook.stream}</div>
+                    <div><strong>Target:</strong> Ethiopian Freshman (Year 1)</div>
+                    <div><strong>Units:</strong> {coverModalBook.chapters.length} Units</div>
+                    <div><strong>Pages:</strong> ~{coverModalBook.pages} Pages</div>
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-2 border-t border-slate-800">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => {
+                        const b = coverModalBook;
+                        setCoverModalBook(null);
+                        handleOpenBook(b, 0, 'drive');
+                      }}
+                      className="py-2.5 px-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
+                    >
+                      <Eye className="w-4 h-4 text-slate-950" />
+                      <span>{language === 'am' ? 'ኦፊሴላዊ ፒዲኤፍ አንብብ' : 'Read Official PDF'}</span>
+                    </button>
+
+                    {coverModalBook.downloadUrl ? (
+                      <a
+                        href={coverModalBook.downloadUrl}
+                        download
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 border border-slate-700 cursor-pointer"
+                      >
+                        <Download className="w-4 h-4 text-amber-400" />
+                        <span>{language === 'am' ? 'ፒዲኤፍ አውርድ' : 'Download File'}</span>
+                      </a>
+                    ) : null}
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      const b = coverModalBook;
+                      setCoverModalBook(null);
+                      handleOpenBook(b, 0, 'notes');
+                    }}
+                    className="w-full py-2 px-3 bg-white/5 hover:bg-white/10 text-slate-300 font-semibold text-xs rounded-xl border border-white/10 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Layers className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{language === 'am' ? 'የምዕራፍ ማስታወሻዎች እና አስጎብኚ' : 'Interactive Units & Notes'}</span>
+                  </button>
+                </div>
               </div>
             </motion.div>
           </motion.div>
