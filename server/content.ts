@@ -499,6 +499,223 @@ export async function streamContent(req: Request, res: Response) {
   }
 }
 
+// Cache directory for downloaded curriculum and public book PDFs
+const BOOKS_CACHE_DIR = path.join(PRIVATE_BOOKS_DIR, 'cache');
+if (!fs.existsSync(BOOKS_CACHE_DIR)) {
+  try { fs.mkdirSync(BOOKS_CACHE_DIR, { recursive: true }); } catch (e) {}
+}
+
+const KNOWN_CURRICULUM_FILE_IDS: Record<string, string> = {
+  'freshman_critical_thinking': '124Fl_yC-lWM4JiKuFwMItJUDJM5NmV9F',
+  'freshman_economics': '1nTlrUtAVzOSOsoeG4AX883sVlIxkfDrz',
+  'freshman_emerging_tech': '1sqKFF2o8ORHOnoF9VRy4x5hgY7lp-Uub',
+  'freshman_entrepreneurship': '14DKK75SxkylV4sLdaYTu_6dj7Y1nXKWu',
+  'freshman_biology': '1On4zzWIFDWypb7kU-HMTOmx6SRwp-K7Q',
+  'freshman_chemistry': '1gm0FrHxIQhxto8pfrf0Fy8NnHLDAdU0S',
+  'freshman_physics': '1JUJ1wclP4yNyyv1bb8kNXOsfHDKvJqXJ',
+  'freshman_psychology': '1FAVXFQheYxYKFh_PI2RkcW31HZa-SdTm',
+  'freshman_geography': '1gJJgwSipt30xDslO7JAvMMWz2QNVMtHN',
+  'freshman_global_trends': '1t4g5MyBhPhXRsXPXA01Zc6GfxAB9LVAq',
+  'freshman_inclusiveness': '1hWYVvjJB3LkndfAlbGJDtlVBzmBgkY3i',
+  'freshman_fitness': '18MIM7eTALuYt3NoRD7UeaS0mFeKcQTKg',
+  'freshman_history': '1kM_myBDzTTw9gt76uhhEzCdlpJXrMIZD',
+  'freshman_math_nat': '1JvIpwqFCHhcme03f_MFOH7hG2x4zV9JP',
+  'freshman_math_soc': '1r--ekd2ZqN5eKuRInRh7geVCVso1FrNr',
+  'freshman_anthropology': '1ZFRYrwL3hrd5jT_rtwvHXq7240qhbCtM',
+  'fresh_entrepreneurship': '14DKK75SxkylV4sLdaYTu_6dj7Y1nXKWu',
+  'fresh_biology': '1On4zzWIFDWypb7kU-HMTOmx6SRwp-K7Q',
+  'fresh_chemistry': '1gm0FrHxIQhxto8pfrf0Fy8NnHLDAdU0S',
+  'fresh_psychology': '1FAVXFQheYxYKFh_PI2RkcW31HZa-SdTm',
+  'fresh_geography': '1gJJgwSipt30xDslO7JAvMMWz2QNVMtHN',
+  'fresh_global_trends': '1t4g5MyBhPhXRsXPXA01Zc6GfxAB9LVAq',
+  'fresh_history': '1kM_myBDzTTw9gt76uhhEzCdlpJXrMIZD',
+  'fresh_inclusiveness': '1hWYVvjJB3LkndfAlbGJDtlVBzmBgkY3i',
+  'fresh_economics': '1nTlrUtAVzOSOsoeG4AX883sVlIxkfDrz',
+  'fresh_emerging_tech': '1sqKFF2o8ORHOnoF9VRy4x5hgY7lp-Uub',
+  'fresh_logic': '124Fl_yC-lWM4JiKuFwMItJUDJM5NmV9F',
+  'fresh_math_nat': '1JvIpwqFCHhcme03f_MFOH7hG2x4zV9JP',
+  'fresh_math_soc': '1r--ekd2ZqN5eKuRInRh7geVCVso1FrNr',
+  'fresh_physical_fitness': '18MIM7eTALuYt3NoRD7UeaS0mFeKcQTKg',
+  'fresh_anthro': '1ZFRYrwL3hrd5jT_rtwvHXq7240qhbCtM',
+  'fresh_physics': '1JUJ1wclP4yNyyv1bb8kNXOsfHDKvJqXJ'
+};
+
+/**
+ * GET /api/books/download-pdf & /api/pdf/proxy
+ * Proxy & stream PDF bytes from Google Drive, disk cache, or local storage for in-app offline caching
+ */
+export async function proxyBookPdf(req: Request, res: Response) {
+  try {
+    const fileId = (req.query.fileId as string) || '';
+    const bookId = (req.query.id as string) || '';
+    const customUrl = (req.query.url as string) || '';
+
+    // 1. Check if there is an uploaded private file
+    if (bookId) {
+      const localBook = readBooksFromStore().find(b => b.id === bookId);
+      if (localBook?.pdfStoragePath && fs.existsSync(localBook.pdfStoragePath)) {
+        const stat = fs.statSync(localBook.pdfStoragePath);
+        res.writeHead(200, {
+          'Content-Type': 'application/pdf',
+          'Content-Length': stat.size,
+          'Content-Disposition': `inline; filename="${(localBook.title || 'book').replace(/[^a-zA-Z0-9_\-]/g, '_')}.pdf"`,
+          'Cache-Control': 'public, max-age=604800',
+          'Access-Control-Allow-Origin': '*'
+        });
+        return fs.createReadStream(localBook.pdfStoragePath).pipe(res);
+      }
+    }
+
+    // 2. Determine target Google Drive File ID
+    let targetFileId = fileId;
+    if (!targetFileId && bookId) {
+      if (KNOWN_CURRICULUM_FILE_IDS[bookId]) {
+        targetFileId = KNOWN_CURRICULUM_FILE_IDS[bookId];
+      } else {
+        const dbBook = readBooksFromStore().find(b => b.id === bookId || (b as any).code === bookId || b.course === bookId);
+        if (dbBook?.pdfUrl) {
+          const m = dbBook.pdfUrl.match(/[?&]id=([a-zA-Z0-9_-]{20,})/) || dbBook.pdfUrl.match(/\/file\/d\/([a-zA-Z0-9_-]{20,})/);
+          if (m && m[1]) targetFileId = m[1];
+        }
+      }
+    }
+
+    if (!targetFileId && customUrl) {
+      const match = customUrl.match(/[?&]id=([a-zA-Z0-9_-]{20,})/) || 
+                    customUrl.match(/\/file\/d\/([a-zA-Z0-9_-]{20,})/) || 
+                    customUrl.match(/\/d\/([a-zA-Z0-9_-]{20,})/);
+      if (match && match[1]) {
+        targetFileId = match[1];
+      }
+    }
+
+    // 3. Fast Disk Cache Hit: If already cached on server disk, stream instantly!
+    if (targetFileId) {
+      const cachePath = path.join(BOOKS_CACHE_DIR, `${targetFileId}.pdf`);
+      if (fs.existsSync(cachePath)) {
+        try {
+          const stat = fs.statSync(cachePath);
+          if (stat.size > 1000) {
+            res.writeHead(200, {
+              'Content-Type': 'application/pdf',
+              'Content-Length': stat.size,
+              'Content-Disposition': 'inline',
+              'Cache-Control': 'public, max-age=604800',
+              'Access-Control-Allow-Origin': '*'
+            });
+            return fs.createReadStream(cachePath).pipe(res);
+          }
+        } catch (cacheErr) {
+          console.warn('[proxyBookPdf] Read cache error:', cacheErr);
+        }
+      }
+    }
+
+    // 4. Remote Fetch from Google Drive with mirrors & retry
+    if (targetFileId) {
+      const candidateUrls = [
+        `https://drive.usercontent.google.com/download?id=${targetFileId}&export=download`,
+        `https://drive.google.com/uc?export=download&id=${targetFileId}`
+      ];
+
+      let pdfBuffer: Buffer | null = null;
+      let totalLength: number | null = null;
+
+      for (const driveUrl of candidateUrls) {
+        try {
+          const response = await fetch(driveUrl, { 
+            redirect: 'follow',
+            signal: AbortSignal.timeout(35000)
+          });
+          if (!response.ok) continue;
+
+          const contentType = response.headers.get('content-type') || '';
+          if (contentType.includes('text/html')) {
+            const html = await response.text();
+            const confirmMatch = html.match(/confirm=([0-9A-Za-z_-]+)/) || 
+                                 html.match(/name="confirm"\s+value="([0-9A-Za-z_-]+)"/) ||
+                                 html.match(/href="(\/uc\?export=download&amp;confirm=[^"]+)"/);
+            
+            if (confirmMatch && confirmMatch[1]) {
+              const confirmToken = confirmMatch[1].replace(/&amp;/g, '&');
+              const confirmedUrl = confirmToken.startsWith('/uc') 
+                ? `https://drive.google.com${confirmToken}` 
+                : `https://drive.google.com/uc?export=download&id=${targetFileId}&confirm=${confirmToken}`;
+              
+              const confirmedResp = await fetch(confirmedUrl, { 
+                redirect: 'follow',
+                signal: AbortSignal.timeout(35000)
+              });
+              if (confirmedResp.ok) {
+                const confirmedAb = await confirmedResp.arrayBuffer();
+                const buf = Buffer.from(confirmedAb);
+                if (buf.length > 500 && buf.subarray(0, 5).toString().startsWith('%PDF')) {
+                  pdfBuffer = buf;
+                  totalLength = buf.length;
+                  break;
+                }
+              }
+            }
+          } else {
+            const ab = await response.arrayBuffer();
+            const buf = Buffer.from(ab);
+            if (buf.length > 500 && buf.subarray(0, 5).toString().startsWith('%PDF')) {
+              pdfBuffer = buf;
+              totalLength = buf.length;
+              break;
+            }
+          }
+        } catch (fetchErr) {
+          console.warn('[proxyBookPdf] Candidate URL failed:', driveUrl, fetchErr);
+        }
+      }
+
+      if (pdfBuffer) {
+        // Asynchronously save to server disk cache for subsequent rapid delivery
+        const savePath = path.join(BOOKS_CACHE_DIR, `${targetFileId}.pdf`);
+        fs.promises.writeFile(savePath, pdfBuffer).catch(e => console.warn('[proxyBookPdf] Failed to cache file:', e));
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Length', totalLength || pdfBuffer.length);
+        res.setHeader('Cache-Control', 'public, max-age=604800');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Content-Disposition', 'inline');
+        return res.send(pdfBuffer);
+      }
+    }
+
+    // 5. Custom URL fallback
+    if (customUrl && (customUrl.startsWith('http://') || customUrl.startsWith('https://'))) {
+      try {
+        const response = await fetch(customUrl, { 
+          redirect: 'follow',
+          signal: AbortSignal.timeout(30000)
+        });
+        if (response.ok) {
+          res.setHeader('Content-Type', 'application/pdf');
+          const cl = response.headers.get('content-length');
+          if (cl) res.setHeader('Content-Length', cl);
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          const arrayBuffer = await response.arrayBuffer();
+          return res.send(Buffer.from(arrayBuffer));
+        }
+      } catch (custErr) {
+        console.warn('[proxyBookPdf] Custom URL fetch error:', custErr);
+      }
+    }
+
+    // If all remote downloads fail, return a clean non-fatal message
+    return res.status(502).json({ 
+      error: 'The university document repository is temporarily unavailable. Please retry in a few moments.' 
+    });
+  } catch (err: any) {
+    console.error('[Content API] proxyBookPdf error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message || 'Failed to proxy PDF' });
+    }
+  }
+}
+
 // ============================================================================
 // ADMIN CONSOLE API ENDPOINTS (Protected by requireAdmin)
 // ============================================================================

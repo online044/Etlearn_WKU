@@ -713,6 +713,30 @@ export async function fetchSupabaseBooks(): Promise<any[]> {
 }
 
 /**
+ * Fetch video lessons directly from Supabase "lessons" table
+ */
+export async function fetchSupabaseLessons(): Promise<any[]> {
+  const client = getSupabase();
+  if (!client) return [];
+
+  try {
+    const { data, error } = await client
+      .from('lessons')
+      .select('*')
+      .order('chapter_number', { ascending: true });
+
+    if (error) {
+      console.warn('Could not fetch lessons from Supabase:', error.message);
+      return [];
+    }
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching lessons from Supabase:', err);
+    return [];
+  }
+}
+
+/**
  * Asynchronously loads Supabase config from server if not already stored in localStorage.
  */
 export function initSupabaseConfig(): Promise<void> {

@@ -53,6 +53,7 @@ import {
   getPublishedExams, 
   createContentToken, 
   streamContent, 
+  proxyBookPdf,
   serveCoverImage, 
   getAdminBooks, 
   saveAdminBook, 
@@ -712,6 +713,8 @@ app.delete(['/api/admin/announcement/:id', '/api/admin/announcement/:id/'], requ
 // Student Public Content API (Returns only published items with filters)
 app.get(['/api/books', '/api/books/'], getPublishedBooks);
 app.get(['/api/exams', '/api/exams/'], getPublishedExams);
+app.get(['/api/books/download-pdf', '/api/books/download-pdf/'], proxyBookPdf);
+app.get(['/api/pdf/proxy', '/api/pdf/proxy/'], proxyBookPdf);
 
 // Secure streaming & access token endpoints (Enforces server-side Pro entitlement)
 app.post(['/api/content/access-token', '/api/content/access-token/'], createContentToken);
