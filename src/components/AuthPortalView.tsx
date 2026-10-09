@@ -1329,20 +1329,20 @@ export default function AuthPortalView({
         {/* Glowing Ambient Top Edge Line */}
         <div className="absolute top-0 inset-x-8 h-[2px] bg-gradient-to-r from-transparent via-[#F59E0B]/50 to-transparent" />
 
-        {/* Top Header: Minimized Logo, Branding & Language Switcher */}
-        <div className="flex items-center justify-between gap-3 pb-2 border-b border-slate-800/60">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <EthioLearnLogo size={26} showCardBackground={false} iconOnly={true} className="shrink-0 drop-shadow-[0_0_8px_rgba(245,158,11,0.3)]" />
+        {/* Top Header: Mini Logo, Branding & Language Switcher */}
+        <div className="flex items-center justify-between gap-2.5 pb-2 border-b border-slate-800/60">
+          <div className="flex items-center gap-2 min-w-0">
+            <EthioLearnLogo size={18} showCardBackground={false} iconOnly={true} className="shrink-0 drop-shadow-[0_0_6px_rgba(245,158,11,0.25)]" />
             <div className="text-left min-w-0">
               <div className="flex items-center gap-1.5 leading-tight">
-                <h2 className="font-serif font-black text-base sm:text-lg text-white tracking-tight truncate">
+                <h2 className="font-serif font-black text-sm sm:text-base text-white tracking-tight truncate">
                   EthioLearn Pro
                 </h2>
-                <span className="px-1.5 py-0.2 rounded-full bg-amber-500/15 border border-amber-500/30 text-[#F59E0B] text-[8.5px] font-black tracking-wider font-mono shrink-0">
+                <span className="px-1.5 py-0.2 rounded-full bg-amber-500/15 border border-amber-500/30 text-[#F59E0B] text-[8px] font-black tracking-wider font-mono shrink-0">
                   CAMPUS
                 </span>
               </div>
-              <p className="text-[10px] text-slate-400 font-medium tracking-normal truncate">
+              <p className="text-[9.5px] text-slate-400 font-medium tracking-normal truncate">
                 {lang === 'am' ? 'የኢትዮጵያ ዩኒቨርሲቲ ተማሪዎች ፖርታል' : 'Ethiopian University Scholars Portal'}
               </p>
             </div>
@@ -2533,7 +2533,7 @@ export default function AuthPortalView({
             <div className="rounded-2xl bg-gradient-to-br from-[#121c33] via-[#0b1325] to-[#070b16] border border-[#F59E0B]/50 p-5 shadow-2xl overflow-hidden relative text-left">
               <div className="flex items-center justify-between pb-3 border-b border-[#F59E0B]/25">
                 <div className="flex items-center gap-2">
-                  <EthioLearnLogo size={28} />
+                  <EthioLearnLogo size={18} />
                   <div>
                     <p className="text-[11px] font-bold font-serif text-[#F59E0B]">ETHIOLEARN PRO</p>
                     <p className="text-[8.5px] text-slate-400 tracking-widest uppercase font-mono">National Academic Scholar</p>
