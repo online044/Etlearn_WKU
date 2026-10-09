@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Home as HomeIcon, Bot, Trophy, Award, Sparkles, Calendar, Sun, Moon, User as UserIcon, BookOpen, CheckCircle,
-  Share, X, ShieldCheck, Download, WifiOff, GraduationCap, FileText, Menu, MoreVertical, Type, ArrowLeft
+  Share, X, ShieldCheck, Download, WifiOff, GraduationCap, FileText, Menu, MoreVertical, Type
 } from 'lucide-react';
 
 import { StudentProfile, CustomNote, Flashcard, AITeacherContext, ExamAttemptRecord } from './types';
@@ -1310,25 +1310,6 @@ export default function App() {
             >
               <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
-
-            {/* 🔙 Back to Home Navigation Button (When on any sub-page) */}
-            {currentPage !== 'home' && (
-              <button
-                type="button"
-                onClick={() => {
-                  playClickChime();
-                  setCurrentPage('home');
-                }}
-                className="px-2.5 sm:px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold text-amber-500 hover:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[44px] active:scale-95 shadow-xs"
-                title={language === 'am' ? 'ወደ ዋና ገጽ ተመለስ' : 'Back to Home'}
-                aria-label={language === 'am' ? 'ተመለስ' : 'Back'}
-              >
-                <ArrowLeft className="w-4 h-4 text-amber-500 shrink-0" />
-                <span className="font-bold tracking-tight">
-                  {language === 'am' ? 'ተመለስ' : 'Back'}
-                </span>
-              </button>
-            )}
 
             {/* 🎓 App Logo & Brand Title */}
             <div 
