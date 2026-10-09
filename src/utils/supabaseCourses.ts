@@ -996,6 +996,16 @@ export async function fetchCoupons(): Promise<CouponCode[]> {
       isActive: true
     },
     {
+      code: 'FRESHMAN100',
+      description: '100% Full Academic Scholarship Pass for Freshman Students',
+      discountPercentage: 100,
+      fixedDiscountETB: 350,
+      maxUses: 100,
+      usedCount: 14,
+      expiresAt: '2026-12-31',
+      isActive: true
+    },
+    {
       code: 'CAMPUS40',
       description: '40% Campus Representative Student Voucher',
       discountPercentage: 40,

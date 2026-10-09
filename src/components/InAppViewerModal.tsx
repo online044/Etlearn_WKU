@@ -1,38 +1,163 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
-  X, ExternalLink, RefreshCw, FileText, Globe, Info, 
-  Maximize, Minimize, Sun, Moon, Coffee, ShieldCheck, ArrowLeft 
+  ArrowLeft, X, ExternalLink, Download, RefreshCw, 
+  Maximize2, Minimize2, Sun, Moon, Coffee, 
+  Smartphone, FileText, Check, Share2, Eye, EyeOff,
+  AlertCircle
 } from 'lucide-react';
 import { playClickChime, playSuccessChime } from '../utils/audio';
 
-interface InAppViewerModalProps {
+export interface InAppViewerModalProps {
   url: string;
   title: string;
   onClose: () => void;
+  courseCode?: string;
+  downloadUrl?: string;
+  language?: 'en' | 'am';
 }
 
-export default function InAppViewerModal({ url, title, onClose }: InAppViewerModalProps) {
+export default function InAppViewerModal({
+  url,
+  title,
+  onClose,
+  courseCode,
+  downloadUrl,
+  language = 'en'
+}: InAppViewerModalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const isPdf = url.toLowerCase().includes('.pdf') || url.includes('drive.google.com/file');
-  
-  // Decide default viewer mode: for local stream endpoints (/api/...) use direct frame, for external public pdf use embed or direct
-  const isLocalEndpoint = url.startsWith('/') || url.startsWith('blob:') || url.startsWith('data:');
-  const [viewerMode, setViewerMode] = useState<'embed' | 'direct'>(isPdf && !isLocalEndpoint ? 'embed' : 'direct');
-  const [iframeKey, setIframeKey] = useState<number>(0);
-  const [isTrueFullscreen, setIsTrueFullscreen] = useState<boolean>(false);
-  const [readerTheme, setReaderTheme] = useState<'dark' | 'light' | 'sepia'>('dark');
+  const isAm = language === 'am';
 
+  // State
+  const [isFocusMode, setIsFocusMode] = useState<boolean>(false);
+  const [readerTheme, setReaderTheme] = useState<'slate' | 'sepia' | 'light'>('slate');
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [viewerEngine, setViewerEngine] = useState<'drive' | 'gdocs' | 'direct'>('drive');
+  const [iframeKey, setIframeKey] = useState<number>(0);
+  const [copiedLink, setCopiedLink] = useState<boolean>(false);
+  const [showEngineMenu, setShowEngineMenu] = useState<boolean>(false);
+
+  // Normalize Drive URLs
+  const getEmbedUrl = () => {
+    if (!url) return '';
+    // Local API stream endpoint
+    if (url.startsWith('/') || url.startsWith('blob:') || url.startsWith('data:')) {
+      return url;
+    }
+    // Google Drive URL handling
+    if (url.includes('drive.google.com/file/d/')) {
+      if (viewerEngine === 'gdocs') {
+        const fileIdMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        if (fileIdMatch) {
+          const directDl = `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
+          return `https://docs.google.com/viewer?url=${encodeURIComponent(directDl)}&embedded=true`;
+        }
+      }
+      let preview = url;
+      if (preview.includes('/view')) {
+        preview = preview.replace(/\/view(\?.*)?$/, '/preview');
+      } else if (!preview.includes('/preview')) {
+        preview = preview.endsWith('/') ? `${preview}preview` : `${preview}/preview`;
+      }
+      return preview;
+    }
+    // Google Drive Folder embed
+    if (url.includes('drive.google.com/drive/folders/')) {
+      const folderIdMatch = url.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+      if (folderIdMatch) {
+        return `https://drive.google.com/embeddedfolderview?id=${folderIdMatch[1]}#grid`;
+      }
+      return url;
+    }
+    // Generic external PDF
+    if (url.toLowerCase().includes('.pdf')) {
+      if (viewerEngine === 'gdocs') {
+        return `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`;
+      }
+      return url;
+    }
+    return url;
+  };
+
+  // Google Drive Native App URL
+  const getDriveAppUrl = () => {
+    if (url.includes('drive.google.com/file/d/')) {
+      return url.replace('/preview', '/view?usp=sharing');
+    }
+    return url;
+  };
+
+  // Download URL
+  const getResolvedDownloadUrl = () => {
+    if (downloadUrl) return downloadUrl;
+    if (url.includes('drive.google.com/file/d/')) {
+      const fileIdMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      if (fileIdMatch) {
+        return `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
+      }
+    }
+    return url;
+  };
+
+  // Fullscreen sync
   useEffect(() => {
-    const handleFsChange = () => {
-      setIsTrueFullscreen(Boolean(document.fullscreenElement));
+    const onFsChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
     };
-    document.addEventListener('fullscreenchange', handleFsChange);
-    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
-  const toggleFullscreen = async () => {
+  // Keyboard & back-navigation sync
+  useEffect(() => {
+    // 1. Push state to intercept Android hardware back button / iOS swipe-back
+    window.history.pushState({ inAppViewerOpen: true }, '');
+    const handlePopState = () => {
+      onClose();
+    };
+    window.addEventListener('popstate', handlePopState);
+
+    // 2. Telegram WebApp BackButton integration
+    const tg = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp : null;
+    if (tg?.BackButton) {
+      tg.BackButton.show();
+      tg.BackButton.onClick(onClose);
+    }
+
+    // 3. Keyboard controls
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isFocusMode) {
+          setIsFocusMode(false);
+        } else {
+          onClose();
+        }
+      } else if (e.key === 'f' || e.key === 'F') {
+        // Toggle focus mode when not typing in an input
+        if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+          setIsFocusMode((prev) => !prev);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('keydown', handleKeyDown);
+      if (tg?.BackButton) {
+        tg.BackButton.offClick(onClose);
+        tg.BackButton.hide();
+      }
+    };
+  }, [isFocusMode, onClose]);
+
+  const toggleHardwareFullscreen = async () => {
     playClickChime();
     try {
       if (!document.fullscreenElement) {
@@ -43,266 +168,382 @@ export default function InAppViewerModal({ url, title, onClose }: InAppViewerMod
         await document.exitFullscreen();
       }
     } catch {
-      setIsTrueFullscreen((prev) => !prev);
+      setIsFullscreen((prev) => !prev);
     }
   };
 
-  const getTargetUrl = () => {
-    if (isLocalEndpoint) {
-      return url;
-    }
-    // If it's already a Google Drive preview or embed link, render directly
-    if (url.includes('drive.google.com/file') && url.includes('/preview')) {
-      return url;
-    }
-    if (url.includes('drive.google.com/drive/folders/')) {
-      return url;
-    }
-    if (viewerMode === 'embed' && isPdf && !url.includes('drive.google.com')) {
-      return `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`;
-    }
-    return url;
+  const handleCopyLink = () => {
+    playSuccessChime();
+    navigator.clipboard?.writeText(getDriveAppUrl());
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  const handleRefresh = () => {
+  const handleReload = () => {
     playClickChime();
     setIframeKey((prev) => prev + 1);
-  };
-
-  const toggleMode = () => {
-    playClickChime();
-    setViewerMode((prev) => (prev === 'embed' ? 'direct' : 'embed'));
   };
 
   if (typeof document === 'undefined') return null;
 
   return createPortal(
-    <div 
+    <div
       ref={containerRef}
-      className={`fixed inset-0 z-[999999] flex flex-col w-screen h-[100dvh] max-h-[100dvh] p-0 m-0 overflow-hidden select-none font-sans transition-colors duration-300 ${
+      className={`fixed inset-0 z-[999999] flex flex-col w-screen h-[100dvh] max-h-[100dvh] p-0 m-0 overflow-hidden font-sans select-none transition-colors duration-200 ${
         readerTheme === 'light'
-          ? 'bg-[#F8FAFC] text-slate-900'
+          ? 'bg-slate-100 text-slate-900'
           : readerTheme === 'sepia'
-          ? 'bg-[#FBF0D9] text-[#2C1810]'
-          : 'bg-[#0A1128] text-white'
+          ? 'bg-[#FAF3E0] text-[#2D2115]'
+          : 'bg-[#0A1128] text-slate-100'
       }`}
-      style={{ top: 0, left: 0, right: 0, bottom: 0 }}
+      style={{
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)'
+      }}
     >
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="w-full h-full flex flex-col overflow-hidden"
+        className="w-full h-full flex flex-col overflow-hidden relative"
       >
-        {/* Top Header / Pro Control Bar */}
-        <header className={`px-3 sm:px-5 py-2.5 sm:py-3 border-b flex items-center justify-between gap-2 sm:gap-4 shrink-0 transition-colors ${
-          readerTheme === 'light'
-            ? 'bg-white border-slate-200'
-            : readerTheme === 'sepia'
-            ? 'bg-[#F4E7CC] border-[#DFCFAB]'
-            : 'bg-[#0F172A] border-white/10'
-        }`}>
-          {/* Left Title and Back Action */}
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <button
-              onClick={() => { playClickChime(); onClose(); }}
-              className={`p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0 ${
+        {/* ========================================================================= */}
+        {/* 🌟 1. UNIFIED REDESIGNED TOP BAR (Clean, Single Line, Non-Distracting)    */}
+        {/* ========================================================================= */}
+        <AnimatePresence>
+          {!isFocusMode && (
+            <motion.header
+              initial={{ y: -60, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -60, opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              className={`h-14 sm:h-16 px-2.5 sm:px-4 border-b flex items-center justify-between gap-2 shrink-0 z-30 transition-colors ${
                 readerTheme === 'light'
-                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  ? 'bg-white/95 border-slate-200 text-slate-800 shadow-xs'
                   : readerTheme === 'sepia'
-                  ? 'bg-[#EAD8B8] hover:bg-[#DFC7A0] text-[#332211]'
-                  : 'bg-white/10 hover:bg-white/20 text-white'
-              }`}
-              title="Close and Back"
-              aria-label="Back"
+                  ? 'bg-[#F4EBD9]/95 border-[#E2D5B8] text-[#362719] shadow-xs'
+                  : 'bg-[#0F172A]/95 border-slate-800 text-slate-100 shadow-md'
+              } backdrop-blur-md`}
             >
-              <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500" />
-            </button>
+              {/* LEFT: Back Button + Clean Document Identity */}
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                <button
+                  type="button"
+                  onClick={() => { playClickChime(); onClose(); }}
+                  className={`px-3 py-2 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[44px] select-none active:scale-95 shadow-xs ${
+                    readerTheme === 'light'
+                      ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-800'
+                      : readerTheme === 'sepia'
+                      ? 'bg-[#EADECE] hover:bg-[#DDD0C0] border-[#D5C5B0] text-[#3A2A1A]'
+                      : 'bg-slate-800/90 hover:bg-slate-700 border-amber-500/40 text-slate-100 hover:text-white'
+                  }`}
+                  title={isAm ? 'ተመለስ (ዝጋ)' : 'Back / Close'}
+                  aria-label={isAm ? 'ተመለስ' : 'Back'}
+                >
+                  <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500 shrink-0" />
+                  <span className="text-xs sm:text-sm font-bold tracking-tight">
+                    {isAm ? 'ተመለስ' : 'Back'}
+                  </span>
+                </button>
 
-            <div className="p-1.5 sm:p-2 bg-amber-500/10 text-amber-500 rounded-xl shrink-0 hidden xs:flex">
-              {isPdf ? <FileText className="w-4 h-4 sm:w-5 sm:h-5" /> : <Globe className="w-4 h-4 sm:w-5 sm:h-5" />}
-            </div>
-
-            <div className="text-left min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-amber-500 bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.2 rounded shrink-0">
-                  {isPdf ? 'Pro Book Reader' : 'In-App Web Viewer'}
-                </span>
-                <span className="hidden sm:inline-block text-[10px] text-emerald-500 font-bold">
-                  • Fullscreen Active
-                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
+                    {courseCode && (
+                      <span className="font-bold text-amber-500 font-mono">
+                        {courseCode}
+                      </span>
+                    )}
+                    {courseCode && <span aria-hidden="true">·</span>}
+                    <span className="truncate">
+                      {isAm ? 'የዩኒቨርሲቲ ሰነድ' : 'University Document'}
+                    </span>
+                  </div>
+                  <h1 className="text-xs sm:text-sm font-bold truncate leading-tight tracking-tight">
+                    {title || (isAm ? 'ሰነድ' : 'Document')}
+                  </h1>
+                </div>
               </div>
-              <h3 className="text-xs sm:text-sm font-bold truncate mt-0.5 max-w-[190px] sm:max-w-md md:max-w-xl">
-                {title}
-              </h3>
-            </div>
-          </div>
 
-          {/* Right Action Controls */}
-          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-            {/* Theme switcher */}
-            <div className={`flex items-center p-0.5 rounded-xl border ${
-              readerTheme === 'light'
-                ? 'bg-slate-150 border-slate-300'
-                : readerTheme === 'sepia'
-                ? 'bg-[#E5D2AE] border-[#CFB98C]'
-                : 'bg-white/5 border-white/10'
-            }`}>
-              <button
-                onClick={() => { playClickChime(); setReaderTheme('dark'); }}
-                className={`p-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
-                  readerTheme === 'dark' ? 'bg-amber-500 text-slate-950 font-bold shadow' : 'text-slate-400 hover:text-white'
-                }`}
-                title="Dark Slate Mode"
-              >
-                <Moon className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => { playClickChime(); setReaderTheme('sepia'); }}
-                className={`p-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
-                  readerTheme === 'sepia' ? 'bg-amber-600 text-white font-bold shadow' : 'text-slate-500 hover:text-amber-800'
-                }`}
-                title="Sepia Eye Care"
-              >
-                <Coffee className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => { playClickChime(); setReaderTheme('light'); }}
-                className={`p-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
-                  readerTheme === 'light' ? 'bg-amber-500 text-slate-950 font-bold shadow' : 'text-slate-400 hover:text-slate-800'
-                }`}
-                title="Light Paper Mode"
-              >
-                <Sun className="w-3.5 h-3.5" />
-              </button>
-            </div>
+              {/* RIGHT: Production Tooling Cluster */}
+              <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+                {/* ⚡ Open in Google Drive App (Direct 1-tap mobile launch) */}
+                <a
+                  href={getDriveAppUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => playSuccessChime()}
+                  className="px-2.5 sm:px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
+                  title={isAm ? 'በGoogle Drive መተግበሪያ ክፈት' : 'Open in Google Drive App'}
+                >
+                  <Smartphone className="w-3.5 h-3.5" />
+                  <span className="hidden xs:inline">Drive App</span>
+                </a>
 
-            {/* View Toggle Mode for PDF */}
-            {isPdf && !url.includes('drive.google.com') && (
-              <button
-                onClick={toggleMode}
-                className={`hidden md:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                {/* 🌙 Reading Filter / Theme Toggle (Slate / Sepia / Light) */}
+                <div className={`hidden sm:flex items-center p-0.5 rounded-xl border ${
                   readerTheme === 'light'
-                    ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                    ? 'bg-slate-100 border-slate-200'
                     : readerTheme === 'sepia'
-                    ? 'bg-[#E8D6B2] hover:bg-[#DCBE94] text-[#332211] border-[#C8B084]'
-                    : 'bg-white/5 hover:bg-white/10 text-slate-200 border-white/10'
-                }`}
-                title="Toggle between Google PDF Reader & Direct view"
+                    ? 'bg-[#EADECE] border-[#D5C5B0]'
+                    : 'bg-slate-800 border-slate-700'
+                }`}>
+                  <button
+                    type="button"
+                    onClick={() => { playClickChime(); setReaderTheme('slate'); }}
+                    className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
+                      readerTheme === 'slate'
+                        ? 'bg-[#0A1128] text-amber-400 shadow-xs'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    title="Dark Slate Theme"
+                  >
+                    <Moon className="w-3 h-3" />
+                    <span>Dark</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { playClickChime(); setReaderTheme('sepia'); }}
+                    className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
+                      readerTheme === 'sepia'
+                        ? 'bg-[#FAF3E0] text-[#362719] shadow-xs'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    title="Warm Sepia Paper Theme"
+                  >
+                    <Coffee className="w-3 h-3" />
+                    <span>Sepia</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { playClickChime(); setReaderTheme('light'); }}
+                    className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
+                      readerTheme === 'light'
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    title="Crisp Light Theme"
+                  >
+                    <Sun className="w-3 h-3" />
+                    <span>Light</span>
+                  </button>
+                </div>
+
+                {/* Mobile single theme cycle button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    playClickChime();
+                    setReaderTheme((prev) => prev === 'slate' ? 'sepia' : prev === 'sepia' ? 'light' : 'slate');
+                  }}
+                  className="sm:hidden p-2 rounded-xl hover:bg-white/10 text-slate-300 transition-colors"
+                  title="Switch Reading Theme"
+                >
+                  {readerTheme === 'slate' ? (
+                    <Moon className="w-4 h-4 text-amber-400" />
+                  ) : readerTheme === 'sepia' ? (
+                    <Coffee className="w-4 h-4 text-[#7A5A38]" />
+                  ) : (
+                    <Sun className="w-4 h-4 text-amber-500" />
+                  )}
+                </button>
+
+                {/* 🔄 Reload Iframe */}
+                <button
+                  type="button"
+                  onClick={handleReload}
+                  className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                    readerTheme === 'light'
+                      ? 'hover:bg-slate-100 border-slate-200 text-slate-600'
+                      : readerTheme === 'sepia'
+                      ? 'hover:bg-[#EADECE] border-[#D5C5B0] text-[#4A3828]'
+                      : 'hover:bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+                  }`}
+                  title={isAm ? 'እንደገና ጫን' : 'Reload Document'}
+                >
+                  <RefreshCw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                </button>
+
+                {/* 📥 Direct Download */}
+                <a
+                  href={getResolvedDownloadUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                  onClick={() => playSuccessChime()}
+                  className={`hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                    readerTheme === 'light'
+                      ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
+                      : readerTheme === 'sepia'
+                      ? 'bg-[#EADECE] hover:bg-[#DDD0C0] border-[#D5C5B0] text-[#3A2A1A]'
+                      : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200 hover:text-white'
+                  }`}
+                  title={isAm ? 'ሰነዱን አውርድ' : 'Download Document'}
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download</span>
+                </a>
+
+                {/* 🎯 Focus Mode Toggle (Hide Bars for 100% Reading immersion) */}
+                <button
+                  type="button"
+                  onClick={() => { playClickChime(); setIsFocusMode(true); }}
+                  className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                    readerTheme === 'light'
+                      ? 'hover:bg-slate-100 border-slate-200 text-slate-600'
+                      : readerTheme === 'sepia'
+                      ? 'hover:bg-[#EADECE] border-[#D5C5B0] text-[#4A3828]'
+                      : 'hover:bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+                  }`}
+                  title={isAm ? 'ሙሉ ማያ የንባብ እይታ (Focus Mode)' : 'Focus Mode (Hide Top Bar)'}
+                >
+                  <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-500" />
+                </button>
+
+                {/* ⛶ Hardware Fullscreen Toggle */}
+                <button
+                  type="button"
+                  onClick={toggleHardwareFullscreen}
+                  className={`hidden sm:flex p-2 rounded-xl border transition-all cursor-pointer ${
+                    readerTheme === 'light'
+                      ? 'hover:bg-slate-100 border-slate-200 text-slate-600'
+                      : readerTheme === 'sepia'
+                      ? 'hover:bg-[#EADECE] border-[#D5C5B0] text-[#4A3828]'
+                      : 'hover:bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+                  }`}
+                  title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                >
+                  {isFullscreen ? (
+                    <Minimize2 className="w-4 h-4 text-amber-500" />
+                  ) : (
+                    <Maximize2 className="w-4 h-4 text-amber-500" />
+                  )}
+                </button>
+
+                {/* ✕ Close Button */}
+                <button
+                  type="button"
+                  onClick={() => { playClickChime(); onClose(); }}
+                  className="p-2 rounded-xl hover:bg-red-500/15 text-slate-400 hover:text-red-400 transition-colors cursor-pointer"
+                  title={isAm ? 'ዝጋ' : 'Close'}
+                  aria-label="Close"
+                >
+                  <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+              </div>
+            </motion.header>
+          )}
+        </AnimatePresence>
+
+        {/* ========================================================================= */}
+        {/* 🌟 2. FOCUS MODE FLOATING CONTROLS (Positioned at TOP-LEFT)               */}
+        {/* Leaves Google Drive's native top-right pop-out button COMPLETELY clear!   */}
+        {/* ========================================================================= */}
+        <AnimatePresence>
+          {isFocusMode && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="absolute top-3 left-3 sm:left-4 z-[1000000] flex items-center gap-1.5 bg-slate-950/90 backdrop-blur-xl px-2.5 py-1.5 rounded-full border border-amber-500/50 shadow-2xl text-white select-none"
+            >
+              <button
+                type="button"
+                onClick={() => { playClickChime(); onClose(); }}
+                className="px-2.5 py-1 rounded-full bg-white/10 hover:bg-red-500/30 text-slate-200 hover:text-red-300 transition-colors cursor-pointer flex items-center gap-1.5 text-[11px] font-bold active:scale-95"
+                title={isAm ? 'ተመለስ (ዝጋ)' : 'Back / Close'}
               >
-                <span>{viewerMode === 'embed' ? 'G-Docs Preview' : 'Direct Frame'}</span>
+                <ArrowLeft className="w-3.5 h-3.5 text-amber-400" />
+                <span>{isAm ? 'ተመለስ' : 'Back'}</span>
               </button>
-            )}
 
-            {/* Reload Frame */}
-            <button
-              onClick={handleRefresh}
-              className={`p-1.5 sm:p-2 rounded-xl transition-colors cursor-pointer ${
-                readerTheme === 'light'
-                  ? 'hover:bg-slate-200 text-slate-600'
-                  : readerTheme === 'sepia'
-                  ? 'hover:bg-[#DFCCAA] text-[#332211]'
-                  : 'hover:bg-white/10 text-slate-300'
-              }`}
-              title="Reload Frame"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
+              <div className="h-3 w-px bg-white/20" />
 
-            {/* True Fullscreen Toggle */}
-            <button
-              onClick={toggleFullscreen}
-              className={`p-1.5 sm:p-2 rounded-xl transition-colors cursor-pointer ${
-                readerTheme === 'light'
-                  ? 'hover:bg-slate-200 text-slate-600'
-                  : readerTheme === 'sepia'
-                  ? 'hover:bg-[#DFCCAA] text-[#332211]'
-                  : 'hover:bg-white/10 text-slate-300'
-              }`}
-              title={isTrueFullscreen ? 'Exit True Fullscreen' : 'Enter True Fullscreen'}
-            >
-              {isTrueFullscreen ? <Minimize className="w-4 h-4 text-amber-500" /> : <Maximize className="w-4 h-4" />}
-            </button>
+              <span className="text-[11px] font-bold text-slate-200 max-w-[120px] sm:max-w-[180px] truncate">
+                {title}
+              </span>
 
-            {/* Direct Open in new window fallback */}
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => playSuccessChime()}
-              className="p-1.5 sm:p-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 rounded-xl transition-colors cursor-pointer"
-              title="Open Original Link in New Tab"
-            >
-              <ExternalLink className="w-4 h-4" />
-            </a>
+              <div className="h-3 w-px bg-white/20" />
 
-            {/* Close Modal */}
-            <button
-              onClick={() => { playClickChime(); onClose(); }}
-              className="p-1.5 sm:p-2 hover:bg-red-500/15 text-red-400 hover:text-red-300 rounded-xl transition-colors cursor-pointer font-bold"
-              title="Close Reader"
-            >
-              <X className="w-4 h-4 sm:w-5 sm:h-5" />
-            </button>
+              <button
+                type="button"
+                onClick={() => { playClickChime(); setIsFocusMode(false); }}
+                className="px-2 py-0.5 bg-white/10 hover:bg-white/20 text-slate-200 rounded-full text-[10px] font-bold flex items-center gap-1 transition-colors"
+                title="Exit Focus Mode (Show Toolbars)"
+              >
+                <EyeOff className="w-3 h-3 text-amber-400" />
+                <span>{isAm ? 'መሳሪያዎች' : 'Tools'}</span>
+              </button>
+
+              <a
+                href={getDriveAppUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => playSuccessChime()}
+                className="p-1 rounded-full hover:bg-white/10 text-amber-400 transition-colors"
+                title="Open in Google Drive App"
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+              </a>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ========================================================================= */}
+        {/* 🌟 3. FULL-BLEED PDF CANVAS (100% Edge-to-Edge)                           */}
+        {/* ========================================================================= */}
+        <div 
+          className="flex-1 w-full h-full min-h-0 relative overflow-hidden"
+          style={{
+            WebkitOverflowScrolling: 'touch',
+            touchAction: 'pan-x pan-y pinch-zoom'
+          }}
+        >
+          {/* Subtle Reading Theme Tone Filter Layer */}
+          <div
+            className={`w-full h-full relative transition-all duration-300 ${
+              readerTheme === 'sepia'
+                ? 'sepia-[0.18] brightness-[0.98]'
+                : ''
+            }`}
+          >
+            <iframe
+              key={`pdf-engine-${viewerEngine}-${iframeKey}`}
+              src={getEmbedUrl()}
+              title={title}
+              className="absolute inset-0 w-full h-full border-0 block bg-slate-950"
+              allow="autoplay; fullscreen; encrypted-media"
+              referrerPolicy="no-referrer"
+            />
           </div>
-        </header>
 
-        {/* Dynamic Reader Companion Ribbon */}
-        <div className={`px-3 sm:px-5 py-1.5 border-b flex flex-wrap items-center justify-between gap-2 text-[11px] sm:text-xs shrink-0 ${
-          readerTheme === 'light'
-            ? 'bg-amber-50 text-amber-900 border-amber-200'
-            : readerTheme === 'sepia'
-            ? 'bg-[#F2E4C4] text-[#4A321A] border-[#D8C49C]'
-            : 'bg-amber-500/10 text-amber-300 border-amber-500/20'
-        }`}>
-          <div className="flex items-center gap-1.5 font-medium min-w-0 truncate">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-            <span className="truncate">EthioLearn Pro Fullscreen Reader • Certified University Curriculum</span>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => playSuccessChime()}
-              className="px-2.5 py-0.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black uppercase rounded text-[10px] flex items-center gap-1 transition-all cursor-pointer shadow-sm"
-            >
-              <ExternalLink className="w-3 h-3" />
-              <span>Drive Tab (ቀጥታ ክፈት)</span>
-            </a>
+          {/* Quick Trouble-Shooting Helper Capsule (Fixed at bottom-center) */}
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none opacity-80 hover:opacity-100 transition-opacity">
+            <div className="pointer-events-auto flex items-center gap-2 bg-slate-950/85 backdrop-blur-md px-3 py-1 rounded-full border border-slate-800 text-[10px] text-slate-300 shadow-lg">
+              <span>{isAm ? 'ሰነዱ ካልታየ:' : 'Display issue?'}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  playClickChime();
+                  setViewerEngine((prev) => prev === 'drive' ? 'gdocs' : 'drive');
+                  handleReload();
+                }}
+                className="text-amber-400 font-bold hover:underline"
+              >
+                {viewerEngine === 'drive' ? 'Switch to Docs Engine' : 'Switch to Drive Engine'}
+              </button>
+              <span aria-hidden="true">·</span>
+              <a
+                href={getDriveAppUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-emerald-400 font-bold hover:underline flex items-center gap-0.5"
+              >
+                <span>Drive App</span>
+                <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+            </div>
           </div>
         </div>
-
-        {/* Main Edge-to-Edge Iframe Stage (No Cut, Full Bleed) */}
-        <div className={`flex-1 w-full h-full min-h-0 relative overflow-hidden ${
-          readerTheme === 'light' ? 'bg-white' : readerTheme === 'sepia' ? 'bg-[#F8F2E2]' : 'bg-[#0B132B]'
-        }`}>
-          <iframe
-            key={iframeKey}
-            src={getTargetUrl()}
-            title={`EthioLearn Pro Reader: ${title}`}
-            className="w-full h-full border-0 block"
-            allow="autoplay; encrypted-media; fullscreen"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
-          />
-        </div>
-
-        {/* Slim Bottom Status Bar */}
-        <footer className={`px-4 py-1.5 border-t flex items-center justify-between gap-3 text-[10px] sm:text-[11px] shrink-0 ${
-          readerTheme === 'light'
-            ? 'bg-slate-100 border-slate-200 text-slate-500'
-            : readerTheme === 'sepia'
-            ? 'bg-[#EFE2C6] border-[#DDCBB0] text-[#554030]'
-            : 'bg-[#080E21] border-white/10 text-slate-400'
-        }`}>
-          <div className="flex items-center gap-1">
-            <Info className="w-3 h-3 text-amber-500 shrink-0" />
-            <span>Pinch/Scroll to zoom. Press Fullscreen for distraction-free study.</span>
-          </div>
-          <div className="font-mono text-[10px] text-amber-500/80 hidden xs:block">
-            EthioLearn Pro Reader v3.2
-          </div>
-        </footer>
       </motion.div>
     </div>,
     document.body

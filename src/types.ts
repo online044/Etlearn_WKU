@@ -86,6 +86,7 @@ export interface SupabaseProfileRecord {
 
 export interface StudentProfile {
   id?: string;
+  studentId?: string; // Unique student identifier (e.g. WKU/2026/8492)
   name: string;
   email?: string;
   university: string;
@@ -115,6 +116,7 @@ export interface StudentProfile {
   senderName?: string;
   proPaymentPhone?: string;
   paymentMethod?: PaymentProvider;
+  couponCode?: string;
   proReceiptImage?: string; // Base64 data string or image URL of payment receipt
   agreedToTerms?: boolean;
   agreedToTermsDate?: string;

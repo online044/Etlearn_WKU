@@ -23,6 +23,7 @@ import BillingAccountSection from './BillingAccountSection';
 import ProfileCustomizerModal from './ProfileCustomizerModal';
 import { safeStorage } from '../utils/safeStorage';
 import { isAdministratorEmail } from '../utils/adminAuth';
+import { generateUniqueStudentId } from '../utils/studentId';
 import { getProfilePreferences, ACCENT_THEMES, BANNER_PRESETS } from '../utils/profileCustomization';
 import { ProfileCustomizationPreferences, ProfileSectionKey, ProfileQuickActionKey } from '../types';
 
@@ -718,6 +719,9 @@ export default function StudentProfileView({
                   >
                     {displayBadge}
                   </span>
+                  <span className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-700 text-amber-400 font-mono text-[10px] font-bold">
+                    ID: {generateUniqueStudentId(activeProfileData)}
+                  </span>
                 </div>
 
                 <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-3 gap-y-0.5 text-xs text-slate-300">
@@ -865,6 +869,9 @@ export default function StudentProfileView({
                       }}
                     >
                       {displayBadge}
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-md bg-slate-900 border border-slate-700 text-amber-400 font-mono text-[11px] font-bold">
+                      ID: {generateUniqueStudentId(activeProfileData)}
                     </span>
                     {(activeProfileData.telegramUsername || activeProfileData.telegramId) && (
                       <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-sky-500/20 text-sky-400 border border-sky-500/30 flex items-center gap-1">

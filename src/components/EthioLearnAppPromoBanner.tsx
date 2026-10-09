@@ -46,30 +46,43 @@ interface PromoCampaign {
 
 const CAMPAIGNS: PromoCampaign[] = [
   {
-    id: 'app_download',
-    tag: { en: 'Android App', am: 'አንድሮይድ አፕ' },
+    id: 'free_pdfs',
+    tag: { en: '100% Free PDFs', am: '100% ነፃ ፒዲኤፎች' },
     title: { 
-      en: '0 MB Offline Mode: Install EthioLearn on your phone', 
-      am: 'ያለ ኢንተርኔት ዳታ ይጠቀሙ፦ የኢትዮለርን አፕ በስልክዎ ላይ ይጫኑ' 
+      en: 'All Ethiopian university textbooks & lecture note PDFs are 100% Free to read and download', 
+      am: 'ሁሉም የዩኒቨርሲቲ ሞጁሎች እና የትምህርት ኖት ፒዲኤፎች በነፃ ማንበብና ማውረድ ይችላሉ' 
     },
-    highlight: { en: 'Free Offline Study', am: 'ያለ ዳታ ይሰራል' },
-    ctaText: { en: 'Install App', am: 'አፑን ጫን' },
-    icon: Smartphone,
-    accentColor: '#10B981',
-    actionType: 'install'
+    highlight: { en: '100% Free PDFs', am: 'ነፃ ፒዲኤፍ' },
+    ctaText: { en: 'Read Free PDFs', am: 'መጽሐፍት አንብብ' },
+    icon: BookOpen,
+    accentColor: '#F59E0B',
+    actionType: 'bookstore'
   },
   {
-    id: 'telegram',
-    tag: { en: 'Telegram Hub', am: 'ቴሌግራም' },
+    id: 'biology_open',
+    tag: { en: 'Open Course', am: 'ክፍት ኮርስ' },
     title: { 
-      en: 'Join 200+ university scholars on @Et_Learnn for exam keys & PDFs', 
-      am: 'ከ200+ ተማሪዎች ጋር በቴሌግራም የፈተና ጥያቄዎችን እና ፒዲኤፍ ይጋሩ (@Et_Learnn)' 
+      en: 'General Biology video lectures are open & free for all students! Upgrade to Pro for all course videos', 
+      am: 'የአጠቃላይ ባዮሎጂ የቪዲዮ ትምህርቶች ለሁሉም ክፍት ናቸው! ለሌሎች ኮርሶች ወደ ፕሮ ያሳድጉ' 
     },
-    highlight: { en: '@Et_Learnn', am: '@Et_Learnn' },
-    ctaText: { en: 'Join Channel', am: 'ቴሌግራም' },
-    icon: Send,
-    accentColor: '#0EA5E9',
-    actionType: 'telegram'
+    highlight: { en: 'Free Biology Videos', am: 'ነፃ ባዮሎጂ ቪዲዮ' },
+    ctaText: { en: 'Watch Biology', am: 'ባዮሎጂ ይመልከቱ' },
+    icon: Sparkles,
+    accentColor: '#F59E0B',
+    actionType: 'bookstore'
+  },
+  {
+    id: 'pro_upgrade',
+    tag: { en: 'Video Pro Pass', am: 'የቪዲዮ ፕሮ ፓስ' },
+    title: { 
+      en: 'Unlock full video lectures for all university courses via Telebirr & CBE Birr (Only 80 ETB)', 
+      am: 'ለሁሉም የዩኒቨርሲቲ ኮርሶች የተሟሉ የቪዲዮ ትምህርቶችን በቴሌብር እና በንግድ ባንክ ይክፈቱ (80 ብር ብቻ)' 
+    },
+    highlight: { en: 'From 80 ETB', am: 'ከ80 ብር ጀምሮ' },
+    ctaText: { en: 'Upgrade Pro', am: 'ወደ ፕሮ አሳድግ' },
+    icon: Crown,
+    accentColor: '#F59E0B',
+    actionType: 'upgrade'
   },
   {
     id: 'exam_bank',
@@ -81,34 +94,21 @@ const CAMPAIGNS: PromoCampaign[] = [
     highlight: { en: '1,000+ Exams', am: '1,000+ ፈተናዎች' },
     ctaText: { en: 'Open Exams', am: 'ፈተናዎች' },
     icon: GraduationCap,
-    accentColor: '#3B82F6',
+    accentColor: '#F59E0B',
     actionType: 'exams'
   },
   {
-    id: 'study_notes',
-    tag: { en: 'Faculty Notes', am: 'የመምህራን ማስታወሻ' },
+    id: 'telegram',
+    tag: { en: 'Telegram Hub', am: 'ቴሌግራም' },
     title: { 
-      en: 'Structured lecture handouts & formula sheets for freshman courses', 
-      am: 'የመጀመሪያ ዓመት እና የዲፓርትመንት ኮርሶች የተሟሉ ማጠቃለያዎች' 
+      en: 'Join 200+ university scholars on @Et_Learnn for study materials and discussions', 
+      am: 'ከ200+ ተማሪዎች ጋር በቴሌግራም የፈተና ጥያቄዎችን እና ኖቶችን ይጋሩ (@Et_Learnn)' 
     },
-    highlight: { en: 'Curriculum Certified', am: 'የተረጋገጡ ማስታወሻዎች' },
-    ctaText: { en: 'Read Notes', am: 'ማስታወሻዎች' },
-    icon: BookOpen,
+    highlight: { en: '@Et_Learnn', am: '@Et_Learnn' },
+    ctaText: { en: 'Join Channel', am: 'ቴሌግራም' },
+    icon: Send,
     accentColor: '#F59E0B',
-    actionType: 'notes'
-  },
-  {
-    id: 'pro_upgrade',
-    tag: { en: 'EthioLearn Pro', am: 'ኢትዮለርን ፕሮ' },
-    title: { 
-      en: 'Telebirr & CBE Birr student pass: Unlimited AI tutor & full books', 
-      am: 'በቴሌብር እና በንግድ ባንክ ያልተገደበ የአስጎብኚ AI እና የመጻሕፍት አገልግሎት' 
-    },
-    highlight: { en: 'From 80 ETB', am: 'ከ80 ብር ጀምሮ' },
-    ctaText: { en: 'Upgrade Pro', am: 'ወደ ፕሮ አሳድግ' },
-    icon: Crown,
-    accentColor: '#EAB308',
-    actionType: 'upgrade'
+    actionType: 'telegram'
   }
 ];
 
@@ -123,14 +123,14 @@ export default function EthioLearnAppPromoBanner({
 }: EthioLearnAppPromoProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
-  const [isDismissed, setIsDismissed] = useState(() => {
-    try {
-      return safeStorage.getItem('ethiolearn_promobar_dismissed') === 'true';
-    } catch {
-      return false;
-    }
-  });
+  const [isDismissed, setIsDismissed] = useState(false);
   const timerRef = useRef<any>(null);
+
+  useEffect(() => {
+    try {
+      safeStorage.removeItem('ethiolearn_promobar_dismissed');
+    } catch {}
+  }, []);
 
   const isAmharic = language === 'am';
   const isProUser = Boolean(profile?.isPro || profile?.proStatus === 'active');
@@ -223,68 +223,13 @@ export default function EthioLearnAppPromoBanner({
         <button
           type="button"
           onClick={handleRestore}
-          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium text-slate-400 hover:text-amber-400 bg-slate-900/60 hover:bg-slate-900 border border-slate-800 transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10.5px] font-medium text-slate-300 hover:text-amber-400 bg-slate-900 border border-slate-800 transition-colors cursor-pointer"
           title={isAmharic ? 'የኢትዮለርን ማስታወቂያ አሳይ' : 'Show EthioLearn updates'}
         >
-          <Sparkles className="w-3 h-3 text-amber-400" />
-          <span>{isAmharic ? 'ጠቃሚ ማስታወቂያ' : 'Updates'}</span>
+          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+          <span>{isAmharic ? 'ጠቃሚ ማስታወቂያ (አሳይ)' : 'Updates & Announcements'}</span>
         </button>
       </div>
-    );
-  }
-
-  // If Pro Scholar is active, render a refined, quiet status strip
-  if (isProUser) {
-    return (
-      <aside 
-        id="ethiolearn-pro-member-banner"
-        aria-label="Pro Scholar Status"
-        className={`my-2 sm:my-3 w-full rounded-xl bg-slate-900/80 border border-amber-500/20 px-3 py-1.5 sm:px-3.5 sm:py-2 text-slate-200 shadow-xs backdrop-blur-md ${className}`}
-        data-context={positionContext}
-      >
-        <div className="flex items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-6 h-6 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
-              <Crown className="w-3.5 h-3.5 fill-amber-400/20" />
-            </div>
-            <div className="flex items-center gap-2 truncate text-[11px] sm:text-xs">
-              <span className="font-bold text-amber-400">
-                {isAmharic ? 'የፕሮ አባል' : 'EthioLearn Pro'}
-              </span>
-              <span className="text-slate-400 hidden sm:inline" aria-hidden="true">·</span>
-              <span className="text-slate-300 truncate">
-                {isAmharic 
-                  ? 'ያልተገደበ የAI አስጎብኚና የፈተናዎች አገልግሎት ንቁ ነው' 
-                  : 'Ad-free study & unlimited AI Tutor unlocked'}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            {onNavigate && (
-              <button
-                type="button"
-                onClick={() => {
-                  playClickChime();
-                  onNavigate('tutor');
-                }}
-                className="text-[11px] font-bold text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-1 cursor-pointer"
-              >
-                <span>{isAmharic ? 'አስጎብኚን ክፈት' : 'AI Tutor'}</span>
-                <ArrowRight className="w-3 h-3" />
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={handleDismiss}
-              className="p-1 text-slate-400 hover:text-slate-200 rounded-md transition-colors cursor-pointer"
-              title={isAmharic ? 'ዝጋ' : 'Close'}
-            >
-              <X className="w-3 h-3" />
-            </button>
-          </div>
-        </div>
-      </aside>
     );
   }
 

@@ -206,9 +206,11 @@ export default function AuthPortalView({
   const [isPopupBlocked, setIsPopupBlocked] = useState(false);
   const [lastSignedOutUser, setLastSignedOutUser] = useState(() => getLastSignedOutUser());
 
-  // Modals
+  // Modals & Terms Agreement
   const [showLegalModal, setShowLegalModal] = useState(false);
   const [legalModalTab, setLegalModalTab] = useState<'terms' | 'privacy'>('terms');
+  const [agreedToTerms, setAgreedToTerms] = useState<boolean>(true);
+  const [termsError, setTermsError] = useState<string | null>(null);
 
   // Load saved accounts from storage on mount & check URL verification params
   useEffect(() => {
@@ -380,6 +382,17 @@ export default function AuthPortalView({
     setAuthError(null);
     setEmailError(null);
     setPasswordError(null);
+    setTermsError(null);
+
+    if (!agreedToTerms) {
+      setTermsError(
+        lang === 'am'
+          ? 'እባክዎ ከመግባትዎ በፊት የአጠቃቀም ደንቦችን እና ሁኔታዎችን ይቀበሉ።'
+          : 'Please agree to our Terms of Use and Conditions to continue.'
+      );
+      playFailureChime();
+      return;
+    }
 
     const emailTrim = email.trim().toLowerCase();
     const passwordTrim = password.trim();
@@ -670,7 +683,18 @@ export default function AuthPortalView({
     setPasswordError(null);
     setConfirmPasswordError(null);
     setCodeError(null);
+    setTermsError(null);
     setVerificationCodeInput('');
+
+    if (!agreedToTerms) {
+      setTermsError(
+        lang === 'am'
+          ? 'እባክዎ ከመመዝገብዎ በፊት የአጠቃቀም ደንቦችን እና ሁኔታዎችን ይቀበሉ።'
+          : 'Please agree to our Terms of Use and Conditions to continue.'
+      );
+      playFailureChime();
+      return;
+    }
 
     const nameTrim = name.trim();
     const phoneRaw = phone.trim();
@@ -1305,21 +1329,21 @@ export default function AuthPortalView({
         {/* Glowing Ambient Top Edge Line */}
         <div className="absolute top-0 inset-x-8 h-[2px] bg-gradient-to-r from-transparent via-[#F59E0B]/50 to-transparent" />
 
-        {/* Top Header: Logo, Branding & Language Switcher */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <EthioLearnLogo size={46} showCardBackground={true} className="drop-shadow-[0_0_15px_rgba(245,158,11,0.25)] shrink-0" />
-            <div className="text-left">
-              <div className="flex items-center gap-1.5">
-                <h2 className="font-serif font-black text-xl text-white tracking-tight">
+        {/* Top Header: Minimized Logo, Branding & Language Switcher */}
+        <div className="flex items-center justify-between gap-3 pb-2 border-b border-slate-800/60">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <EthioLearnLogo size={26} showCardBackground={false} iconOnly={true} className="shrink-0 drop-shadow-[0_0_8px_rgba(245,158,11,0.3)]" />
+            <div className="text-left min-w-0">
+              <div className="flex items-center gap-1.5 leading-tight">
+                <h2 className="font-serif font-black text-base sm:text-lg text-white tracking-tight truncate">
                   EthioLearn Pro
                 </h2>
-                <span className="px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-[#F59E0B] text-[9.5px] font-extrabold tracking-wider font-mono">
+                <span className="px-1.5 py-0.2 rounded-full bg-amber-500/15 border border-amber-500/30 text-[#F59E0B] text-[8.5px] font-black tracking-wider font-mono shrink-0">
                   CAMPUS
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 font-medium tracking-normal mt-0.5">
-                {lang === 'am' ? 'የኢትዮጵያ ዩኒቨርሲቲ ተማሪዎች ዲጂታል ፖርታል' : 'Ethiopian University Scholars Portal'}
+              <p className="text-[10px] text-slate-400 font-medium tracking-normal truncate">
+                {lang === 'am' ? 'የኢትዮጵያ ዩኒቨርሲቲ ተማሪዎች ፖርታል' : 'Ethiopian University Scholars Portal'}
               </p>
             </div>
           </div>
@@ -1672,7 +1696,7 @@ export default function AuthPortalView({
                 </div>
 
                 {/* Remember Me & Pending Code Trigger */}
-                <div className="flex items-center justify-between py-1 text-left">
+                <div className="flex items-center justify-between py-0.5 text-left">
                   <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input
                       type="checkbox"
@@ -1694,6 +1718,69 @@ export default function AuthPortalView({
                     <Key className="w-3 h-3 text-[#F59E0B]" />
                     <span>{lang === 'am' ? 'ኮድ አለኝ' : 'Have code?'}</span>
                   </button>
+                </div>
+
+                {/* Mandatory Student Terms of Use & Conditions Agreement */}
+                <div className={`p-2.5 rounded-xl border transition-all text-left ${
+                  termsError 
+                    ? 'bg-red-950/40 border-red-500/80' 
+                    : agreedToTerms 
+                    ? 'bg-[#090f1d]/90 border-amber-500/30' 
+                    : 'bg-[#090f1d]/90 border-slate-800'
+                }`}>
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={agreedToTerms}
+                      onChange={(e) => {
+                        setAgreedToTerms(e.target.checked);
+                        if (termsError) setTermsError(null);
+                      }}
+                      className="mt-0.5 rounded border-slate-700 bg-[#0a0f1d] text-[#F59E0B] focus:ring-0 cursor-pointer w-4 h-4 accent-[#F59E0B] shrink-0"
+                    />
+                    <div className="text-[11px] text-slate-300 leading-snug">
+                      <span>
+                        {lang === 'am' ? 'በኢትዮ ለርን ፕሮ ' : 'I agree to the '}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          playClickChime();
+                          setLegalModalTab('terms');
+                          setShowLegalModal(true);
+                        }}
+                        className="font-bold text-[#F59E0B] hover:text-amber-300 underline underline-offset-2 transition-colors cursor-pointer"
+                      >
+                        {lang === 'am' ? 'የአጠቃቀም ደንቦች እና ሁኔታዎች (Terms & Conditions)' : 'Terms of Use & Conditions'}
+                      </button>
+                      <span>
+                        {lang === 'am' ? ' እና ' : ' and '}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          playClickChime();
+                          setLegalModalTab('privacy');
+                          setShowLegalModal(true);
+                        }}
+                        className="font-bold text-[#F59E0B] hover:text-amber-300 underline underline-offset-2 transition-colors cursor-pointer"
+                      >
+                        {lang === 'am' ? 'የተማሪ የግላዊነት ፖሊሲ (Privacy Policy)' : 'Student Privacy Policy'}
+                      </button>
+                      <span>
+                        {lang === 'am' ? ' ተስማምቻለሁ።' : '.'}
+                      </span>
+                    </div>
+                  </label>
+                  {termsError && (
+                    <p className="text-[11px] text-red-400 font-medium pl-6 pt-1 flex items-center gap-1">
+                      <span>⚠️</span> {termsError}
+                    </p>
+                  )}
                 </div>
 
                 {/* Submit Sign In Button */}
@@ -2070,6 +2157,69 @@ export default function AuthPortalView({
                       ? 'ምዝገባውን ሲያጠናቅቁ ትክክለኛው ባለ 6-አሃዝ የማረጋገጫ ኮድ ወደ ኢሜይልዎ ይላካል እና በFirebase ይረጋገጣል።' 
                       : 'An authentic 6-digit activation code is sent to your email address and verified cryptographically by Firebase.'}
                   </div>
+                </div>
+
+                {/* Mandatory Student Terms of Use & Conditions Agreement */}
+                <div className={`p-2.5 rounded-xl border transition-all text-left ${
+                  termsError 
+                    ? 'bg-red-950/40 border-red-500/80' 
+                    : agreedToTerms 
+                    ? 'bg-[#090f1d]/90 border-amber-500/30' 
+                    : 'bg-[#090f1d]/90 border-slate-800'
+                }`}>
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={agreedToTerms}
+                      onChange={(e) => {
+                        setAgreedToTerms(e.target.checked);
+                        if (termsError) setTermsError(null);
+                      }}
+                      className="mt-0.5 rounded border-slate-700 bg-[#0a0f1d] text-[#F59E0B] focus:ring-0 cursor-pointer w-4 h-4 accent-[#F59E0B] shrink-0"
+                    />
+                    <div className="text-[11px] text-slate-300 leading-snug">
+                      <span>
+                        {lang === 'am' ? 'በኢትዮ ለርን ፕሮ ' : 'I agree to the '}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          playClickChime();
+                          setLegalModalTab('terms');
+                          setShowLegalModal(true);
+                        }}
+                        className="font-bold text-[#F59E0B] hover:text-amber-300 underline underline-offset-2 transition-colors cursor-pointer"
+                      >
+                        {lang === 'am' ? 'የአጠቃቀም ደንቦች እና ሁኔታዎች (Terms & Conditions)' : 'Terms of Use & Conditions'}
+                      </button>
+                      <span>
+                        {lang === 'am' ? ' እና ' : ' and '}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          playClickChime();
+                          setLegalModalTab('privacy');
+                          setShowLegalModal(true);
+                        }}
+                        className="font-bold text-[#F59E0B] hover:text-amber-300 underline underline-offset-2 transition-colors cursor-pointer"
+                      >
+                        {lang === 'am' ? 'የተማሪ የግላዊነት ፖሊሲ (Privacy Policy)' : 'Student Privacy Policy'}
+                      </button>
+                      <span>
+                        {lang === 'am' ? ' ተስማምቻለሁ።' : '.'}
+                      </span>
+                    </div>
+                  </label>
+                  {termsError && (
+                    <p className="text-[11px] text-red-400 font-medium pl-6 pt-1 flex items-center gap-1">
+                      <span>⚠️</span> {termsError}
+                    </p>
+                  )}
                 </div>
 
                 {/* Submit Create Account Button */}
@@ -2654,6 +2804,11 @@ export default function AuthPortalView({
         onClose={() => setShowLegalModal(false)}
         language={lang}
         initialTab={legalModalTab}
+        onAcceptAndClose={() => {
+          setAgreedToTerms(true);
+          setTermsError(null);
+          setShowLegalModal(false);
+        }}
       />
     </div>
   );

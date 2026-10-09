@@ -7,14 +7,16 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  FileText, Search, Star, Bookmark, BookOpen, ChevronRight, ChevronLeft,
+  FileText, Search, Star, Bookmark, BookOpen, ChevronRight, ChevronLeft, ArrowLeft,
   X, Check, Bot, Sparkles, Printer, ZoomIn, ZoomOut, Maximize2, Minimize2,
   Download, Moon, Sun, Layers, HelpCircle, CheckCircle2, RotateCcw, Share2,
   ExternalLink, Folder, CloudDownload, Eye, ShieldCheck, LayoutGrid, List, RefreshCw, Info,
-  Play, Video, Tv, Film, ListVideo, Focus, HardDrive, WifiOff, Trash2, Loader2, CheckCheck
+  Play, Video, Tv, Film, ListVideo, Focus, HardDrive, WifiOff, Trash2, Loader2, CheckCheck,
+  Lock, Unlock, Smartphone, SlidersHorizontal, Coffee
 } from 'lucide-react';
 import { StudentProfile } from '../types';
 import { playClickChime, playSuccessChime } from '../utils/audio';
+import { isAdministratorEmail } from '../utils/adminAuth';
 import { getChapterContent } from '../data/textbookChapterContent';
 import { safeStorage } from '../utils/safeStorage';
 import { fetchSupabaseBooks, fetchSupabaseLessons } from '../utils/supabaseClient';
@@ -145,29 +147,28 @@ export function getBookPdfLinks(rawUrl?: string) {
 /**
  * 🎯 Normalize course subject keys to prevent any duplicate entries across Supabase & Curriculum lists
  */
-export function getCanonicalSubjectKey(str?: string): string {
-  if (!str) return '';
-  const s = str.toLowerCase();
+export function getCanonicalSubjectKey(title?: string, code?: string, subject?: string): string {
+  const s = `${title || ''} ${code || ''} ${subject || ''}`.toLowerCase();
   if (s.includes('fitness') || s.includes('sport') || s.includes('spsc')) return 'fitness';
   if (s.includes('physics') || s.includes('phys')) return 'physics';
   if (s.includes('biology') || s.includes('biol')) return 'biology';
   if (s.includes('chem')) return 'chemistry';
-  if (s.includes('math') && (s.includes('natural') || s.includes('nat'))) return 'math_natural';
-  if (s.includes('math') && (s.includes('social') || s.includes('soc'))) return 'math_social';
+  if (s.includes('math') && (s.includes('social') || s.includes('soc') || s.includes('1012'))) return 'math_social';
+  if (s.includes('math') || s.includes('calculus')) return 'math_natural';
   if (s.includes('econ')) return 'economics';
   if (s.includes('emerg') || s.includes('emte') || s.includes('4ir')) return 'emerging_tech';
   if (s.includes('entrep') || s.includes('mgmt')) return 'entrepreneurship';
-  if (s.includes('logic') || s.includes('phil') || s.includes('critical')) return 'critical_thinking';
+  if (s.includes('logic') || s.includes('phil') || s.includes('critical') || s.includes('loct')) return 'critical_thinking';
   if (s.includes('psych') || s.includes('pscy') || s.includes('life skill')) return 'psychology';
   if (s.includes('geog') || s.includes('gees')) return 'geography';
   if (s.includes('global') || s.includes('gltr')) return 'global_trends';
   if (s.includes('inclu') || s.includes('special need')) return 'inclusiveness';
   if (s.includes('civic') || s.includes('mcie') || s.includes('moral')) return 'civics';
   if (s.includes('english') && (s.includes('ii') || s.includes(' 2') || s.includes('1012'))) return 'english_2';
-  if (s.includes('english') || s.includes('flen') || s.includes(' 1') || s.includes('1011')) return 'english_1';
+  if (s.includes('english') || s.includes('flen') || s.includes('communicat') || s.includes('1011')) return 'english_1';
   if (s.includes('hist')) return 'history';
   if (s.includes('anthro')) return 'anthropology';
-  return s.replace(/[^a-z0-9]/g, '');
+  return (title || 'module').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30);
 }
 
 export interface LectureItem {
@@ -1141,6 +1142,9 @@ export default function BookStoreView({
   const [downloadingMap, setDownloadingMap] = useState<Record<string, number>>({});
   const [activeOfflineRecord, setActiveOfflineRecord] = useState<OfflineBookRecord | null>(null);
   const [activeOfflineBlobUrl, setActiveOfflineBlobUrl] = useState<string | null>(null);
+  const [proVideoModalBook, setProVideoModalBook] = useState<UnifiedBookItem | null>(null);
+  const isProUser = Boolean(profile?.isPro || profile?.proStatus === 'active');
+  const isUserAdmin = Boolean(profile?.email && isAdministratorEmail(profile.email)) || profile?.userRole === 'admin' || (profile as any)?.role === 'admin';
   const [isZenMode, setIsZenMode] = useState<boolean>(false);
   const [pdfViewerMode, setPdfViewerMode] = useState<'drive' | 'native' | 'gdocs'>('drive');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -1228,141 +1232,142 @@ export default function BookStoreView({
     });
   };
 
-  // ─── UNIFIED BOOKS REPOSITORY (Supabase Live Table + Curriculum Metadata) ───
+  // ─── UNIFIED BOOKS REPOSITORY (Strictly Deduplicated: 0 Repeated PDFs) ───
   const unifiedBooks = useMemo(() => {
-    const list: UnifiedBookItem[] = [];
-    const matchedModuleIds = new Set<string>();
+    const canonicalMap = new Map<string, UnifiedBookItem>();
 
-    // 1. Process all books from Supabase table first
-    (supabaseList || []).forEach((sbBook) => {
-      const sbTitle = (sbBook.title || '').trim();
-      const sbSubject = (sbBook.subject || '').trim();
-      const normTitle = sbTitle.toLowerCase();
-      const normSub = sbSubject.toLowerCase();
-
-      // Find matching curriculum module for chapters and rich metadata
-      const match = FRESHMAN_MODULES.find(m => {
-        const mTitle = m.title.toLowerCase();
-        const mSub = m.subject.toLowerCase();
-        return (
-          mTitle === normTitle ||
-          mTitle.includes(normTitle) ||
-          normTitle.includes(mTitle) ||
-          mSub.includes(normSub) ||
-          normSub.includes(mSub)
-        );
+    // 1. Seed with official Ethiopian curriculum modules (canonical definitions)
+    FRESHMAN_MODULES.forEach((mod) => {
+      const cKey = getCanonicalSubjectKey(mod.title, mod.code, mod.subject);
+      const pdfLinks = getBookPdfLinks(
+        mod.googleDriveFileId ? `https://drive.google.com/uc?export=download&id=${mod.googleDriveFileId}` : ''
+      );
+      const coverUrl = resolveBookCover({
+        cover_url: null,
+        pdf_url: mod.googleDriveFileId ? `https://drive.google.com/uc?export=download&id=${mod.googleDriveFileId}` : '',
+        subject: mod.subject,
+        title: mod.title
       });
 
-      if (match) {
-        matchedModuleIds.add(match.id);
-      }
-
-      const pdfLinks = getBookPdfLinks(
-        sbBook.pdf_url || (match?.googleDriveFileId ? `https://drive.google.com/uc?export=download&id=${match.googleDriveFileId}` : '')
+      const lectures = resolveBookLectures(
+        { id: mod.id, subject: mod.subject, title: mod.title },
+        supabaseLessons
       );
 
+      const isBio = cKey === 'biology' || mod.subject.toLowerCase().includes('bio') || mod.title.toLowerCase().includes('bio');
+
+      canonicalMap.set(cKey, {
+        id: mod.id,
+        code: mod.code,
+        title: mod.title,
+        amharicTitle: mod.amharicTitle,
+        subject: mod.subject,
+        grade: 'Freshman',
+        stream: mod.stream,
+        semester: mod.semester,
+        coverUrl,
+        pdfUrl: pdfLinks.pdfUrl,
+        previewUrl: pdfLinks.previewUrl,
+        downloadUrl: pdfLinks.downloadUrl,
+        description: mod.description,
+        amharicDescription: mod.amharicDescription,
+        chapters: mod.chapters,
+        pages: mod.pages,
+        creditHours: mod.creditHours,
+        fileSizeMb: mod.fileSizeMb,
+        rating: mod.rating,
+        isDrive: pdfLinks.isDrive,
+        isFromSupabase: false,
+        originalModule: mod,
+        hasVideoLecture: lectures.length > 0,
+        isVideoFree: isBio, // General Biology is Open & Free for all students!
+        lectures,
+        videoUrl: lectures[0]?.url || ''
+      });
+    });
+
+    // 2. Merge all books from Supabase table - avoids creating duplicates!
+    (supabaseList || []).forEach((sbBook) => {
+      const sbTitle = (sbBook.title || '').trim();
+      const sbCode = (sbBook.code || '').trim();
+      const sbSubject = (sbBook.subject || '').trim();
+      if (!sbTitle && !sbSubject) return;
+
+      const cKey = getCanonicalSubjectKey(sbTitle, sbCode, sbSubject);
+      const existing = canonicalMap.get(cKey);
+
+      const pdfLinks = getBookPdfLinks(
+        sbBook.pdf_url || existing?.pdfUrl || ''
+      );
       const coverUrl = resolveBookCover({
-        cover_url: sbBook.cover_url,
-        pdf_url: sbBook.pdf_url || (match?.googleDriveFileId ? `https://drive.google.com/uc?export=download&id=${match.googleDriveFileId}` : ''),
-        subject: sbSubject || match?.subject,
-        title: sbTitle || match?.title
+        cover_url: sbBook.cover_url || existing?.coverUrl,
+        pdf_url: sbBook.pdf_url || existing?.pdfUrl || '',
+        subject: sbSubject || existing?.subject,
+        title: sbTitle || existing?.title
       });
 
       const lectures = resolveBookLectures(
         {
-          id: sbBook.id || match?.id,
-          subject: sbSubject || match?.subject,
-          title: sbTitle || match?.title,
-          video_url: sbBook.video_url,
-          videoUrl: sbBook.videoUrl,
+          id: sbBook.id || existing?.id,
+          subject: sbSubject || existing?.subject,
+          title: sbTitle || existing?.title,
+          video_url: sbBook.video_url || existing?.videoUrl,
+          videoUrl: sbBook.videoUrl || existing?.videoUrl,
           lectures: sbBook.lectures,
           youtube_url: sbBook.youtube_url
         },
         supabaseLessons
       );
 
-      list.push({
-        id: sbBook.id || match?.id || `sb_${Math.random()}`,
-        code: match?.code || (sbSubject ? `${sbSubject.slice(0, 4).toUpperCase()} 1011` : 'MOD 1011'),
-        title: sbTitle || match?.title || 'University Textbook',
-        amharicTitle: match?.amharicTitle || (language === 'am' ? 'የዩኒቨርሲቲ ሞጁል' : ''),
-        subject: sbSubject || match?.subject || 'University Curriculum',
-        grade: sbBook.grade || 'Freshman',
-        stream: match?.stream || (normSub.includes('phys') || normSub.includes('chem') || normSub.includes('bio') || normSub.includes('math') ? 'Natural Science' : normSub.includes('soc') || normSub.includes('econ') || normSub.includes('hist') || normSub.includes('anth') ? 'Social Science' : 'Common'),
-        semester: match?.semester || 'Semester I',
-        coverUrl,
-        pdfUrl: pdfLinks.pdfUrl,
-        previewUrl: pdfLinks.previewUrl,
-        downloadUrl: pdfLinks.downloadUrl,
-        description: sbBook.description || match?.description || 'Official Ethiopian higher education university curriculum module textbook.',
-        amharicDescription: match?.amharicDescription || 'ኦፊሴላዊ የኢትዮጵያ ከፍተኛ ትምህርት ተቋማት የመጀመሪያ ዓመት ካሪኩለም መማሪያ መጽሐፍ።',
-        chapters: match?.chapters || ['Unit 1: Fundamentals & Scope', 'Unit 2: Theoretical Foundations', 'Unit 3: Applied Principles & Analysis', 'Unit 4: Review, Problems & Assessment'],
-        pages: match?.pages || 160,
-        creditHours: match?.creditHours || 3,
-        fileSizeMb: match?.fileSizeMb || 4.2,
-        rating: match?.rating || 4.9,
-        isDrive: pdfLinks.isDrive,
-        isFromSupabase: true,
-        originalModule: match,
-        hasVideoLecture: lectures.length > 0,
-        lectures,
-        videoUrl: lectures[0]?.url || ''
-      });
-    });
+      const isBio = cKey === 'biology' || sbSubject.toLowerCase().includes('bio') || sbTitle.toLowerCase().includes('bio');
 
-    // 2. Append any curriculum modules that were not in Supabase yet
-    FRESHMAN_MODULES.forEach(mod => {
-      if (!matchedModuleIds.has(mod.id)) {
-        const pdfLinks = getBookPdfLinks(
-          mod.googleDriveFileId ? `https://drive.google.com/uc?export=download&id=${mod.googleDriveFileId}` : ''
-        );
-        const coverUrl = resolveBookCover({
-          cover_url: null,
-          pdf_url: mod.googleDriveFileId ? `https://drive.google.com/uc?export=download&id=${mod.googleDriveFileId}` : '',
-          subject: mod.subject,
-          title: mod.title
+      if (existing) {
+        // Merge enriched data from Supabase without creating a duplicate card
+        canonicalMap.set(cKey, {
+          ...existing,
+          pdfUrl: sbBook.pdf_url ? pdfLinks.pdfUrl : existing.pdfUrl,
+          previewUrl: sbBook.pdf_url ? pdfLinks.previewUrl : existing.previewUrl,
+          downloadUrl: sbBook.pdf_url ? pdfLinks.downloadUrl : existing.downloadUrl,
+          coverUrl: sbBook.cover_url ? coverUrl : existing.coverUrl,
+          hasVideoLecture: lectures.length > 0 || existing.hasVideoLecture,
+          isVideoFree: isBio,
+          lectures: lectures.length > 0 ? lectures : existing.lectures,
+          videoUrl: lectures[0]?.url || existing.videoUrl || '',
+          isFromSupabase: true
         });
-
-        const lectures = resolveBookLectures(
-          {
-            id: mod.id,
-            subject: mod.subject,
-            title: mod.title
-          },
-          supabaseLessons
-        );
-
-        list.push({
-          id: mod.id,
-          code: mod.code,
-          title: mod.title,
-          amharicTitle: mod.amharicTitle,
-          subject: mod.subject,
-          grade: 'Freshman',
-          stream: mod.stream,
-          semester: mod.semester,
+      } else {
+        // Novel book not in curriculum list
+        canonicalMap.set(cKey, {
+          id: sbBook.id || `sb_${Math.random()}`,
+          code: sbBook.code || (sbSubject ? `${sbSubject.slice(0, 4).toUpperCase()} 1011` : 'MOD 1011'),
+          title: sbTitle || 'University Textbook',
+          amharicTitle: sbBook.amharicTitle || (language === 'am' ? 'የዩኒቨርሲቲ ሞጁል' : ''),
+          subject: sbSubject || 'University Curriculum',
+          grade: sbBook.grade || 'Freshman',
+          stream: sbBook.stream || 'Common',
+          semester: sbBook.semester || 'Semester I',
           coverUrl,
           pdfUrl: pdfLinks.pdfUrl,
           previewUrl: pdfLinks.previewUrl,
           downloadUrl: pdfLinks.downloadUrl,
-          description: mod.description,
-          amharicDescription: mod.amharicDescription,
-          chapters: mod.chapters,
-          pages: mod.pages,
-          creditHours: mod.creditHours,
-          fileSizeMb: mod.fileSizeMb,
-          rating: mod.rating,
+          description: sbBook.description || 'Official Ethiopian higher education university curriculum module textbook.',
+          amharicDescription: sbBook.amharicDescription || 'ኦፊሴላዊ የኢትዮጵያ ከፍተኛ ትምህርት ተቋማት የመጀመሪያ ዓመት ካሪኩለም መማሪያ መጽሐፍ።',
+          chapters: sbBook.chapters || ['Unit 1: Fundamentals & Scope', 'Unit 2: Theoretical Foundations', 'Unit 3: Applied Principles & Analysis', 'Unit 4: Review, Problems & Assessment'],
+          pages: sbBook.pages || 160,
+          creditHours: sbBook.creditHours || 3,
+          fileSizeMb: sbBook.fileSizeMb || 4.2,
+          rating: sbBook.rating || 4.9,
           isDrive: pdfLinks.isDrive,
-          isFromSupabase: false,
-          originalModule: mod,
+          isFromSupabase: true,
           hasVideoLecture: lectures.length > 0,
+          isVideoFree: isBio,
           lectures,
           videoUrl: lectures[0]?.url || ''
         });
       }
     });
 
-    return list;
+    return Array.from(canonicalMap.values());
   }, [supabaseList, supabaseLessons, language]);
 
   // Filtered & Sorted Modules
@@ -1533,8 +1538,15 @@ export default function BookStoreView({
     chapterIdx: number = 0, 
     defaultTab: 'drive' | 'video' | 'cover' | 'notes' = 'drive',
     lectureIdx: number = 0,
-    startInFullPage: boolean = false
+    startInFullPage: boolean = true
   ) => {
+    // Biology videos are 100% Free! All other courses require Pro for video playback
+    if (defaultTab === 'video' && !isProUser && !book.isVideoFree) {
+      playClickChime();
+      setProVideoModalBook(book);
+      return;
+    }
+
     playClickChime();
     setActivePdfBook(book);
     setActiveChapterIndex(chapterIdx);
@@ -1546,7 +1558,7 @@ export default function BookStoreView({
     setAiPanelOpen(false);
     setAiMode(null);
     setQuizAnswers({});
-    setIsZenMode(startInFullPage);
+    setIsZenMode(defaultTab === 'drive' ? true : startInFullPage);
     onStudyAction();
 
     // Check offline storage for cached PDF
@@ -1584,6 +1596,47 @@ export default function BookStoreView({
     setCoverModalBook(null);
   };
   const handleClosePdf = handleCloseBook;
+
+  // 🔄 Sync reader back navigation with browser history, Android gesture & Telegram BackButton
+  useEffect(() => {
+    if (!activePdfBook) return;
+
+    // Push state so device hardware back button or swipe-back closes the reader
+    window.history.pushState({ ethioLearnBookOpen: true }, '');
+
+    const handlePopState = () => {
+      handleCloseBook();
+    };
+    window.addEventListener('popstate', handlePopState);
+
+    // Telegram WebApp native BackButton integration
+    const tg = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp : null;
+    if (tg?.BackButton) {
+      tg.BackButton.show();
+      tg.BackButton.onClick(handleCloseBook);
+    }
+
+    // Physical Escape key on keyboard
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isZenMode) {
+          setIsZenMode(false);
+        } else {
+          handleCloseBook();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('keydown', handleKeyDown);
+      if (tg?.BackButton) {
+        tg.BackButton.offClick(handleCloseBook);
+        tg.BackButton.hide();
+      }
+    };
+  }, [activePdfBook, isZenMode]);
 
   const currentChapterTitle = activePdfBook?.chapters[activeChapterIndex] || 'Chapter 1';
   const currentChapterContent = useMemo(() => {
@@ -1824,7 +1877,7 @@ export default function BookStoreView({
             return (
               <div
                 key={book.id}
-                onClick={() => handleOpenBook(book, 0, 'drive')}
+                onClick={() => handleOpenBook(book, 0, 'drive', 0, true)}
                 className="group relative bg-[#111C35] hover:bg-[#142344] border border-slate-800/90 hover:border-amber-400/50 rounded-2xl p-3 sm:p-3.5 transition-all duration-200 flex flex-col justify-between gap-3 cursor-pointer shadow-md hover:shadow-xl hover:-translate-y-1"
               >
                 {/* 3D Realistic Textbook Cover Page */}
@@ -2017,7 +2070,7 @@ export default function BookStoreView({
             return (
               <div
                 key={book.id}
-                onClick={() => handleOpenBook(book, 0, 'drive')}
+                onClick={() => handleOpenBook(book, 0, 'drive', 0, true)}
                 className="group relative p-4 rounded-2xl bg-[#111C35] border border-slate-800/90 hover:border-amber-400/40 hover:bg-[#14213F] transition-all flex flex-col justify-between gap-3 text-left cursor-pointer shadow-md hover:shadow-lg"
               >
                 {/* Top: Cover Thumbnail + Metadata */}
@@ -2201,289 +2254,321 @@ export default function BookStoreView({
                     : 'bg-[#0A1128] text-slate-100'
                 }`}
               >
-                {/* 🌟 FULL PAGE VIEW FLOATING CONTROLLER (100% Edge-to-Edge Full Page View) */}
+                {/* 🌟 1. FOCUS MODE FLOATING PILL (Positioned at TOP-LEFT) */}
+                {/* Leaves Google Drive's native top-right pop-out button COMPLETELY clear! */}
                 {isZenMode && (
-                  <div className="absolute top-3 right-3 sm:right-6 z-[1000000] flex items-center gap-1.5 sm:gap-2 bg-slate-950/92 backdrop-blur-xl px-3 py-1.5 sm:px-4 sm:py-2 rounded-full border border-amber-500/50 shadow-2xl transition-all hover:opacity-100 opacity-90">
-                    <div className="flex items-center gap-1.5 pr-2 border-r border-white/20 max-w-[120px] sm:max-w-[200px] md:max-w-xs truncate">
-                      <FileText className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                      <span className="text-[11px] font-bold text-slate-100 truncate">
-                        {activePdfModule.title}
-                      </span>
-                    </div>
-
-                    {activeOfflineBlobUrl && (
-                      <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hidden xs:inline">
-                        Offline
-                      </span>
-                    )}
-
-                    {/* Exit Full Page Button */}
+                  <div className="absolute top-3 left-3 sm:left-4 z-[1000000] flex items-center gap-1.5 bg-slate-950/90 backdrop-blur-xl px-2.5 py-1.5 rounded-full border border-amber-500/50 shadow-2xl text-white select-none">
                     <button
+                      type="button"
+                      onClick={handleCloseBook}
+                      className="px-2.5 py-1 rounded-full bg-white/10 hover:bg-red-500/30 text-slate-200 hover:text-red-300 transition-colors cursor-pointer flex items-center gap-1.5 text-[11px] font-bold active:scale-95"
+                      title={language === 'am' ? 'ተመለስ (ዝጋ)' : 'Back / Close'}
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5 text-amber-400" />
+                      <span>{language === 'am' ? 'ተመለስ' : 'Back'}</span>
+                    </button>
+
+                    <div className="h-3 w-px bg-white/20" />
+
+                    <span className="text-[11px] font-bold text-slate-200 max-w-[120px] sm:max-w-[180px] truncate">
+                      {activePdfModule.title}
+                    </span>
+
+                    <div className="h-3 w-px bg-white/20" />
+
+                    <button
+                      type="button"
                       onClick={() => { playClickChime(); setIsZenMode(false); }}
-                      className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                      title={language === 'am' ? 'መደበኛ እይታ መልስ' : 'Show Toolbars & Menus'}
+                      className="px-2 py-0.5 bg-white/10 hover:bg-white/20 text-slate-200 rounded-full text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                      title={language === 'am' ? 'መሳሪያዎችን አሳይ' : 'Exit Focus (Show Tools)'}
                     >
-                      <Minimize2 className="w-3.5 h-3.5 text-amber-400" />
-                      <span className="hidden sm:inline">{language === 'am' ? 'መደበኛ እይታ' : 'Normal View'}</span>
+                      <Minimize2 className="w-3 h-3 text-amber-400" />
+                      <span>{language === 'am' ? 'መሳሪያዎች' : 'Tools'}</span>
                     </button>
 
-                    {/* Hardware Fullscreen Toggle */}
-                    <button
-                      onClick={toggleFullscreen}
-                      className="p-1.5 hover:bg-white/10 text-slate-300 hover:text-white rounded-lg transition-colors cursor-pointer"
-                      title={isTrueFullscreen ? 'Exit Hardware Fullscreen' : 'Hardware Fullscreen (ሙሉ ማያ)'}
-                    >
-                      {isTrueFullscreen ? <Minimize2 className="w-3.5 h-3.5 text-amber-400" /> : <Maximize2 className="w-3.5 h-3.5 text-amber-400" />}
-                    </button>
-
-                    {/* External Link */}
                     {activePdfModule.pdfUrl && (
                       <a
                         href={activePdfModule.pdfUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="p-1.5 hover:bg-white/10 text-slate-300 hover:text-amber-400 rounded-lg transition-colors cursor-pointer hidden md:flex items-center justify-center"
-                        title="Open in new window"
+                        onClick={() => playSuccessChime()}
+                        className="p-1 rounded-full hover:bg-white/10 text-amber-400 transition-colors"
+                        title="Open in Google Drive App"
                       >
-                        <ExternalLink className="w-3.5 h-3.5" />
+                        <Smartphone className="w-3.5 h-3.5" />
                       </a>
                     )}
-
-                    {/* Close */}
-                    <button
-                      onClick={handleCloseBook}
-                      className="p-1.5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded-full transition-colors cursor-pointer ml-0.5"
-                      title="Close Reader"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
                   </div>
                 )}
 
-                {/* 1. COMPACT PRO HEADER (Hidden when Zen Focus Mode is active) */}
+                {/* 🌟 2. UNIFIED REDESIGNED TOP BAR (Clean, Single Line, Responsive) */}
                 {!isZenMode && (
-                  <div
-                    className={`px-3 sm:px-4 py-2 sm:py-2.5 border-b shrink-0 flex items-center justify-between gap-2 text-xs transition-colors ${
+                  <header
+                    className={`h-14 sm:h-16 px-2.5 sm:px-4 border-b flex items-center justify-between gap-2 shrink-0 z-30 transition-colors backdrop-blur-md ${
                       readerTheme === 'light'
-                        ? 'bg-[#F8FAFC] border-slate-200 text-slate-800'
+                        ? 'bg-white/95 border-slate-200 text-slate-800 shadow-xs'
                         : readerTheme === 'sepia'
-                        ? 'bg-[#F5EBD4] border-[#E2D5B7] text-[#362719]'
-                        : 'bg-[#0B132B] border-white/10 text-slate-200'
+                        ? 'bg-[#F4EBD9]/95 border-[#E2D5B8] text-[#362719] shadow-xs'
+                        : 'bg-[#0F172A]/95 border-slate-800 text-slate-100 shadow-md'
                     }`}
                   >
-                {/* Left: Back / Close & Course Identity */}
-                <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-initial">
-                  <button
-                    onClick={handleCloseBook}
-                    className={`p-1.5 sm:p-2 rounded-xl transition-colors cursor-pointer shrink-0 ${
-                      readerTheme === 'light'
-                        ? 'hover:bg-slate-200 text-slate-600 hover:text-slate-900'
-                        : readerTheme === 'sepia'
-                        ? 'hover:bg-[#EADBBE] text-[#4A3725]'
-                        : 'hover:bg-white/10 text-slate-400 hover:text-white'
-                    }`}
-                    title="Close Reader (ዝጋ)"
-                  >
-                    <ChevronLeft className="w-5 h-5 sm:hidden" />
-                    <X className="w-4 h-4 hidden sm:block text-slate-400 hover:text-white" />
-                  </button>
+                    {/* LEFT: Back Button + Course Code & Title */}
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                      <button
+                        type="button"
+                        onClick={handleCloseBook}
+                        className={`px-3 py-2 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[44px] select-none active:scale-95 shadow-xs ${
+                          readerTheme === 'light'
+                            ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-800'
+                            : readerTheme === 'sepia'
+                            ? 'bg-[#EADECE] hover:bg-[#DDD0C0] border-[#D5C5B0] text-[#3A2A1A]'
+                            : 'bg-slate-800/90 hover:bg-slate-700 border-amber-500/40 text-slate-100 hover:text-white'
+                        }`}
+                        title={language === 'am' ? 'ወደ መጻሕፍት ማከማቻ ተመለስ' : 'Back to Library'}
+                        aria-label={language === 'am' ? 'ተመለስ' : 'Back'}
+                      >
+                        <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500 shrink-0" />
+                        <span className="text-xs sm:text-sm font-bold tracking-tight">
+                          {language === 'am' ? 'ተመለስ' : 'Back'}
+                        </span>
+                      </button>
 
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[9.5px] font-black uppercase px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-500 dark:text-amber-400 font-mono shrink-0">
-                        {activePdfModule.code}
-                      </span>
-                      <span className="hidden sm:inline text-[11px] text-slate-400 font-bold truncate">
-                        {activePdfModule.stream} • {activePdfModule.creditHours} Cr
-                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
+                          <span className="font-bold text-amber-500 font-mono">
+                            {activePdfModule.code}
+                          </span>
+                          <span aria-hidden="true">·</span>
+                          <span className="truncate">
+                            {activePdfModule.stream || (language === 'am' ? 'ሞጁል' : 'Module')}
+                          </span>
+                        </div>
+                        <h1 className="text-xs sm:text-sm font-bold truncate leading-tight tracking-tight">
+                          {activePdfModule.title}
+                        </h1>
+                      </div>
                     </div>
-                    <h2 className="text-xs sm:text-sm font-bold truncate leading-tight">
-                      {activePdfModule.title}
-                    </h2>
-                  </div>
-                </div>
 
-                {/* Center: Mode Tabs Switcher */}
-                <div
-                  className={`flex items-center rounded-xl p-0.5 sm:p-1 gap-0.5 sm:gap-1 text-[11px] sm:text-xs shrink-0 ${
-                    readerTheme === 'light'
-                      ? 'bg-slate-200/80 border border-slate-300'
-                      : readerTheme === 'sepia'
-                      ? 'bg-[#EADEBF] border border-[#D5C5A1]'
-                      : 'bg-white/5 border border-white/10'
-                  }`}
-                >
-                  <button
-                    onClick={() => { playClickChime(); setReaderTab('drive'); }}
-                    className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg font-bold transition-all flex items-center gap-1 cursor-pointer ${
-                      readerTab === 'drive'
-                        ? 'bg-amber-500 text-slate-950 shadow-sm'
-                        : readerTheme === 'light'
-                        ? 'text-slate-600 hover:text-slate-900'
-                        : readerTheme === 'sepia'
-                        ? 'text-[#5C4530] hover:text-[#2E2012]'
-                        : 'text-slate-300 hover:text-white'
-                    }`}
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span>{language === 'am' ? 'ፒዲኤፍ አንብብ' : 'Read PDF'}</span>
-                  </button>
-
-                  <button
-                    onClick={() => { playClickChime(); setReaderTab('video'); }}
-                    className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg font-bold transition-all flex items-center gap-1 cursor-pointer ${
-                      readerTab === 'video'
-                        ? 'bg-amber-500 text-slate-950 shadow-sm'
-                        : readerTheme === 'light'
-                        ? 'text-slate-600 hover:text-slate-900'
-                        : readerTheme === 'sepia'
-                        ? 'text-[#5C4530] hover:text-[#2E2012]'
-                        : 'text-slate-300 hover:text-white'
-                    }`}
-                  >
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>{language === 'am' ? 'ቪዲዮ' : 'Lectures'}</span>
+                    {/* CENTER: Clean Mode Switcher (If video lectures exist) */}
                     {activePdfModule.lectures && activePdfModule.lectures.length > 0 && (
-                      <span className={`text-[9.5px] px-1.5 py-0.2 rounded-full font-mono font-black ${
-                        readerTab === 'video' ? 'bg-slate-950 text-amber-400' : 'bg-amber-500/20 text-amber-400'
-                      }`}>
-                        {activePdfModule.lectures.length}
-                      </span>
-                    )}
-                  </button>
-
-                  <button
-                    onClick={() => { playClickChime(); setReaderTab('cover'); }}
-                    className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg font-bold transition-all flex items-center gap-1 cursor-pointer ${
-                      readerTab === 'cover'
-                        ? 'bg-amber-500 text-slate-950 shadow-sm'
-                        : readerTheme === 'light'
-                        ? 'text-slate-600 hover:text-slate-900'
-                        : readerTheme === 'sepia'
-                        ? 'text-[#5C4530] hover:text-[#2E2012]'
-                        : 'text-slate-300 hover:text-white'
-                    }`}
-                  >
-                    <BookOpen className="w-3.5 h-3.5" />
-                    <span className="hidden xs:inline sm:inline">{language === 'am' ? 'ሽፋን' : 'Cover'}</span>
-                  </button>
-
-                  <button
-                    onClick={() => { playClickChime(); setReaderTab('notes'); }}
-                    className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg font-bold transition-all flex items-center gap-1 cursor-pointer ${
-                      readerTab === 'notes'
-                        ? 'bg-amber-500 text-slate-950 shadow-sm'
-                        : readerTheme === 'light'
-                        ? 'text-slate-600 hover:text-slate-900'
-                        : readerTheme === 'sepia'
-                        ? 'text-[#5C4530] hover:text-[#2E2012]'
-                        : 'text-slate-300 hover:text-white'
-                    }`}
-                  >
-                    <Layers className="w-3.5 h-3.5" />
-                    <span className="hidden xs:inline sm:inline">{language === 'am' ? 'ማስታወሻ' : 'Notes'}</span>
-                  </button>
-                </div>
-
-                {/* Right: Pro Reading Controls (Theme, Fullscreen, AI, Close) */}
-                <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-                  {/* Theme Switcher: Dark | Light | Sepia */}
-                  <div
-                    className={`flex items-center rounded-xl p-0.5 border text-xs ${
-                      readerTheme === 'light'
-                        ? 'bg-slate-200/80 border-slate-300'
-                        : readerTheme === 'sepia'
-                        ? 'bg-[#EADEBF] border-[#D5C5A1]'
-                        : 'bg-white/5 border border-white/10'
-                    }`}
-                  >
-                    <button
-                      onClick={() => { playClickChime(); setReaderTheme('dark'); }}
-                      className={`p-1 sm:p-1.5 rounded-lg transition-colors cursor-pointer ${
-                        readerTheme === 'dark'
-                          ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                      title="Dark Slate Theme"
-                    >
-                      <Moon className="w-3.5 h-3.5" />
-                    </button>
-
-                    <button
-                      onClick={() => { playClickChime(); setReaderTheme('light'); }}
-                      className={`p-1 sm:p-1.5 rounded-lg transition-colors cursor-pointer ${
+                      <div className={`hidden md:flex items-center p-0.5 rounded-xl border ${
                         readerTheme === 'light'
-                          ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
-                          : 'text-slate-500 hover:text-slate-800'
-                      }`}
-                      title="Paper White Theme"
-                    >
-                      <Sun className="w-3.5 h-3.5" />
-                    </button>
+                          ? 'bg-slate-100 border-slate-200'
+                          : readerTheme === 'sepia'
+                          ? 'bg-[#EADECE] border-[#D5C5B0]'
+                          : 'bg-slate-800 border-slate-700'
+                      }`}>
+                        <button
+                          type="button"
+                          onClick={() => { playClickChime(); setReaderTab('drive'); }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                            readerTab === 'drive'
+                              ? 'bg-amber-500 text-slate-950 shadow-xs'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>{language === 'am' ? 'ፒዲኤፍ አንብብ' : 'Read PDF'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { playClickChime(); setReaderTab('video'); }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                            readerTab === 'video'
+                              ? 'bg-amber-500 text-slate-950 shadow-xs'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                          <span>{language === 'am' ? 'ቪዲዮ' : 'Lectures'}</span>
+                          <span className={`text-[9.5px] px-1.5 py-0.2 rounded-full font-mono font-black ${
+                            readerTab === 'video' ? 'bg-slate-950 text-amber-400' : 'bg-amber-500/20 text-amber-400'
+                          }`}>
+                            {activePdfModule.lectures.length}
+                          </span>
+                        </button>
+                      </div>
+                    )}
 
-                    <button
-                      onClick={() => { playClickChime(); setReaderTheme('sepia'); }}
-                      className={`p-1 sm:p-1.5 rounded-lg transition-colors cursor-pointer hidden xs:block sm:block ${
-                        readerTheme === 'sepia'
-                          ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
-                          : 'text-[#82664E] hover:text-[#3B291A]'
-                      }`}
-                      title="Eye Comfort Sepia"
-                    >
-                      <span className="text-[10px] font-bold px-0.5">Aa</span>
-                    </button>
-                  </div>
+                    {/* RIGHT: Production Action Controls */}
+                    <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+                      {/* ⚡ Open in Google Drive App */}
+                      {activePdfModule.pdfUrl && (
+                        <a
+                          href={activePdfModule.pdfUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => playSuccessChime()}
+                          className="px-2.5 sm:px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
+                          title={language === 'am' ? 'በGoogle Drive መተግበሪያ ክፈት' : 'Open in Google Drive App'}
+                        >
+                          <Smartphone className="w-3.5 h-3.5" />
+                          <span className="hidden xs:inline">Drive App</span>
+                        </a>
+                      )}
 
-                  {/* Full Page View Button (100% Uncut Full Screen Document) */}
-                  <button
-                    onClick={() => { playClickChime(); setIsZenMode(true); }}
-                    className="px-2.5 sm:px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95 shrink-0"
-                    title={language === 'am' ? 'ሙሉ ገጽ እይታ (ያለ ማስተካከያ አሞሌዎች)' : 'Full Page View (100% Edge-to-Edge Document)'}
-                  >
-                    <Maximize2 className="w-3.5 h-3.5 text-slate-950" />
-                    <span className="font-extrabold">{language === 'am' ? 'ሙሉ ገጽ' : 'Full Page'}</span>
-                  </button>
+                      {/* 🌙 Reading Theme Switcher (Slate / Sepia / Light) */}
+                      <div className={`hidden sm:flex items-center p-0.5 rounded-xl border ${
+                        readerTheme === 'light'
+                          ? 'bg-slate-100 border-slate-200'
+                          : readerTheme === 'sepia'
+                          ? 'bg-[#EADECE] border-[#D5C5B0]'
+                          : 'bg-slate-800 border-slate-700'
+                      }`}>
+                        <button
+                          type="button"
+                          onClick={() => { playClickChime(); setReaderTheme('dark'); }}
+                          className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
+                            readerTheme === 'dark'
+                              ? 'bg-[#0A1128] text-amber-400 shadow-xs'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                          title="Dark Slate Theme"
+                        >
+                          <Moon className="w-3 h-3" />
+                          <span>Dark</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { playClickChime(); setReaderTheme('sepia'); }}
+                          className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
+                            readerTheme === 'sepia'
+                              ? 'bg-[#FAF3E0] text-[#362719] shadow-xs'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                          title="Warm Sepia Paper Theme"
+                        >
+                          <Coffee className="w-3 h-3" />
+                          <span>Sepia</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { playClickChime(); setReaderTheme('light'); }}
+                          className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
+                            readerTheme === 'light'
+                              ? 'bg-white text-slate-900 shadow-xs'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                          title="Crisp Light Theme"
+                        >
+                          <Sun className="w-3 h-3" />
+                          <span>Light</span>
+                        </button>
+                      </div>
 
-                  {/* Fullscreen Button (No Cut) */}
-                  <button
-                    onClick={toggleFullscreen}
-                    className={`p-1.5 sm:p-2 rounded-xl border transition-colors cursor-pointer ${
-                      readerTheme === 'light'
-                        ? 'bg-white hover:bg-slate-100 border-slate-200 text-slate-700'
-                        : readerTheme === 'sepia'
-                        ? 'bg-[#FDF7E8] hover:bg-[#F2E5C7] border-[#DECFAF] text-[#3E2B19]'
-                        : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300 hover:text-white'
-                    }`}
-                    title={isTrueFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen (ሙሉ ማያ)'}
-                  >
-                    {isTrueFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                  </button>
+                      {/* Mobile theme toggle */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playClickChime();
+                          setReaderTheme((prev) => prev === 'dark' ? 'sepia' : prev === 'sepia' ? 'light' : 'dark');
+                        }}
+                        className="sm:hidden p-2 rounded-xl hover:bg-white/10 text-slate-300 transition-colors cursor-pointer"
+                        title="Switch Reading Theme"
+                      >
+                        {readerTheme === 'dark' ? (
+                          <Moon className="w-4 h-4 text-amber-400" />
+                        ) : readerTheme === 'sepia' ? (
+                          <Coffee className="w-4 h-4 text-[#7A5A38]" />
+                        ) : (
+                          <Sun className="w-4 h-4 text-amber-500" />
+                        )}
+                      </button>
 
-                  {/* Ask AI Button */}
-                  <button
-                    onClick={() => { playClickChime(); setAiPanelOpen(o => !o); }}
-                    className={`px-2 sm:px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                      aiPanelOpen
-                        ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
-                        : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 dark:text-amber-400 border-amber-500/30'
-                    }`}
-                    title="Ask AI Asgobnyi"
-                  >
-                    <Bot className="w-3.5 h-3.5" />
-                    <span className="hidden md:inline">{language === 'am' ? 'አስጎብኚ AI' : 'Asgobnyi AI'}</span>
-                  </button>
+                      {/* 📥 Download / Offline Button */}
+                      {downloadingMap[activePdfBook.id] !== undefined ? (
+                        <div className="px-2.5 py-1.5 bg-amber-500/20 text-amber-400 font-bold text-xs rounded-xl flex items-center gap-1 border border-amber-500/30">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>{downloadingMap[activePdfBook.id]}%</span>
+                        </div>
+                      ) : activeOfflineBlobUrl ? (
+                        <div className="px-2.5 py-1.5 bg-emerald-500/20 text-emerald-400 font-bold text-xs rounded-xl flex items-center gap-1 border border-emerald-500/30">
+                          <Check className="w-3.5 h-3.5" />
+                          <span className="hidden md:inline">{language === 'am' ? 'ከመስመር ውጭ ዝግጁ' : 'Offline'}</span>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadBook(activePdfBook)}
+                          className={`hidden xs:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                            readerTheme === 'light'
+                              ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
+                              : readerTheme === 'sepia'
+                              ? 'bg-[#EADECE] hover:bg-[#DDD0C0] border-[#D5C5B0] text-[#3A2A1A]'
+                              : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200 hover:text-white'
+                          }`}
+                          title={language === 'am' ? 'ሰነዱን አውርድ' : 'Download for Offline Reading'}
+                        >
+                          <CloudDownload className="w-3.5 h-3.5 text-amber-500" />
+                          <span className="hidden md:inline">Download</span>
+                        </button>
+                      )}
 
-                  {/* Close button on desktop */}
-                  <button
-                    onClick={handleCloseBook}
-                    className="hidden sm:flex p-1.5 sm:p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-colors cursor-pointer"
-                    title="Close Reader"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            )}
+                      {/* 🔄 Reload Iframe */}
+                      <button
+                        type="button"
+                        onClick={() => { playClickChime(); setPdfIframeKey((k) => k + 1); }}
+                        className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                          readerTheme === 'light'
+                            ? 'hover:bg-slate-100 border-slate-200 text-slate-600'
+                            : readerTheme === 'sepia'
+                            ? 'hover:bg-[#EADECE] border-[#D5C5B0] text-[#4A3828]'
+                            : 'hover:bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+                        }`}
+                        title={language === 'am' ? 'እንደገና ጫን' : 'Reload'}
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                      </button>
+
+                      {/* 🎯 Focus Mode Toggle (Hide Bars for 100% Reading immersion) */}
+                      <button
+                        type="button"
+                        onClick={() => { playClickChime(); setIsZenMode(true); }}
+                        className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                          readerTheme === 'light'
+                            ? 'hover:bg-slate-100 border-slate-200 text-slate-600'
+                            : readerTheme === 'sepia'
+                            ? 'hover:bg-[#EADECE] border-[#D5C5B0] text-[#4A3828]'
+                            : 'hover:bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+                        }`}
+                        title={language === 'am' ? 'ሙሉ ገጽ የንባብ እይታ (Focus Mode)' : 'Focus Mode (Hide Top Bar)'}
+                      >
+                        <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-500" />
+                      </button>
+
+                      {/* ⛶ Hardware Fullscreen Toggle */}
+                      <button
+                        type="button"
+                        onClick={toggleFullscreen}
+                        className={`hidden sm:flex p-2 rounded-xl border transition-all cursor-pointer ${
+                          readerTheme === 'light'
+                            ? 'hover:bg-slate-100 border-slate-200 text-slate-700'
+                            : readerTheme === 'sepia'
+                            ? 'hover:bg-[#EADECE] border-[#D5C5B0] text-[#4A3828]'
+                            : 'hover:bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+                        }`}
+                        title={isTrueFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                      >
+                        {isTrueFullscreen ? (
+                          <Minimize2 className="w-4 h-4 text-amber-500" />
+                        ) : (
+                          <Maximize2 className="w-4 h-4 text-amber-500" />
+                        )}
+                      </button>
+
+                      {/* ✕ Close Button */}
+                      <button
+                        type="button"
+                        onClick={handleCloseBook}
+                        className="p-2 rounded-xl hover:bg-red-500/15 text-slate-400 hover:text-red-400 transition-colors cursor-pointer"
+                        title={language === 'am' ? 'ዝጋ' : 'Close'}
+                        aria-label="Close"
+                      >
+                        <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                      </button>
+                    </div>
+                  </header>
+                )}
 
               {/* 2. MAIN STAGE CONTENT (Edge-to-edge, responsive per tab) */}
               <div className="flex-1 w-full h-full min-h-0 flex flex-col relative overflow-hidden">
@@ -2760,151 +2845,7 @@ export default function BookStoreView({
                 {/* ================================================================= */}
                 {readerTab === 'drive' && (
                   <div className="flex-1 w-full h-full min-h-0 flex flex-col relative overflow-hidden animate-fadeIn">
-                    {/* Slim PDF Sub-toolbar (Hidden during Full Page View) */}
-                    {!isZenMode && (
-                      <div className={`px-3 sm:px-4 py-1.5 sm:py-2 border-b flex items-center justify-between gap-2 shrink-0 text-xs ${
-                        readerTheme === 'light'
-                          ? 'bg-[#F8FAFC] border-slate-200 text-slate-700'
-                          : readerTheme === 'sepia'
-                          ? 'bg-[#F6EEDB] border-[#E1D4B6] text-[#3A291A]'
-                          : 'bg-[#0B132B] border-white/10 text-slate-300'
-                      }`}>
-                        <div className="flex items-center gap-2 min-w-0">
-                          <FileText className="w-4 h-4 text-amber-500 shrink-0" />
-                          <span className="font-bold truncate max-w-[180px] sm:max-w-md">
-                            {activePdfBook.title}
-                          </span>
-                          <span className="hidden sm:inline-block text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/15 text-amber-500 dark:text-amber-400 font-bold shrink-0">
-                            Official PDF
-                          </span>
-                          {/* Full Page Button in Sub-toolbar */}
-                          <button
-                            onClick={() => { playClickChime(); setIsZenMode(true); }}
-                            className="px-2 py-0.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-md text-[10.5px] flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-sm ml-1"
-                            title={language === 'am' ? 'ሙሉ ገጽ እይታ (ያለ ማስተካከያ አሞሌ)' : 'Full Page View (100% Uncluttered)'}
-                          >
-                            <Maximize2 className="w-3 h-3 text-slate-950" />
-                            <span>{language === 'am' ? 'ሙሉ ገጽ' : 'Full Page'}</span>
-                          </button>
-                        </div>
-
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {/* Offline / Download status */}
-                        {downloadingMap[activePdfBook.id] !== undefined ? (
-                          <div className="px-2.5 py-1 bg-amber-500/20 text-amber-400 font-bold text-xs rounded-lg flex items-center gap-1.5 border border-amber-500/30">
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>{downloadingMap[activePdfBook.id]}%</span>
-                          </div>
-                        ) : activeOfflineBlobUrl ? (
-                          <div className="px-2.5 py-1 bg-emerald-500/20 text-emerald-400 font-bold text-xs rounded-lg flex items-center gap-1 border border-emerald-500/30">
-                            <Check className="w-3.5 h-3.5" />
-                            <span className="hidden xs:inline">{language === 'am' ? 'ከመስመር ውጭ ዝግጁ' : 'Offline Ready'}</span>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => handleDownloadBook(activePdfBook)}
-                            className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-xs flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-sm"
-                            title="Download module to read offline without internet"
-                          >
-                            <CloudDownload className="w-3.5 h-3.5 text-slate-950" />
-                            <span className="hidden xs:inline">{language === 'am' ? 'አውርድ (ከመስመር ውጭ)' : 'Save Offline'}</span>
-                          </button>
-                        )}
-
-                        {!activeOfflineBlobUrl && (
-                          <div className={`hidden sm:flex items-center rounded-lg p-0.5 border text-xs ${
-                            readerTheme === 'light'
-                              ? 'bg-slate-200 border-slate-300'
-                              : readerTheme === 'sepia'
-                              ? 'bg-[#EADEBF] border-[#D5C5A1]'
-                              : 'bg-white/5 border-white/10'
-                          }`}>
-                            <button
-                              onClick={() => { playClickChime(); setPdfViewerMode('drive'); }}
-                              className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all cursor-pointer ${
-                                pdfViewerMode === 'drive'
-                                  ? 'bg-amber-500 text-slate-950 shadow-sm'
-                                  : 'text-slate-400 hover:text-white'
-                              }`}
-                              title="Google Drive Full Preview"
-                            >
-                              Drive
-                            </button>
-                            <button
-                              onClick={() => { playClickChime(); setPdfViewerMode('native'); }}
-                              className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all cursor-pointer ${
-                                pdfViewerMode === 'native'
-                                  ? 'bg-amber-500 text-slate-950 shadow-sm'
-                                  : 'text-slate-400 hover:text-white'
-                              }`}
-                              title="Native Full PDF Engine (Pure, no cuts, edge-to-edge)"
-                            >
-                              Pure PDF
-                            </button>
-                            {activePdfBook.downloadUrl && (
-                              <button
-                                onClick={() => { playClickChime(); setPdfViewerMode('gdocs'); }}
-                                className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all cursor-pointer ${
-                                  pdfViewerMode === 'gdocs'
-                                    ? 'bg-amber-500 text-slate-950 shadow-sm'
-                                    : 'text-slate-400 hover:text-white'
-                                }`}
-                                title="Google Docs Viewer"
-                              >
-                                G-Docs
-                              </button>
-                            )}
-                          </div>
-                        )}
-
-                        <button
-                          onClick={() => { playClickChime(); setPdfIframeKey(k => k + 1); }}
-                          className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
-                            readerTheme === 'light'
-                              ? 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
-                              : readerTheme === 'sepia'
-                              ? 'bg-[#FDF7E8] hover:bg-[#F2E5C7] border-[#DECFAF] text-[#3E2B19]'
-                              : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300 hover:text-white'
-                          }`}
-                          title="Reload PDF Frame"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5" />
-                        </button>
-
-                        {activePdfBook.hasVideoLecture && (
-                          <button
-                            onClick={() => { playClickChime(); setReaderTab('video'); }}
-                            className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/40 font-bold rounded-lg text-xs flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-sm"
-                            title="Watch Video Lectures for this module"
-                          >
-                            <Play className="w-3.5 h-3.5 fill-amber-400" />
-                            <span className="hidden xs:inline">{language === 'am' ? 'ቪዲዮ እይ' : 'Watch Lectures'} ({activePdfBook.lectures.length})</span>
-                          </button>
-                        )}
-
-                        {activePdfBook.pdfUrl && (
-                          <a
-                            href={activePdfBook.pdfUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={`px-2 py-1 rounded-lg text-xs font-bold border flex items-center gap-1 transition-colors cursor-pointer ${
-                              readerTheme === 'light'
-                                ? 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
-                                : readerTheme === 'sepia'
-                                ? 'bg-[#FDF7E8] hover:bg-[#F2E5C7] border-[#DECFAF] text-[#3E2B19]'
-                                : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300 hover:text-white'
-                            }`}
-                            title="Open Google Drive Link in New Tab"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5 text-amber-500" />
-                            <span className="hidden sm:inline">Drive</span>
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Edge-to-Edge PDF Stage (100% full height, no cut, no fixed min-height) */}
+                    {/* Edge-to-Edge PDF Stage (100% full height, no cut, no fixed min-height) */}
                     {activeOfflineBlobUrl ? (
                       <div className="flex-1 w-full h-full min-h-0 relative bg-slate-950 flex flex-col">
                         <div className="px-3 sm:px-4 py-1.5 bg-emerald-950/90 border-b border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center justify-between shrink-0">
@@ -2946,35 +2887,75 @@ export default function BookStoreView({
                         </div>
                       </div>
                     ) : (activePdfBook.previewUrl || activePdfBook.downloadUrl) ? (
-                      <div className="flex-1 w-full h-full min-h-0 relative bg-slate-950">
-                        {pdfViewerMode === 'native' ? (
-                          <object
-                            data={`/api/books/download-pdf?id=${encodeURIComponent(activePdfBook.id)}&fileId=${encodeURIComponent(extractDriveFileId(activePdfBook.downloadUrl || activePdfBook.pdfUrl))}`}
-                            type="application/pdf"
-                            className="w-full h-full block"
-                          >
+                      <div 
+                        className="flex-1 w-full h-full min-h-0 relative bg-slate-950"
+                        style={{
+                          WebkitOverflowScrolling: 'touch',
+                          touchAction: 'pan-x pan-y pinch-zoom'
+                        }}
+                      >
+                        <div className={`w-full h-full relative transition-all duration-300 ${
+                          readerTheme === 'sepia' ? 'sepia-[0.18] brightness-[0.98]' : ''
+                        }`}>
+                          {pdfViewerMode === 'native' ? (
+                            <object
+                              data={`/api/books/download-pdf?id=${encodeURIComponent(activePdfBook.id)}&fileId=${encodeURIComponent(extractDriveFileId(activePdfBook.downloadUrl || activePdfBook.pdfUrl))}`}
+                              type="application/pdf"
+                              className="w-full h-full block"
+                            >
+                              <iframe
+                                key={`${activePdfBook.id}-${pdfIframeKey}-native`}
+                                src={`/api/books/download-pdf?id=${encodeURIComponent(activePdfBook.id)}&fileId=${encodeURIComponent(extractDriveFileId(activePdfBook.downloadUrl || activePdfBook.pdfUrl))}`}
+                                title={activePdfBook.title}
+                                className="absolute inset-0 w-full h-full border-0 block"
+                                allow="autoplay; fullscreen; encrypted-media"
+                              />
+                            </object>
+                          ) : (
                             <iframe
-                              key={`${activePdfBook.id}-${pdfIframeKey}-native`}
-                              src={`/api/books/download-pdf?id=${encodeURIComponent(activePdfBook.id)}&fileId=${encodeURIComponent(extractDriveFileId(activePdfBook.downloadUrl || activePdfBook.pdfUrl))}`}
+                              key={`${activePdfBook.id}-${pdfIframeKey}-${pdfViewerMode}`}
+                              src={
+                                pdfViewerMode === 'gdocs' && activePdfBook.downloadUrl
+                                  ? `https://docs.google.com/viewer?url=${encodeURIComponent(activePdfBook.downloadUrl)}&embedded=true`
+                                  : activePdfBook.previewUrl
+                              }
                               title={activePdfBook.title}
                               className="absolute inset-0 w-full h-full border-0 block"
                               allow="autoplay; fullscreen; encrypted-media"
+                              referrerPolicy="no-referrer"
                             />
-                          </object>
-                        ) : (
-                          <iframe
-                            key={`${activePdfBook.id}-${pdfIframeKey}-${pdfViewerMode}`}
-                            src={
-                              pdfViewerMode === 'gdocs' && activePdfBook.downloadUrl
-                                ? `https://docs.google.com/viewer?url=${encodeURIComponent(activePdfBook.downloadUrl)}&embedded=true`
-                                : activePdfBook.previewUrl
-                            }
-                            title={activePdfBook.title}
-                            className="absolute inset-0 w-full h-full border-0 block"
-                            allow="autoplay; fullscreen; encrypted-media"
-                            referrerPolicy="no-referrer"
-                          />
-                        )}
+                          )}
+                        </div>
+
+                        {/* Quick Trouble-Shooting Helper Capsule */}
+                        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none opacity-80 hover:opacity-100 transition-opacity">
+                          <div className="pointer-events-auto flex items-center gap-2 bg-slate-950/85 backdrop-blur-md px-3 py-1 rounded-full border border-slate-800 text-[10px] text-slate-300 shadow-lg">
+                            <span>{language === 'am' ? 'ሰነዱ ካልታየ:' : 'Display issue?'}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                playClickChime();
+                                setPdfViewerMode((prev) => prev === 'drive' ? 'gdocs' : prev === 'gdocs' ? 'native' : 'drive');
+                                setPdfIframeKey((k) => k + 1);
+                              }}
+                              className="text-amber-400 font-bold hover:underline cursor-pointer"
+                            >
+                              {pdfViewerMode === 'drive' ? 'Switch to Docs Engine' : pdfViewerMode === 'gdocs' ? 'Switch to Native Engine' : 'Switch to Drive Engine'}
+                            </button>
+                            <span aria-hidden="true">·</span>
+                            {activePdfBook.pdfUrl && (
+                              <a
+                                href={activePdfBook.pdfUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-emerald-400 font-bold hover:underline flex items-center gap-0.5 cursor-pointer"
+                              >
+                                <span>Drive App</span>
+                                <ExternalLink className="w-2.5 h-2.5" />
+                              </a>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     ) : (
                       <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-3">
@@ -3900,6 +3881,85 @@ export default function BookStoreView({
       </AnimatePresence>,
       document.body
     )}
+
+      {/* ─── PRO VIDEO UPGRADE MODAL ─── */}
+      {proVideoModalBook && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#111C35] border border-amber-500/40 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 text-slate-100">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white leading-tight">
+                    {language === 'am' ? 'የፕሮ ቪዲዮ ትምህርት' : 'Pro Video Lecture Pass'}
+                  </h3>
+                  <p className="text-[11px] text-amber-400 font-medium truncate max-w-[220px]">
+                    {proVideoModalBook.title}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setProVideoModalBook(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2.5 text-xs text-slate-300">
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
+                <p className="font-bold">
+                  {language === 'am' ? '✓ የባዮሎጂ ቪዲዮ ለሁሉም ክፍት ነው!' : '✓ Biology video lectures are 100% Free!'}
+                </p>
+                <p className="text-[11px] text-slate-300 mt-0.5">
+                  {language === 'am'
+                    ? 'አጠቃላይ ባዮሎጂን በነፃ መከታተል ይችላሉ። የሌሎች ኮርሶች ቪዲዮዎችን ለመክፈት ወደ ፕሮ ያሳድጉ።'
+                    : 'You can watch full General Biology unit lectures for free. Unlock Chemistry, Physics, Math, Economics and all other courses with a Pro Pass.'}
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1.5">
+                <div className="flex items-center justify-between font-bold">
+                  <span className="text-white">{language === 'am' ? 'የሴሚስተር ቪዲዮ ፓስ' : 'Semester Video Pass'}</span>
+                  <span className="text-amber-400 font-mono text-sm">80 ETB</span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  {language === 'am'
+                    ? 'በቴሌብር (Telebirr) ወይም በኢትዮጵያ ንግድ ባንክ (CBE Birr) በቀላሉ ይክፈሉ።'
+                    : 'Instant activation via Telebirr & Commercial Bank of Ethiopia (CBE Birr).'}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <button
+                onClick={() => {
+                  setProVideoModalBook(null);
+                  playClickChime();
+                  onNavigate('upgrade');
+                }}
+                className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider transition cursor-pointer shadow-md flex items-center justify-center gap-1.5 active:scale-98"
+              >
+                <span>{language === 'am' ? 'በቴሌብር / ንግድ ባንክ አሳድግ (80 ብር)' : 'Upgrade Pro via Telebirr (80 ETB)'}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  const b = proVideoModalBook;
+                  setProVideoModalBook(null);
+                  handleOpenBook(b, 0, 'drive', 0, true);
+                }}
+                className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-200 font-semibold text-xs transition cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
+                <span>{language === 'am' ? 'ነፃ ፒዲኤፍ መጽሐፍ አንብብ (100% ነፃ)' : 'Read 100% Free PDF Textbook Instead'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

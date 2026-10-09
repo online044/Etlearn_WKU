@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Home as HomeIcon, Bot, Trophy, Award, Sparkles, Calendar, Sun, Moon, User as UserIcon, BookOpen, CheckCircle,
-  Share, X, ShieldCheck, Download, WifiOff, GraduationCap, FileText, Menu, MoreVertical, Type
+  Share, X, ShieldCheck, Download, WifiOff, GraduationCap, FileText, Menu, MoreVertical, Type, ArrowLeft
 } from 'lucide-react';
 
 import { StudentProfile, CustomNote, Flashcard, AITeacherContext, ExamAttemptRecord } from './types';
@@ -22,7 +22,6 @@ import BookStoreView from './components/BookStoreView';
 import UniversityExamsView from './components/UniversityExamsView';
 import UpgradeProView from './components/UpgradeProView';
 import EthioLearnLogo from './components/EthioLearnLogo';
-import SupportChatBubble from './components/SupportChatBubble';
 import ExamNotesHubView from './components/ExamNotesHubView';
 import InAppViewerModal from './components/InAppViewerModal';
 import AdminDashboardView from './components/AdminDashboardView';
@@ -487,6 +486,20 @@ export default function App() {
       }
     }
   }, []);
+
+  // Browser History & Android/iOS hardware back button synchronization
+  useEffect(() => {
+    if (currentPage !== 'home') {
+      window.history.pushState({ page: currentPage }, '');
+      const handleBrowserBack = () => {
+        setCurrentPage('home');
+      };
+      window.addEventListener('popstate', handleBrowserBack);
+      return () => {
+        window.removeEventListener('popstate', handleBrowserBack);
+      };
+    }
+  }, [currentPage]);
 
   // Telegram Mini App BackButton & MainButton state synchronization
   useEffect(() => {
@@ -1291,12 +1304,31 @@ export default function App() {
                 playClickChime();
                 setIsSidebarOpen(true);
               }}
-              className="p-1.5 sm:p-2 rounded-xl text-slate-600 dark:text-zinc-300 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-zinc-900 border border-transparent hover:border-slate-200 dark:hover:border-zinc-800 transition-all cursor-pointer flex items-center justify-center shrink-0"
+              className="p-1.5 sm:p-2 rounded-xl text-slate-600 dark:text-zinc-300 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-zinc-900 border border-transparent hover:border-slate-200 dark:hover:border-zinc-800 transition-all cursor-pointer flex items-center justify-center shrink-0 min-h-[44px] min-w-[44px]"
               title={language === 'en' ? 'Open App Menu & Info' : 'የአፕሊኬሽን ሜኑ እና መረጃ'}
               aria-label="Toggle App Sidebar"
             >
               <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
+
+            {/* 🔙 Back to Home Navigation Button (When on any sub-page) */}
+            {currentPage !== 'home' && (
+              <button
+                type="button"
+                onClick={() => {
+                  playClickChime();
+                  setCurrentPage('home');
+                }}
+                className="px-2.5 sm:px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold text-amber-500 hover:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[44px] active:scale-95 shadow-xs"
+                title={language === 'am' ? 'ወደ ዋና ገጽ ተመለስ' : 'Back to Home'}
+                aria-label={language === 'am' ? 'ተመለስ' : 'Back'}
+              >
+                <ArrowLeft className="w-4 h-4 text-amber-500 shrink-0" />
+                <span className="font-bold tracking-tight">
+                  {language === 'am' ? 'ተመለስ' : 'Back'}
+                </span>
+              </button>
+            )}
 
             {/* 🎓 App Logo & Brand Title */}
             <div 
@@ -1305,11 +1337,11 @@ export default function App() {
               title="EthioLearn Pro"
             >
               <div className="shrink-0 flex items-center justify-center">
-                <span className="hidden sm:inline-flex items-center justify-center w-[42px] h-[42px]">
-                  <EthioLearnLogo size={42} showCardBackground={false} iconOnly={true} className="w-full h-full group-hover:scale-105 duration-300 transition-all drop-shadow-md" />
+                <span className="hidden sm:inline-flex items-center justify-center w-8 h-8">
+                  <EthioLearnLogo size={32} showCardBackground={false} iconOnly={true} className="w-full h-full group-hover:scale-105 duration-200 transition-transform" />
                 </span>
-                <span className="sm:hidden inline-flex items-center justify-center w-[36px] h-[36px]">
-                  <EthioLearnLogo size={36} showCardBackground={false} iconOnly={true} className="w-full h-full group-hover:scale-105 duration-300 transition-all drop-shadow-sm" />
+                <span className="sm:hidden inline-flex items-center justify-center w-7 h-7">
+                  <EthioLearnLogo size={28} showCardBackground={false} iconOnly={true} className="w-full h-full group-hover:scale-105 duration-200 transition-transform" />
                 </span>
               </div>
               <div className="leading-tight text-left min-w-0">
@@ -1402,26 +1434,6 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-1 min-[360px]:gap-1.5 sm:gap-2 shrink-0">
-            {/* Bilingual Quick Selector */}
-            <div className="flex bg-slate-100 dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-800 rounded-lg sm:rounded-xl p-0.5 shrink-0">
-              <button
-                onClick={() => { setLanguage('en'); playClickChime(); }}
-                className={`text-xs sm:text-sm font-bold px-2 sm:px-2.5 py-1 rounded-md sm:rounded-lg transition-colors cursor-pointer ${
-                  language === 'en' ? 'bg-[#078930] text-white shadow-sm' : 'text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200'
-                }`}
-              >
-                EN
-              </button>
-              <button
-                onClick={() => { setLanguage('am'); playClickChime(); }}
-                className={`text-xs sm:text-sm font-bold px-2 sm:px-2.5 py-1 rounded-md sm:rounded-lg transition-colors cursor-pointer ${
-                  language === 'am' ? 'bg-[#078930] text-white shadow-sm' : 'text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200'
-                }`}
-              >
-                አማ
-              </button>
-            </div>
-
             {/* Quick Text Size Toggle (Moderate / Large / X-Large / Normal) */}
             <button
               onClick={() => {
@@ -1614,7 +1626,7 @@ export default function App() {
       <main className="flex-grow w-full max-w-7xl mx-auto px-2 min-[360px]:px-3 sm:px-4 py-2 sm:py-4 pb-24 sm:pb-28">
         
         {/* EthioLearn Native Mini Highlight / Announcement Bar */}
-        {currentPage !== 'upgrade' && currentPage !== 'bookstore' && currentPage !== 'university' && (
+        {currentPage !== 'upgrade' && (
           <EthioLearnAppPromoBanner 
             profile={profile}
             language={language}
@@ -1644,6 +1656,7 @@ export default function App() {
                 onUpdateGrade={handleUpdateGrade}
                 streakCount={streak}
                 studyHoursCount={studyHours}
+                onOpenSidebar={() => setIsSidebarOpen(true)}
               />
             )}
 
@@ -1957,9 +1970,6 @@ export default function App() {
           onUpdateProfile={handleUpdateProfile}
         />
       )}
-
-      {/* Floating conversational support assistant chat bubble */}
-      <SupportChatBubble language={language} studentName={profile?.name} apiKey={profile?.claudeApiKey} />
 
       {/* 📱 Slide-over App Sidebar with Phone, Email, Telegram & App Details */}
       <AppSidebar

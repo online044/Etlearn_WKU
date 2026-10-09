@@ -484,9 +484,14 @@ export default function AdminDashboardView({
     setCouponSaving(true);
     playClickChime();
 
+    const discountPct = parseInt(newDiscount, 10) || 20;
     const created: CouponCode = {
       code: newCode.trim().toUpperCase(),
-      discountPercentage: parseInt(newDiscount, 10) || 20,
+      discountPercentage: discountPct,
+      fixedDiscountETB: Math.round((80 * discountPct) / 100),
+      description: discountPct === 100 
+        ? '100% Full Academic Scholarship Pass' 
+        : `${discountPct}% Campus Promotional Discount`,
       maxUses: parseInt(newMaxUses, 10) || 50,
       usedCount: 0,
       expiresAt: '2026-12-31',
@@ -1741,44 +1746,88 @@ export default function AdminDashboardView({
           {activeTab === 'coupons' && (
             <div className="space-y-6">
               <form onSubmit={handleAddCoupon} className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400">Generate New Promo Coupon</h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                    <Tag className="w-4 h-4" />
+                    <span>Generate New Promo / Scholarship Coupon</span>
+                  </h4>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewCode(`SCHOLAR-${Math.floor(1000 + Math.random() * 9000)}`);
+                        setNewDiscount('100');
+                        setNewMaxUses('100');
+                        playClickChime();
+                      }}
+                      className="text-[10.5px] px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold hover:bg-emerald-500/25 transition cursor-pointer"
+                    >
+                      + 100% Scholarship Pass
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewCode(`WKU-${Math.floor(100 + Math.random() * 900)}`);
+                        setNewDiscount('40');
+                        setNewMaxUses('200');
+                        playClickChime();
+                      }}
+                      className="text-[10.5px] px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-400 font-bold hover:bg-amber-500/25 transition cursor-pointer"
+                    >
+                      + 40% WKU Discount
+                    </button>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="text-[10px] text-slate-400 font-mono block mb-1">Coupon Code</label>
                     <input
                       type="text"
+                      required
                       value={newCode}
                       onChange={(e) => setNewCode(e.target.value.toUpperCase())}
-                      placeholder="e.g. WKU2026"
-                      className="w-full px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-slate-100 text-xs uppercase font-mono outline-none"
+                      placeholder="e.g. WKU2026 or SCHOLAR100"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-slate-100 text-xs uppercase font-mono outline-none focus:border-amber-400"
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] text-slate-400 font-mono block mb-1">Discount (%)</label>
+                    <label className="text-[10px] text-slate-400 font-mono block mb-1">Discount (% or 100 for Full Free)</label>
                     <input
                       type="number"
+                      required
+                      min="1"
+                      max="100"
                       value={newDiscount}
                       onChange={(e) => setNewDiscount(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-slate-100 text-xs font-mono outline-none"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-amber-400"
                     />
                   </div>
                   <div>
                     <label className="text-[10px] text-slate-400 font-mono block mb-1">Max Redemptions</label>
                     <input
                       type="number"
+                      required
+                      min="1"
                       value={newMaxUses}
                       onChange={(e) => setNewMaxUses(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-slate-100 text-xs font-mono outline-none"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-slate-100 text-xs font-mono outline-none focus:border-amber-400"
                     />
                   </div>
                 </div>
-                <button
-                  type="submit"
-                  disabled={couponSaving || !newCode.trim()}
-                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-all cursor-pointer disabled:opacity-50"
-                >
-                  {couponSaving ? 'Saving...' : 'Create Coupon in Database'}
-                </button>
+
+                <div className="flex items-center justify-between pt-1">
+                  <p className="text-[11px] text-slate-400">
+                    Real coupons are saved to persistent storage and validated instantly on student checkout.
+                  </p>
+                  <button
+                    type="submit"
+                    disabled={couponSaving || !newCode.trim()}
+                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-all cursor-pointer disabled:opacity-50 shadow-sm"
+                  >
+                    {couponSaving ? 'Saving...' : 'Create Coupon in Database'}
+                  </button>
+                </div>
               </form>
 
               {coupons.length === 0 ? (
@@ -1787,21 +1836,40 @@ export default function AdminDashboardView({
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                  {coupons.map(c => (
-                    <div key={c.code} className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between">
-                      <div>
-                        <span className="font-mono font-black text-amber-400 text-sm">{c.code}</span>
-                        <p className="text-xs text-slate-400 mt-0.5">{c.discountPercentage}% OFF • {c.usedCount}/{c.maxUses} used</p>
+                  {coupons.map(c => {
+                    const isScholarship = c.discountPercentage === 100;
+                    return (
+                      <div key={c.code} className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-mono font-black text-amber-400 text-sm truncate">{c.code}</span>
+                            {isScholarship ? (
+                              <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                100% SCHOLARSHIP
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                {c.discountPercentage}% OFF
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-400 mt-1">
+                            {c.usedCount} of {c.maxUses} used ({c.maxUses - c.usedCount} left)
+                          </p>
+                          {c.description && (
+                            <p className="text-[11px] text-slate-500 truncate mt-0.5">{c.description}</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleDeleteCoupon(c.code)}
+                          className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg cursor-pointer transition-colors shrink-0"
+                          title="Delete coupon"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
-                      <button
-                        onClick={() => handleDeleteCoupon(c.code)}
-                        className="p-1.5 text-slate-500 hover:text-red-400 cursor-pointer transition-colors"
-                        title="Delete coupon"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

@@ -1,8 +1,8 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- * EthioLearn Pro - Master Subscription & Campus Coupon Monetization System
- * Local payment integration for Telebirr, CBE Birr & HelloCash with 1-click coupon activation.
+ * EthioLearn Pro - Master Subscription Monetization System
+ * Local payment integration for Telebirr, CBE Birr & HelloCash.
  */
 
 import React, { useState } from 'react';
@@ -17,7 +17,6 @@ import { playClickChime, playSuccessChime, playFailureChime } from '../utils/aud
 import { safeStorage } from '../utils/safeStorage';
 import { addPaymentRecordLocal } from '../utils/monetization';
 import { validateCoupon, incrementCouponUsage } from '../utils/supabaseCourses';
-import { validatePromotionInDatabase } from '../utils/firebaseStore';
 import TermsModal from './TermsModal';
 
 interface UpgradeProViewProps {
@@ -48,11 +47,12 @@ export default function UpgradeProView({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  // Campus Coupon / Promo Code States
-  const [couponInput, setCouponInput] = useState('');
+  // Coupon & Promo States
+  const [couponCodeInput, setCouponCodeInput] = useState<string>('');
   const [appliedCoupon, setAppliedCoupon] = useState<CouponCode | null>(null);
-  const [couponStatus, setCouponStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [couponMessage, setCouponMessage] = useState<string | null>(null);
+  const [couponDiscount, setCouponDiscount] = useState<number>(0);
+  const [couponStatus, setCouponStatus] = useState<'idle' | 'validating' | 'success' | 'error'>('idle');
+  const [couponMessage, setCouponMessage] = useState<string>('');
 
   // Copy to clipboard helper
   const handleCopy = (text: string, fieldName: string) => {
@@ -87,38 +87,38 @@ export default function UpgradeProView({
     switch (tier) {
       case 'pro_monthly': 
         return { 
-          etb: 149, 
-          label: language === 'en' ? '1 Month Full Pro' : 'ለ 1 ወር ሙሉ ፕሮ',
+          etb: 45, 
+          label: language === 'en' ? '1 Month Video Pass' : 'የ 1 ወር ቪዲዮ ፓስ',
           durationDays: 30,
-          originalEtb: 199
+          originalEtb: 60
         };
       case 'pro_semester': 
         return { 
-          etb: 349, 
-          label: language === 'en' ? '4 Months Semester Pass (Save 42%)' : 'የ 4 ወራት የሴሚስተር ፓስ (42% ቅናሽ)',
+          etb: 80, 
+          label: language === 'en' ? 'Semester Pass (All Course Videos)' : 'የሴሚስተር ፓስ (ለሁሉም ኮርሶች)',
           durationDays: 120,
-          originalEtb: 596
+          originalEtb: 140
         };
       case 'pro_annual': 
         return { 
-          etb: 699, 
-          label: language === 'en' ? 'Full Academic Year (Save 61%)' : 'ሙሉ የትምህርት ዘመን (61% ቅናሽ)',
+          etb: 150, 
+          label: language === 'en' ? 'Full Academic Year Video Pass' : 'ሙሉ የትምህርት ዘመን ቪዲዮ ፓስ',
           durationDays: 365,
-          originalEtb: 1788
+          originalEtb: 280
         };
       case 'exam_season_pass': 
         return { 
-          etb: 89, 
-          label: language === 'en' ? '3 Weeks Exam Blitz' : 'የ 3 ሳምንታት ፈተና ፓስ',
-          durationDays: 21,
-          originalEtb: 120
+          etb: 80, 
+          label: language === 'en' ? 'Semester Exam Pass' : 'የፈተና ወቅት ፓስ',
+          durationDays: 60,
+          originalEtb: 100
         };
       case 'subject_bundle': 
         return { 
-          etb: 69, 
-          label: language === 'en' ? 'Single Subject Lifetime Pack' : 'የአንድ ትምህርት ቋሚ ጥቅል',
+          etb: 50, 
+          label: language === 'en' ? 'Single Subject Video Pack' : 'የአንድ ትምህርት ጥቅል',
           durationDays: 365,
-          originalEtb: 99
+          originalEtb: 80
         };
       default: 
         return { 
@@ -131,83 +131,104 @@ export default function UpgradeProView({
   };
 
   const currentPrice = getTierPrice(selectedTier);
-  const couponDiscount = appliedCoupon
-    ? Math.min(currentPrice.etb, Math.round((currentPrice.etb * appliedCoupon.discountPercentage) / 100))
-    : 0;
   const finalPayableETB = Math.max(0, currentPrice.etb - couponDiscount);
 
-  // Coupon Handlers
+  // Apply Coupon Code
   const handleApplyCoupon = async (codeToTry?: string) => {
-    const code = (codeToTry || couponInput).trim().toUpperCase();
-    if (!code) return;
-    setCouponStatus('loading');
-    setCouponMessage(null);
+    const code = (codeToTry || couponCodeInput).trim().toUpperCase();
+    if (!code) {
+      setCouponStatus('error');
+      setCouponMessage(language === 'en' ? 'Please enter a coupon code.' : 'እባክዎ የኩፖን ኮድ ያስገቡ።');
+      return;
+    }
+    setCouponCodeInput(code);
+    setCouponStatus('validating');
     playClickChime();
-
     try {
-      // 1. Try Supabase/Cached validation
-      let res = await validateCoupon(code, currentPrice.etb);
-
-      // 2. If not found in Supabase, fallback to Firestore Promotions
-      if (!res.valid) {
-        const fsRes = await validatePromotionInDatabase(code, currentPrice.etb, selectedTier);
-        if (fsRes.valid && fsRes.promotion) {
-          res = {
-            valid: true,
-            coupon: {
-              code: fsRes.promotion.code,
-              description: fsRes.promotion.description,
-              discountPercentage: fsRes.promotion.discountPercentage,
-              fixedDiscountETB: fsRes.promotion.fixedDiscountETB || 0,
-              maxUses: fsRes.promotion.maxUses,
-              usedCount: fsRes.promotion.usedCount || 0,
-              expiresAt: fsRes.promotion.expiresAt,
-              isActive: fsRes.promotion.isActive
-            },
-            discountETB: fsRes.discountETB,
-            finalAmountETB: fsRes.finalAmountETB,
-            message: fsRes.message
-          };
-        }
-      }
-
+      const res = await validateCoupon(code, currentPrice.etb);
       if (res.valid && res.coupon) {
         setAppliedCoupon(res.coupon);
-        setCouponInput(res.coupon.code);
+        setCouponDiscount(res.discountETB);
         setCouponStatus('success');
+        setCouponMessage(res.message);
         playSuccessChime();
-        setCouponMessage(language === 'en' 
-          ? `Coupon "${res.coupon.code}" activated! ${res.coupon.discountPercentage}% discount applied (${res.discountETB} ETB saved).` 
-          : `ኩፖን "${res.coupon.code}" ተግብሯል! የ ${res.coupon.discountPercentage}% ቅናሽ (${res.discountETB} ብር ቅናሽ) ተሰጥቷል።`);
-        if (res.coupon.discountPercentage >= 100) {
-          setTxnRef(`SCHOLARSHIP-${res.coupon.code}`);
-        }
       } else {
+        setAppliedCoupon(null);
+        setCouponDiscount(0);
         setCouponStatus('error');
+        setCouponMessage(res.message);
         playFailureChime();
-        setCouponMessage(res.message || (language === 'en' ? 'Invalid or expired coupon code.' : 'የተሳሳተ ወይም ጊዜው ያለፈበት ኩፖን ኮድ።'));
       }
-    } catch (err: any) {
+    } catch {
       setCouponStatus('error');
-      playFailureChime();
-      setCouponMessage(err?.message || (language === 'en' ? 'Failed to validate coupon.' : 'ኩፖኑን ማረጋገጥ አልተቻለም።'));
+      setCouponMessage('Error validating coupon. Please try again.');
     }
   };
 
   const handleRemoveCoupon = () => {
-    playClickChime();
     setAppliedCoupon(null);
-    setCouponInput('');
+    setCouponDiscount(0);
     setCouponStatus('idle');
-    setCouponMessage(null);
-    if (txnRef.startsWith('SCHOLARSHIP-') || txnRef.startsWith('COUPON-')) {
-      setTxnRef('');
-    }
+    setCouponMessage('');
+    setCouponCodeInput('');
+    playClickChime();
   };
 
-  const handleSubmitPayment = (e: React.FormEvent) => {
+  // Instant Free Scholarship Activation (100% Coupon)
+  const handleActivateScholarship = async () => {
+    if (!appliedCoupon || finalPayableETB > 0) return;
+    setIsSubmitting(true);
+    playClickChime();
+
+    try {
+      await incrementCouponUsage(appliedCoupon.code);
+    } catch {}
+
+    const startDate = new Date().toISOString();
+    const durationDays = currentPrice.durationDays || 120;
+    const end = new Date();
+    end.setDate(end.getDate() + durationDays);
+    const endDate = end.toISOString();
+
+    const paymentRecord: PaymentRecord = {
+      id: `SCHOLAR-${Date.now()}`,
+      userId: profile.email || profile.phone || profile.name || 'student',
+      amount: 0,
+      originalAmount: currentPrice.etb,
+      currency: 'ETB',
+      provider: 'telebirr',
+      providerTxnId: `SCHOLAR-${appliedCoupon.code}-${Date.now().toString().slice(-4)}`,
+      senderName: senderName.trim() || profile.name || 'Scholarship Recipient',
+      senderPhone: phoneInput.trim() || profile.phone || '',
+      couponCode: appliedCoupon.code,
+      agreedToTerms: true,
+      status: 'completed',
+      createdAt: new Date().toISOString()
+    };
+    addPaymentRecordLocal(paymentRecord);
+
+    const updatedProfile: StudentProfile = {
+      ...profile,
+      tier: selectedTier,
+      isPro: true,
+      proStatus: 'active',
+      subscription_status: 'pro',
+      proPaymentTxn: `SCHOLAR-${appliedCoupon.code}`,
+      proPaymentDate: startDate,
+      proStartDate: startDate,
+      proEndDate: endDate,
+      paymentMethod: 'telebirr',
+      couponCode: appliedCoupon.code
+    };
+    onUpdateProfile(updatedProfile);
+    setIsSubmitting(false);
+    setActiveTab('status');
+    playSuccessChime();
+  };
+
+  const handleSubmitPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    const effectiveTxn = finalPayableETB === 0 ? (txnRef.trim() || `COUPON-${appliedCoupon?.code || 'FREE'}`) : txnRef.trim();
+    const effectiveTxn = txnRef.trim();
 
     if (!senderName.trim() || !effectiveTxn) {
       alert(language === 'en' ? 'Please fill in Sender Name and Transaction Reference.' : 'እባክዎ መለያ ስምና የትራንዛክሽን ቁጥሩን በትክክል ያስገቡ።');
@@ -225,15 +246,18 @@ export default function UpgradeProView({
     setIsSubmitting(true);
     playClickChime();
 
+    if (appliedCoupon) {
+      try {
+        await incrementCouponUsage(appliedCoupon.code);
+      } catch {}
+    }
+
     // Calculate start & end dates based on tier
     const startDate = new Date().toISOString();
     const durationDays = currentPrice.durationDays || 30;
     const end = new Date();
     end.setDate(end.getDate() + durationDays);
     const endDate = end.toISOString();
-
-    // Is 100% coupon activation instant
-    const isInstantCouponGrant = finalPayableETB === 0 && Boolean(appliedCoupon);
 
     // Save payment record
     const paymentRecord: PaymentRecord = {
@@ -242,40 +266,35 @@ export default function UpgradeProView({
       amount: finalPayableETB,
       originalAmount: currentPrice.etb,
       couponCode: appliedCoupon?.code,
-      discountETB: couponDiscount,
       currency: 'ETB',
-      provider: isInstantCouponGrant ? 'manual' : paymentMethod,
+      provider: paymentMethod,
       providerTxnId: effectiveTxn,
       senderName: senderName.trim(),
       senderPhone: phoneInput.trim(),
       receiptImage: receiptImage,
       agreedToTerms: agreedToTerms,
-      status: isInstantCouponGrant ? 'completed' : 'pending',
+      status: 'pending',
       createdAt: new Date().toISOString()
     };
     
     addPaymentRecordLocal(paymentRecord);
-    if (appliedCoupon?.code) {
-      incrementCouponUsage(appliedCoupon.code).catch(err => {
-        console.warn('[UpgradeProView] Failed to increment coupon count:', err);
-      });
-    }
     
     // Save payment submission details inside student profile
     const updatedProfile: StudentProfile = {
       ...profile,
       tier: selectedTier,
-      isPro: isInstantCouponGrant ? true : profile.isPro,
-      proStatus: isInstantCouponGrant ? 'active' : 'pending',
-      subscription_status: isInstantCouponGrant ? 'pro' : (profile.subscription_status || 'free'),
+      isPro: profile.isPro,
+      proStatus: 'pending',
+      subscription_status: profile.subscription_status || 'free',
       proPaymentTxn: effectiveTxn,
       proPaymentDate: startDate,
       proStartDate: startDate,
       proEndDate: endDate,
       senderName: senderName.trim(),
       proPaymentPhone: phoneInput.trim(),
-      paymentMethod: isInstantCouponGrant ? 'manual' : paymentMethod,
+      paymentMethod: paymentMethod,
       proReceiptImage: receiptImage,
+      couponCode: appliedCoupon?.code,
       agreedToTerms: true,
       agreedToTermsDate: startDate,
       purchasedBundles: selectedTier === 'subject_bundle' 
@@ -288,17 +307,6 @@ export default function UpgradeProView({
     setActiveTab('status');
     playSuccessChime();
   };
-
-  // Popular Campus Coupons List
-  const quickCampusCoupons = [
-    { code: 'FRESHMAN100', discount: '100% FREE', desc: 'Freshman Scholarship' },
-    { code: 'WKU100', discount: '100% FREE', desc: 'Wolkite Campus' },
-    { code: 'ETHIOLEARN50', discount: '50% OFF', desc: 'Semester 50%' },
-    { code: 'WKU2026', discount: '40% OFF', desc: 'WKU Special' },
-    { code: 'TELEBIRR30', discount: '30% OFF', desc: 'Telebirr 30%' },
-    { code: 'CBEBIRR30', discount: '30% OFF', desc: 'CBE Birr 30%' },
-    { code: 'AAU2026', discount: '35% OFF', desc: 'AAU Scholar' }
-  ];
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 text-white pb-10">
@@ -319,8 +327,8 @@ export default function UpgradeProView({
             </h2>
             <p className="text-slate-300 text-xs md:text-sm leading-relaxed font-sans">
               {language === 'en' 
-                ? 'Affordable student plans tailored for Ethiopian universities. Instant activation with Telebirr, CBE Birr, or free campus scholarship coupon codes.'
-                : 'ለኢትዮጵያ ዩኒቨርሲቲ ተማሪዎች የተዘጋጁ ቅናሾች። በቴሌብር፣ በሲቢኢ ብር ወይም በነፃ የካምፓስ ስኮላርሺፕ ኩፖን ወዲያውኑ ያግብሩ።'}
+                ? 'Affordable student plans tailored for Ethiopian universities. Instant activation via Telebirr & CBE Birr (Commercial Bank of Ethiopia).'
+                : 'ለኢትዮጵያ ዩኒቨርሲቲ ተማሪዎች የተዘጋጁ ቅናሾች። በቴሌብር እና በኢትዮጵያ ንግድ ባንክ (CBE) ፈጣን ማግበር።'}
             </p>
           </div>
 
@@ -331,9 +339,6 @@ export default function UpgradeProView({
             <div className="mt-1 flex items-baseline justify-center gap-1">
               <span className="text-3xl font-black font-serif text-amber-400">{finalPayableETB}</span>
               <span className="text-sm font-black text-amber-300">ETB</span>
-              {couponDiscount > 0 && (
-                <span className="text-xs text-slate-500 line-through ml-1">{currentPrice.etb}</span>
-              )}
             </div>
             <span className="text-[10px] text-slate-400 mt-1 uppercase tracking-wide">
               {currentPrice.label}
@@ -375,10 +380,7 @@ export default function UpgradeProView({
           }`}
         >
           <CreditCard className="w-4 h-4" />
-          {language === 'en' ? '2. Payment & Coupon' : '2. ክፍያ እና ኩፖን'}
-          {appliedCoupon && (
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block" />
-          )}
+          {language === 'en' ? '2. Direct Payment' : '2. የክፍያ ሂደት'}
         </button>
 
         <button
@@ -542,123 +544,16 @@ export default function UpgradeProView({
       {activeTab === 'pay' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
-          {/* Left: Transfer details & Coupon */}
+          {/* Left: Transfer details */}
           <div className="lg:col-span-7 bg-[#0A1128] border border-slate-800 rounded-2xl p-6 space-y-5">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-serif font-black text-amber-400 uppercase tracking-tight flex items-center gap-2">
                 <Smartphone className="w-5 h-5" />
-                {language === 'en' ? 'Step 1: Apply Coupon & Choose Channel' : 'ደረጃ 1፡ ኩፖን ይጠቀሙና የክፍያ መንገድ ይምረጡ'}
+                {language === 'en' ? 'Step 1: Choose Payment Channel' : 'ደረጃ 1፡ የክፍያ መንገድ ይምረጡ'}
               </h3>
             </div>
 
-            {/* Campus Coupon / Promo Code Input Box */}
-            <div className="p-4 bg-[#111C35] rounded-2xl border border-amber-500/40 space-y-3 shadow-md">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Ticket className="w-4 h-4 text-amber-400" />
-                  {language === 'en' ? 'Campus Coupon / Promo Code' : 'የካምፓስ ኩፖን ወይም የቅናሽ ኮድ'}
-                </label>
-                {appliedCoupon && (
-                  <span className="text-[10px] font-extrabold text-emerald-300 bg-emerald-500/20 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
-                    {appliedCoupon.discountPercentage}% OFF APPLIED
-                  </span>
-                )}
-              </div>
-
-              {appliedCoupon ? (
-                <div className="p-3 bg-emerald-500/10 border border-emerald-500/40 rounded-xl flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 font-bold font-mono text-xs">
-                      %
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-mono font-black text-white tracking-wider flex items-center gap-1.5 truncate">
-                        <Tag className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        {appliedCoupon.code}
-                      </p>
-                      <p className="text-[11px] text-emerald-300 truncate">
-                        {appliedCoupon.description || `${appliedCoupon.discountPercentage}% discount active`}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleRemoveCoupon}
-                    className="px-2.5 py-1 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer shrink-0 font-bold"
-                  >
-                    {language === 'en' ? 'Remove' : 'አስወግድ'}
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <input
-                        type="text"
-                        value={couponInput}
-                        onChange={(e) => {
-                          setCouponInput(e.target.value.toUpperCase());
-                          if (couponStatus === 'error') setCouponStatus('idle');
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleApplyCoupon();
-                          }
-                        }}
-                        placeholder={language === 'en' ? 'e.g. FRESHMAN100, ETHIOLEARN50, WKU100' : 'ለምሳሌ፡ FRESHMAN100, ETHIOLEARN50'}
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B1228] border border-slate-700 text-xs font-mono font-bold text-white uppercase placeholder:text-slate-500 focus:ring-1 focus:ring-amber-400 outline-none"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleApplyCoupon()}
-                      disabled={!couponInput.trim() || couponStatus === 'loading'}
-                      className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer shadow-md transition-all flex items-center gap-1.5 shrink-0"
-                    >
-                      {couponStatus === 'loading' ? (
-                        <Clock className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Check className="w-3.5 h-3.5" />
-                      )}
-                      {language === 'en' ? 'Apply' : 'ተግብር'}
-                    </button>
-                  </div>
-
-                  {/* Coupon status messages */}
-                  {couponMessage && (
-                    <p className={`text-[11px] font-medium flex items-center gap-1 ${
-                      couponStatus === 'error' ? 'text-rose-400' : 'text-emerald-400'
-                    }`}>
-                      {couponStatus === 'error' ? <AlertCircle className="w-3.5 h-3.5 shrink-0" /> : <CheckCircle className="w-3.5 h-3.5 shrink-0" />}
-                      {couponMessage}
-                    </p>
-                  )}
-
-                  {/* 1-Click Quick Campus Coupons */}
-                  <div className="pt-1 space-y-1.5">
-                    <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
-                      {language === 'en' ? 'Tap to apply available campus coupons:' : 'ለማግበር የካምፓስ ኩፖን ይጫኑ፦'}
-                    </span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {quickCampusCoupons.map((c) => (
-                        <button
-                          key={c.code}
-                          type="button"
-                          onClick={() => handleApplyCoupon(c.code)}
-                          className="text-[10px] font-mono font-bold px-2 py-1 rounded-lg bg-[#0B1228] hover:bg-amber-500/20 text-amber-300 border border-slate-700/80 hover:border-amber-400/50 cursor-pointer transition flex items-center gap-1"
-                        >
-                          <span>{c.code}</span>
-                          <span className="text-emerald-400 font-sans font-extrabold text-[9px]">({c.discount})</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Price Breakdown Badge */}
+            {/* Price Breakdown Badge with Coupon Discount */}
             <div className="p-4 bg-[#111C35] rounded-2xl border border-slate-800 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
@@ -666,44 +561,116 @@ export default function UpgradeProView({
                   <p className="text-sm font-black font-serif text-white uppercase">{selectedTier.replace('_', ' ')}</p>
                 </div>
                 <div className="text-right">
-                  {appliedCoupon ? (
+                  {couponDiscount > 0 ? (
                     <div>
-                      <div className="flex items-center justify-end gap-2">
-                        <span className="text-xs text-slate-500 line-through">{currentPrice.etb} ETB</span>
-                        <span className="text-2xl font-black font-serif text-emerald-400">{finalPayableETB} ETB</span>
-                      </div>
-                      <p className="text-[10px] text-emerald-400 font-bold">
-                        {language === 'en' ? `-${couponDiscount} ETB (${appliedCoupon.discountPercentage}% OFF)` : `-${couponDiscount} ብር (${appliedCoupon.discountPercentage}% ቅናሽ)`}
-                      </p>
+                      <span className="text-sm line-through text-slate-500 font-mono mr-2">{currentPrice.etb} ETB</span>
+                      <span className="text-2xl font-black font-serif text-emerald-400">{finalPayableETB} ETB</span>
                     </div>
                   ) : (
-                    <div>
-                      <span className="text-2xl font-black font-serif text-amber-400">{currentPrice.etb} ETB</span>
-                      <p className="text-[10px] text-slate-400">{currentPrice.label}</p>
-                    </div>
+                    <span className="text-2xl font-black font-serif text-amber-400">{currentPrice.etb} ETB</span>
                   )}
+                  <p className="text-[10px] text-slate-400">{currentPrice.label}</p>
                 </div>
               </div>
 
-              {appliedCoupon && finalPayableETB === 0 && (
-                <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-emerald-400 shrink-0 animate-bounce" />
-                  <div>
-                    <p className="font-extrabold text-emerald-400">
-                      {language === 'en' ? '100% Free Campus Scholarship Applied!' : '100% ነፃ የካምፓስ ስኮላርሺፕ ተግብሯል!'}
-                    </p>
-                    <p className="text-[11px] text-slate-300">
-                      {language === 'en' 
-                        ? 'No bank payment needed! Click the green button below to activate Pro immediately.' 
-                        : 'ምንም የባንክ ክፍያ አያስፈልግዎትም! ከታች ያለውን አረንጓዴ ቁልፍ ተጭነው ፕሮ አባልነትዎን ወዲያውኑ ያግብሩ።'}
-                    </p>
+              {couponDiscount > 0 && appliedCoupon && (
+                <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs text-emerald-400">
+                  <span className="flex items-center gap-1 font-bold">
+                    <Tag className="w-3.5 h-3.5" />
+                    <span>Coupon "{appliedCoupon.code}"</span>
+                  </span>
+                  <span className="font-mono font-bold">-{couponDiscount} ETB ({appliedCoupon.discountPercentage}% OFF)</span>
+                </div>
+              )}
+            </div>
+
+            {/* REAL PROMO / CAMPUS COUPON REDEMPTION BOX */}
+            <div className="p-4 bg-[#111C35] rounded-2xl border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Tag className="w-4 h-4 text-amber-400" />
+                  <span>{language === 'en' ? 'Campus Coupon / Scholarship Code' : 'የግቢ ኩፖን / ስኮላርሺፕ ኮድ'}</span>
+                </label>
+                {appliedCoupon && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveCoupon}
+                    className="text-[11px] text-rose-400 hover:underline cursor-pointer"
+                  >
+                    {language === 'en' ? 'Remove' : 'አስወግድ'}
+                  </button>
+                )}
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={couponCodeInput}
+                  onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())}
+                  placeholder="e.g. WKU2026, FRESHMAN100"
+                  disabled={appliedCoupon !== null}
+                  className="flex-1 px-3.5 py-2.5 rounded-xl bg-[#0B1228] border border-slate-700 text-xs font-mono font-bold text-white uppercase placeholder-slate-500 focus:ring-1 focus:ring-amber-400 outline-none disabled:opacity-60"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleApplyCoupon()}
+                  disabled={appliedCoupon !== null || couponStatus === 'validating'}
+                  className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold text-xs uppercase tracking-wider transition cursor-pointer shrink-0"
+                >
+                  {couponStatus === 'validating' 
+                    ? (language === 'en' ? 'Checking...' : 'በማጣራት ላይ...') 
+                    : (language === 'en' ? 'Apply' : 'ተግብር')}
+                </button>
+              </div>
+
+              {/* Status Message */}
+              {couponMessage && (
+                <p className={`text-xs font-medium flex items-center gap-1.5 ${
+                  couponStatus === 'success' ? 'text-emerald-400' : 'text-rose-400'
+                }`}>
+                  {couponStatus === 'success' ? <CheckCircle className="w-3.5 h-3.5 shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 shrink-0" />}
+                  <span>{couponMessage}</span>
+                </p>
+              )}
+
+              {/* Campus Coupon Quick Presets */}
+              {!appliedCoupon && (
+                <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
+                  <span className="text-[10px] text-slate-400 block font-semibold">
+                    {language === 'en' ? 'Available Campus Codes:' : 'የሚገኙ የግቢ ኩፖን ኮዶች፦'}
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleApplyCoupon('WKU2026')}
+                      className="px-2 py-1 rounded-md bg-slate-900 border border-slate-700 hover:border-amber-400 text-[11px] font-mono text-amber-400 transition cursor-pointer"
+                      title="40% off Wolkite University Discount"
+                    >
+                      WKU2026 (40% OFF)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyCoupon('FRESHMAN100')}
+                      className="px-2 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/30 hover:border-emerald-400 text-[11px] font-mono text-emerald-400 transition cursor-pointer font-bold"
+                      title="100% Full Scholarship Pass"
+                    >
+                      FRESHMAN100 (100% FREE)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyCoupon('TELEBIRR30')}
+                      className="px-2 py-1 rounded-md bg-slate-900 border border-slate-700 hover:border-amber-400 text-[11px] font-mono text-sky-400 transition cursor-pointer"
+                      title="30% off Telebirr Voucher"
+                    >
+                      TELEBIRR30 (30% OFF)
+                    </button>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Provider Selector Grid (Telebirr & CBE) */}
-            {finalPayableETB > 0 && (
+            {/* Provider Selector Grid (Telebirr & CBE) - Only shown if payment is needed */}
+            {finalPayableETB > 0 ? (
               <div className="space-y-3">
                 <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
                   {language === 'en' ? 'Select Payment Channel' : 'የክፍያ መንገድ ይምረጡ'}
@@ -765,12 +732,27 @@ export default function UpgradeProView({
                   <p className="text-slate-300">
                     Account Holder: <span className="font-extrabold text-white">Abreham Alemayehu</span>
                   </p>
+                  <p className="text-amber-400 font-bold">
+                    Amount to Send: <span className="text-white font-mono text-sm">{finalPayableETB} ETB</span>
+                  </p>
                   <p className="text-slate-400 text-[11px] font-sans">
                     {language === 'en' 
                       ? 'Official partner verification. Verify receiver name shows "Abreham Alemayehu" before sending.' 
                       : 'ከመላክዎ በፊት የላኪው ስም "አብርሃም አለማየሁ" መሆኑን ያረጋግጡ።'}
                   </p>
                 </div>
+              </div>
+            ) : (
+              <div className="p-5 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl space-y-2 text-center">
+                <Crown className="w-8 h-8 text-amber-400 mx-auto" />
+                <h4 className="text-sm font-black text-emerald-400 uppercase tracking-wider">
+                  {language === 'en' ? '100% Scholarship Pass Applied!' : '100% ሙሉ ስኮላርሺፕ ተግብሯል!'}
+                </h4>
+                <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                  {language === 'en'
+                    ? 'Congratulations! Your scholarship code covers 100% of the cost. No bank transfer required. Activate your Pro account directly below.'
+                    : 'እንኳን ደስ አለዎት! የስኮላርሺፕ ኩፖኑ ክፍያውን ሙሉ በሙሉ ሸፍኗል። ምንም የባንክ ክፍያ አያስፈልግዎትም። ከታች ወዲያውኑ ያግብሩ።'}
+                </p>
               </div>
             )}
           </div>
@@ -779,9 +761,7 @@ export default function UpgradeProView({
           <div className="lg:col-span-5 bg-[#0A1128] border border-slate-800 rounded-2xl p-6 space-y-4">
             <h3 className="text-base font-serif font-black text-amber-400 uppercase tracking-tight flex items-center gap-2">
               <Send className="w-5 h-5" />
-              {finalPayableETB === 0 
-                ? (language === 'en' ? 'Instant 0 ETB Activation' : 'ፈጣን የ 0 ብር ማግበር')
-                : (language === 'en' ? 'Step 2: Submit Txn Reference' : 'ደረጃ 2፡ የትራንዛክሽን ቁጥር ያስገቡ')}
+              {language === 'en' ? 'Step 2: Submit Txn Reference' : 'ደረጃ 2፡ የትራንዛክሽን ቁጥር ያስገቡ'}
             </h3>
 
             <form onSubmit={handleSubmitPayment} className="space-y-4">
@@ -812,19 +792,29 @@ export default function UpgradeProView({
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">
-                  {language === 'en' ? 'Transaction ID / Reference Number' : 'የትራንዛክሽን መለያ ቁጥር'} {finalPayableETB > 0 ? '*' : language === 'en' ? '(Auto-filled from coupon)' : '(ከኩፖን የተወሰደ)'}
-                </label>
-                <input
-                  type="text"
-                  required={finalPayableETB > 0}
-                  value={txnRef}
-                  onChange={(e) => setTxnRef(e.target.value)}
-                  placeholder={finalPayableETB === 0 ? `SCHOLARSHIP-${appliedCoupon?.code || 'FREE'}` : "e.g. FT16A1926B or Telebirr Txn No"}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#111C35] border border-slate-700 text-xs text-white font-mono focus:ring-1 focus:ring-amber-400 outline-none"
-                />
-              </div>
+              {finalPayableETB > 0 ? (
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">
+                    {language === 'en' ? 'Transaction ID / Reference Number' : 'የትራንዛክሽን መለያ ቁጥር'} *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={txnRef}
+                    onChange={(e) => setTxnRef(e.target.value)}
+                    placeholder="e.g. FT16A1926B or Telebirr Txn No"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#111C35] border border-slate-700 text-xs text-white font-mono focus:ring-1 focus:ring-amber-400 outline-none"
+                  />
+                </div>
+              ) : (
+                <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-400 flex items-center gap-2.5">
+                  <Crown className="w-4 h-4 text-amber-400 shrink-0" />
+                  <div>
+                    <p className="font-bold">{language === 'en' ? 'Full Scholarship Pass Active' : 'ሙሉ የስኮላርሺፕ ፓስ ነቅቷል'}</p>
+                    <p className="text-[11px] text-slate-300">{language === 'en' ? 'No payment transaction reference required. Click below to activate.' : 'የትራንዛክሽን መለያ አያስፈልግም። ከታች ያለውን ይጫኑ።'}</p>
+                  </div>
+                </div>
+              )}
 
               {/* Receipt Image / Screenshot Upload (only if payment is needed) */}
               {finalPayableETB > 0 && (
@@ -1000,14 +990,14 @@ export default function UpgradeProView({
               <div className="space-y-3">
                 <p className="text-xs text-slate-400 font-sans">
                   {language === 'en' 
-                    ? 'Upgrade now or apply a campus scholarship coupon code to unlock full question banks and module downloads.' 
-                    : 'ሙሉ የፈተና ጥያቄዎችንና የሞጁል ዳውንሎዶችን ለማግኘት አሁኑኑ ያሻሽሉ ወይም የቅናሽ ኩፖን ይጠቀሙ።'}
+                    ? 'Upgrade now with Telebirr or CBE Birr to unlock video lectures for all university courses.' 
+                    : 'ለሁሉም የዩኒቨርሲቲ ኮርሶች የቪዲዮ ትምህርቶችን ለመክፈት በቴሌብር ወይም በንግድ ባንክ አሁኑኑ ያሻሽሉ።'}
                 </p>
                 <button
                   onClick={() => setActiveTab('pay')}
                   className="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer"
                 >
-                  {language === 'en' ? 'Enter Campus Coupon Code' : 'የካምፓስ ኩፖን ኮድ ያስገቡ'}
+                  {language === 'en' ? 'Proceed to Payment' : 'ክፍያ ይፈጽሙ'}
                 </button>
               </div>
             )}
@@ -1021,8 +1011,8 @@ export default function UpgradeProView({
             </div>
             <p className="text-[11px] text-slate-400 leading-relaxed font-sans">
               {language === 'en'
-                ? 'All subscriptions and scholarship coupons are governed by official university academic integrity guidelines.'
-                : 'ሁሉም የፕሮ አባልነቶች እና የስኮላርሺፕ ኩፖኖች በኦፊሴላዊ የዩኒቨርሲቲ ደንብ መሰረት የተጠበቁ ናቸው።'}
+                ? 'All subscriptions and payments are verified securely by our academic administration team.'
+                : 'ሁሉም የፕሮ አባልነቶች እና ክፍያዎች በአስተዳዳሪዎች በጥንቃቄ የተረጋገጡ ናቸው።'}
             </p>
           </div>
         </div>

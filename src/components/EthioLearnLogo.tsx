@@ -11,7 +11,7 @@ interface EthioLearnLogoProps {
 
 export default function EthioLearnLogo({ 
   className = '', 
-  size = 40, 
+  size = 32, 
   showCardBackground = false,
   iconOnly = true,
   onClick,
@@ -31,7 +31,7 @@ export default function EthioLearnLogo({
   return (
     <div 
       onClick={onClick}
-      className={`relative select-none shrink-0 inline-flex items-center justify-center transition-all duration-300 ${
+      className={`relative select-none shrink-0 inline-flex items-center justify-center transition-all duration-300 aspect-square ${
         showCardBackground 
           ? 'bg-gradient-to-b from-[#1E293B] to-[#0A1128] rounded-xl border border-amber-500/50 shadow-md shadow-amber-500/10 p-0.5' 
           : 'bg-transparent'

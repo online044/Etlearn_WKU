@@ -330,65 +330,117 @@ export default function LegalPrivacyTermsModal({
               </>
             )}
             {/* ========================================================================= */}
+            {/* TAB 1: COMPREHENSIVE TERMS AND CONDITIONS OF SERVICE                      */}
+            {/* ========================================================================= */}
             {activeTab === 'terms' && (
               <>
-                {/* Rule 1: Registration and Authentication */}
+                {/* Official Terms Preamble & Verification Banner */}
+                <div className="p-4 bg-gradient-to-r from-amber-500/15 via-slate-900 to-slate-900 rounded-xl border border-amber-500/40 space-y-2">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
+                      <Scale className="w-5 h-5 shrink-0" />
+                      <span>
+                        {isAm ? 'የኢትዮ-ለርን ፕሮ ይፋዊ የአጠቃቀም ደንቦች እና ሁኔታዎች' : 'EthioLearn Pro Official Terms & Conditions of Service'}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      {isAm ? 'የጸደቀበት ዓመት፡ 2026/2027 (2018/2019 ዓ.ም.)' : 'Academic Year 2026/2027'}
+                    </span>
+                  </div>
+                  <p className="text-[11.5px] leading-relaxed text-slate-300">
+                    {isAm
+                      ? 'ወደ ኢትዮ ለርን ፕሮ (EthioLearn Pro) ሲገቡ ወይም መለያ ሲፈጥሩ፣ ከዚህ በታች የተዘረዘሩትን የአጠቃቀም ደንቦች፣ የአካዳሚክ ታማኝነት ህጎች እና የዩኒቨርሲቲ የጥናት መመሪያዎች ሙሉ በሙሉ ተቀብለው ለመተግበር ተስማምተዋል። ይህ ሰነድ በወልቂጤ ዩኒቨርሲቲ እና በሀገር አቀፍ የኢትዮጵያ ካምፓሶች ተማሪዎች መካከል የሚሰራ ህጋዊ የአገልግሎት ስምምነት ነው።'
+                      : 'By signing in, registering, or accessing EthioLearn Pro, you enter into a binding academic agreement and agree to be bound by these Terms of Use and Conditions. These terms govern your use of the student learning portal, digital textbook library, AI Tutor ("አስጎብኚ"), and examination archives across Wolkite University and partner Ethiopian institutions.'}
+                  </p>
+                </div>
+
+                {/* Section 1: Student Registration, 2-Step Security & Single Account Policy */}
                 <div className="p-4 bg-slate-900/90 rounded-xl border border-slate-800 space-y-2">
                   <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
                     <UserCheck className="w-4 h-4 shrink-0" />
                     <span>
-                      {isAm ? '1. የተማሪ ምዝገባ፣ የይለፍ ቃል እና ባለ 2-ደረጃ ማረጋገጫ' : '1. Student Registration, Passwords & 2-Step Verification'}
+                      {isAm ? '1. የተማሪ ምዝገባ፣ የይለፍ ቃል እና ባለ 2-ደረጃ ማረጋገጫ' : '1. Student Registration, Credentials & 2-Step Verification'}
                     </span>
                   </div>
                   <p className="leading-relaxed">
                     {isAm
-                      ? 'እያንዳንዱ ተማሪ በኢትዮ ለርን ፕሮ ሲመዘገብ ባለ 6-አሃዝ የማረጋገጫ ኮድ ይሰጠዋል። ይህንን ኮድ ሳያረጋግጡ ወደ መተግበሪያው መግባት በጥብቅ የተከለከለ ነው። ተማሪዎች የይለፍ ቃላቸውን በምስጢር የመጠበቅ ሃላፊነት አለባቸው። ያልተፈቀደ የይለፍ ቃል ማዛባት ወይም የሌላ ተማሪን አካውንት ያለፈቃድ ለመጠቀም መሞከር አካውንትን ያስዘጋል።'
-                      : 'Every student registering for EthioLearn Pro is issued a 6-digit confirmation security code. Portal access is strictly restricted until this code is successfully verified. Students are solely responsible for maintaining password confidentiality. Unauthorized attempts to bypass authentication or access accounts without valid credentials will result in immediate suspension.'}
+                      ? 'እያንዳንዱ ተማሪ በኢትዮ ለርን ፕሮ ሲመዘገብ ባለ 6-አሃዝ የማረጋገጫ ኮድ ይሰጠዋል። ይህንን ኮድ ሳያረጋግጡ ወደ መተግበሪያው መግባት በጥብቅ የተከለከለ ነው። ተማሪዎች የይለፍ ቃላቸውን በምስጢር የመጠበቅ ሙሉ ሃላፊነት አለባቸው። አንድ ተማሪ አንድ አካውንት ብቻ እንዲጠቀም የተፈቀደ ሲሆን፣ የመግቢያ መረጃን ለሶስተኛ ወገን አሳልፎ መስጠት ወይም የሌላ ተማሪን አካውንት ያለፈቃድ ለመጠቀም መሞከር አካውንትን በቋሚነት ያስዘጋል።'
+                      : 'Every student registering on EthioLearn Pro is verified via a 6-digit cryptographic security confirmation code. Access to university resources is granted only after successful verification. Students are solely responsible for safeguarding their login credentials. Account sharing, credential reselling, or unauthorized session cloning is strictly prohibited and results in immediate account suspension.'}
                   </p>
                 </div>
 
-                {/* Rule 2: Payment and Pro Subscriptions */}
+                {/* Section 2: Academic Integrity & Anti-Cheating Honor Code */}
+                <div className="p-4 bg-slate-900/90 rounded-xl border border-slate-800 space-y-2">
+                  <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
+                    <Award className="w-4 h-4 shrink-0" />
+                    <span>
+                      {isAm ? '2. የአካዳሚክ ታማኝነት እና የስነ-ምግባር ደንቦች (Honor Code)' : '2. Academic Integrity & Anti-Cheating Honor Code'}
+                    </span>
+                  </div>
+                  <p className="leading-relaxed">
+                    {isAm
+                      ? 'የኢትዮ-ለርን ፕሮ የፈተና ጥያቄዎች እና የ AI አስጎብኚ ማብራሪያዎች የተዘጋጁት ለግል ጥናት እና ለፅንሰ-ሀሳብ ማዳበር ብቻ ነው። ተማሪዎች ይህንን መድረክ በቀጥታ የፈተና ወቅት (Live University Exams) ለማጭበርበር ወይም ያልተፈቀደ እርዳታ ለማግኘት መጠቀም በጥብቅ የተከለከለ ነው። ማንኛውም የአካዳሚክ ማጭበርበር ሙከራ ለሚመለከተው የዩኒቨርሲቲ ዲፓርትመንት ሪፖርት ይደረጋል።'
+                      : 'All learning materials, past exams, and AI tutor explanations are provided strictly for independent study, revision, and conceptual mastery. Utilizing EthioLearn Pro during live, proctored university examinations or supervised quizzes constitutes serious academic misconduct. Any violation of academic integrity will be reported to university department administrators.'}
+                  </p>
+                </div>
+
+                {/* Section 3: Verified Financial Channels & Activation (Telebirr & CBE Birr) */}
                 <div className="p-4 bg-slate-900/90 rounded-xl border border-slate-800 space-y-2">
                   <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
                     <FileText className="w-4 h-4 shrink-0" />
                     <span>
-                      {isAm ? '2. የቴሌብር እና ሲቢኢ ብር ክፍያ ደረሰኝ ማረጋገጫ' : '2. Payment Verification (Telebirr & CBE Birr)'}
+                      {isAm ? '3. የክፍያ ደንቦች፣ ቴሌብር እና ሲቢኢ ብር የደረሰኝ ማረጋገጫ' : '3. Payment Verification & Telebirr / CBE Birr Transactions'}
                     </span>
                   </div>
                   <p className="leading-relaxed">
                     {isAm
-                      ? 'የኢትዮ-ለርን ፕሮ አባልነትን ለማስበር ተማሪዎች የተጠቀሰውን ክፍያ በቴሌብር (Telebirr) ወይም በሲቢኢ ብር (CBE Birr) በመክፈል ትክክለኛ የትራንዛክሽን ቁጥር እና የደረሰኝ ፎቶ ማያያዝ አለባቸው። ሀሰተኛ ወይም የተዛባ የክፍያ ማረጋገጫ ማቅረብ የመለያ አጠቃቀምን በዘላቂነት ያስዘጋል።'
-                      : 'To unlock EthioLearn Pro, students must submit payments via verified Ethiopian financial channels (Telebirr, CBE Birr) with a verifiable Transaction Reference ID and receipt screenshot. Submitting fraudulent, duplicated, or altered transaction slips will trigger immediate permanent blacklisting.'}
+                      ? 'የኢትዮ-ለርን ፕሮ አባልነትን ለማስከፈት ተማሪዎች የተጠቀሰውን ክፍያ በይፋዊ የኢትዮጵያ የክፍያ መንገዶች (ቴሌብር / Telebirr ወይም ሲቢኢ ብር / CBE Birr) በመክፈል ትክክለኛ የትራንዛክሽን ቁጥር (Transaction ID) እና የደረሰኝ ፎቶ ማያያዝ አለባቸው። ሀሰተኛ፣ የተደጋገመ ወይም የተዛባ የክፍያ ማረጋገጫ ማቅረብ የመለያ አጠቃቀምን በዘላቂነት ያስዘጋል እንዲሁም ለህጋዊ ተጠያቂነት ይዳርጋል።'
+                      : 'To upgrade to EthioLearn Pro, students must complete payments through verified Ethiopian payment services (Telebirr, CBE Birr) and provide authentic Transaction Reference numbers along with readable payment slips. Submitting forged, duplicated, or altered transaction slips triggers automatic permanent account termination without refund.'}
                   </p>
                 </div>
 
-                {/* Rule 3: Free Quota vs Pro Access */}
-                <div className="p-4 bg-slate-900/90 rounded-xl border border-slate-800 space-y-2">
-                  <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
-                    <Clock className="w-4 h-4 shrink-0" />
-                    <span>
-                      {isAm ? '3. የነፃ አጠቃቀም ገደብ እና የ AI ጥያቄዎች' : '3. Free Tier Limits & Unlimited Pro AI Access'}
-                    </span>
-                  </div>
-                  <p className="leading-relaxed">
-                    {isAm
-                      ? 'የነፃ አባልነት ተማሪዎች በቀን እስከ 5 የ AI መምህር ጥያቄዎች ይጠቀማሉ። ዕለታዊ ገደቡ ሲያልቅ ተማሪዎች ወደ ፕሮ አባልነት በማሳደግ ወይም የክፍያ ደረሰኝ በማስገባት ያልተገደበ አገልግሎት፣ ሙሉ የፈተና መፍትሔዎች እና PDF ማውረድ ይችላሉ።'
-                      : 'Free tier scholars receive 5 daily AI Tutor queries. When exhausted, users may continue studying static course notes or upgrade to Pro for unlimited AI tutoring, step-by-step exam solutions, and offline PDF downloads.'}
-                  </p>
-                </div>
-
-                {/* Rule 4: Academic Integrity */}
+                {/* Section 4: Fair Use of Digital Textbooks, Lecture Notes & Offline PDFs */}
                 <div className="p-4 bg-slate-900/90 rounded-xl border border-slate-800 space-y-2">
                   <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
                     <BookOpen className="w-4 h-4 shrink-0" />
                     <span>
-                      {isAm ? '4. የአካዳሚክ ታማኝነት እና የመረጃ አጠቃቀም' : '4. Academic Integrity & Non-Commercial Use'}
+                      {isAm ? '4. የዲጂታል መጽሐፍት፣ ማስታወሻዎች እና ፒዲኤፍ አጠቃቀም ደንብ' : '4. Fair Use of Digital Textbooks, Notes & Offline PDFs'}
                     </span>
                   </div>
                   <p className="leading-relaxed">
                     {isAm
-                      ? 'በኢትዮ-ለርን የሚዘጋጁ የትምህርት ማስታወሻዎች፣ የፈተና መፍትሔዎች እና የ AI ገለጻዎች ለተማሪዎች የግል ጥናት የተዘጋጁ ናቸው። መረጃዎችን ለንግድ አላማ መልሶ መሸጥ፣ በሶስተኛ ወገን ማሰራጨት ወይም በቦቶች ማውረድ በጥብቅ የተከለከለ ነው።'
-                      : 'EthioLearn study notes, university past exam solutions, and AI mentor explanations are intended exclusively for personal educational revision. Commercial redistribution, automated scraping, or reselling of EthioLearn modules is strictly forbidden.'}
+                      ? 'በኢትዮ-ለርን የሚገኙ የዩኒቨርሲቲ ሞጁሎች፣ የፍሬሽማን የጋራ ኮርሶች፣ እና የፈተና መፍትሔዎች ለግል ትምህርት ብቻ የታሰቡ ናቸው። መረጃዎችን ለንግድ አላማ መልሶ መሸጥ፣ በሶስተኛ ወገን ድረ-ገጾች ማሰራጨት ወይም በቦቶች (Automated scrapers) በብዛት ማውረድ በጥብቅ የተከለከለ ነው። ከመስመር ውጭ (Offline) የተቀመጡ ፋይሎች በመሳሪያዎ ላይ ለግል ንባብ ብቻ ይፈቀዳሉ።'
+                      : 'University course modules, freshmen common curricula, and verified lecture PDFs are licensed exclusively for personal, non-commercial student study. Bulk scraping, automated downloading, or commercial resale of EthioLearn resources is strictly prohibited. Offline downloaded files are cached exclusively for single-device offline reading.'}
+                  </p>
+                </div>
+
+                {/* Section 5: AI Tutor ("አስጎብኚ") Usage Code of Conduct */}
+                <div className="p-4 bg-slate-900/90 rounded-xl border border-slate-800 space-y-2">
+                  <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
+                    <GraduationCap className="w-4 h-4 shrink-0" />
+                    <span>
+                      {isAm ? '5. የ AI አስጎብኚ ("Asgobnyi") የአጠቃቀም ስነ-ምግባር' : '5. AI Tutor ("Asgobnyi") Usage Code of Conduct'}
+                    </span>
+                  </div>
+                  <p className="leading-relaxed">
+                    {isAm
+                      ? 'የ AI አስጎብኚው ተማሪዎችን በሳይንስ፣ በምህንድስና፣ በህክምና፣ በኢኮኖሚክስ እና በጋራ ኮርሶች ለመደገፍ የተዘጋጀ ነው። ተገቢ ያልሆኑ ቃላትን፣ የጥላቻ ንግግርን ወይም ከአካዳሚክ ጥናት ውጭ የሆኑ ጥያቄዎችን ማቅረብ የአይኤይ አጠቃቀም ገደብ እንዲጣል ሊያደርግ ይችላል። የ AI አስጎብኚው የሚሰጣቸው ማብራሪያዎች ተጨማሪ የጥናት ድጋፍ እንጂ የዩኒቨርሲቲ መምህራንን የመጨረሻ ውሳኔ አይተኩም።'
+                      : 'The Asgobnyi AI Tutor is designed specifically for academic tutoring across science, technology, medicine, humanities, and common university curricula. Submitting abusive prompts or attempting prompt injections will trigger AI safety throttling. AI-generated explanations serve as study aids and do not supersede official university syllabus guidelines.'}
+                  </p>
+                </div>
+
+                {/* Section 6: Account Governance, Suspension & Appeals */}
+                <div className="p-4 bg-slate-900/90 rounded-xl border border-slate-800 space-y-2">
+                  <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
+                    <ShieldCheck className="w-4 h-4 shrink-0" />
+                    <span>
+                      {isAm ? '6. የአካውንት ህልውና፣ ክልከላዎች እና የቅሬታ ማቅረቢያ' : '6. Account Standing, Sanctions & Dispute Resolution'}
+                    </span>
+                  </div>
+                  <p className="leading-relaxed">
+                    {isAm
+                      ? 'የኢትዮ-ለርን ፕሮ አስተዳደር እነዚህን ደንቦች የሚጥሱ መለያዎችን የማገድ ወይም የመሰረዝ ሙሉ መብት አለው። ተማሪዎች ማንኛውንም የክፍያ ወይም የአካውንት ጥያቄ ካላቸው በይፋዊ የአድሚን አድራሻዎች (ኢሜይል፡ Abrehamalemayehu05@gmail.com, ስልክ፡ +251906046518 / +251966701315, ቴሌግራም፡ @ultra207) ማነጋገር ይችላሉ።'
+                      : 'EthioLearn Pro reserves the right to suspend or terminate accounts that breach these Terms of Service. In case of verification issues or payment inquiries, students may directly reach the official administration office (Email: Abrehamalemayehu05@gmail.com, Phone: +251906046518 / +251966701315, Telegram: @ultra207).'}
                   </p>
                 </div>
               </>
