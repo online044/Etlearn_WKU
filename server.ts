@@ -1913,7 +1913,28 @@ function saveServerManualQuestions(questions: any[]) {
 // In-memory cache synced with disk
 let serverQuestionsCache: any[] = loadServerManualQuestions();
 
-app.get(['/api/questions', '/api/questions/'], (req: Request, res: Response) => {
+app.get(['/api/questions', '/api/questions/'], async (req: Request, res: Response) => {
+  try {
+    const { subject, course } = req.query;
+    const supabase = getSupabaseAdmin();
+    if (supabase) {
+      let query = supabase.from('questions').select('*').limit(3000);
+      if (typeof subject === 'string' && subject.trim()) {
+        query = query.ilike('subject', `%${subject.trim()}%`);
+      }
+      if (typeof course === 'string' && course.trim()) {
+        query = query.ilike('course', `%${course.trim()}%`);
+      }
+      const { data, error } = await query;
+      if (!error && Array.isArray(data) && data.length > 0) {
+        return res.json({ success: true, count: data.length, questions: data, source: 'supabase' });
+      }
+    }
+  } catch (err: any) {
+    console.warn('[server /api/questions] Supabase query warning:', err?.message || err);
+  }
+
+  // Fallback to local server questions cache
   const { subject } = req.query;
   if (typeof subject === 'string' && subject.trim()) {
     const s = subject.trim().toLowerCase();
@@ -1921,9 +1942,9 @@ app.get(['/api/questions', '/api/questions/'], (req: Request, res: Response) => 
       (q.subject && q.subject.toLowerCase().includes(s)) ||
       (q.topic && q.topic.toLowerCase().includes(s))
     );
-    return res.json({ success: true, count: filtered.length, questions: filtered });
+    return res.json({ success: true, count: filtered.length, questions: filtered, source: 'local' });
   }
-  return res.json({ success: true, count: serverQuestionsCache.length, questions: serverQuestionsCache });
+  return res.json({ success: true, count: serverQuestionsCache.length, questions: serverQuestionsCache, source: 'local' });
 });
 
 app.post(['/api/questions', '/api/questions/'], (req: Request, res: Response) => {

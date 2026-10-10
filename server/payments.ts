@@ -10,13 +10,15 @@ import { getSupabaseAdmin } from './security';
 // Server-side authoritative pricing catalog in ETB
 export const SUBSCRIPTION_PRICING: Record<string, { priceETB: number; durationDays?: number }> = {
   free: { priceETB: 0 },
-  pro_monthly: { priceETB: 200, durationDays: 30 },
-  exam_season_pass: { priceETB: 100, durationDays: 21 },
-  subject_bundle: { priceETB: 80 }
+  pro_monthly: { priceETB: 99, durationDays: 30 },
+  pro_semester: { priceETB: 199, durationDays: 120 },
+  pro_annual: { priceETB: 250, durationDays: 365 },
+  exam_season_pass: { priceETB: 199, durationDays: 60 },
+  subject_bundle: { priceETB: 99 }
 };
 
 export interface PaymentSubmissionPayload {
-  tier: 'pro_monthly' | 'exam_season_pass' | 'subject_bundle' | 'free';
+  tier: 'pro_monthly' | 'pro_semester' | 'pro_annual' | 'exam_season_pass' | 'subject_bundle' | 'free';
   provider: 'telebirr' | 'cbe_birr' | 'chapa' | 'santim_pay' | 'manual';
   provider_transaction_id: string;
   sender_name: string;
@@ -53,7 +55,7 @@ export async function handlePaymentSubmission(req: Request, res: Response) {
       });
     }
 
-    const validTiers = ['pro_monthly', 'exam_season_pass', 'subject_bundle'];
+    const validTiers = ['pro_monthly', 'pro_semester', 'pro_annual', 'exam_season_pass', 'subject_bundle'];
     if (!validTiers.includes(tier)) {
       return res.status(400).json({ error: 'Invalid subscription tier' });
     }

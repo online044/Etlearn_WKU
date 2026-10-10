@@ -87,38 +87,38 @@ export default function UpgradeProView({
     switch (tier) {
       case 'pro_monthly': 
         return { 
-          etb: 45, 
+          etb: 99, 
           label: language === 'en' ? '1 Month Video Pass' : 'የ 1 ወር ቪዲዮ ፓስ',
           durationDays: 30,
-          originalEtb: 60
+          originalEtb: 149
         };
       case 'pro_semester': 
         return { 
-          etb: 80, 
+          etb: 199, 
           label: language === 'en' ? 'Semester Pass (All Course Videos)' : 'የሴሚስተር ፓስ (ለሁሉም ኮርሶች)',
           durationDays: 120,
-          originalEtb: 140
+          originalEtb: 250
         };
       case 'pro_annual': 
         return { 
-          etb: 150, 
+          etb: 250, 
           label: language === 'en' ? 'Full Academic Year Video Pass' : 'ሙሉ የትምህርት ዘመን ቪዲዮ ፓስ',
           durationDays: 365,
-          originalEtb: 280
+          originalEtb: 399
         };
       case 'exam_season_pass': 
         return { 
-          etb: 80, 
+          etb: 199, 
           label: language === 'en' ? 'Semester Exam Pass' : 'የፈተና ወቅት ፓስ',
           durationDays: 60,
-          originalEtb: 100
+          originalEtb: 250
         };
       case 'subject_bundle': 
         return { 
-          etb: 50, 
+          etb: 99, 
           label: language === 'en' ? 'Single Subject Video Pack' : 'የአንድ ትምህርት ጥቅል',
           durationDays: 365,
-          originalEtb: 80
+          originalEtb: 149
         };
       default: 
         return { 
@@ -448,9 +448,9 @@ export default function UpgradeProView({
                 <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 block mb-1">Monthly Pass</span>
                 <h3 className="text-lg font-serif font-black text-amber-300">{language === 'en' ? 'Pro Monthly' : 'ፕሮ ወርሃዊ'}</h3>
                 <div className="mt-2 mb-4">
-                  <span className="text-2xl font-black font-serif text-amber-400">149</span>
+                  <span className="text-2xl font-black font-serif text-amber-400">99</span>
                   <span className="text-xs font-bold text-amber-300 ml-1">ETB / Month</span>
-                  <span className="text-[10px] text-slate-500 line-through ml-2">199 ETB</span>
+                  <span className="text-[10px] text-slate-500 line-through ml-2">149 ETB</span>
                 </div>
                 <ul className="space-y-2 text-xs text-slate-200">
                   <li className="flex items-center gap-2"><Check className="w-4 h-4 text-amber-400 shrink-0" /> All 19 Freshman Modules</li>
@@ -463,7 +463,7 @@ export default function UpgradeProView({
                 onClick={() => { playClickChime(); setSelectedTier('pro_monthly'); setActiveTab('pay'); }}
                 className="mt-6 w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer transition border border-slate-700"
               >
-                {language === 'en' ? 'Select Monthly (149 ETB)' : 'ወርሃዊ ይምረጡ (149 ብር)'}
+                {language === 'en' ? 'Select Monthly (99 ETB)' : 'ወርሃዊ ይምረጡ (99 ብር)'}
               </button>
             </div>
 
@@ -477,15 +477,15 @@ export default function UpgradeProView({
               }`}
             >
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-400 text-slate-950 font-black text-[9px] uppercase tracking-widest px-3 py-0.5 rounded-full shadow-md">
-                {language === 'en' ? 'Best Value • Save 42%' : 'ምርጥ ዋጋ • 42% ቅናሽ'}
+                {language === 'en' ? 'Best Value • Save 50%' : 'ምርጥ ዋጋ • 50% ቅናሽ'}
               </div>
               <div>
                 <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 block mb-1 mt-1">4 Months Full Term</span>
                 <h3 className="text-lg font-serif font-black text-amber-300">{language === 'en' ? 'Semester Pass' : 'የሴሚስተር ፓስ'}</h3>
                 <div className="mt-2 mb-4">
-                  <span className="text-2xl font-black font-serif text-amber-400">349</span>
+                  <span className="text-2xl font-black font-serif text-amber-400">199</span>
                   <span className="text-xs font-bold text-amber-300 ml-1">ETB / Semester</span>
-                  <p className="text-[10px] text-emerald-400 font-bold mt-0.5">Only ~87 ETB / month</p>
+                  <p className="text-[10px] text-emerald-400 font-bold mt-0.5">Only ~50 ETB / month</p>
                 </div>
                 <ul className="space-y-2 text-xs text-slate-200">
                   <li className="flex items-center gap-2"><Check className="w-4 h-4 text-amber-400 shrink-0" /> Full University Semester Access</li>
@@ -498,7 +498,7 @@ export default function UpgradeProView({
                 onClick={() => { playClickChime(); setSelectedTier('pro_semester'); setActiveTab('pay'); }}
                 className="mt-6 w-full py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider cursor-pointer shadow-lg transition active:scale-98"
               >
-                {language === 'en' ? 'Get Semester Pass (349 ETB)' : 'የሴሚስተር ፓስ ይውሰዱ'}
+                {language === 'en' ? 'Get Semester Pass (199 ETB)' : 'የሴሚስተር ፓስ ይውሰዱ (199 ብር)'}
               </button>
             </div>
 
@@ -515,22 +515,22 @@ export default function UpgradeProView({
                 <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 block mb-1">Full 12 Months</span>
                 <h3 className="text-lg font-serif font-black text-emerald-300">{language === 'en' ? 'Academic Year Pass' : 'የዓመታዊ እቅድ'}</h3>
                 <div className="mt-2 mb-4">
-                  <span className="text-2xl font-black font-serif text-emerald-400">699</span>
+                  <span className="text-2xl font-black font-serif text-emerald-400">250</span>
                   <span className="text-xs font-bold text-emerald-300 ml-1">ETB / Year</span>
-                  <p className="text-[10px] text-emerald-400 font-bold mt-0.5">Only ~58 ETB / month</p>
+                  <p className="text-[10px] text-emerald-400 font-bold mt-0.5">Only ~21 ETB / month</p>
                 </div>
                 <ul className="space-y-2 text-xs text-slate-300">
                   <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400 shrink-0" /> Freshman + Sophomore Courses</li>
                   <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400 shrink-0" /> National Exit Exam Series</li>
                   <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400 shrink-0" /> Unlimited Offline Sync</li>
-                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400 shrink-0" /> Maximum Savings (61% Off)</li>
+                  <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400 shrink-0" /> Maximum Savings (69% Off)</li>
                 </ul>
               </div>
               <button 
                 onClick={() => { playClickChime(); setSelectedTier('pro_annual'); setActiveTab('pay'); }}
                 className="mt-6 w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer transition shadow-md"
               >
-                {language === 'en' ? 'Select Annual (699 ETB)' : 'ዓመታዊ ይምረጡ (699 ብር)'}
+                {language === 'en' ? 'Select Annual (250 ETB)' : 'ዓመታዊ ይምረጡ (250 ብር)'}
               </button>
             </div>
 

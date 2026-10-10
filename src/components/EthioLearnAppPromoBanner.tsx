@@ -75,10 +75,10 @@ const CAMPAIGNS: PromoCampaign[] = [
     id: 'pro_upgrade',
     tag: { en: 'Video Pro Pass', am: 'የቪዲዮ ፕሮ ፓስ' },
     title: { 
-      en: 'Unlock full video lectures for all university courses via Telebirr & CBE Birr (Only 80 ETB)', 
-      am: 'ለሁሉም የዩኒቨርሲቲ ኮርሶች የተሟሉ የቪዲዮ ትምህርቶችን በቴሌብር እና በንግድ ባንክ ይክፈቱ (80 ብር ብቻ)' 
+      en: 'Unlock full video lectures for all university courses via Telebirr & CBE Birr (From 99 ETB)', 
+      am: 'ለሁሉም የዩኒቨርሲቲ ኮርሶች የተሟሉ የቪዲዮ ትምህርቶችን በቴሌብር እና በንግድ ባንክ ይክፈቱ (ከ99 ብር ጀምሮ)' 
     },
-    highlight: { en: 'From 80 ETB', am: 'ከ80 ብር ጀምሮ' },
+    highlight: { en: 'From 99 ETB', am: 'ከ99 ብር ጀምሮ' },
     ctaText: { en: 'Upgrade Pro', am: 'ወደ ፕሮ አሳድግ' },
     icon: Crown,
     accentColor: '#F59E0B',

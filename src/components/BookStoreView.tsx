@@ -7,7 +7,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  FileText, Search, Star, Bookmark, BookOpen, ChevronRight, ChevronLeft, ArrowLeft,
+  FileText, Search, Star, Bookmark, BookOpen, ChevronRight, ChevronLeft,
   X, Check, Bot, Sparkles, Printer, ZoomIn, ZoomOut, Maximize2, Minimize2,
   Download, Moon, Sun, Layers, HelpCircle, CheckCircle2, RotateCcw, Share2,
   ExternalLink, Folder, CloudDownload, Eye, ShieldCheck, LayoutGrid, List, RefreshCw, Info,
@@ -2257,15 +2257,15 @@ export default function BookStoreView({
                 {/* 🌟 1. FOCUS MODE FLOATING PILL (Positioned at TOP-LEFT) */}
                 {/* Leaves Google Drive's native top-right pop-out button COMPLETELY clear! */}
                 {isZenMode && (
-                  <div className="absolute top-3 left-3 sm:left-4 z-[1000000] flex items-center gap-1.5 bg-slate-950/90 backdrop-blur-xl px-2.5 py-1.5 rounded-full border border-amber-500/50 shadow-2xl text-white select-none">
+                  <div className="absolute top-3 left-3 sm:left-4 z-[1000000] flex items-center gap-1.5 bg-slate-950/90 backdrop-blur-xl px-3 py-1.5 rounded-full border border-amber-500/50 shadow-2xl text-white select-none">
                     <button
                       type="button"
                       onClick={handleCloseBook}
-                      className="px-2.5 py-1 rounded-full bg-white/10 hover:bg-red-500/30 text-slate-200 hover:text-red-300 transition-colors cursor-pointer flex items-center gap-1.5 text-[11px] font-bold active:scale-95"
-                      title={language === 'am' ? 'ተመለስ (ዝጋ)' : 'Back / Close'}
+                      className="p-1 rounded-full bg-white/10 hover:bg-red-500/30 text-slate-300 hover:text-red-300 transition-colors cursor-pointer"
+                      title={language === 'am' ? 'ዝጋ' : 'Close'}
+                      aria-label="Close"
                     >
-                      <ArrowLeft className="w-3.5 h-3.5 text-amber-400" />
-                      <span>{language === 'am' ? 'ተመለስ' : 'Back'}</span>
+                      <X className="w-3.5 h-3.5" />
                     </button>
 
                     <div className="h-3 w-px bg-white/20" />
@@ -2312,27 +2312,8 @@ export default function BookStoreView({
                         : 'bg-[#0F172A]/95 border-slate-800 text-slate-100 shadow-md'
                     }`}
                   >
-                    {/* LEFT: Back Button + Course Code & Title */}
+                    {/* LEFT: Course Code & Title */}
                     <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-                      <button
-                        type="button"
-                        onClick={handleCloseBook}
-                        className={`px-3 py-2 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[44px] select-none active:scale-95 shadow-xs ${
-                          readerTheme === 'light'
-                            ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-800'
-                            : readerTheme === 'sepia'
-                            ? 'bg-[#EADECE] hover:bg-[#DDD0C0] border-[#D5C5B0] text-[#3A2A1A]'
-                            : 'bg-slate-800/90 hover:bg-slate-700 border-amber-500/40 text-slate-100 hover:text-white'
-                        }`}
-                        title={language === 'am' ? 'ወደ መጻሕፍት ማከማቻ ተመለስ' : 'Back to Library'}
-                        aria-label={language === 'am' ? 'ተመለስ' : 'Back'}
-                      >
-                        <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500 shrink-0" />
-                        <span className="text-xs sm:text-sm font-bold tracking-tight">
-                          {language === 'am' ? 'ተመለስ' : 'Back'}
-                        </span>
-                      </button>
-
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
                           <span className="font-bold text-amber-500 font-mono">
@@ -3923,7 +3904,7 @@ export default function BookStoreView({
               <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1.5">
                 <div className="flex items-center justify-between font-bold">
                   <span className="text-white">{language === 'am' ? 'የሴሚስተር ቪዲዮ ፓስ' : 'Semester Video Pass'}</span>
-                  <span className="text-amber-400 font-mono text-sm">80 ETB</span>
+                  <span className="text-amber-400 font-mono text-sm">199 ETB</span>
                 </div>
                 <p className="text-[11px] text-slate-400">
                   {language === 'am'
@@ -3942,7 +3923,7 @@ export default function BookStoreView({
                 }}
                 className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider transition cursor-pointer shadow-md flex items-center justify-center gap-1.5 active:scale-98"
               >
-                <span>{language === 'am' ? 'በቴሌብር / ንግድ ባንክ አሳድግ (80 ብር)' : 'Upgrade Pro via Telebirr (80 ETB)'}</span>
+                <span>{language === 'am' ? 'በቴሌብር / ንግድ ባንክ አሳድግ (ከ99 ብር)' : 'Upgrade Pro via Telebirr (From 99 ETB)'}</span>
               </button>
 
               <button

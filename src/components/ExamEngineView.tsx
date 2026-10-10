@@ -15,6 +15,7 @@ import {
   fetchQuestionsForExamFromFirestore 
 } from '../utils/firebaseStore';
 import { playClickChime, playSuccessChime } from '../utils/audio';
+import { fetchAllSupabaseQuestions } from '../utils/supabaseQuestions';
 
 // Built-in authentic Ethiopian exam papers
 export const ETHIOPIAN_EXAM_PAPERS: ExamPaper[] = [
@@ -277,9 +278,60 @@ export default function ExamEngineView({
   const [pastAttempts, setPastAttempts] = useState<any[]>([]);
   const [reviewFilter, setReviewFilter] = useState<'all' | 'incorrect' | 'correct' | 'flagged'>('all');
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string>('All');
+  const [examPapers, setExamPapers] = useState<ExamPaper[]>(ETHIOPIAN_EXAM_PAPERS);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const userId = profile?.email || 'guest_user';
+
+  // Load live questions from Supabase question table and generate university exam papers
+  useEffect(() => {
+    async function loadSupabaseExams() {
+      try {
+        const liveQuestions = await fetchAllSupabaseQuestions(true);
+        if (liveQuestions && liveQuestions.length > 0) {
+          const courseMap: Record<string, typeof liveQuestions> = {};
+          liveQuestions.forEach(q => {
+            const courseKey = q.course || q.subject || 'University Assessment';
+            if (!courseMap[courseKey]) courseMap[courseKey] = [];
+            courseMap[courseKey].push(q);
+          });
+
+          const dynamicPapers: ExamPaper[] = Object.entries(courseMap).map(([crs, qList]) => {
+            const subj = qList[0]?.subject || crs;
+            return {
+              id: `supa_exam_${crs.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+              title: `${crs} (${subj}) University Exam`,
+              subject: subj,
+              level: 'University',
+              durationMinutes: Math.min(60, Math.max(20, Math.round(qList.length * 1.5))),
+              totalQuestions: qList.length,
+              passingScore: 60,
+              instructions: `Official university examination questions pulled directly from the Supabase question bank for ${crs}. Select the best option.`,
+              questions: qList.map((q, idx) => ({
+                id: q.id || `q_${idx + 1}`,
+                questionNumber: idx + 1,
+                text: q.question_text || q.question,
+                options: q.options && q.options.length > 0 ? q.options : ['True', 'False'],
+                correctAnswer: q.correct_answer,
+                explanation: q.explanation || `Correct answer is ${q.correct_answer}.`,
+                subject: q.subject,
+                topic: q.topic || q.unit || 'Core Curriculum'
+              }))
+            };
+          });
+
+          setExamPapers(prev => {
+            const dynIds = new Set(dynamicPapers.map(p => p.id));
+            const existingNonDup = prev.filter(p => !dynIds.has(p.id));
+            return [...dynamicPapers, ...existingNonDup];
+          });
+        }
+      } catch (err) {
+        console.warn('Could not load dynamic exam papers from Supabase:', err);
+      }
+    }
+    loadSupabaseExams();
+  }, []);
 
   // Load past attempts from Firestore and Supabase
   useEffect(() => {
@@ -319,8 +371,8 @@ export default function ExamEngineView({
 
   // Current active exam object
   const activeExam = useMemo(() => {
-    return ETHIOPIAN_EXAM_PAPERS.find(e => e.id === selectedExamId) || null;
-  }, [selectedExamId]);
+    return examPapers.find(e => e.id === selectedExamId) || null;
+  }, [examPapers, selectedExamId]);
 
   // Active question
   const currentQuestion = useMemo(() => {
@@ -524,9 +576,16 @@ export default function ExamEngineView({
   // VIEW 1: EXAM CATALOG & HISTORY
   // ==========================================================================
   if (examState === 'catalog') {
-    const filteredPapers = ETHIOPIAN_EXAM_PAPERS.filter(p => 
+    const filteredPapers = examPapers.filter(p => 
       selectedSubjectFilter === 'All' || p.subject === selectedSubjectFilter || p.level === selectedSubjectFilter
     );
+
+    const availableTags = Array.from(new Set([
+      'All', 
+      'Grade 12', 
+      'University', 
+      ...examPapers.map(p => p.subject).filter(Boolean)
+    ]));
 
     return (
       <div className="w-full max-w-7xl mx-auto px-4 py-6 text-slate-100 min-h-screen">
@@ -540,7 +599,7 @@ export default function ExamEngineView({
                   {language === 'am' ? 'የብሔራዊና የዩኒቨርሲቲ ፈተናዎች ማዕከል' : 'Authentic National & University Exams'}
                 </span>
                 <span className="text-xs text-slate-400">
-                  {ETHIOPIAN_EXAM_PAPERS.length} {language === 'am' ? 'ፈተናዎች ዝግጁ ናቸው' : 'Exam Papers Ready'}
+                  {examPapers.length} {language === 'am' ? 'ፈተናዎች ዝግጁ ናቸው' : 'Exam Papers Ready'}
                 </span>
               </div>
               <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">
@@ -567,7 +626,7 @@ export default function ExamEngineView({
 
         {/* Filter Pills */}
         <div className="flex flex-wrap items-center gap-2 mb-6">
-          {['All', 'Grade 12', 'University', 'Mathematics', 'Physics', 'Emerging Technologies'].map((tag) => (
+          {availableTags.map((tag) => (
             <button
               key={tag}
               onClick={() => {

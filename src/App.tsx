@@ -52,6 +52,7 @@ import { playClickChime, playSuccessChime, playFailureChime } from './utils/audi
 import { initAuth, googleSignIn, googleSignInRedirect, logoutGoogle, exportAnalyticsToGoogleSheets } from './utils/workspace';
 import { User as FirebaseUser } from 'firebase/auth';
 import { initSupabaseConfig, getSupabase, clearSessionToken, syncAuthSessionWithServer, fetchProfileFromSupabase, saveProfileToSupabase } from './utils/supabaseClient';
+import { fetchAllSupabaseQuestions } from './utils/supabaseQuestions';
 import { safeStorage } from './utils/safeStorage';
 import { isAdministratorEmail, ADMIN_EMAIL } from './utils/adminAuth';
 import { 
@@ -527,7 +528,7 @@ export default function App() {
     // Handle Telegram MainButton on specific pages
     if (tg.MainButton) {
       if (currentPage === 'upgrade') {
-        tg.MainButton.setText(language === 'en' ? 'UPGRADE TO PRO (149 ETB)' : 'ወደ ፕሮ አባልነት አሳድግ (149 ብር)');
+        tg.MainButton.setText(language === 'en' ? 'UPGRADE TO PRO (99 ETB)' : 'ወደ ፕሮ አባልነት አሳድግ (99 ብር)');
         tg.MainButton.show();
         const handleTelegramMainBtn = () => {
           triggerHaptic('medium');
@@ -981,6 +982,22 @@ export default function App() {
       }
     }
     fetchBooks();
+  }, []);
+
+  // Fetch central questions repository from 'questions' table in Supabase
+  useEffect(() => {
+    async function loadQuestionsFromSupabase() {
+      try {
+        await initSupabaseConfig();
+        const questions = await fetchAllSupabaseQuestions(true);
+        if (questions && questions.length > 0) {
+          console.log(`[App.tsx] Loaded ${questions.length} questions from Supabase questions table`);
+        }
+      } catch (err) {
+        console.warn('Could not load questions from Supabase in App.tsx:', err);
+      }
+    }
+    loadQuestionsFromSupabase();
   }, []);
 
   const triggerPWAInstall = async () => {

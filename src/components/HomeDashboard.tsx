@@ -377,7 +377,7 @@ export default function HomeDashboard({
                           ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-black' 
                           : 'bg-slate-800 hover:bg-slate-750 text-slate-300 border border-slate-700'
                       }`}
-                      title={isProUser ? 'Watch Pro Video Lecture' : 'Pro Video Lecture (80 ETB)'}
+                      title={isProUser ? 'Watch Pro Video Lecture' : 'Pro Video Lecture (From 99 ETB)'}
                     >
                       {isProUser ? (
                         <>
@@ -453,7 +453,7 @@ export default function HomeDashboard({
                 VIDEO LECTURE PASS
               </span>
               <span className="text-xs font-mono font-bold text-slate-400">
-                80 ETB
+                From 99 ETB
               </span>
             </div>
 

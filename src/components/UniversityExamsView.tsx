@@ -19,7 +19,7 @@ import { playClickChime, playSuccessChime, playFailureChime } from '../utils/aud
 import { safeStorage } from '../utils/safeStorage';
 import { fetchPublishedExams } from '../utils/contentStore';
 import { INITIAL_QUESTIONS } from '../data/initialFirestoreContent';
-import { generateRandomExamQuestions, fetchQuestionsPaginated } from '../utils/supabaseQuestions';
+import { generateRandomExamQuestions, fetchQuestionsPaginated, fetchAllSupabaseQuestions } from '../utils/supabaseQuestions';
 import { getEthiopian10kExamSheets } from '../data/ethiopianExams10kBank';
 import { generateUniqueQuestions } from '../utils/examQuestionGenerator';
 import ExamBrowserView from './ExamBrowserView';
@@ -295,9 +295,9 @@ export default function UniversityExamsView({
       }
     }).catch(err => console.warn('Could not fetch remote exams:', err));
 
-    // 2. Fetch pre-generated university questions from Supabase Question Bank
-    fetchQuestionsPaginated({ examCategory: 'university_exam', isPublished: true }, 1, 200).then(res => {
-      if (res.questions && res.questions.length > 0) {
+    // 2. Fetch live questions from Supabase Question Bank table
+    fetchAllSupabaseQuestions(true).then(questions => {
+      if (questions && questions.length > 0) {
         const groupMap: Record<string, {
           title: string;
           university: string;
@@ -307,19 +307,19 @@ export default function UniversityExamsView({
           questions: ExamQuestion[];
         }> = {};
 
-        res.questions.forEach(q => {
-          const uni = q.university || 'Wolkite University (WKU)';
+        questions.forEach(q => {
+          const uni = q.university || (profile?.university ? profile.university : 'Wolkite University (WKU)');
           const crs = q.course || q.subject || 'Academic';
           const yr = q.academic_year || '2016 E.C.';
-          const key = `supa_exam_${uni}_${crs}_${yr}`.replace(/[^a-zA-Z0-9_]/g, '_');
+          const key = `supa_exam_${crs}_${yr}`.replace(/[^a-zA-Z0-9_]/g, '_');
 
           if (!groupMap[key]) {
             groupMap[key] = {
               title: `${crs} (${yr}) Exam Paper`,
               university: uni,
               year: yr,
-              subject: q.subject || 'Academic',
-              department: q.department || 'University Academic Faculty',
+              subject: q.subject || crs,
+              department: q.department || `${q.subject || 'University'} Academic Faculty`,
               questions: []
             };
           }
@@ -327,15 +327,18 @@ export default function UniversityExamsView({
           const opts = q.options && q.options.length > 0 ? q.options : ['True', 'False'];
           const choices = opts.map((opt, oIdx) => `${String.fromCharCode(65 + oIdx)}) ${opt}`);
           let correctIdx = opts.findIndex(o => o.trim().toLowerCase() === q.correct_answer.trim().toLowerCase());
+          if (correctIdx === -1 && /^[A-E]$/i.test(q.correct_answer)) {
+            correctIdx = q.correct_answer.toUpperCase().charCodeAt(0) - 65;
+          }
           if (correctIdx === -1) correctIdx = 0;
 
           groupMap[key].questions.push({
             id: groupMap[key].questions.length + 1,
-            qText: q.question_text,
+            qText: q.question_text || q.question,
             choices,
             correctIndex: correctIdx,
             subjectTopic: `${q.subject} • ${q.course}${q.unit ? ` (${q.unit})` : ''}`,
-            explanation: q.explanation || `Official question from ${uni} question bank.`,
+            explanation: q.explanation || `Official question from ${uni} question bank for ${crs}.`,
             amharicExplanation: `ከ${uni} የፈተና ጥያቄዎች ባንክ የተወሰደ።`
           });
         });

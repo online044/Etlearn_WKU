@@ -7,7 +7,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  ArrowLeft, X, ExternalLink, Download, RefreshCw, 
+  X, ExternalLink, Download, RefreshCw, 
   Maximize2, Minimize2, Sun, Moon, Coffee, 
   Smartphone, FileText, Check, Share2, Eye, EyeOff,
   AlertCircle
@@ -225,27 +225,8 @@ export default function InAppViewerModal({
                   : 'bg-[#0F172A]/95 border-slate-800 text-slate-100 shadow-md'
               } backdrop-blur-md`}
             >
-              {/* LEFT: Back Button + Clean Document Identity */}
+              {/* LEFT: Clean Document Identity */}
               <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-                <button
-                  type="button"
-                  onClick={() => { playClickChime(); onClose(); }}
-                  className={`px-3 py-2 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[44px] select-none active:scale-95 shadow-xs ${
-                    readerTheme === 'light'
-                      ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-800'
-                      : readerTheme === 'sepia'
-                      ? 'bg-[#EADECE] hover:bg-[#DDD0C0] border-[#D5C5B0] text-[#3A2A1A]'
-                      : 'bg-slate-800/90 hover:bg-slate-700 border-amber-500/40 text-slate-100 hover:text-white'
-                  }`}
-                  title={isAm ? 'ተመለስ (ዝጋ)' : 'Back / Close'}
-                  aria-label={isAm ? 'ተመለስ' : 'Back'}
-                >
-                  <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500 shrink-0" />
-                  <span className="text-xs sm:text-sm font-bold tracking-tight">
-                    {isAm ? 'ተመለስ' : 'Back'}
-                  </span>
-                </button>
-
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
                     {courseCode && (
@@ -449,11 +430,11 @@ export default function InAppViewerModal({
               <button
                 type="button"
                 onClick={() => { playClickChime(); onClose(); }}
-                className="px-2.5 py-1 rounded-full bg-white/10 hover:bg-red-500/30 text-slate-200 hover:text-red-300 transition-colors cursor-pointer flex items-center gap-1.5 text-[11px] font-bold active:scale-95"
-                title={isAm ? 'ተመለስ (ዝጋ)' : 'Back / Close'}
+                className="p-1 rounded-full bg-white/10 hover:bg-red-500/30 text-slate-300 hover:text-red-300 transition-colors cursor-pointer"
+                title={isAm ? 'ዝጋ' : 'Close'}
+                aria-label="Close"
               >
-                <ArrowLeft className="w-3.5 h-3.5 text-amber-400" />
-                <span>{isAm ? 'ተመለስ' : 'Back'}</span>
+                <X className="w-3.5 h-3.5" />
               </button>
 
               <div className="h-3 w-px bg-white/20" />

@@ -130,7 +130,7 @@ export default function PaywallModal({
               className="flex-1 py-3 px-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-amber-500/20 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <Zap className="w-4 h-4 fill-current" />
-              {language === 'en' ? 'Upgrade to Pro (from 80 ETB)' : 'ወደ ፕሮ ያሻሽሉ (ከ 80 ብር ጀምሮ)'}
+              {language === 'en' ? 'Upgrade to Pro (from 99 ETB)' : 'ወደ ፕሮ ያሻሽሉ (ከ 99 ብር ጀምሮ)'}
             </button>
             <button
               onClick={() => { playClickChime(); onClose(); }}

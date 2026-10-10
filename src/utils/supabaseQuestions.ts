@@ -133,6 +133,7 @@ export function mapDbQuestion(row: any): QuestionBankRecord {
   let optionsArr: string[] = [];
   const optionsRaw: Array<{ id: string; text: string }> = [];
 
+  // 1. Array format
   if (Array.isArray(row.options)) {
     row.options.forEach((o: any, idx: number) => {
       const id = typeof o === 'object' && o?.id ? String(o.id) : String.fromCharCode(65 + idx);
@@ -140,8 +141,15 @@ export function mapDbQuestion(row: any): QuestionBankRecord {
       optionsArr.push(text);
       optionsRaw.push({ id, text });
     });
+  } else if (Array.isArray(row.choices)) {
+    row.choices.forEach((o: any, idx: number) => {
+      const id = typeof o === 'object' && o?.id ? String(o.id) : String.fromCharCode(65 + idx);
+      const text = typeof o === 'string' ? o.trim() : String(o?.text || o || '').trim();
+      optionsArr.push(text);
+      optionsRaw.push({ id, text });
+    });
   } else if (row.options && typeof row.options === 'object') {
-    // Handle dictionary: { "A": "...", "B": "...", "C": "...", "D": "..." }
+    // 2. Object dictionary: { "A": "...", "B": "...", "C": "...", "D": "..." }
     ['A', 'B', 'C', 'D', 'E'].forEach((letter) => {
       const val = row.options[letter] || row.options[letter.toLowerCase()];
       if (val !== undefined && val !== null) {
@@ -158,6 +166,7 @@ export function mapDbQuestion(row: any): QuestionBankRecord {
       });
     }
   } else if (typeof row.options === 'string') {
+    // 3. Serialized string JSON or pipe-delimited
     try {
       const parsed = JSON.parse(row.options);
       if (Array.isArray(parsed)) {
@@ -186,15 +195,56 @@ export function mapDbQuestion(row: any): QuestionBankRecord {
     }
   }
 
-  const qText = String(row.question || row.question_text || '');
-  const subjectStr = String(row.subject || row.module_name || 'General Biology');
-  const courseStr = String(row.course || row.module_name || subjectStr);
-  const unitStr = String(row.unit || row.chapter || 'Unit 1');
+  // 4. Fallback to separate columns (e.g. option_a, option_b, option_c, option_d or choice_a/b/c/d or a/b/c/d)
+  if (optionsArr.length === 0) {
+    const optA = row.option_a ?? row.optionA ?? row.choice_a ?? row.choiceA ?? row.a ?? row.A;
+    const optB = row.option_b ?? row.optionB ?? row.choice_b ?? row.choiceB ?? row.b ?? row.B;
+    const optC = row.option_c ?? row.optionC ?? row.choice_c ?? row.choiceC ?? row.c ?? row.C;
+    const optD = row.option_d ?? row.optionD ?? row.choice_d ?? row.choiceD ?? row.d ?? row.D;
+    const optE = row.option_e ?? row.optionE ?? row.choice_e ?? row.choiceE ?? row.e ?? row.E;
+
+    if (optA !== undefined && optB !== undefined) {
+      [
+        { id: 'A', text: String(optA).trim() },
+        { id: 'B', text: String(optB).trim() },
+        ...(optC !== undefined ? [{ id: 'C', text: String(optC).trim() }] : []),
+        ...(optD !== undefined ? [{ id: 'D', text: String(optD).trim() }] : []),
+        ...(optE !== undefined ? [{ id: 'E', text: String(optE).trim() }] : []),
+      ].forEach(item => {
+        optionsArr.push(item.text);
+        optionsRaw.push(item);
+      });
+    }
+  }
+
+  const qText = String(row.question || row.question_text || row.questionText || row.prompt || row.text || row.title || row.body || '');
+  const subjectStr = String(row.subject || row.course || row.module_name || row.module || row.category || 'General Biology');
+  const courseStr = String(row.course || row.subject || row.module_name || subjectStr);
+  const unitStr = String(row.unit || row.chapter || row.part || row.section || 'Unit 1');
   const chapterStr = row.chapter ? String(row.chapter) : unitStr;
-  const topicStr = row.topic ? String(row.topic) : chapterStr;
+  const topicStr = String(row.topic || row.chapter || row.unit || 'General Topic');
+  const rawCorrect = String(
+    row.correct_answer ?? 
+    row.correctAnswer ?? 
+    row.answer ?? 
+    row.correct ?? 
+    row.solution ?? 
+    row.right_answer ?? 
+    row.correct_option ?? 
+    ''
+  ).trim();
+
+  // If correct answer is a letter 'A', 'B', 'C', 'D' but options have texts, normalize
+  let resolvedCorrect = rawCorrect;
+  if (/^[A-E]$/i.test(rawCorrect) && optionsArr.length > 0) {
+    const idx = rawCorrect.toUpperCase().charCodeAt(0) - 65;
+    if (optionsArr[idx]) {
+      resolvedCorrect = optionsArr[idx];
+    }
+  }
 
   return {
-    id: String(row.id || `q-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`),
+    id: String(row.id || row.question_id || row._id || `q-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`),
     subject_id: row.subject_id ? String(row.subject_id) : undefined,
     subject: subjectStr,
     course: courseStr,
@@ -206,11 +256,11 @@ export function mapDbQuestion(row: any): QuestionBankRecord {
     question_type: (row.question_type || 'multiple_choice') as BankQuestionType,
     options: optionsArr,
     options_raw: optionsRaw.length > 0 ? optionsRaw : optionsArr.map((text, i) => ({ id: String.fromCharCode(65 + i), text })),
-    correct_answer: String(row.correct_answer || row.correctAnswer || ''),
-    explanation: row.explanation ? String(row.explanation) : undefined,
+    correct_answer: resolvedCorrect || rawCorrect,
+    explanation: row.explanation || row.rationale || row.solution_explanation || row.reason ? String(row.explanation || row.rationale || row.solution_explanation || row.reason) : undefined,
     difficulty: (row.difficulty || 'medium') as BankDifficulty,
     exam_category: (row.exam_category || 'practice_exam') as BankExamCategory,
-    source: row.source ? String(row.source) : 'Curriculum Module',
+    source: row.source ? String(row.source) : 'Supabase Database',
     source_unit: row.source_unit ? String(row.source_unit) : (row.unit ? String(row.unit) : undefined),
     source_file: row.source_file ? String(row.source_file) : undefined,
     university: row.university ? String(row.university) : undefined,
@@ -218,13 +268,111 @@ export function mapDbQuestion(row: any): QuestionBankRecord {
     academic_year: row.academic_year ? String(row.academic_year) : undefined,
     semester: row.semester ? String(row.semester) : undefined,
     is_verified_official: Boolean(row.is_verified_official),
-    batch_id: String(row.batch_id || 'manual-entry'),
+    batch_id: String(row.batch_id || 'supabase-live'),
     fingerprint: row.fingerprint || generateQuestionFingerprint(courseStr, subjectStr, qText),
     is_published: row.is_published !== false,
     is_pro: Boolean(row.is_pro),
     created_at: row.created_at || new Date().toISOString(),
     updated_at: row.updated_at || new Date().toISOString()
   };
+}
+
+// ============================================================================
+// 2b. DYNAMIC TABLE RESOLVER (Supports both 'questions' and 'question' in Supabase)
+// ============================================================================
+
+let cachedQuestionsTableName: 'questions' | 'question' | null = null;
+
+export async function resolveQuestionsTable(): Promise<string> {
+  if (cachedQuestionsTableName) return cachedQuestionsTableName;
+  const supabase = getSupabase();
+  if (!supabase) return 'questions';
+
+  try {
+    // 1. Test 'questions' (plural)
+    const resPlural = await supabase.from('questions').select('id').limit(1);
+    if (!resPlural.error) {
+      cachedQuestionsTableName = 'questions';
+      return 'questions';
+    }
+
+    // 2. Test 'question' (singular)
+    const resSingular = await supabase.from('question').select('id').limit(1);
+    if (!resSingular.error) {
+      console.log("[Supabase Questions] Auto-detected 'question' (singular) table in Supabase");
+      cachedQuestionsTableName = 'question';
+      return 'question';
+    }
+  } catch (e) {
+    console.warn('[resolveQuestionsTable] Auto-detection error:', e);
+  }
+
+  return 'questions';
+}
+
+/**
+ * Loads all live questions directly from the Supabase question / questions table.
+ * Automatically saves them into local cache so they are immediately available
+ * across all quizzes, practice drills, and exam generators.
+ */
+export async function fetchAllSupabaseQuestions(forceRefresh = false): Promise<QuestionBankRecord[]> {
+  const supabase = getSupabase();
+  let liveRows: any[] = [];
+  let foundTable = '';
+
+  if (supabase) {
+    const tableNames = ['questions', 'question'];
+    for (const table of tableNames) {
+      try {
+        const { data, error } = await supabase
+          .from(table)
+          .select('*')
+          .limit(3000);
+
+        if (!error && Array.isArray(data) && data.length > 0) {
+          liveRows = data;
+          foundTable = table;
+          cachedQuestionsTableName = table as any;
+          break;
+        }
+      } catch (err) {
+        console.warn(`[fetchAllSupabaseQuestions] Error querying table '${table}':`, err);
+      }
+    }
+  }
+
+  // Also try backend proxy endpoint /api/questions if direct client returned nothing
+  if (liveRows.length === 0) {
+    try {
+      const res = await fetch('/api/questions');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.questions && Array.isArray(json.questions) && json.questions.length > 0) {
+          liveRows = json.questions;
+          foundTable = 'api_questions';
+        }
+      }
+    } catch (err) {
+      console.warn('[fetchAllSupabaseQuestions] /api/questions fetch error:', err);
+    }
+  }
+
+  if (liveRows.length > 0) {
+    console.log(`[Supabase Questions] Successfully loaded ${liveRows.length} questions from '${foundTable}'`);
+    const mappedQuestions = liveRows.map(mapDbQuestion);
+
+    // Merge into local cache so questions are accessible offline and immediately
+    const currentCached = getCachedQuestions();
+    const map = new Map<string, QuestionBankRecord>();
+    currentCached.forEach(q => map.set(q.id, q));
+    mappedQuestions.forEach(q => map.set(q.id, q));
+    const merged = Array.from(map.values());
+    setCachedQuestions(merged);
+
+    return mappedQuestions;
+  }
+
+  return getCachedQuestions();
 }
 
 // ============================================================================
@@ -662,64 +810,69 @@ export async function fetchQuestionsPaginated(
   const supabase = getSupabase();
 
   if (supabase) {
-    try {
-      let query = supabase
-        .from('questions')
-        .select('*', { count: 'exact' });
+    const primaryTable = await resolveQuestionsTable();
+    const candidateTables = [primaryTable, primaryTable === 'questions' ? 'question' : 'questions'];
 
-      if (filter.course && filter.course !== 'All') {
-        query = query.eq('course', filter.course);
-      }
-      if (filter.subject && filter.subject !== 'All') {
-        query = query.eq('subject', filter.subject);
-      }
-      if (filter.unit && filter.unit !== 'All') {
-        query = query.eq('unit', filter.unit);
-      }
-      if (filter.difficulty && filter.difficulty !== 'All') {
-        query = query.eq('difficulty', filter.difficulty);
-      }
-      if (filter.questionType && filter.questionType !== 'All') {
-        query = query.eq('question_type', filter.questionType);
-      }
-      if (filter.examCategory && filter.examCategory !== 'All') {
-        query = query.eq('exam_category', filter.examCategory);
-      }
-      if (filter.batchId && filter.batchId !== 'All') {
-        query = query.eq('batch_id', filter.batchId);
-      }
-      if (filter.university && filter.university !== 'All') {
-        query = query.eq('university', filter.university);
-      }
-      if (filter.isPublished !== undefined && filter.isPublished !== 'all') {
-        query = query.eq('is_published', Boolean(filter.isPublished));
-      }
-      if (filter.isVerifiedOfficial !== undefined && filter.isVerifiedOfficial !== 'all') {
-        query = query.eq('is_verified_official', Boolean(filter.isVerifiedOfficial));
-      }
-      if (filter.search && filter.search.trim()) {
-        const s = filter.search.trim();
-        query = query.or(`question_text.ilike.%${s}%,explanation.ilike.%${s}%,subject.ilike.%${s}%,course.ilike.%${s}%`);
-      }
+    for (const table of candidateTables) {
+      try {
+        let query = supabase
+          .from(table)
+          .select('*', { count: 'exact' });
 
-      const from = (page - 1) * pageSize;
-      const to = from + pageSize - 1;
+        if (filter.course && filter.course !== 'All') {
+          query = query.eq('course', filter.course);
+        }
+        if (filter.subject && filter.subject !== 'All') {
+          query = query.eq('subject', filter.subject);
+        }
+        if (filter.unit && filter.unit !== 'All') {
+          query = query.eq('unit', filter.unit);
+        }
+        if (filter.difficulty && filter.difficulty !== 'All') {
+          query = query.eq('difficulty', filter.difficulty);
+        }
+        if (filter.questionType && filter.questionType !== 'All') {
+          query = query.eq('question_type', filter.questionType);
+        }
+        if (filter.examCategory && filter.examCategory !== 'All') {
+          query = query.eq('exam_category', filter.examCategory);
+        }
+        if (filter.batchId && filter.batchId !== 'All') {
+          query = query.eq('batch_id', filter.batchId);
+        }
+        if (filter.university && filter.university !== 'All') {
+          query = query.eq('university', filter.university);
+        }
+        if (filter.isPublished !== undefined && filter.isPublished !== 'all') {
+          query = query.eq('is_published', Boolean(filter.isPublished));
+        }
+        if (filter.isVerifiedOfficial !== undefined && filter.isVerifiedOfficial !== 'all') {
+          query = query.eq('is_verified_official', Boolean(filter.isVerifiedOfficial));
+        }
+        if (filter.search && filter.search.trim()) {
+          const s = filter.search.trim();
+          query = query.or(`question_text.ilike.%${s}%,explanation.ilike.%${s}%,subject.ilike.%${s}%,course.ilike.%${s}%`);
+        }
 
-      query = query.order('created_at', { ascending: false }).range(from, to);
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
 
-      const { data, count, error } = await query;
+        query = query.order('id', { ascending: true }).range(from, to);
 
-      if (!error && Array.isArray(data)) {
-        return {
-          questions: data.map(mapDbQuestion),
-          totalCount: count || data.length
-        };
+        const { data, count, error } = await query;
+
+        if (!error && Array.isArray(data) && data.length > 0) {
+          return {
+            questions: data.map(mapDbQuestion),
+            totalCount: count || data.length
+          };
+        }
+        if (error) {
+          console.warn(`[fetchQuestionsPaginated warning for '${table}']]:`, error.message);
+        }
+      } catch (e) {
+        console.warn(`[fetchQuestionsPaginated exception for '${table}']]:`, e);
       }
-      if (error) {
-        console.warn('[fetchQuestionsPaginated warning]:', error.message);
-      }
-    } catch (e) {
-      console.warn('[fetchQuestionsPaginated exception]:', e);
     }
   }
 
@@ -784,11 +937,16 @@ export async function fetchQuestionBankStats(): Promise<QuestionBankStats> {
 
   if (supabase) {
     try {
-      const { data, error } = await supabase
-        .from('questions')
-        .select('*');
-      if (!error && Array.isArray(data)) {
-        questions = data.map(mapDbQuestion);
+      const table = await resolveQuestionsTable();
+      for (const t of [table, table === 'questions' ? 'question' : 'questions']) {
+        const { data, error } = await supabase
+          .from(t)
+          .select('*')
+          .limit(3000);
+        if (!error && Array.isArray(data) && data.length > 0) {
+          questions = data.map(mapDbQuestion);
+          break;
+        }
       }
     } catch (e) {
       console.warn('[fetchQuestionBankStats exception]:', e);
@@ -1043,64 +1201,88 @@ export async function generateRandomExamQuestions(config: ExamGenerationConfig):
   let candidatePool: QuestionBankRecord[] = [];
 
   if (supabase) {
-    try {
-      let query = supabase
-        .from('questions')
-        .select('*')
-        .eq('is_published', true);
+    const primaryTable = await resolveQuestionsTable();
+    const candidateTables = [primaryTable, primaryTable === 'questions' ? 'question' : 'questions'];
 
-      if (config.course && config.course !== 'All' && !config.course.startsWith('All First-Year')) {
-        query = query.eq('course', config.course);
-      } else if (config.subject && config.subject !== 'All' && !config.subject.startsWith('All First-Year')) {
-        query = query.eq('subject', config.subject);
-      }
+    for (const table of candidateTables) {
+      try {
+        let query = supabase.from(table).select('*');
 
-      if (config.unit && config.unit !== 'All' && config.unit !== 'All Units') {
-        query = query.eq('unit', config.unit);
-      }
+        if (config.course && config.course !== 'All' && !config.course.startsWith('All First-Year')) {
+          query = query.or(`course.ilike.%${config.course}%,subject.ilike.%${config.course}%`);
+        } else if (config.subject && config.subject !== 'All' && !config.subject.startsWith('All First-Year')) {
+          query = query.or(`subject.ilike.%${config.subject}%,course.ilike.%${config.subject}%`);
+        }
 
-      if (config.topic && config.topic !== 'All' && config.topic !== 'All Topics') {
-        query = query.eq('topic', config.topic);
-      }
+        if (config.unit && config.unit !== 'All' && config.unit !== 'All Units') {
+          query = query.eq('unit', config.unit);
+        }
 
-      if (config.examCategory && (config.examCategory as string) !== 'All') {
-        query = query.eq('exam_category', config.examCategory);
-      }
+        if (config.topic && config.topic !== 'All' && config.topic !== 'All Topics') {
+          query = query.eq('topic', config.topic);
+        }
 
-      if (config.university && config.university !== 'All') {
-        query = query.eq('university', config.university);
-      }
+        const { data, error } = await query.limit(1000);
+        if (!error && Array.isArray(data) && data.length > 0) {
+          candidatePool = data.map(mapDbQuestion);
+          break;
+        }
 
-      // Fetch up to 1000 candidates to select from
-      const { data, error } = await query.limit(1000);
-      if (!error && Array.isArray(data) && data.length > 0) {
-        candidatePool = data.map(mapDbQuestion);
+        // If specific filtered query returned 0, try fetching questions from this table
+        if (!candidatePool.length) {
+          const { data: allData, error: allErr } = await supabase.from(table).select('*').limit(1000);
+          if (!allErr && Array.isArray(allData) && allData.length > 0) {
+            candidatePool = allData.map(mapDbQuestion);
+            break;
+          }
+        }
+      } catch (e) {
+        console.warn(`[generateRandomExamQuestions exception for '${table}']]:`, e);
       }
-    } catch (e) {
-      console.warn('[generateRandomExamQuestions exception]:', e);
     }
   }
 
   // Fallback to cached questions if Supabase is offline or returned empty
   if (candidatePool.length === 0) {
-    const cached = getCachedQuestions().filter(q => q.is_published);
-    candidatePool = cached.filter(q => {
-      if (config.course && config.course !== 'All' && !config.course.startsWith('All First-Year') && q.course !== config.course) return false;
-      if (config.subject && config.subject !== 'All' && !config.subject.startsWith('All First-Year') && q.subject !== config.subject) return false;
-      if (config.unit && config.unit !== 'All' && config.unit !== 'All Units' && q.unit !== config.unit) return false;
-      if (config.topic && config.topic !== 'All' && config.topic !== 'All Topics' && q.topic !== config.topic) return false;
-      if (config.examCategory && (config.examCategory as string) !== 'All' && q.exam_category !== config.examCategory) return false;
-      if (config.university && config.university !== 'All' && q.university !== config.university) return false;
-      return true;
-    });
+    candidatePool = getCachedQuestions().filter(q => q.is_published);
+  }
 
-    // If still empty, broaden search to subject or general
-    if (candidatePool.length === 0) {
-      candidatePool = cached.filter(q => !config.subject || config.subject === 'All' || config.subject.startsWith('All First-Year') || q.subject === config.subject);
-      if (candidatePool.length === 0) {
-        candidatePool = [...cached];
-      }
+  // Filter in memory according to config
+  let filtered = candidatePool;
+  if (config.subject && config.subject !== 'All' && !config.subject.startsWith('All First-Year')) {
+    const subLower = config.subject.toLowerCase();
+    const subMatches = candidatePool.filter(q => 
+      q.subject.toLowerCase().includes(subLower) || 
+      q.course.toLowerCase().includes(subLower)
+    );
+    if (subMatches.length >= 3) {
+      filtered = subMatches;
     }
+  }
+
+  if (config.unit && config.unit !== 'All' && config.unit !== 'All Units') {
+    const unitMatches = filtered.filter(q => q.unit === config.unit);
+    if (unitMatches.length >= 3) {
+      filtered = unitMatches;
+    }
+  }
+
+  if (config.difficulty && (config.difficulty as string) !== 'all') {
+    const diffMatches = filtered.filter(q => q.difficulty === config.difficulty);
+    if (diffMatches.length >= 3) {
+      filtered = diffMatches;
+    }
+  }
+
+  candidatePool = filtered.length > 0 ? filtered : candidatePool;
+
+  if (config.examCategory && (config.examCategory as string) !== 'All') {
+    const catMatches = candidatePool.filter(q => q.exam_category === config.examCategory);
+    if (catMatches.length >= 3) candidatePool = catMatches;
+  }
+  if (config.university && config.university !== 'All') {
+    const uniMatches = candidatePool.filter(q => q.university === config.university);
+    if (uniMatches.length >= 3) candidatePool = uniMatches;
   }
 
   // Filter out recently answered questions if possible to avoid repetition
