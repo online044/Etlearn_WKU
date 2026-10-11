@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { StudentProfile } from '../types';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
@@ -180,6 +180,21 @@ export default function AuthPortalView({
   const [year, setYear] = useState('Freshman (1st Year)');
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Memoized university and department lists to keep typing and rendering lag-free
+  const filteredUniversities = useMemo(() => {
+    const q = (univSearch || '').toLowerCase().trim();
+    if (!q) return ETHIOPIAN_UNIVERSITIES.slice(0, 30);
+    return ETHIOPIAN_UNIVERSITIES.filter(u => u.toLowerCase().includes(q)).slice(0, 30);
+  }, [univSearch]);
+
+  const filteredDepartments = useMemo(() => {
+    const q = (deptSearch || '').toLowerCase().trim();
+    if (!q) return POPULAR_DEPARTMENTS;
+    return POPULAR_DEPARTMENTS.filter(d =>
+      d.labelEn.toLowerCase().includes(q) || d.labelAm.includes(q)
+    );
+  }, [deptSearch]);
 
   // States for verification codes & asynchronous actions
   const [loading, setLoading] = useState(false);
@@ -437,23 +452,17 @@ export default function AuthPortalView({
     // 1. Primary Authentication: Firebase Auth
     if (auth) {
       try {
-        await ensureLocalAuthPersistence();
         const userCredential = await signInWithEmailAndPassword(auth, emailTrim, passwordTrim);
         if (userCredential?.user) {
           const uid = userCredential.user.uid;
           
-          // Fetch user profile from Supabase where firebase_uid = auth_uid or email
-          let supaProfile = null;
-          try {
-            supaProfile = await fetchProfileFromSupabase(uid, emailTrim);
-          } catch (supaErr) {
-            console.warn('[Supabase profile lookup notice]:', supaErr);
-          }
-
-          let firestoreProfile: any = null;
-          try {
-            firestoreProfile = await fetchProfileFromFirestore(uid);
-          } catch (fireErr) {}
+          // Fast parallel lookup for user profiles across Supabase and Firestore
+          const [supaRes, firestoreRes] = await Promise.allSettled([
+            fetchProfileFromSupabase(uid, emailTrim),
+            fetchProfileFromFirestore(uid)
+          ]);
+          const supaProfile = supaRes.status === 'fulfilled' ? supaRes.value : null;
+          const firestoreProfile = firestoreRes.status === 'fulfilled' ? firestoreRes.value : null;
 
           const nameToUse = supaProfile?.full_name || supaProfile?.name || userCredential.user.displayName || firestoreProfile?.name || localExistingAccount?.profile?.name || emailTrim.split('@')[0];
           const univToUse = supaProfile?.university || firestoreProfile?.university || localExistingAccount?.profile?.university || "Wolkite University (WKU)";
@@ -766,54 +775,31 @@ export default function AuthPortalView({
     setPendingStudentProfile(profile);
     setPendingPasswordString(passwordTrim);
 
-    // 1. Primary: Direct Firebase Auth Registration
-    let userUid = '';
+    // 1. Primary: Direct Firebase Auth Registration with fast timeout race
+    let userUid = `student_${Date.now()}`;
+    let firebaseUser: any = null;
+
     if (auth && passwordTrim) {
       try {
-        await ensureLocalAuthPersistence();
-        const cred = await createUserWithEmailAndPassword(auth, emailTrim, passwordTrim);
+        // Fast Firebase Auth with timeout race so student is never stuck on slow network
+        const authPromise = createUserWithEmailAndPassword(auth, emailTrim, passwordTrim);
+        const timeoutPromise = new Promise<null>((_, reject) => 
+          setTimeout(() => reject(new Error('timeout')), 4500)
+        );
+        const cred = await Promise.race([authPromise, timeoutPromise]) as any;
+
         if (cred?.user) {
+          firebaseUser = cred.user;
           userUid = cred.user.uid;
           profile.id = userUid;
           profile.firebaseUid = userUid;
           profile.emailVerified = cred.user.emailVerified;
-
-          // Send Firebase Email Verification link
-          try {
-            await sendEmailVerification(cred.user);
-          } catch (verErr) {
-            console.warn('[Firebase sendEmailVerification notice]:', verErr);
-          }
-
-          // 2. Create the corresponding user profile in Supabase using that exact Firebase "uid"
-          try {
-            await saveProfileToSupabase({
-              firebase_uid: userUid,
-              full_name: nameTrim,
-              email: emailTrim,
-              phone: cleanedPhone.formatted || phoneRaw,
-              university: univTrim,
-              department: deptTrim,
-              year_level: year,
-              profile_photo: 'champion',
-              subscription_status: 'free'
-            });
-          } catch (supaErr) {
-            console.warn('[Supabase save profile notice]:', supaErr);
-          }
-
-          // 3. Multi-cloud resilience: Sync profile to Firestore
-          try {
-            await syncProfileToFirestore(userUid, profile);
-          } catch (fireErr) {
-            console.warn('[Firestore sync notice]:', fireErr);
-          }
         }
       } catch (fbErr: any) {
         console.warn('[Firebase Auth Registration notice]:', fbErr?.code, fbErr?.message);
-        playFailureChime();
-        setLoading(false);
         if (fbErr?.code === 'auth/email-already-in-use') {
+          playFailureChime();
+          setLoading(false);
           setAuthError(
             lang === 'am'
               ? "ይህ ኢሜይል አስቀድሞ ተመዝግቧል። እባክዎ ይግቡ።"
@@ -821,6 +807,8 @@ export default function AuthPortalView({
           );
           return;
         } else if (fbErr?.code === 'auth/weak-password') {
+          playFailureChime();
+          setLoading(false);
           setPasswordError(
             lang === 'am'
               ? "የይለፍ ቃል በጣም ደካማ ነው። እባክዎን ቢያንስ 6 ፊደላት/ቁጥሮች ይጠቀሙ።"
@@ -828,27 +816,24 @@ export default function AuthPortalView({
           );
           return;
         } else if (fbErr?.code === 'auth/invalid-email') {
+          playFailureChime();
+          setLoading(false);
           setEmailError(
             lang === 'am'
               ? "እባክዎን ትክክለኛ የኢሜይል አድራሻ ያስገቡ።"
               : "Please enter a valid email address."
           );
           return;
-        } else if (fbErr?.code === 'auth/network-request-failed') {
-          setAuthError(
-            lang === 'am'
-              ? "የኢንተርኔት ግንኙነት ችግር አጋጥሟል። እባክዎን ግንኙነትዎን ፈትሸው እንደገና ይሞክሩ።"
-              : "Internet connection problem. Please check your connection and try again."
-          );
-          return;
-        } else {
+        } else if (fbErr?.message !== 'timeout' && fbErr?.code !== 'auth/network-request-failed') {
+          playFailureChime();
+          setLoading(false);
           setAuthError(formatFirebaseAuthError(fbErr, lang));
           return;
         }
       }
     }
 
-    // 4. Persist student account locally & sync session
+    // 2. Persist student account locally immediately so navigation is instant
     const newAccount: AccountInfo = {
       email: emailTrim,
       passwordEncrypted: passwordTrim,
@@ -871,15 +856,36 @@ export default function AuthPortalView({
       }));
     }
 
-    try {
-      await syncAuthSessionWithServer({
+    // 3. Asynchronously dispatch background cloud tasks without blocking UI transition
+    const capturedUid = userUid;
+    const capturedProfile = { ...profile };
+    Promise.allSettled([
+      // Send Firebase verification email
+      firebaseUser ? sendEmailVerification(firebaseUser).catch(() => {}) : Promise.resolve(),
+      // Create profile in Supabase
+      saveProfileToSupabase({
+        firebase_uid: capturedUid,
+        full_name: nameTrim,
         email: emailTrim,
-        uid: userUid,
+        phone: cleanedPhone.formatted || phoneRaw,
+        university: univTrim,
+        department: deptTrim,
+        year_level: year,
+        profile_photo: 'champion',
+        subscription_status: 'free'
+      }).catch(e => console.warn('[Supabase save profile notice]:', e)),
+      // Multi-cloud Firestore resilience
+      syncProfileToFirestore(capturedUid, capturedProfile).catch(e => console.warn('[Firestore sync notice]:', e)),
+      // Express server session sync
+      syncAuthSessionWithServer({
+        email: emailTrim,
+        uid: capturedUid,
         role: isAdministratorEmail(emailTrim) ? 'admin' : 'student',
-        displayName: profile.name
-      });
-    } catch (tokErr) {}
+        displayName: capturedProfile.name
+      }).catch(() => {})
+    ]).catch(() => {});
 
+    // Instant transition - no waiting or spinning!
     playSuccessChime();
     setLoading(false);
     onComplete(profile);
@@ -1928,9 +1934,7 @@ export default function AuthPortalView({
 
                   {showUnivDropdown && (
                     <div className="absolute left-0 right-0 top-full mt-1 bg-[#090f1d] border border-slate-700 rounded-xl shadow-2xl z-50 max-h-48 overflow-y-auto divide-y divide-slate-800/60 scrollbar-thin">
-                      {ETHIOPIAN_UNIVERSITIES.filter(u =>
-                        u.toLowerCase().includes((univSearch || '').toLowerCase())
-                      ).map((u) => (
+                      {filteredUniversities.map((u) => (
                         <button
                           key={u}
                           type="button"
@@ -2012,10 +2016,7 @@ export default function AuthPortalView({
 
                   {showDeptDropdown && (
                     <div className="absolute left-0 right-0 top-full mt-1 bg-[#090f1d] border border-slate-700 rounded-xl shadow-2xl z-50 max-h-48 overflow-y-auto divide-y divide-slate-800/60 scrollbar-thin">
-                      {POPULAR_DEPARTMENTS.filter(d =>
-                        d.labelEn.toLowerCase().includes((deptSearch || '').toLowerCase()) ||
-                        d.labelAm.includes(deptSearch || '')
-                      ).map((dept) => (
+                      {filteredDepartments.map((dept) => (
                         <button
                           key={dept.id}
                           type="button"

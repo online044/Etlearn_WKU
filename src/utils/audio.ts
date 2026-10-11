@@ -81,14 +81,7 @@ export function playSuccessChime() {
 }
 
 export function playClickChime() {
-  try {
-    const ctx = getAudioContext();
-    if (!ctx) return;
-    const t = ctx.currentTime;
-    createTone(ctx, 900, t, 0.03, 0.01); // ultra soft high click
-  } catch (err) {
-    // Fail silently
-  }
+  // Touch sound removed per user request
 }
 
 export function playFailureChime() {

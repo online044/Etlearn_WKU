@@ -1032,8 +1032,5 @@ export async function fetchProfileFromSupabase(firebaseUid: string, email?: stri
     console.warn('[fetchProfileFromSupabase warning]:', err);
   }
   return null;
-}
-
-
-
+}export { supabase } from './supabase';
 

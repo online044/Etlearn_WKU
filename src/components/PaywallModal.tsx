@@ -115,7 +115,7 @@ export default function PaywallModal({
               <div className="p-1 rounded-full bg-emerald-500/20 text-emerald-400 shrink-0">
                 <Check className="w-3.5 h-3.5" />
               </div>
-              <span>{language === 'en' ? 'Pay easily via Telebirr or CBE Birr (80 - 200 ETB)' : 'በቴሌብር ወይም በሲቢኢ ብር በቀላሉ ይክፈሉ (80 - 200 ETB)'}</span>
+              <span>{language === 'en' ? 'Pay easily via Telebirr or CBE Birr (99, 199, 250 ETB)' : 'በቴሌብር ወይም በሲቢኢ ብር በቀላሉ ይክፈሉ (99፣ 199፣ 250 ብር)'}</span>
             </div>
           </div>
 

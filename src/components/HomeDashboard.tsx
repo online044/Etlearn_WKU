@@ -1,8 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   BookOpen, Play, GraduationCap, Calendar,
   Award, Send, ArrowUpRight,
-  ShieldCheck, Lock, ChevronRight
+  ShieldCheck, Lock, ChevronRight, X
 } from 'lucide-react';
 import StudentAvatar from './StudentAvatar';
 import { StudentProfile, ExamAttemptRecord } from '../types';
@@ -357,7 +357,7 @@ export default function HomeDashboard({
                     <button
                       onClick={() => { playClickChime(); onNavigate('bookstore'); }}
                       className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-sm"
-                      title="Watch Free Biology Video Lectures"
+                      title="Watch Free Biology Video Lectures & Exams in Bookstore"
                     >
                       <Play className="w-3.5 h-3.5 fill-slate-950" />
                       <span>{isAmharic ? 'ቪዲዮ (ነፃ)' : 'Watch Video (Free)'}</span>
@@ -377,7 +377,7 @@ export default function HomeDashboard({
                           ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-black' 
                           : 'bg-slate-800 hover:bg-slate-750 text-slate-300 border border-slate-700'
                       }`}
-                      title={isProUser ? 'Watch Pro Video Lecture' : 'Pro Video Lecture (From 99 ETB)'}
+                      title={isProUser ? 'Watch Pro Video Lecture in Bookstore' : 'Pro Video Lecture (From 99 ETB)'}
                     >
                       {isProUser ? (
                         <>

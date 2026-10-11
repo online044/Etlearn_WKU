@@ -20,6 +20,7 @@ import { isAdministratorEmail } from '../utils/adminAuth';
 import { getChapterContent } from '../data/textbookChapterContent';
 import { safeStorage } from '../utils/safeStorage';
 import { fetchSupabaseBooks, fetchSupabaseLessons } from '../utils/supabaseClient';
+import CourseDetail from './CourseDetail';
 import { 
   getAllOfflineBookIds, 
   getOfflineBook, 
@@ -1114,6 +1115,22 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
   }
 ];
 
+export const FREE_TRIAL_COURSE_ID = 'freshman_critical_thinking';
+
+export function isFreeTrialCourse(book?: { id?: string; code?: string; title?: string } | null): boolean {
+  if (!book) return false;
+  const normId = (book.id || '').toLowerCase();
+  const normCode = (book.code || '').toLowerCase();
+  const normTitle = (book.title || '').toLowerCase();
+  return (
+    normId === 'freshman_critical_thinking' ||
+    normId.includes('critical') ||
+    normId.includes('phil_1011') ||
+    normCode.includes('phil 1011') ||
+    normTitle.includes('critical thinking')
+  );
+}
+
 export default function BookStoreView({
   profile,
   apiKey,
@@ -1131,10 +1148,12 @@ export default function BookStoreView({
   const [lastSyncTime, setLastSyncTime] = useState<string>('Just now');
   const [viewMode, setViewMode] = useState<'covers' | 'list'>('covers');
 
-  // Search & Stream Filter States
+  // Search & Stream Filter States (including prominent 'exams' tab)
   const isOnline = useOnlineStatus();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStream, setSelectedStream] = useState<'all' | 'Common' | 'Natural Science' | 'Social Science' | 'favorites' | 'videos' | 'downloaded'>('all');
+  const [selectedStream, setSelectedStream] = useState<'all' | 'exams' | 'Common' | 'Natural Science' | 'Social Science' | 'favorites' | 'videos' | 'downloaded'>('all');
+  const [selectedCourseForDetail, setSelectedCourseForDetail] = useState<UnifiedBookItem | null>(null);
+  const [monthlyExamSubscriptionModalOpen, setMonthlyExamSubscriptionModalOpen] = useState<UnifiedBookItem | null>(null);
   const [sortBy, setSortBy] = useState<'rating' | 'title' | 'code' | 'pages'>('code');
 
   // Offline Books Storage state
@@ -1380,6 +1399,9 @@ export default function BookStoreView({
         if (!book.hasVideoLecture) return false;
       } else if (selectedStream === 'downloaded') {
         if (!offlineBookIds.has(book.id)) return false;
+      } else if (selectedStream === 'exams') {
+        // Show courses in exam tab
+        return true;
       } else if (selectedStream !== 'all' && book.stream !== selectedStream) {
         return false;
       }
@@ -1428,7 +1450,7 @@ export default function BookStoreView({
   const [aiPanelOpen, setAiPanelOpen] = useState<boolean>(false);
   const [aiMode, setAiMode] = useState<'summary' | 'amharic' | 'quiz' | null>(null);
   const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
-  const [readerTab, setReaderTab] = useState<'drive' | 'video' | 'cover' | 'notes'>('drive');
+  const [readerTab, setReaderTab] = useState<'drive' | 'video' | 'exams' | 'cover' | 'notes'>('drive');
 
   const activePdfModule = activePdfBook;
 
@@ -1784,6 +1806,7 @@ export default function BookStoreView({
         <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
           {[
             { id: 'all', label: language === 'am' ? `ሁሉም (${unifiedBooks.length})` : `All Books (${unifiedBooks.length})`, icon: '📚' },
+            { id: 'exams', label: language === 'am' ? 'አጋማሽና ማጠቃለያ ፈተናዎች (Exams)' : 'Mid & Final Exams (Videos)', icon: '📝' },
             { id: 'downloaded', label: language === 'am' ? `ከመስመር ውጭ (${offlineBookIds.size})` : `Offline Ready (${offlineBookIds.size})`, icon: '📥', isOfflineBadge: true },
             { id: 'videos', label: language === 'am' ? `ቪዲዮ ትምህርቶች (${unifiedBooks.filter(b => b.hasVideoLecture).length})` : `Video Lectures (${unifiedBooks.filter(b => b.hasVideoLecture).length})`, icon: '🎥' },
             { id: 'Common', label: language === 'am' ? 'የጋራ ኮርሶች (Common)' : 'Common Courses', icon: '🏛️' },
@@ -1867,6 +1890,187 @@ export default function BookStoreView({
           >
             {language === 'am' ? 'ሁሉንም አሳይ' : 'Show All Books'}
           </button>
+        </div>
+      ) : selectedStream === 'exams' ? (
+        /* 📝 EXAM TAB: MID & FINAL EXAM WALKTHROUGH VIDEOS GALLERY */
+        <div className="space-y-4">
+          {/* Top Banner for Exams */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-[#111C35] via-[#152345] to-[#1E293B] border border-amber-500/30 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">📝</span>
+                <h3 className="text-base sm:text-lg font-black text-white">
+                  {language === 'am' ? 'የዩኒቨርሲቲ አጋማሽና ማጠቃለያ ፈተናዎች ቪዲዮ መፍትሔ' : 'University Mid & Final Exam Solution Videos'}
+                </h3>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  {language === 'am' ? 'ወርሃዊ 99 ብር' : 'Monthly 99 ETB'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+                {language === 'am'
+                  ? 'የኢትዮጵያ ዩኒቨርሲቲዎች የአጋማሽ (Midterm) እና የማጠቃለያ (Final) ፈተናዎች ደረጃ-በደረጃ የቪዲዮ ትንታኔ እና የሞዴል ፈተና ልምምድ።'
+                  : 'Watch comprehensive video explanations and worked solutions for official Midterm & Final examination papers by university instructors.'}
+              </p>
+              <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px]">
+                <span className="px-2.5 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" />
+                  <span>{language === 'am' ? '1 ነፃ የሙከራ ኮርስ ክፍት ነው (Critical Thinking)' : '1 Free Trial Course (Critical Thinking)'}</span>
+                </span>
+                <span className="text-slate-400">
+                  {isProUser ? '✓ ' + (language === 'am' ? 'ሙሉ አገልግሎት ተከፍቷል' : 'Full Access Subscribed') : (language === 'am' ? 'የወርሃዊ ፓስ፡ 99 ብር በወር' : 'Monthly Pass: 99 ETB / Month')}
+                </span>
+              </div>
+            </div>
+
+            {!isProUser && (
+              <button
+                onClick={() => { playClickChime(); onNavigate('upgrade'); }}
+                className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md active:scale-95 shrink-0 flex items-center gap-1.5"
+              >
+                <span>{language === 'am' ? 'በ99 ብር ተመዝገብ' : 'Subscribe 99 ETB/mo'}</span>
+              </button>
+            )}
+          </div>
+
+          {/* Grid of Courses with Mid & Final Exam Solution Videos */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredBooks.map((book) => {
+              const isTrial = isFreeTrialCourse(book);
+              const isAccessible = isTrial || isProUser;
+
+              return (
+                <div
+                  key={`exam_card_${book.id}`}
+                  className={`p-4 rounded-2xl bg-[#111C35] border transition-all duration-200 flex flex-col justify-between gap-3 shadow-lg ${
+                    isTrial 
+                      ? 'border-emerald-500/40 ring-1 ring-emerald-500/20' 
+                      : 'border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2 pb-2 border-b border-slate-800/80">
+                      <div className="min-w-0">
+                        <span className="text-[11px] font-mono text-amber-400 font-bold">
+                          {book.code} • {book.semester}
+                        </span>
+                        <h4 className="text-sm font-bold text-white truncate mt-0.5">
+                          {language === 'am' && book.amharicTitle ? book.amharicTitle : book.title}
+                        </h4>
+                      </div>
+
+                      {isTrial ? (
+                        <span className="px-2 py-0.5 text-[10px] font-black uppercase tracking-wider rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shrink-0 flex items-center gap-1">
+                          <Sparkles className="w-3 h-3" />
+                          <span>{language === 'am' ? 'ነፃ ሙከራ' : 'Free Trial'}</span>
+                        </span>
+                      ) : !isProUser ? (
+                        <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0 flex items-center gap-1">
+                          <Lock className="w-3 h-3" />
+                          <span>99 ETB</span>
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shrink-0">
+                          ✓ Pro
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-[11px] text-slate-400 line-clamp-2 mt-2">
+                      {language === 'am' && book.amharicDescription ? book.amharicDescription : book.description}
+                    </p>
+                  </div>
+
+                  {/* Mid & Final Action Buttons */}
+                  <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                    <div className="grid grid-cols-2 gap-2">
+                      {/* Midterm Video Button */}
+                      <button
+                        onClick={() => {
+                          playClickChime();
+                          if (!isAccessible) {
+                            setMonthlyExamSubscriptionModalOpen(book);
+                          } else {
+                            setSelectedCourseForDetail(book);
+                          }
+                        }}
+                        className={`py-2 px-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                          isAccessible
+                            ? 'bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300'
+                            : 'bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300'
+                        }`}
+                        title="Watch Midterm Solution Video"
+                      >
+                        {isAccessible ? (
+                          <>
+                            <Play className="w-3 h-3 fill-amber-400 text-amber-400 shrink-0" />
+                            <span className="truncate">Midterm Video</span>
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="w-3 h-3 text-amber-400 shrink-0" />
+                            <span className="truncate">Midterm (99 ETB)</span>
+                          </>
+                        )}
+                      </button>
+
+                      {/* Final Exam Video Button */}
+                      <button
+                        onClick={() => {
+                          playClickChime();
+                          if (!isAccessible) {
+                            setMonthlyExamSubscriptionModalOpen(book);
+                          } else {
+                            setSelectedCourseForDetail(book);
+                          }
+                        }}
+                        className={`py-2 px-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                          isAccessible
+                            ? 'bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300'
+                            : 'bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300'
+                        }`}
+                        title="Watch Final Exam Solution Video"
+                      >
+                        {isAccessible ? (
+                          <>
+                            <Play className="w-3 h-3 fill-amber-400 text-amber-400 shrink-0" />
+                            <span className="truncate">Final Video</span>
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="w-3 h-3 text-amber-400 shrink-0" />
+                            <span className="truncate">Final (99 ETB)</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {/* Take Quiz Drill */}
+                      <button
+                        onClick={() => {
+                          playClickChime();
+                          setSelectedCourseForDetail(book);
+                        }}
+                        className="flex-1 py-1.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 text-xs font-medium transition cursor-pointer flex items-center justify-center gap-1"
+                      >
+                        <FileText className="w-3 h-3 text-slate-400" />
+                        <span>{language === 'am' ? 'ፈተና ጀምር' : 'Start Exam Quiz'}</span>
+                      </button>
+
+                      {/* Read PDF */}
+                      <button
+                        onClick={() => handleOpenBook(book, 0, 'drive', 0, true)}
+                        className="py-1.5 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1"
+                      >
+                        <BookOpen className="w-3 h-3" />
+                        <span>PDF</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       ) : viewMode === 'covers' ? (
         /* 🖼️ VIEW MODE 1: DIGITAL BOOKSHELF GALLERY (WITH AUTHENTIC COVER PAGES) */
@@ -1991,6 +2195,19 @@ export default function BookStoreView({
                       <span className="truncate">{language === 'am' ? 'ቪዲዮ ትምህርት እይ' : 'Watch Lectures'} ({book.lectures.length})</span>
                     </button>
                   )}
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      playClickChime();
+                      setSelectedCourseForDetail(book);
+                    }}
+                    className="w-full py-1.5 px-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-bold text-[10.5px] rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
+                    title={language === 'am' ? 'የአጋማሽ እና ማጠቃለያ ፈተና ቪዲዮዎች' : 'Mid & Final Exam Solution Videos'}
+                  >
+                    <FileText className="w-3 h-3 text-amber-400 shrink-0" />
+                    <span className="truncate">{language === 'am' ? 'ፈተናዎች እና ቪዲዮ' : 'Mid & Final Exams'}</span>
+                  </button>
 
                   <div className="grid grid-cols-3 gap-1">
                     <button
@@ -2166,6 +2383,19 @@ export default function BookStoreView({
                       <span>{language === 'am' ? 'ቪዲዮ ትምህርት እይ' : 'Watch Video Lectures'} ({book.lectures.length})</span>
                     </button>
                   )}
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      playClickChime();
+                      setSelectedCourseForDetail(book);
+                    }}
+                    className="w-full py-1.5 px-3 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
+                    title={language === 'am' ? 'የአጋማሽ እና ማጠቃለያ ፈተና ቪዲዮዎች' : 'Mid & Final Exam Solution Videos'}
+                  >
+                    <FileText className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>{language === 'am' ? 'አጋማሽና ማጠቃለያ ፈተናዎች (ቪዲዮ)' : 'Mid & Final Exams (Videos)'}</span>
+                  </button>
 
                   <div className="grid grid-cols-3 gap-1.5">
                   <button
@@ -2367,6 +2597,18 @@ export default function BookStoreView({
                           }`}>
                             {activePdfModule.lectures.length}
                           </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { playClickChime(); setReaderTab('exams'); }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                            readerTab === 'exams'
+                              ? 'bg-amber-500 text-slate-950 shadow-xs'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>{language === 'am' ? 'ፈተናዎች' : 'Exams'}</span>
                         </button>
                       </div>
                     )}
@@ -3237,6 +3479,30 @@ export default function BookStoreView({
                 )}
 
                 {/* ================================================================= */}
+                {/* TAB 3.5: 📝 MID & FINAL EXAM VIDEOS & INTERACTIVE TESTS           */}
+                {/* ================================================================= */}
+                {readerTab === 'exams' && (
+                  <div className="flex-1 w-full h-full min-h-0 overflow-y-auto p-3 sm:p-5 bg-[#0B132B]">
+                    <CourseDetail
+                      courseId={activePdfModule.id}
+                      courseTitle={activePdfModule.title}
+                      language={language}
+                      isProUser={isProUser}
+                      isFreeTrial={isFreeTrialCourse(activePdfModule)}
+                      onUpgrade={() => {
+                        handleCloseBook();
+                        onNavigate('upgrade');
+                      }}
+                      onStartQuiz={(examId, title) => {
+                        handleCloseBook();
+                        safeStorage.setItem('ethiolearn_active_exam_drill', JSON.stringify({ examId, title }));
+                        onNavigate('quiz');
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* ================================================================= */}
                 {/* TAB 4: 📝 A4 STYLE INTERACTIVE CURRICULUM NOTES & ASGOBNYI AI     */}
                 {/* ================================================================= */}
                 {readerTab === 'notes' && (
@@ -3936,6 +4202,121 @@ export default function BookStoreView({
               >
                 <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
                 <span>{language === 'am' ? 'ነፃ ፒዲኤፍ መጽሐፍ አንብብ (100% ነፃ)' : 'Read 100% Free PDF Textbook Instead'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── SELECTED COURSE EXAM & CHAPTER DETAIL MODAL ─── */}
+      {selectedCourseForDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto">
+          <div className="relative w-full max-w-xl bg-[#0A1128] border border-amber-500/40 rounded-2xl p-4 sm:p-6 shadow-2xl text-white my-auto max-h-[94vh] overflow-y-auto">
+            <button
+              onClick={() => setSelectedCourseForDetail(null)}
+              className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition cursor-pointer z-10"
+              title="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <CourseDetail
+              courseId={selectedCourseForDetail.id}
+              courseTitle={selectedCourseForDetail.title}
+              language={language}
+              isProUser={isProUser}
+              isFreeTrial={isFreeTrialCourse(selectedCourseForDetail)}
+              onUpgrade={() => {
+                setSelectedCourseForDetail(null);
+                onNavigate('upgrade');
+              }}
+              onBack={() => setSelectedCourseForDetail(null)}
+              onStartQuiz={(examId, title) => {
+                setSelectedCourseForDetail(null);
+                safeStorage.setItem('ethiolearn_active_exam_drill', JSON.stringify({ examId, title }));
+                onNavigate('quiz');
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ─── MONTHLY EXAM SUBSCRIPTION PASS MODAL ─── */}
+      {monthlyExamSubscriptionModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#111C35] border border-amber-500/40 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 text-slate-100">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white leading-tight">
+                    {language === 'am' ? 'የወርሃዊ የፈተና ቪዲዮ ፓስ' : 'Monthly Exam Solution Pass'}
+                  </h3>
+                  <p className="text-[11px] text-amber-400 font-medium truncate max-w-[220px]">
+                    {monthlyExamSubscriptionModalOpen.title}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setMonthlyExamSubscriptionModalOpen(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2.5 text-xs text-slate-300">
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
+                <p className="font-bold flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-emerald-400" />
+                  <span>{language === 'am' ? '✓ 1 ነፃ የሙከራ ኮርስ ክፍት ነው!' : '✓ 1 Free Trial Course is Open!'}</span>
+                </p>
+                <p className="text-[11px] text-slate-300 mt-1">
+                  {language === 'am'
+                    ? 'የCritical Thinking & Logic አጋማሽና ማጠቃለያ ፈተናዎችን በነፃ መሞከር ይችላሉ።'
+                    : 'You can watch full Midterm & Final exam solution videos for Critical Thinking & Logic right now 100% free!'}
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1.5">
+                <div className="flex items-center justify-between font-bold">
+                  <span className="text-white">{language === 'am' ? 'የወርሃዊ ፓስ ክፍያ' : 'Monthly Exam Pass'}</span>
+                  <span className="text-amber-400 font-mono text-sm">99 ETB / Month</span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  {language === 'am'
+                    ? 'በቴሌብር (Telebirr) ወይም በኢትዮጵያ ንግድ ባንክ (CBE Birr) በቀላሉ ይክፈሉ።'
+                    : 'Instant activation via Telebirr & CBE Birr (Monthly: 99 ETB, Semester: 199 ETB, Annual: 250 ETB).'}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <button
+                onClick={() => {
+                  setMonthlyExamSubscriptionModalOpen(null);
+                  playClickChime();
+                  onNavigate('upgrade');
+                }}
+                className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider transition cursor-pointer shadow-md flex items-center justify-center gap-1.5 active:scale-98"
+              >
+                <span>{language === 'am' ? 'በቴሌብር በ99 ብር ክፈት' : 'Subscribe for 99 ETB / Month'}</span>
+              </button>
+
+              {/* Direct button to try the Free Trial course */}
+              <button
+                onClick={() => {
+                  setMonthlyExamSubscriptionModalOpen(null);
+                  const trialCourse = unifiedBooks.find(isFreeTrialCourse) || unifiedBooks[0];
+                  if (trialCourse) {
+                    setSelectedCourseForDetail(trialCourse);
+                  }
+                }}
+                className="w-full py-2 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/40 font-bold text-xs transition cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                <span>{language === 'am' ? 'ነፃ የሙከራ ኮርስ አሁኑኑ ሞክር' : 'Try 1 Free Trial Course Now'}</span>
               </button>
             </div>
           </div>
