@@ -589,30 +589,12 @@ export default function AppSidebar({
 
             </div>
 
-            {/* Bottom Footer with Language, Theme, and Calendar */}
-            <div className="p-4 border-t border-white/10 bg-[#080E21] space-y-3 shrink-0 text-xs">
+            {/* Bottom Footer with Theme, and Calendar */}
+            <div className="p-3.5 border-t border-white/10 bg-[#080E21] space-y-2.5 shrink-0 text-xs">
               <div className="flex items-center justify-between">
-                {/* Language Toggle */}
-                <div className="flex items-center gap-1 bg-white/5 border border-white/10 p-0.5 rounded-xl">
-                  <button
-                    type="button"
-                    onClick={() => { playClickChime(); setLanguage('en'); }}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      language === 'en' ? 'bg-amber-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    English
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { playClickChime(); setLanguage('am'); }}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      language === 'am' ? 'bg-amber-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    አማርኛ
-                  </button>
-                </div>
+                <span className="text-[11px] font-medium text-slate-400">
+                  {isAm ? 'የቀለም ገጽታ' : 'Theme Mode'}
+                </span>
 
                 {/* Theme Mode Toggle */}
                 <button

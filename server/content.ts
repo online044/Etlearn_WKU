@@ -518,10 +518,19 @@ const KNOWN_CURRICULUM_FILE_IDS: Record<string, string> = {
   'freshman_global_trends': '1t4g5MyBhPhXRsXPXA01Zc6GfxAB9LVAq',
   'freshman_inclusiveness': '1hWYVvjJB3LkndfAlbGJDtlVBzmBgkY3i',
   'freshman_fitness': '18MIM7eTALuYt3NoRD7UeaS0mFeKcQTKg',
+  'freshman_physical_fitness': '18MIM7eTALuYt3NoRD7UeaS0mFeKcQTKg',
   'freshman_history': '1kM_myBDzTTw9gt76uhhEzCdlpJXrMIZD',
   'freshman_math_nat': '1JvIpwqFCHhcme03f_MFOH7hG2x4zV9JP',
   'freshman_math_soc': '1r--ekd2ZqN5eKuRInRh7geVCVso1FrNr',
   'freshman_anthropology': '1ZFRYrwL3hrd5jT_rtwvHXq7240qhbCtM',
+  'freshman_english_1': '1Jq2IhWPcEoXg9If7sDlP8caqwqcjfNDk',
+  'freshman_english_2': '1Ih7e_MhTWbKk9Gw-UaW1Cbs_J47cyOZp',
+  'freshman_civics': '1irrsbxQWb2ZbTscmXp0hF9qzgDrZCQoV',
+
+  // Supabase book ID aliases (fresh_*)
+  'fresh_english_1': '1Jq2IhWPcEoXg9If7sDlP8caqwqcjfNDk',
+  'fresh_english_2': '1Ih7e_MhTWbKk9Gw-UaW1Cbs_J47cyOZp',
+  'fresh_civics': '1irrsbxQWb2ZbTscmXp0hF9qzgDrZCQoV',
   'fresh_entrepreneurship': '14DKK75SxkylV4sLdaYTu_6dj7Y1nXKWu',
   'fresh_biology': '1On4zzWIFDWypb7kU-HMTOmx6SRwp-K7Q',
   'fresh_chemistry': '1gm0FrHxIQhxto8pfrf0Fy8NnHLDAdU0S',
@@ -536,6 +545,7 @@ const KNOWN_CURRICULUM_FILE_IDS: Record<string, string> = {
   'fresh_math_nat': '1JvIpwqFCHhcme03f_MFOH7hG2x4zV9JP',
   'fresh_math_soc': '1r--ekd2ZqN5eKuRInRh7geVCVso1FrNr',
   'fresh_physical_fitness': '18MIM7eTALuYt3NoRD7UeaS0mFeKcQTKg',
+  'fresh_fitness': '18MIM7eTALuYt3NoRD7UeaS0mFeKcQTKg',
   'fresh_anthro': '1ZFRYrwL3hrd5jT_rtwvHXq7240qhbCtM',
   'fresh_physics': '1JUJ1wclP4yNyyv1bb8kNXOsfHDKvJqXJ'
 };

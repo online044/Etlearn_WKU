@@ -115,14 +115,39 @@ export default function MobilePdfReader({
     activeRenderTasks.current.clear();
 
     try {
-      const loadingTask = pdfjsLib.getDocument({
-        url: fileUrl,
+      let docData: Uint8Array | null = null;
+
+      // 1. If it's a blob: or data: URL, or local API endpoint, fetch as ArrayBuffer with progress
+      if (fileUrl.startsWith('blob:') || fileUrl.startsWith('data:') || fileUrl.startsWith('/api/')) {
+        const resp = await fetch(fileUrl, { credentials: 'same-origin' });
+        if (!resp.ok) {
+          throw new Error(
+            resp.status === 500 
+              ? (isAm ? 'የአገልጋይ ጊዜያዊ ችግር (Error 500)። እባክዎ እንደገና ይሞክሩ።' : 'Internal server error (500). Please retry.')
+              : (isAm ? `ሰነዱን ማግኘት አልተቻለም (Status: ${resp.status})` : `Failed to download PDF stream (HTTP ${resp.status})`)
+          );
+        }
+        const ab = await resp.arrayBuffer();
+        docData = new Uint8Array(ab);
+        setLoadingProgress(60);
+      }
+
+      // 2. Load into PDF.js engine
+      const getDocConfig: any = {
         cMapUrl: '/pdfjs/cmaps/',
         cMapPacked: true,
         standardFontDataUrl: '/pdfjs/standard_fonts/',
-        withCredentials: true,
         enableXfa: false
-      });
+      };
+
+      if (docData) {
+        getDocConfig.data = docData;
+      } else {
+        getDocConfig.url = fileUrl;
+        getDocConfig.withCredentials = true;
+      }
+
+      const loadingTask = pdfjsLib.getDocument(getDocConfig);
 
       loadingTask.onProgress = (progressData: { loaded: number; total: number }) => {
         if (progressData.total > 0) {
