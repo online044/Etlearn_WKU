@@ -254,50 +254,69 @@ export async function downloadBookInApp(
       return { success: true, record: existing };
     }
 
-    // 2. Determine download target
-    const fileId = extractDriveFileId(book.downloadUrl) || extractDriveFileId(book.pdfUrl);
-    const targetUrl = `/api/books/download-pdf?id=${encodeURIComponent(book.id)}&fileId=${encodeURIComponent(fileId)}&url=${encodeURIComponent(book.downloadUrl || book.pdfUrl || '')}`;
+    // 2. Determine download target & file ID
+    const fileId = extractDriveFileId(book.downloadUrl) || extractDriveFileId(book.pdfUrl) || (book as any).googleDriveFileId || '';
+    
+    // Multiple fallback endpoints on the local proxy server (immune to external VPN blocks)
+    const primaryUrl = `/api/books/download-pdf?id=${encodeURIComponent(book.id)}${fileId ? `&fileId=${encodeURIComponent(fileId)}` : ''}`;
+    const secondaryUrl = `/api/pdf/proxy?id=${encodeURIComponent(book.id)}${fileId ? `&fileId=${encodeURIComponent(fileId)}` : ''}`;
 
     if (onProgress) onProgress(5, 0, 0);
 
     let response: Response | null = null;
+    
+    // First attempt: primary local proxy endpoint
     try {
-      response = await fetch(targetUrl);
+      response = await fetch(primaryUrl);
     } catch (e) {
-      console.warn('[OfflineDB] First fetch attempt error:', e);
+      console.warn('[OfflineDB] Primary proxy attempt error:', e);
     }
 
-    // Auto-retry once after 1 second in case of cold-start or temporary hiccup
+    // Second attempt: secondary alias proxy endpoint
     if (!response || !response.ok) {
-      await new Promise(r => setTimeout(r, 1200));
+      await new Promise(r => setTimeout(r, 600));
       try {
-        response = await fetch(targetUrl);
+        response = await fetch(secondaryUrl);
       } catch (e) {
-        console.warn('[OfflineDB] Retry fetch attempt error:', e);
+        console.warn('[OfflineDB] Secondary proxy attempt error:', e);
       }
     }
 
-    // Direct usercontent fallback if proxy had a gateway issue
+    // Third attempt: with custom url param
     if (!response || !response.ok) {
-      const fallbackUrl = fileId 
-        ? `https://drive.usercontent.google.com/download?id=${fileId}&export=download` 
-        : book.downloadUrl;
+      await new Promise(r => setTimeout(r, 1000));
+      try {
+        const fullProxyUrl = `${primaryUrl}&url=${encodeURIComponent(book.downloadUrl || book.pdfUrl || '')}`;
+        response = await fetch(fullProxyUrl);
+      } catch (e) {
+        console.warn('[OfflineDB] Extended proxy attempt error:', e);
+      }
+    }
 
-      if (fallbackUrl && (fallbackUrl.startsWith('http://') || fallbackUrl.startsWith('https://'))) {
+    // Fourth attempt: direct Google Drive download link (if user VPN allows direct Google)
+    if (!response || !response.ok) {
+      const directGoogleUrls = [
+        fileId ? `https://drive.usercontent.google.com/download?id=${fileId}&export=download` : null,
+        fileId ? `https://drive.google.com/uc?export=download&id=${fileId}` : null,
+        book.downloadUrl
+      ].filter(Boolean) as string[];
+
+      for (const directUrl of directGoogleUrls) {
         try {
-          const directResp = await fetch(fallbackUrl);
+          const directResp = await fetch(directUrl);
           if (directResp.ok && directResp.headers.get('content-type')?.includes('application/')) {
             response = directResp;
+            break;
           }
         } catch (dirErr) {
-          console.warn('[OfflineDB] Direct fallback unreachable:', dirErr);
+          console.warn('[OfflineDB] Direct Google URL attempt notice:', dirErr);
         }
       }
     }
 
     if (!response || !response.ok) {
       const status = response ? response.status : 502;
-      throw new Error(`Download service temporarily unavailable (status ${status}). Please retry.`);
+      throw new Error(`Download service temporarily unavailable (status ${status}). Please check network or retry.`);
     }
 
     const contentLengthHeader = response.headers.get('content-length');

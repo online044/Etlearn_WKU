@@ -546,26 +546,38 @@ export function resolveBookLectures(
   return result;
 }
 
-export function getVideoEmbedUrl(rawUrl: string): { embedUrl: string; isDirectVideo: boolean; isDrive: boolean } {
+export function getVideoEmbedUrl(rawUrl: string, useStandardDomain: boolean = false): { 
+  embedUrl: string; 
+  isDirectVideo: boolean; 
+  isDrive: boolean;
+  videoId?: string;
+  youtubeUrl?: string;
+} {
   if (!rawUrl) return { embedUrl: '', isDirectVideo: false, isDrive: false };
   const clean = rawUrl.trim();
+  const domain = useStandardDomain ? 'www.youtube.com' : 'www.youtube-nocookie.com';
 
   // Raw 11-character YouTube video ID (from Supabase lessons table, e.g. BoeytcZGuXg)
   if (/^[a-zA-Z0-9_-]{11}$/.test(clean)) {
     return {
-      embedUrl: `https://www.youtube-nocookie.com/embed/${clean}?autoplay=1&rel=0&modestbranding=1`,
+      embedUrl: `https://${domain}/embed/${clean}?autoplay=1&rel=0&modestbranding=1`,
       isDirectVideo: false,
-      isDrive: false
+      isDrive: false,
+      videoId: clean,
+      youtubeUrl: `https://www.youtube.com/watch?v=${clean}`
     };
   }
 
   // YouTube watch link (watch?v=... or youtu.be/...)
   const ytMatch = clean.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
   if (ytMatch && ytMatch[1]) {
+    const vId = ytMatch[1];
     return {
-      embedUrl: `https://www.youtube-nocookie.com/embed/${ytMatch[1]}?autoplay=1&rel=0&modestbranding=1`,
+      embedUrl: `https://${domain}/embed/${vId}?autoplay=1&rel=0&modestbranding=1`,
       isDirectVideo: false,
-      isDrive: false
+      isDrive: false,
+      videoId: vId,
+      youtubeUrl: `https://www.youtube.com/watch?v=${vId}`
     };
   }
 
@@ -573,9 +585,10 @@ export function getVideoEmbedUrl(rawUrl: string): { embedUrl: string; isDirectVi
   const ytListMatch = clean.match(/[?&]list=([a-zA-Z0-9_-]+)/i);
   if (ytListMatch && ytListMatch[1] && clean.includes('youtube.com')) {
     return {
-      embedUrl: `https://www.youtube-nocookie.com/embed/videoseries?list=${ytListMatch[1]}`,
+      embedUrl: `https://${domain}/embed/videoseries?list=${ytListMatch[1]}`,
       isDirectVideo: false,
-      isDrive: false
+      isDrive: false,
+      youtubeUrl: `https://www.youtube.com/playlist?list=${ytListMatch[1]}`
     };
   }
 
@@ -1452,6 +1465,7 @@ export default function BookStoreView({
   const [aiMode, setAiMode] = useState<'summary' | 'amharic' | 'quiz' | null>(null);
   const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
   const [readerTab, setReaderTab] = useState<'drive' | 'video' | 'exams' | 'cover' | 'notes'>('drive');
+  const [videoDomainAlternative, setVideoDomainAlternative] = useState<boolean>(false);
 
   const activePdfModule = activePdfBook;
 
@@ -3325,12 +3339,13 @@ export default function BookStoreView({
                         <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-black shadow-2xl border border-white/10 ring-1 ring-amber-500/20 shrink-0">
                           {currentLecture?.url ? (
                             <iframe
-                              key={`yt-player-${currentLecture.id || activeLectureIndex}-${currentLecture.url}`}
-                              src={getVideoEmbedUrl(currentLecture.url).embedUrl}
+                              key={`yt-player-${currentLecture.id || activeLectureIndex}-${currentLecture.url}-${videoDomainAlternative ? 'std' : 'nocookie'}`}
+                              src={getVideoEmbedUrl(currentLecture.url, videoDomainAlternative).embedUrl}
                               title={currentLecture.title}
                               className="absolute inset-0 w-full h-full border-0"
                               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
                               allowFullScreen
+                              referrerPolicy="strict-origin-when-cross-origin"
                             />
                           ) : (
                             <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center space-y-2 text-slate-400">
@@ -3339,6 +3354,43 @@ export default function BookStoreView({
                             </div>
                           )}
                         </div>
+
+                        {/* VPN & Direct App Quick Actions Capsule */}
+                        {currentLecture?.url && (
+                          <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-900/80 border border-slate-800 text-[11px] text-slate-300">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                              <span className="text-slate-400">
+                                {language === 'am' ? 'ቪዲዮ ካልተከፈተ (በVPN ምክንያት):' : 'Video blocked by VPN?'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  playClickChime();
+                                  setVideoDomainAlternative(prev => !prev);
+                                }}
+                                className="text-amber-400 font-bold hover:underline cursor-pointer"
+                              >
+                                {videoDomainAlternative ? 'Switch to YouTube-NoCookie' : 'Switch to Standard YouTube'}
+                              </button>
+                            </div>
+
+                            {/* Direct Open in Official YouTube App (Bypasses web browser iframe VPN restrictions) */}
+                            {getVideoEmbedUrl(currentLecture.url).youtubeUrl && (
+                              <a
+                                href={getVideoEmbedUrl(currentLecture.url).youtubeUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={() => playSuccessChime()}
+                                className="px-2.5 py-1 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg flex items-center gap-1 cursor-pointer transition-all active:scale-95 shrink-0"
+                                title={language === 'am' ? 'በዩቲዩብ መተግበሪያ ክፈት' : 'Open in YouTube App'}
+                              >
+                                <span>YouTube App</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
+                          </div>
+                        )}
 
                         {/* Lesson Information & Interactive Notes Under Video */}
                         <div className={`p-4 rounded-2xl border transition-colors ${
