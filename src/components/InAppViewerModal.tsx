@@ -13,6 +13,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { playClickChime, playSuccessChime } from '../utils/audio';
+import MobilePdfReader from './MobilePdfReader';
 
 export interface InAppViewerModalProps {
   url: string;
@@ -38,7 +39,7 @@ export default function InAppViewerModal({
   const [isFocusMode, setIsFocusMode] = useState<boolean>(false);
   const [readerTheme, setReaderTheme] = useState<'slate' | 'sepia' | 'light'>('slate');
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
-  const [viewerEngine, setViewerEngine] = useState<'drive' | 'gdocs' | 'direct'>('drive');
+  const [viewerEngine, setViewerEngine] = useState<'mobile-native' | 'drive' | 'gdocs' | 'direct'>('mobile-native');
   const [iframeKey, setIframeKey] = useState<number>(0);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
   const [showEngineMenu, setShowEngineMenu] = useState<boolean>(false);
@@ -101,6 +102,18 @@ export default function InAppViewerModal({
       if (fileIdMatch) {
         return `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
       }
+    }
+    return url;
+  };
+
+  // Resolve native streamable URL for PDF.js engine
+  const getNativePdfUrl = () => {
+    if (url.startsWith('/api/') || url.startsWith('blob:') || url.startsWith('data:')) {
+      return url;
+    }
+    const fileIdMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (fileIdMatch && fileIdMatch[1]) {
+      return `/api/books/download-pdf?fileId=${encodeURIComponent(fileIdMatch[1])}`;
     }
     return url;
   };
@@ -470,61 +483,89 @@ export default function InAppViewerModal({
         </AnimatePresence>
 
         {/* ========================================================================= */}
-        {/* 🌟 3. FULL-BLEED PDF CANVAS (100% Edge-to-Edge)                           */}
+        {/* 🌟 3. FULL-BLEED MOBILE-FRIENDLY PDF READER (100% Edge-to-Edge)           */}
         {/* ========================================================================= */}
-        <div 
-          className="flex-1 w-full h-full min-h-0 relative overflow-hidden"
-          style={{
-            WebkitOverflowScrolling: 'touch',
-            touchAction: 'pan-x pan-y pinch-zoom'
-          }}
-        >
-          {/* Subtle Reading Theme Tone Filter Layer */}
-          <div
-            className={`w-full h-full relative transition-all duration-300 ${
-              readerTheme === 'sepia'
-                ? 'sepia-[0.18] brightness-[0.98]'
-                : ''
-            }`}
-          >
-            <iframe
-              key={`pdf-engine-${viewerEngine}-${iframeKey}`}
-              src={getEmbedUrl()}
+        {viewerEngine === 'mobile-native' ? (
+          <div className="flex-1 w-full h-full min-h-0 relative flex flex-col">
+            <MobilePdfReader
+              fileUrl={getNativePdfUrl()}
               title={title}
-              className="absolute inset-0 w-full h-full border-0 block bg-slate-950"
-              allow="autoplay; fullscreen; encrypted-media"
-              referrerPolicy="no-referrer"
+              courseCode={courseCode}
+              theme={readerTheme === 'light' ? 'light' : readerTheme === 'sepia' ? 'sepia' : 'dark'}
+              language={language}
+              externalUrl={getDriveAppUrl()}
+              onClose={onClose}
             />
-          </div>
 
-          {/* Quick Trouble-Shooting Helper Capsule (Fixed at bottom-center) */}
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none opacity-80 hover:opacity-100 transition-opacity">
-            <div className="pointer-events-auto flex items-center gap-2 bg-slate-950/85 backdrop-blur-md px-3 py-1 rounded-full border border-slate-800 text-[10px] text-slate-300 shadow-lg">
-              <span>{isAm ? 'ሰነዱ ካልታየ:' : 'Display issue?'}</span>
+            {/* Quick Switcher Capsule */}
+            <div className="absolute top-16 right-3 z-30 pointer-events-none opacity-40 hover:opacity-100 transition-opacity">
               <button
                 type="button"
                 onClick={() => {
                   playClickChime();
-                  setViewerEngine((prev) => prev === 'drive' ? 'gdocs' : 'drive');
-                  handleReload();
+                  setViewerEngine('drive');
                 }}
-                className="text-amber-400 font-bold hover:underline"
+                className="pointer-events-auto text-[10px] bg-slate-950/80 backdrop-blur-md px-2.5 py-1 rounded-full border border-slate-700 text-slate-300 hover:text-amber-400 cursor-pointer shadow-md"
+                title="Switch to Drive Embedded Mode"
               >
-                {viewerEngine === 'drive' ? 'Switch to Docs Engine' : 'Switch to Drive Engine'}
+                Drive Embed ↗
               </button>
-              <span aria-hidden="true">·</span>
-              <a
-                href={getDriveAppUrl()}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-emerald-400 font-bold hover:underline flex items-center gap-0.5"
-              >
-                <span>Drive App</span>
-                <ExternalLink className="w-2.5 h-2.5" />
-              </a>
             </div>
           </div>
-        </div>
+        ) : (
+          <div 
+            className="flex-1 w-full h-full min-h-0 relative overflow-hidden"
+            style={{
+              WebkitOverflowScrolling: 'touch',
+              touchAction: 'pan-x pan-y pinch-zoom'
+            }}
+          >
+            {/* Subtle Reading Theme Tone Filter Layer */}
+            <div
+              className={`w-full h-full relative transition-all duration-300 ${
+                readerTheme === 'sepia'
+                  ? 'sepia-[0.18] brightness-[0.98]'
+                  : ''
+              }`}
+            >
+              <iframe
+                key={`pdf-engine-${viewerEngine}-${iframeKey}`}
+                src={getEmbedUrl()}
+                title={title}
+                className="absolute inset-0 w-full h-full border-0 block bg-slate-950"
+                allow="autoplay; fullscreen; encrypted-media"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+
+            {/* Quick Trouble-Shooting Helper Capsule (Fixed at bottom-center) */}
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none opacity-80 hover:opacity-100 transition-opacity">
+              <div className="pointer-events-auto flex items-center gap-2 bg-slate-950/85 backdrop-blur-md px-3 py-1 rounded-full border border-slate-800 text-[10px] text-slate-300 shadow-lg">
+                <span>{isAm ? 'ሰነዱ ካልታየ:' : 'Display issue?'}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playClickChime();
+                    setViewerEngine('mobile-native');
+                  }}
+                  className="text-amber-400 font-bold hover:underline"
+                >
+                  Switch to Native PDF Reader
+                </button>
+                <span aria-hidden="true">·</span>
+                <a
+                  href={getDriveAppUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-emerald-400 font-bold hover:underline flex items-center gap-0.5"
+                >
+                  <span>Drive App</span>
+                  <ExternalLink className="w-2.5 h-2.5" />
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
       </motion.div>
     </div>,
     document.body

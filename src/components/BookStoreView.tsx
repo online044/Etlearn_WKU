@@ -21,6 +21,7 @@ import { getChapterContent } from '../data/textbookChapterContent';
 import { safeStorage } from '../utils/safeStorage';
 import { fetchSupabaseBooks, fetchSupabaseLessons } from '../utils/supabaseClient';
 import CourseDetail from './CourseDetail';
+import MobilePdfReader from './MobilePdfReader';
 import { 
   getAllOfflineBookIds, 
   getOfflineBook, 
@@ -1165,7 +1166,7 @@ export default function BookStoreView({
   const isProUser = Boolean(profile?.isPro || profile?.proStatus === 'active');
   const isUserAdmin = Boolean(profile?.email && isAdministratorEmail(profile.email)) || profile?.userRole === 'admin' || (profile as any)?.role === 'admin';
   const [isZenMode, setIsZenMode] = useState<boolean>(false);
-  const [pdfViewerMode, setPdfViewerMode] = useState<'drive' | 'native' | 'gdocs'>('drive');
+  const [pdfViewerMode, setPdfViewerMode] = useState<'mobile-native' | 'drive' | 'native' | 'gdocs'>('mobile-native');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -3064,52 +3065,56 @@ export default function BookStoreView({
                 )}
 
                 {/* ================================================================= */}
-                {/* TAB 2: 📄 EMBEDDED GOOGLE DRIVE OFFICIAL PDF (FULL BLEED, NO CUT)  */}
+                {/* TAB 2: 📄 PROFESSIONAL MOBILE-FRIENDLY PDF READER (EDGE-TO-EDGE)  */}
                 {/* ================================================================= */}
                 {readerTab === 'drive' && (
                   <div className="flex-1 w-full h-full min-h-0 flex flex-col relative overflow-hidden animate-fadeIn">
-                    {/* Edge-to-Edge PDF Stage (100% full height, no cut, no fixed min-height) */}
+                    {/* 1. Offline Mode: Read direct from indexedDB Blob */}
                     {activeOfflineBlobUrl ? (
-                      <div className="flex-1 w-full h-full min-h-0 relative bg-slate-950 flex flex-col">
-                        <div className="px-3 sm:px-4 py-1.5 bg-emerald-950/90 border-b border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center justify-between shrink-0">
-                          <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                            <span>
-                              {language === 'am'
-                                ? 'ከመሳሪያዎ ከመስመር ውጭ እያነበቡ ነው (ምንም ኢንተርኔት አይፈልግም)'
-                                : 'Offline Mode: Reading directly from device storage (0 MB data used)'}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-[11px] font-mono text-emerald-400 font-bold">
-                              {formatBytes(activeOfflineRecord?.fileSize || 0)}
-                            </span>
-                            <button
-                              onClick={(e) => handleDeleteOffline(activePdfBook.id, activePdfBook.title, e)}
-                              className="text-[11px] text-red-400 hover:text-red-300 underline cursor-pointer"
-                              title="Delete offline file from device storage"
-                            >
-                              {language === 'am' ? 'ከመሳሪያ ሰርዝ' : 'Remove offline'}
-                            </button>
-                          </div>
-                        </div>
-                        <div className="flex-1 w-full h-full min-h-0 relative">
-                          <object
-                            data={activeOfflineBlobUrl}
-                            type="application/pdf"
-                            className="w-full h-full block"
+                      <MobilePdfReader
+                        fileUrl={activeOfflineBlobUrl}
+                        title={activePdfBook.title}
+                        courseCode={activePdfBook.code}
+                        initialTotalPages={activePdfBook.pages}
+                        theme={readerTheme}
+                        language={language}
+                        isOffline={true}
+                        externalUrl={activePdfBook.pdfUrl}
+                        onClose={handleCloseBook}
+                      />
+                    ) : pdfViewerMode === 'mobile-native' ? (
+                      /* 2. Professional PDF.js Full-bleed Vector Reader */
+                      <div className="flex-1 w-full h-full min-h-0 relative flex flex-col">
+                        <MobilePdfReader
+                          fileUrl={`/api/books/download-pdf?id=${encodeURIComponent(activePdfBook.id)}&fileId=${encodeURIComponent(extractDriveFileId(activePdfBook.downloadUrl || activePdfBook.pdfUrl))}`}
+                          title={activePdfBook.title}
+                          courseCode={activePdfBook.code}
+                          initialTotalPages={activePdfBook.pages}
+                          theme={readerTheme}
+                          language={language}
+                          isOffline={false}
+                          externalUrl={activePdfBook.pdfUrl}
+                          onClose={handleCloseBook}
+                        />
+
+                        {/* Optional Quick Switcher fallback capsule */}
+                        <div className="absolute top-16 right-3 z-30 pointer-events-none opacity-40 hover:opacity-100 transition-opacity">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              playClickChime();
+                              setPdfViewerMode('drive');
+                              setPdfIframeKey((k) => k + 1);
+                            }}
+                            className="pointer-events-auto text-[10px] bg-slate-950/80 backdrop-blur-md px-2.5 py-1 rounded-full border border-slate-700 text-slate-300 hover:text-amber-400 cursor-pointer shadow-md"
+                            title="Switch to Drive Embedded Mode"
                           >
-                            <iframe
-                              key={`offline-${activePdfBook.id}-${pdfIframeKey}`}
-                              src={activeOfflineBlobUrl}
-                              title={activePdfBook.title}
-                              className="absolute inset-0 w-full h-full border-0 block"
-                              allow="autoplay; fullscreen; encrypted-media"
-                            />
-                          </object>
+                            Drive Embed ↗
+                          </button>
                         </div>
                       </div>
                     ) : (activePdfBook.previewUrl || activePdfBook.downloadUrl) ? (
+                      /* 3. Fallback Embed Mode */
                       <div 
                         className="flex-1 w-full h-full min-h-0 relative bg-slate-950"
                         style={{
@@ -3158,12 +3163,11 @@ export default function BookStoreView({
                               type="button"
                               onClick={() => {
                                 playClickChime();
-                                setPdfViewerMode((prev) => prev === 'drive' ? 'gdocs' : prev === 'gdocs' ? 'native' : 'drive');
-                                setPdfIframeKey((k) => k + 1);
+                                setPdfViewerMode('mobile-native');
                               }}
                               className="text-amber-400 font-bold hover:underline cursor-pointer"
                             >
-                              {pdfViewerMode === 'drive' ? 'Switch to Docs Engine' : pdfViewerMode === 'gdocs' ? 'Switch to Native Engine' : 'Switch to Drive Engine'}
+                              Switch to Native PDF Reader
                             </button>
                             <span aria-hidden="true">·</span>
                             {activePdfBook.pdfUrl && (
