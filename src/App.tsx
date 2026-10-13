@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Home as HomeIcon, Bot, Trophy, Award, Sparkles, Calendar, Sun, Moon, User as UserIcon, BookOpen, CheckCircle,
-  Share, X, ShieldCheck, Download, WifiOff, GraduationCap, FileText, Menu, MoreVertical, Type
+  Share, X, ShieldCheck, Download, WifiOff, GraduationCap, FileText, Menu, MoreVertical, Type, Megaphone, Bell
 } from 'lucide-react';
 
 import { StudentProfile, CustomNote, Flashcard, AITeacherContext, ExamAttemptRecord } from './types';
@@ -29,6 +29,7 @@ import ExamEngineView from './components/ExamEngineView';
 import EthioLearnAppPromoBanner from './components/EthioLearnAppPromoBanner';
 import AppSidebar from './components/AppSidebar';
 import LegalPrivacyTermsModal from './components/LegalPrivacyTermsModal';
+import AnnouncementsModal from './components/AnnouncementsModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { TelegramMiniAppHeader } from './components/TelegramMiniAppHeader';
 import AppDrawer from './components/native/AppDrawer';
@@ -306,6 +307,7 @@ export default function App() {
   const [isHeaderOverflowOpen, setIsHeaderOverflowOpen] = useState(false);
   const [showLegalModal, setShowLegalModal] = useState(false);
   const [legalModalTab, setLegalModalTab] = useState<'about' | 'terms' | 'privacy'>('about');
+  const [showAnnouncementsModal, setShowAnnouncementsModal] = useState<boolean>(false);
 
   // Trigger toast
   const showToast = (msg: string) => {
@@ -1471,6 +1473,23 @@ export default function App() {
                 )}
               </button>
 
+              {/* Official Campus Announcements Place Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  playClickChime();
+                  setShowAnnouncementsModal(true);
+                }}
+                className="relative p-2 sm:px-2.5 sm:py-1.5 border rounded-xl cursor-pointer transition-all flex items-center gap-1.5 border-amber-500/35 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 group shrink-0"
+                title={language === 'am' ? "የካምፓስ ማስታወቂያ ሰሌዳ" : "Campus Announcements & Bulletin"}
+              >
+                <Megaphone className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+                <span className="hidden sm:inline text-[10px] font-black uppercase tracking-wider">
+                  {language === 'am' ? 'ማስታወቂያ' : 'Notices'}
+                </span>
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full animate-pulse border-2 border-[#0A1128]" />
+              </button>
+
               {/* Admin Dashboard Shield Button */}
               {isUserAdmin && (
                 <button
@@ -1548,6 +1567,20 @@ export default function App() {
                     <div onClick={() => setIsHeaderOverflowOpen(false)} className="w-full">
                       <PWAInstallButton language={language} variant="header" />
                     </div>
+
+                    {/* Official Campus Announcements in overflow */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playClickChime();
+                        setShowAnnouncementsModal(true);
+                        setIsHeaderOverflowOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-amber-500/10 text-amber-400 cursor-pointer font-bold"
+                    >
+                      <Megaphone className="w-4 h-4 text-amber-400" />
+                      <span>{language === 'am' ? 'የካምፓስ ማስታወቂያዎች' : 'Campus Notices'}</span>
+                    </button>
 
                     {/* Admin Dashboard if authorized */}
                     {isUserAdmin && (
@@ -1655,6 +1688,7 @@ export default function App() {
                 streakCount={streak}
                 studyHoursCount={studyHours}
                 onOpenSidebar={() => setIsSidebarOpen(true)}
+                onOpenAnnouncements={() => setShowAnnouncementsModal(true)}
               />
             )}
 
@@ -1988,6 +2022,7 @@ export default function App() {
           setShowLegalModal(true);
         }}
         isUserAdmin={isUserAdmin}
+        onOpenAnnouncements={() => setShowAnnouncementsModal(true)}
         onOpenAdmin={isUserAdmin ? () => {
           setIsSidebarOpen(false);
           setIsAdminOpen(true);
@@ -2001,6 +2036,18 @@ export default function App() {
         language={language}
         initialTab={legalModalTab}
         onAcceptAndClose={() => setShowLegalModal(false)}
+      />
+
+      {/* 📢 Official Campus Announcements & Bulletin Board Modal */}
+      <AnnouncementsModal
+        isOpen={showAnnouncementsModal}
+        onClose={() => setShowAnnouncementsModal(false)}
+        language={language}
+        onNavigate={(page) => setCurrentPage(page as any)}
+        isAdmin={isUserAdmin}
+        onOpenAdminAnnouncements={isUserAdmin ? () => {
+          setIsAdminOpen(true);
+        } : undefined}
       />
 
       {/* 📶 PWA Offline Indicator Pill */}

@@ -734,9 +734,54 @@ export async function fetchAnnouncements(publishedOnly = false): Promise<Platfor
   firestoreAnnouncements.forEach(a => annMap.set(a.id, a));
   dbAnnouncements.forEach(a => annMap.set(a.id, a));
 
-  const result = Array.from(annMap.values()).sort((a, b) => {
+  let result = Array.from(annMap.values()).sort((a, b) => {
     return new Date(b.createdAt || b.date || 0).getTime() - new Date(a.createdAt || a.date || 0).getTime();
   });
+
+  if (result.length === 0) {
+    result = [
+      {
+        id: 'ann_wku_exam_archive_2026',
+        title: 'Wolkite University Midterm & Final Exam Archives Verified',
+        message: 'Official past midterms, finals, and Exit Exam prep packages for Engineering, Computing, Health, and Social Sciences faculties have been verified and updated with chapter-by-chapter solution breakdowns.',
+        badgeText: 'WKU Notice',
+        isImportant: true,
+        status: 'published',
+        date: '2026-10-10',
+        createdAt: '2026-10-10T08:00:00.000Z'
+      },
+      {
+        id: 'ann_curriculum_textbooks_2026',
+        title: 'Freshman Common Courses Digital Modules Complete',
+        message: 'All 12 national curriculum modules (General Chemistry, Biology, Economics, Critical Thinking, Logic, Emerging Technologies, Inclusiveness, Physics, Fitness, Anthropology, Communicative English) are now available with offline reading mode.',
+        badgeText: 'Curriculum',
+        isImportant: false,
+        status: 'published',
+        date: '2026-10-08',
+        createdAt: '2026-10-08T09:00:00.000Z'
+      },
+      {
+        id: 'ann_asgobnyi_ai_tutor_active',
+        title: 'AI Tutor "አስጎብኚ" Bilingual Academic Support',
+        message: 'Asgobnyi AI Tutor is active 24/7 in both Amharic and English. Use it to break down complex mathematical proofs, engineering formulas, and textbook questions step by step.',
+        badgeText: 'AI Tutor',
+        isImportant: false,
+        status: 'published',
+        date: '2026-10-05',
+        createdAt: '2026-10-05T10:00:00.000Z'
+      },
+      {
+        id: 'ann_telegram_hub',
+        title: 'Official Student Study & Note Exchange Hub',
+        message: 'Join the verified EthioLearn Telegram community (@Et_Learnn) for lecture notes, department study groups, and direct announcements from university coordinators.',
+        badgeText: 'Community',
+        isImportant: false,
+        status: 'published',
+        date: '2026-10-01',
+        createdAt: '2026-10-01T12:00:00.000Z'
+      }
+    ];
+  }
 
   try {
     safeStorage.setItem(LOCAL_STORAGE_ANNOUNCEMENTS_KEY, JSON.stringify(result));
@@ -914,108 +959,8 @@ export async function fetchCoupons(): Promise<CouponCode[]> {
     }
   } catch {}
 
-  const defaultCampusCoupons: CouponCode[] = [
-    {
-      code: 'FRESHMAN100',
-      description: '100% Free Full Freshman Scholarship Access',
-      discountPercentage: 100,
-      fixedDiscountETB: 349,
-      maxUses: 5000,
-      usedCount: 142,
-      expiresAt: '2026-12-31',
-      isActive: true
-    },
-    {
-      code: 'WKU100',
-      description: '100% Free Wolkite University Campus Access',
-      discountPercentage: 100,
-      fixedDiscountETB: 349,
-      maxUses: 2000,
-      usedCount: 88,
-      expiresAt: '2026-12-31',
-      isActive: true
-    },
-    {
-      code: 'FREESTUDENT',
-      description: '100% Student Scholarship Activation',
-      discountPercentage: 100,
-      fixedDiscountETB: 349,
-      maxUses: 1000,
-      usedCount: 52,
-      expiresAt: '2026-12-31',
-      isActive: true
-    },
-    {
-      code: 'ETHIOLEARN50',
-      description: '50% Semester Discount for University Students',
-      discountPercentage: 50,
-      fixedDiscountETB: 175,
-      maxUses: 1000,
-      usedCount: 42,
-      expiresAt: '2026-12-31',
-      isActive: true
-    },
-    {
-      code: 'WKU2026',
-      description: '40% Special Wolkite University Student Discount',
-      discountPercentage: 40,
-      fixedDiscountETB: 140,
-      maxUses: 1500,
-      usedCount: 56,
-      expiresAt: '2026-12-31',
-      isActive: true
-    },
-    {
-      code: 'TELEBIRR30',
-      description: '30% Discount for Telebirr Payments',
-      discountPercentage: 30,
-      fixedDiscountETB: 105,
-      maxUses: 1000,
-      usedCount: 61,
-      expiresAt: '2026-12-31',
-      isActive: true
-    },
-    {
-      code: 'CBEBIRR30',
-      description: '30% Discount for Commercial Bank of Ethiopia (CBE)',
-      discountPercentage: 30,
-      fixedDiscountETB: 105,
-      maxUses: 1000,
-      usedCount: 39,
-      expiresAt: '2026-12-31',
-      isActive: true
-    },
-    {
-      code: 'AAU2026',
-      description: '35% Discount for Addis Ababa University',
-      discountPercentage: 35,
-      fixedDiscountETB: 122,
-      maxUses: 1000,
-      usedCount: 27,
-      expiresAt: '2026-12-31',
-      isActive: true
-    },
-    {
-      code: 'FRESHMAN100',
-      description: '100% Full Academic Scholarship Pass for Freshman Students',
-      discountPercentage: 100,
-      fixedDiscountETB: 350,
-      maxUses: 100,
-      usedCount: 14,
-      expiresAt: '2026-12-31',
-      isActive: true
-    },
-    {
-      code: 'CAMPUS40',
-      description: '40% Campus Representative Student Voucher',
-      discountPercentage: 40,
-      fixedDiscountETB: 140,
-      maxUses: 500,
-      usedCount: 19,
-      expiresAt: '2026-12-31',
-      isActive: true
-    }
-  ];
+  // All promotional coupon codes removed as requested
+  const defaultCampusCoupons: CouponCode[] = [];
 
   const couponMap = new Map<string, CouponCode>();
   defaultCampusCoupons.forEach(c => couponMap.set(c.code.toUpperCase(), c));
@@ -1024,9 +969,8 @@ export async function fetchCoupons(): Promise<CouponCode[]> {
 
   const result = Array.from(couponMap.values());
   try {
-    safeStorage.setItem(LOCAL_STORAGE_COUPONS_KEY, JSON.stringify(result));
+    safeStorage.removeItem(LOCAL_STORAGE_COUPONS_KEY);
   } catch {}
-
   return result;
 }
 

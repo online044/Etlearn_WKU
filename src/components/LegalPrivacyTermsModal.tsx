@@ -389,13 +389,13 @@ export default function LegalPrivacyTermsModal({
                   <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
                     <FileText className="w-4 h-4 shrink-0" />
                     <span>
-                      {isAm ? '3. የክፍያ ደንቦች፣ ቴሌብር እና ሲቢኢ ብር የደረሰኝ ማረጋገጫ' : '3. Payment Verification & Telebirr / CBE Birr Transactions'}
+                      {isAm ? '3. ግልጽ የክፍያ ደንቦች፣ ቴሌብር እና ሲቢኢ ብር (ምንም ድብቅ ክፍያ የለም)' : '3. Transparent Payments: Telebirr & CBE Birr (Zero Hidden Fees)'}
                     </span>
                   </div>
                   <p className="leading-relaxed">
                     {isAm
-                      ? 'የኢትዮ-ለርን ፕሮ አባልነትን ለማስከፈት ተማሪዎች የተጠቀሰውን ክፍያ በይፋዊ የኢትዮጵያ የክፍያ መንገዶች (ቴሌብር / Telebirr ወይም ሲቢኢ ብር / CBE Birr) በመክፈል ትክክለኛ የትራንዛክሽን ቁጥር (Transaction ID) እና የደረሰኝ ፎቶ ማያያዝ አለባቸው። ሀሰተኛ፣ የተደጋገመ ወይም የተዛባ የክፍያ ማረጋገጫ ማቅረብ የመለያ አጠቃቀምን በዘላቂነት ያስዘጋል እንዲሁም ለህጋዊ ተጠያቂነት ይዳርጋል።'
-                      : 'To upgrade to EthioLearn Pro, students must complete payments through verified Ethiopian payment services (Telebirr, CBE Birr) and provide authentic Transaction Reference numbers along with readable payment slips. Submitting forged, duplicated, or altered transaction slips triggers automatic permanent account termination without refund.'}
+                      ? 'የኢትዮ-ለርን ፕሮ አባልነት ክፍያ ሙሉ በሙሉ ግልጽና ቋሚ ነው (ወርሃዊ 99 ብር፣ የሴሚስተር 199 ብር፣ የዓመት 250 ብር)። ምንም አይነት ድብቅ ክፍያ ወይም ያለተማሪው ፈቃድ የሚቆረጥ አውቶማቲክ ክፍያ የለም። ክፍያዎች የሚፈጸሙት በይፋዊ የኢትዮጵያ የክፍያ መንገዶች (ቴሌብር / Telebirr ወይም ሲቢኢ ብር / CBE Birr) ብቻ ሲሆን፣ ትክክለኛ የትራንዛክሽን ቁጥር እና የደረሰኝ ፎቶ ከተላከ በኋላ በአድሚን ቡድን በ 1-2 ሰዓት ውስጥ ይረጋገጣል። የውሸት ደረሰኝ ማቅረብ መለያን በዘላቂነት ያስዘጋል።'
+                      : 'EthioLearn Pro operates with 100% pricing transparency (99 ETB / month, 199 ETB / semester, 250 ETB / full academic year). There are strictly no hidden charges, no fake foreign fees, and no automated recurring credit card deductions. Payments are executed directly through verified Ethiopian channels (Telebirr, CBE Birr) and manually verified by our university coordination team within 1 to 2 hours of transaction slip submission. Submitting fraudulent receipts results in immediate, permanent account termination.'}
                   </p>
                 </div>
 
@@ -404,13 +404,13 @@ export default function LegalPrivacyTermsModal({
                   <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
                     <BookOpen className="w-4 h-4 shrink-0" />
                     <span>
-                      {isAm ? '4. የዲጂታል መጽሐፍት፣ ማስታወሻዎች እና ፒዲኤፍ አጠቃቀም ደንብ' : '4. Fair Use of Digital Textbooks, Notes & Offline PDFs'}
+                      {isAm ? '4. ነፃ የዲጂታል ሞጁሎች እና የጥናት ማስታወሻዎች አጠቃቀም' : '4. 100% Free Public Textbooks & Academic Fair Use'}
                     </span>
                   </div>
                   <p className="leading-relaxed">
                     {isAm
-                      ? 'በኢትዮ-ለርን የሚገኙ የዩኒቨርሲቲ ሞጁሎች፣ የፍሬሽማን የጋራ ኮርሶች፣ እና የፈተና መፍትሔዎች ለግል ትምህርት ብቻ የታሰቡ ናቸው። መረጃዎችን ለንግድ አላማ መልሶ መሸጥ፣ በሶስተኛ ወገን ድረ-ገጾች ማሰራጨት ወይም በቦቶች (Automated scrapers) በብዛት ማውረድ በጥብቅ የተከለከለ ነው። ከመስመር ውጭ (Offline) የተቀመጡ ፋይሎች በመሳሪያዎ ላይ ለግል ንባብ ብቻ ይፈቀዳሉ።'
-                      : 'University course modules, freshmen common curricula, and verified lecture PDFs are licensed exclusively for personal, non-commercial student study. Bulk scraping, automated downloading, or commercial resale of EthioLearn resources is strictly prohibited. Offline downloaded files are cached exclusively for single-device offline reading.'}
+                      ? 'በኢትዮ-ለርን ፕሮ ላይ የሚገኙ ሁሉም የኢትዮጵያ ዩኒቨርሲቲ የጋራ ኮርስ (Freshman Common Courses) መማሪያ መጽሐፍት እና ፒዲኤፍ ሞጁሎች 100% ነፃ ናቸው። ማንኛውም ተማሪ ያለምንም ክፍያ በመተግበሪያው ውስጥ ማንበብ ወይም ከመስመር ውጭ (Offline) አውርዶ ማጥናት ይችላል። እነዚህን የትምህርት ግብዓቶች ለንግድ አላማ መልሶ መሸጥ ወይም በሶስተኛ ወገን ድረ-ገጾች ማሰራጨት በጥብቅ የተከለከለ ነው።'
+                      : 'All Ethiopian university freshman common course textbooks, syllabus modules, and lecture notes hosted on EthioLearn Pro are 100% free open educational resources. Every student can read them in-app or download them for offline revision without paying any subscription fee. Re-selling, commercially distributing, or bulk-scraping these academic materials is strictly prohibited.'}
                   </p>
                 </div>
 
@@ -476,8 +476,8 @@ export default function LegalPrivacyTermsModal({
                   </div>
                   <p className="leading-relaxed text-emerald-200">
                     {isAm
-                      ? 'የተማሪ የግል መረጃዎችን ለሶስተኛ ወገን ማስታወቂያ ሰሪዎች ወይም የንግድ ተቋማት ፈጽሞ አንሸጥም ወይም አናጋራም። የእርስዎ መረጃዎች በከፍተኛ የደህንነት ደረጃ (256-bit encryption) የተጠበቁ ናቸው።'
-                      : 'We strictly pledge that EthioLearn Pro NEVER sells, rents, or commercializes student records to third-party advertisers. All records are guarded by strict 256-bit encrypted security protocols.'}
+                      ? 'የተማሪ የግል መረጃዎችን ለሶስተኛ ወገን ማስታወቂያ ሰሪዎች ወይም የንግድ ተቋማት ፈጽሞ አንሸጥም ወይም አናጋራም። በመተግበሪያው ውስጥ ምንም አይነት የሶስተኛ ወገን ማስታወቂያ ወይም የተማሪ መከታተያ (Trackers) የለም። የእርስዎ መረጃዎች በከፍተኛ የደህንነት ደረጃ (256-bit encryption) የተጠበቁ ሲሆኑ ከመስመር ውጭ የተቀመጡ ማስታወሻዎች በራስዎ ስልክ/መሳሪያ ላይ ብቻ ይቀመጣሉ።'
+                      : 'We strictly pledge that EthioLearn Pro NEVER sells, rents, or commercializes student records to third-party advertisers or data brokers. The platform contains zero advertising trackers. All student records are guarded by strict 256-bit encrypted security protocols, and offline downloaded books/notes remain strictly cached on your local device.'}
                   </p>
                 </div>
 

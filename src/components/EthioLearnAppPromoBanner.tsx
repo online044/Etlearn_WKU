@@ -60,23 +60,23 @@ const CAMPAIGNS: PromoCampaign[] = [
   },
   {
     id: 'biology_open',
-    tag: { en: 'Open Course', am: 'ክፍት ኮርስ' },
+    tag: { en: 'Open Textbooks', am: 'ክፍት መጻሕፍት' },
     title: { 
-      en: 'General Biology video lectures are open & free for all students! Upgrade to Pro for all course videos', 
-      am: 'የአጠቃላይ ባዮሎጂ የቪዲዮ ትምህርቶች ለሁሉም ክፍት ናቸው! ለሌሎች ኮርሶች ወደ ፕሮ ያሳድጉ' 
+      en: 'Complete Ethiopian freshman curriculum textbook PDFs available for offline download & in-app reading!', 
+      am: 'የመጀመሪያ ዓመት የዩኒቨርሲቲ ሞጁሎች እና መጻሕፍት ከመስመር ውጭ ለማንበብ ክፍት ናቸው!' 
     },
-    highlight: { en: 'Free Biology Videos', am: 'ነፃ ባዮሎጂ ቪዲዮ' },
-    ctaText: { en: 'Watch Biology', am: 'ባዮሎጂ ይመልከቱ' },
+    highlight: { en: '100% Free PDFs', am: '100% ነፃ ፒዲኤፍ' },
+    ctaText: { en: 'Read Textbooks', am: 'መጻሕፍትን አንብብ' },
     icon: Sparkles,
     accentColor: '#F59E0B',
     actionType: 'bookstore'
   },
   {
     id: 'pro_upgrade',
-    tag: { en: 'Video Pro Pass', am: 'የቪዲዮ ፕሮ ፓስ' },
+    tag: { en: 'Past Exams & AI', am: 'ፈተናዎች እና AI' },
     title: { 
-      en: 'Unlock full video lectures for all university courses via Telebirr & CBE Birr (From 99 ETB)', 
-      am: 'ለሁሉም የዩኒቨርሲቲ ኮርሶች የተሟሉ የቪዲዮ ትምህርቶችን በቴሌብር እና በንግድ ባንክ ይክፈቱ (ከ99 ብር ጀምሮ)' 
+      en: 'Unlock official past exam papers, timed drills & AI Tutor Asgobnyi via Telebirr & CBE Birr (From 99 ETB)', 
+      am: 'ትክክለኛ የዩኒቨርሲቲ ፈተናዎችን እና የ AI አስጎብኚ ትንታኔን በቴሌብር እና በንግድ ባንክ ይክፈቱ (ከ99 ብር ጀምሮ)' 
     },
     highlight: { en: 'From 99 ETB', am: 'ከ99 ብር ጀምሮ' },
     ctaText: { en: 'Upgrade Pro', am: 'ወደ ፕሮ አሳድግ' },

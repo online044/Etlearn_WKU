@@ -7,6 +7,7 @@
 import { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import crypto from 'crypto';
 import { getSupabaseAdmin, authenticateRequest, PRIMARY_ADMIN_EMAIL } from './security';
 import { BookRecord, ExamSheetRecord, ContentAccessLevel, ContentStatus, ExamType } from '../src/types';
@@ -500,10 +501,12 @@ export async function streamContent(req: Request, res: Response) {
 }
 
 // Cache directory for downloaded curriculum and public book PDFs
-const BOOKS_CACHE_DIR = path.join(PRIVATE_BOOKS_DIR, 'cache');
-if (!fs.existsSync(BOOKS_CACHE_DIR)) {
-  try { fs.mkdirSync(BOOKS_CACHE_DIR, { recursive: true }); } catch (e) {}
-}
+const BOOKS_CACHE_DIR = process.env.VERCEL
+  ? path.join(os.tmpdir(), 'ethiolearn_books_cache')
+  : path.join(PRIVATE_BOOKS_DIR, 'cache');
+const FALLBACK_CACHE_DIR = path.join(os.tmpdir(), 'ethiolearn_books_cache');
+try { if (!fs.existsSync(BOOKS_CACHE_DIR)) fs.mkdirSync(BOOKS_CACHE_DIR, { recursive: true }); } catch (e) {}
+try { if (!fs.existsSync(FALLBACK_CACHE_DIR)) fs.mkdirSync(FALLBACK_CACHE_DIR, { recursive: true }); } catch (e) {}
 
 const KNOWN_CURRICULUM_FILE_IDS: Record<string, string> = {
   // Canonical freshman module IDs
@@ -603,8 +606,18 @@ const KNOWN_CURRICULUM_FILE_IDS: Record<string, string> = {
  */
 function streamPdfFile(res: Response, filePath: string, filename?: string): boolean {
   try {
-    if (!fs.existsSync(filePath)) return false;
-    const stat = fs.statSync(filePath);
+    let resolvedPath = filePath;
+    if (!fs.existsSync(resolvedPath)) {
+      // Check fallback temp cache
+      const baseName = path.basename(filePath);
+      const fallbackPath = path.join(FALLBACK_CACHE_DIR, baseName);
+      if (fs.existsSync(fallbackPath)) {
+        resolvedPath = fallbackPath;
+      } else {
+        return false;
+      }
+    }
+    const stat = fs.statSync(resolvedPath);
     if (stat.size < 500) return false;
 
     res.setHeader('Content-Type', 'application/pdf');
@@ -614,7 +627,7 @@ function streamPdfFile(res: Response, filePath: string, filename?: string): bool
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Accept-Ranges', 'bytes');
 
-    const stream = fs.createReadStream(filePath);
+    const stream = fs.createReadStream(resolvedPath);
     stream.on('error', (err) => {
       console.warn('[proxyBookPdf] Read stream error:', err);
       if (!res.headersSent) {
@@ -633,67 +646,35 @@ function streamPdfFile(res: Response, filePath: string, filename?: string): bool
  * Helper to generate a minimal valid fallback PDF buffer if remote fetch is unreachable
  */
 function generateFallbackPdfBuffer(title: string, subject: string): Buffer {
-  const cleanTitle = title.replace(/[^\x20-\x7E]/g, ' ').trim() || 'University Course Material';
-  const cleanSub = subject.replace(/[^\x20-\x7E]/g, ' ').trim() || 'EthioLearn Pro Academic Repository';
+  const safeStr = (s: string) => (s || '').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)').replace(/[^\x20-\x7E]/g, ' ').trim();
+  const cleanTitle = safeStr(title) || 'University Course Material';
+  const cleanSub = safeStr(subject) || 'EthioLearn Pro Academic Repository';
   const timestamp = new Date().toISOString().split('T')[0];
 
-  const contentStream = `BT
-/F1 18 Tf
-50 740 Td
-(EthioLearn Pro - Wolkite University) Tj
-/F1 14 Tf
-0 -30 Td
-(${cleanTitle}) Tj
-/F1 10 Tf
-0 -25 Td
-(Course / Subject: ${cleanSub}) Tj
-0 -18 Td
-(Generated / Verified: ${timestamp} | Offline Safe Mode) Tj
-/F1 11 Tf
-0 -35 Td
-(This course module is officially registered in the EthioLearn academic archive.) Tj
-0 -20 Td
-(If you are accessing via cellular data or proxy, this document remains available offline.) Tj
-0 -20 Td
-(Units, lecture notes, quizzes, and summaries are accessible in the EthioLearn portal.) Tj
-ET`;
+  const contentStream = `BT\n/F1 18 Tf\n50 740 Td\n(EthioLearn Pro - Wolkite University) Tj\n/F1 14 Tf\n0 -30 Td\n(${cleanTitle}) Tj\n/F1 10 Tf\n0 -25 Td\n(Course / Subject: ${cleanSub}) Tj\n0 -18 Td\n(Generated / Verified: ${timestamp} | Offline Safe Mode) Tj\n/F1 11 Tf\n0 -35 Td\n(This course module is officially registered in the EthioLearn academic archive.) Tj\n0 -20 Td\n(If you are accessing via cellular data or proxy, this document remains available offline.) Tj\n0 -20 Td\n(Units, lecture notes, quizzes, and summaries are accessible in the EthioLearn portal.) Tj\nET\n`;
 
-  const streamLength = Buffer.byteLength(contentStream, 'utf8');
+  const streamLen = Buffer.byteLength(contentStream, 'utf8');
 
-  const pdfText = `%PDF-1.4
-1 0 obj
-<< /Type /Catalog /Pages 2 0 R >>
-endobj
-2 0 obj
-<< /Type /Pages /Kids [3 0 R] /Count 1 >>
-endobj
-3 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
-endobj
-4 0 obj
-<< /Length ${streamLength} >>
-stream
-${contentStream}
-endstream
-endobj
-5 0 obj
-<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
-endobj
-xref
-0 6
-0000000000 65535 f 
-0000000010 00000 n 
-0000000060 00000 n 
-0000000117 00000 n 
-0000000251 00000 n 
-0000000320 00000 n 
-trailer
-<< /Size 6 /Root 1 0 R >>
-startxref
-389
-%%EOF`;
+  const header = '%PDF-1.4\n';
+  const obj1 = '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n';
+  const obj2 = '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n';
+  const obj3 = '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n';
+  const obj4 = `4 0 obj\n<< /Length ${streamLen} >>\nstream\n${contentStream}endstream\nendobj\n`;
+  const obj5 = '5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n';
 
-  return Buffer.from(pdfText, 'utf8');
+  const o1 = Buffer.byteLength(header, 'utf8');
+  const o2 = o1 + Buffer.byteLength(obj1, 'utf8');
+  const o3 = o2 + Buffer.byteLength(obj2, 'utf8');
+  const o4 = o3 + Buffer.byteLength(obj3, 'utf8');
+  const o5 = o4 + Buffer.byteLength(obj4, 'utf8');
+  const startXref = o5 + Buffer.byteLength(obj5, 'utf8');
+
+  const pad10 = (n: number) => String(n).padStart(10, '0');
+
+  const xref = `xref\n0 6\n0000000000 65535 f \n${pad10(o1)} 00000 n \n${pad10(o2)} 00000 n \n${pad10(o3)} 00000 n \n${pad10(o4)} 00000 n \n${pad10(o5)} 00000 n \ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${startXref}\n%%EOF\n`;
+
+  const fullPdf = header + obj1 + obj2 + obj3 + obj4 + obj5 + xref;
+  return Buffer.from(fullPdf, 'utf8');
 }
 
 /**
@@ -785,7 +766,7 @@ export async function proxyBookPdf(req: Request, res: Response) {
         try {
           const response = await fetch(driveUrl, { 
             redirect: 'follow',
-            signal: AbortSignal.timeout(30000)
+            signal: AbortSignal.timeout(3500)
           });
           if (!response.ok) continue;
 
@@ -804,7 +785,7 @@ export async function proxyBookPdf(req: Request, res: Response) {
               
               const confirmedResp = await fetch(confirmedUrl, { 
                 redirect: 'follow',
-                signal: AbortSignal.timeout(30000)
+                signal: AbortSignal.timeout(3500)
               });
               if (confirmedResp.ok) {
                 const confirmedAb = await confirmedResp.arrayBuffer();
@@ -831,10 +812,16 @@ export async function proxyBookPdf(req: Request, res: Response) {
       if (pdfBuffer) {
         // Asynchronously save to server disk cache for subsequent instant delivery
         const savePath = path.join(BOOKS_CACHE_DIR, `${targetFileId}.pdf`);
-        fs.promises.writeFile(savePath, pdfBuffer).catch(e => console.warn('[proxyBookPdf] Failed to cache file:', e));
+        fs.promises.writeFile(savePath, pdfBuffer).catch(() => {
+          const tempPath = path.join(FALLBACK_CACHE_DIR, `${targetFileId}.pdf`);
+          return fs.promises.writeFile(tempPath, pdfBuffer).catch(() => {});
+        });
         if (bookId) {
           const aliasPath = path.join(BOOKS_CACHE_DIR, `${bookId}.pdf`);
-          fs.promises.writeFile(aliasPath, pdfBuffer).catch(() => {});
+          fs.promises.writeFile(aliasPath, pdfBuffer).catch(() => {
+            const tempAlias = path.join(FALLBACK_CACHE_DIR, `${bookId}.pdf`);
+            return fs.promises.writeFile(tempAlias, pdfBuffer).catch(() => {});
+          });
         }
 
         res.setHeader('Content-Type', 'application/pdf');

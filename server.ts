@@ -120,6 +120,29 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// URL Normalization Middleware (Fix Vercel serverless rewrite paths and missing prefixes)
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  // If request has /api/index.ts, /api/index or /api/vercel, normalize it if original URI exists
+  if (req.url.startsWith('/api/index.ts') || req.url.startsWith('/api/index') || req.url.startsWith('/api/vercel')) {
+    const forwardedUri = (req.headers['x-forwarded-uri'] as string) || (req.headers['x-original-url'] as string);
+    if (forwardedUri && forwardedUri.startsWith('/api/') && !forwardedUri.startsWith('/api/index') && !forwardedUri.startsWith('/api/vercel')) {
+      req.url = forwardedUri;
+    }
+  }
+  // If the path was stripped of /api (e.g. /books/download-pdf instead of /api/books/download-pdf)
+  if (!req.url.startsWith('/api') && !req.url.startsWith('/sw.js') && !req.url.startsWith('/manifest')) {
+    const knownApiPrefixes = [
+      '/books', '/content', '/pdf', '/auth', '/user', '/telegram', 
+      '/payments', '/admin', '/announcements', '/sync-master-key', 
+      '/ai', '/support', '/db', '/supabase-config', '/questions', '/quiz', '/health'
+    ];
+    if (knownApiPrefixes.some(p => req.path.startsWith(p))) {
+      req.url = '/api' + req.url;
+    }
+  }
+  next();
+});
+
 // Global input sanitization
 app.use((req: Request, res: Response, next: NextFunction) => {
   if (req.body && typeof req.body === 'object') {
@@ -127,6 +150,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   }
   next();
 });
+
 
 // PWA Specific Routes & Cache Control
 app.get('/sw.js', (req: Request, res: Response) => {
@@ -713,8 +737,8 @@ app.delete(['/api/admin/announcement/:id', '/api/admin/announcement/:id/'], requ
 // Student Public Content API (Returns only published items with filters)
 app.get(['/api/books', '/api/books/'], getPublishedBooks);
 app.get(['/api/exams', '/api/exams/'], getPublishedExams);
-app.get(['/api/books/download-pdf', '/api/books/download-pdf/'], proxyBookPdf);
-app.get(['/api/pdf/proxy', '/api/pdf/proxy/'], proxyBookPdf);
+app.get(['/api/books/download-pdf', '/api/books/download-pdf/', '/books/download-pdf', '/books/download-pdf/'], proxyBookPdf);
+app.get(['/api/pdf/proxy', '/api/pdf/proxy/', '/pdf/proxy', '/pdf/proxy/'], proxyBookPdf);
 
 // Secure streaming & access token endpoints (Enforces server-side Pro entitlement)
 app.post(['/api/content/access-token', '/api/content/access-token/'], createContentToken);
@@ -1397,7 +1421,7 @@ interface VerificationStoreItem {
 const activeVerificationStore = new Map<string, VerificationStoreItem>();
 
 // Clean expired codes periodically
-setInterval(() => {
+const cleanupCodesInterval = setInterval(() => {
   const now = Date.now();
   for (const [key, item] of activeVerificationStore.entries()) {
     if (item.expiresAt < now) {
@@ -1405,6 +1429,7 @@ setInterval(() => {
     }
   }
 }, 60000);
+cleanupCodesInterval.unref();
 
 // Endpoint to generate & dispatch 6-digit registration / password reset security code
 app.post(['/api/auth/send-verification-code', '/api/auth/send-verification-code/'], async (req: Request, res: Response) => {
@@ -2387,7 +2412,10 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 // ============================================================================
 
 async function startServer() {
-  if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  if (process.env.VERCEL || process.env.NOW_REGION) {
+    return;
+  }
+  if (process.env.NODE_ENV !== 'production') {
     try {
       const { createServer: createViteServer } = await import('vite');
       const vite = await createViteServer({
@@ -2410,12 +2438,19 @@ async function startServer() {
     }
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    const distIndex = path.join(distPath, 'index.html');
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+    }
     app.get('*', (req, res) => {
       if (req.path.startsWith('/api')) {
         return res.status(404).json({ error: `API endpoint ${req.path} not found.` });
       }
-      res.sendFile(path.join(distPath, 'index.html'));
+      if (fs.existsSync(distIndex)) {
+        res.sendFile(distIndex);
+      } else {
+        res.status(200).send('<!DOCTYPE html><html><head><title>EthioLearn Pro</title></head><body><div id="root">EthioLearn Pro Academic Portal</div></body></html>');
+      }
     });
 
     if (!process.env.VERCEL) {
@@ -2426,6 +2461,16 @@ async function startServer() {
   }
 }
 
-startServer();
+// Only invoke startServer when running as standalone Node process (not inside Vercel serverless functions)
+const isServerless = !!(
+  process.env.VERCEL ||
+  process.env.VERCEL_ENV ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.LAMBDA_TASK_ROOT
+);
+
+if (!isServerless) {
+  startServer();
+}
 
 export default app;

@@ -1,14 +1,16 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   BookOpen, Play, GraduationCap, Calendar,
   Award, Send, ArrowUpRight,
-  ShieldCheck, Lock, ChevronRight, X
+  ShieldCheck, Lock, ChevronRight, X,
+  Megaphone, Bell, Sparkles
 } from 'lucide-react';
 import StudentAvatar from './StudentAvatar';
-import { StudentProfile, ExamAttemptRecord } from '../types';
+import { StudentProfile, ExamAttemptRecord, PlatformAnnouncement } from '../types';
 import { playClickChime } from '../utils/audio';
 import { safeStorage } from '../utils/safeStorage';
 import { getEthiopianDate, toGeezNumeral, ETHIOPIAN_HOLIDAYS } from '../utils/ethiopianCalendar';
+import { fetchAnnouncements } from '../utils/supabaseCourses';
 
 interface HomeDashboardProps {
   profile: StudentProfile;
@@ -18,6 +20,7 @@ interface HomeDashboardProps {
   streakCount: number;
   studyHoursCount: number;
   onOpenSidebar?: () => void;
+  onOpenAnnouncements?: () => void;
 }
 
 interface CoreCourseItem {
@@ -129,11 +132,24 @@ export default function HomeDashboard({
   onNavigate,
   streakCount,
   studyHoursCount,
-  onOpenSidebar
+  onOpenSidebar,
+  onOpenAnnouncements
 }: HomeDashboardProps) {
   const isAmharic = language === 'am';
   const userId = profile.email || profile.name || 'guest_user';
   const isProUser = Boolean(profile.isPro || profile.proStatus === 'active');
+
+  const [latestAnnouncements, setLatestAnnouncements] = useState<PlatformAnnouncement[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchAnnouncements(true).then((list) => {
+      if (isMounted && list && list.length > 0) {
+        setLatestAnnouncements(list.slice(0, 3));
+      }
+    }).catch(() => {});
+    return () => { isMounted = false; };
+  }, []);
 
   const ethDate = useMemo(() => getEthiopianDate(new Date()), []);
   const geezDayNumeral = useMemo(() => toGeezNumeral(ethDate.day), [ethDate.day]);
@@ -292,6 +308,36 @@ export default function HomeDashboard({
               </p>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* 📢 MINI CAMPUS ANNOUNCEMENTS TICKER / BAR */}
+      <section 
+        onClick={() => {
+          if (onOpenAnnouncements) {
+            playClickChime();
+            onOpenAnnouncements();
+          }
+        }}
+        className="px-3 py-2 sm:py-2.5 rounded-xl bg-gradient-to-r from-amber-500/10 via-[#111C35]/90 to-[#0A1128]/90 border border-amber-500/25 hover:border-amber-500/50 transition-all cursor-pointer shadow-sm group flex items-center justify-between gap-2.5"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-6 h-6 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-105 transition-transform">
+            <Megaphone className="w-3.5 h-3.5 animate-pulse" />
+          </div>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-amber-400 bg-amber-500/15 border border-amber-500/25 px-1.5 py-0.2 rounded shrink-0">
+              {latestAnnouncements[0]?.badgeText || (isAmharic ? 'ማስታወቂያ' : 'Notice')}
+            </span>
+            <p className="text-[11px] sm:text-xs font-semibold text-slate-200 group-hover:text-amber-300 transition-colors truncate">
+              {latestAnnouncements[0]?.title || (isAmharic ? 'የወልቂጤ ዩኒቨርሲቲ እና የብሔራዊ ፈተናዎች ይፋዊ ማስታወቂያ' : 'Official Wolkite University & National Exam Archives Active')}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0 text-amber-400 text-[10.5px] sm:text-[11px] font-bold group-hover:translate-x-0.5 transition-transform">
+          <span className="hidden min-[380px]:inline">{isAmharic ? 'እይ' : 'View'}</span>
+          <ChevronRight className="w-3.5 h-3.5" />
         </div>
       </section>
 
@@ -458,13 +504,13 @@ export default function HomeDashboard({
             </div>
 
             <h3 className="text-sm font-bold text-white leading-tight">
-              {isAmharic ? 'የሁሉንም ኮርሶች ቪዲዮ ትምህርት ይክፈቱ' : 'Unlock All Course Video Lectures'}
+              {isAmharic ? 'የሁሉንም ኮርሶች ፈተናዎች እና AI አስጎብኚ ይክፈቱ' : 'Unlock All Past Exams & AI Tutor'}
             </h3>
             
             <p className="text-xs text-slate-300 leading-relaxed">
               {isAmharic 
-                ? 'የባዮሎጂ ቪዲዮ ነፃ ነው። ለኬሚስትሪ፣ ፊዚክስ፣ ሂሳብ እና ሌሎች በቴሌብር ወይም በንግድ ባንክ በቀላሉ ይክፈሉ።'
-                : 'Biology videos are free. Unlock Chemistry, Physics, Math, Economics and more via Telebirr & CBE Birr.'}
+                ? 'የወልቂጤ ዩኒቨርሲቲ እና የብሔራዊ ፈተናዎች ማህደር፣ ደረጃ በደረጃ የ AI አስጎብኚ ትንታኔ በቴሌብር ወይም በንግድ ባንክ በቀላሉ ይክፈቱ።'
+                : 'Access official Wolkite University and national past exams archive with step-by-step AI tutor solutions via Telebirr & CBE Birr.'}
             </p>
 
             <button

@@ -9,7 +9,7 @@ import {
   X, Phone, Mail, Send, Copy, Check, Info, ShieldCheck, 
   FileText, BookOpen, GraduationCap, Trophy, User, Sparkles, 
   ExternalLink, Sun, Moon, Globe, Calendar, Award, ChevronRight,
-  HelpCircle, Scale, Lock, HeartHandshake, Layers
+  HelpCircle, Scale, Lock, HeartHandshake, Layers, Megaphone
 } from 'lucide-react';
 import EthioLearnLogo from './EthioLearnLogo';
 import StudentAvatar from './StudentAvatar';
@@ -28,6 +28,7 @@ export interface AppSidebarProps {
   onNavigate: (page: string) => void;
   ethDateFormatted?: string;
   onOpenLegal: (tab: 'about' | 'terms' | 'privacy') => void;
+  onOpenAnnouncements?: () => void;
   isUserAdmin?: boolean;
   onOpenAdmin?: () => void;
 }
@@ -43,6 +44,7 @@ export default function AppSidebar({
   onNavigate,
   ethDateFormatted,
   onOpenLegal,
+  onOpenAnnouncements,
   isUserAdmin,
   onOpenAdmin
 }: AppSidebarProps) {
@@ -542,6 +544,31 @@ export default function AppSidebar({
               {/* 📲 PWA App Installation Action Card */}
               <div className="pt-1">
                 <PWAInstallButton language={language} variant="banner" />
+              </div>
+
+              {/* 📢 CAMPUS ANNOUNCEMENTS & BULLETIN BOARD */}
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    playClickChime();
+                    onClose();
+                    if (onOpenAnnouncements) onOpenAnnouncements();
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 hover:text-white transition-all flex items-center justify-between cursor-pointer group shadow-sm"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-1 rounded-lg bg-amber-500/20 text-amber-400 group-hover:scale-110 transition-transform">
+                      <Megaphone className="w-4 h-4" />
+                    </div>
+                    <span className="font-bold text-xs">
+                      {isAm ? 'የካምፓስ ማስታወቂያዎች' : 'Campus Announcements'}
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/40">
+                    {isAm ? 'ማስታወቂያ' : 'Notices'}
+                  </span>
+                </button>
               </div>
 
               {/* 📜 ABOUT, TERMS AND CONDITION, PRIVACY ACTIONS */}

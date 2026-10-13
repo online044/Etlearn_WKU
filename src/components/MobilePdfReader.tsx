@@ -94,6 +94,33 @@ export default function MobilePdfReader({
   const touchStartDist = useRef<number | null>(null);
   const touchStartScale = useRef<number>(1.0);
 
+  // Embedded viewer fallback state
+  const [embeddedFallback, setEmbeddedFallback] = useState<boolean>(false);
+
+  const extractedFileId = React.useMemo(() => {
+    if (fileUrl) {
+      const m1 = fileUrl.match(/[?&]fileId=([a-zA-Z0-9_-]+)/);
+      if (m1 && m1[1]) return m1[1];
+      const m2 = fileUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+      if (m2 && m2[1]) return m2[1];
+    }
+    if (externalUrl) {
+      const m3 = externalUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/) || externalUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || externalUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      if (m3 && m3[1]) return m3[1];
+    }
+    return '';
+  }, [fileUrl, externalUrl]);
+
+  const drivePreviewUrl = React.useMemo(() => {
+    if (extractedFileId) {
+      return `https://drive.google.com/file/d/${extractedFileId}/preview`;
+    }
+    if (externalUrl && externalUrl.includes('drive.google.com')) {
+      return externalUrl.replace(/\/view(\?.*)?$/, '/preview');
+    }
+    return null;
+  }, [extractedFileId, externalUrl]);
+
   // --------------------------------------------------------------------------
   // 1. Load PDF Document via PDF.js
   // --------------------------------------------------------------------------
@@ -118,8 +145,15 @@ export default function MobilePdfReader({
       let docData: Uint8Array | null = null;
 
       // 1. If it's a blob: or data: URL, or local API endpoint, fetch as ArrayBuffer with progress
-      if (fileUrl.startsWith('blob:') || fileUrl.startsWith('data:') || fileUrl.startsWith('/api/')) {
-        const resp = await fetch(fileUrl, { credentials: 'same-origin' });
+      if (fileUrl.startsWith('blob:') || fileUrl.startsWith('data:') || fileUrl.startsWith('/api/') || fileUrl.startsWith('/books/')) {
+        let resp: Response;
+        try {
+          resp = await fetch(fileUrl, { credentials: 'same-origin' });
+        } catch {
+          const fullUrl = fileUrl.startsWith('/') ? `${window.location.origin}${fileUrl}` : fileUrl;
+          resp = await fetch(fullUrl);
+        }
+
         if (!resp.ok) {
           let errText = '';
           try {
@@ -135,6 +169,13 @@ export default function MobilePdfReader({
           );
         }
         const ab = await resp.arrayBuffer();
+        if (ab.byteLength > 4) {
+          const firstBytes = new Uint8Array(ab.slice(0, 5));
+          const magic = String.fromCharCode(...firstBytes);
+          if (!magic.startsWith('%PDF')) {
+            throw new Error(isAm ? 'ትክክለኛ የፒዲኤፍ ቅርጸት አልተገኘም' : 'Invalid PDF stream received from server');
+          }
+        }
         docData = new Uint8Array(ab);
         setLoadingProgress(60);
       } else {
@@ -143,8 +184,14 @@ export default function MobilePdfReader({
           const proxyResp = await fetch(`/api/books/download-pdf?url=${encodeURIComponent(fileUrl)}`);
           if (proxyResp.ok) {
             const ab = await proxyResp.arrayBuffer();
-            docData = new Uint8Array(ab);
-            setLoadingProgress(60);
+            if (ab.byteLength > 4) {
+              const firstBytes = new Uint8Array(ab.slice(0, 5));
+              const magic = String.fromCharCode(...firstBytes);
+              if (magic.startsWith('%PDF')) {
+                docData = new Uint8Array(ab);
+                setLoadingProgress(60);
+              }
+            }
           }
         } catch {
           // fallback to direct URL
@@ -196,12 +243,18 @@ export default function MobilePdfReader({
       setIsLoading(false);
     } catch (err: any) {
       console.error('[MobilePdfReader] PDF load error:', err);
+      if (drivePreviewUrl) {
+        console.warn('[MobilePdfReader] Vector stream fetch failed, switching to embedded Drive preview seamlessly');
+        setEmbeddedFallback(true);
+        setIsLoading(false);
+        return;
+      }
       setIsLoading(false);
       setErrorMessage(
         err?.message || (isAm ? 'ፒዲኤፉን መጫን አልተቻለም። እባክዎ እንደገና ይሞክሩ።' : 'Failed to load PDF document.')
       );
     }
-  }, [fileUrl, isAm]);
+  }, [fileUrl, isAm, drivePreviewUrl]);
 
   useEffect(() => {
     loadDocument();
@@ -524,7 +577,69 @@ export default function MobilePdfReader({
 
   // Estimated page dimensions in logical px for placeholder before canvas render
   const currentLogicalWidth = Math.round(595.32 * (scale || fitWidthScale || 1.0));
-  const currentLogicalHeight = Math.round(currentLogicalWidth / defaultAspect);
+  if (embeddedFallback && drivePreviewUrl) {
+    return (
+      <div
+        ref={rootContainerRef}
+        className="fixed inset-0 z-[999999] w-screen h-[100dvh] max-h-[100dvh] p-0 m-0 border-0 flex flex-col bg-slate-950 text-slate-100 select-none overflow-hidden"
+      >
+        <header className="h-14 sm:h-16 px-2.5 sm:px-4 border-b border-white/10 flex items-center justify-between gap-2 shrink-0 z-30 bg-slate-900/90 backdrop-blur-md">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <button
+              type="button"
+              onClick={() => { playClickChime(); setEmbeddedFallback(false); }}
+              className="p-2 -ml-1 rounded-xl hover:bg-white/10 active:scale-95 text-slate-300 hover:text-white transition-all cursor-pointer flex items-center gap-1 text-xs"
+              title={isAm ? 'ወደ ቬክተር አንባቢ ተመለስ' : 'Return to Vector Reader'}
+            >
+              <ChevronLeft className="w-5 h-5 text-amber-400" />
+              <span className="hidden sm:inline font-medium">{isAm ? 'ተመለስ' : 'Vector Reader'}</span>
+            </button>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 text-[10.5px] text-slate-400 font-medium">
+                {courseCode && <span className="font-bold text-amber-500 font-mono">{courseCode}</span>}
+                {courseCode && <span aria-hidden="true">·</span>}
+                <span className="truncate">{isAm ? 'የተከተተ ዕይታ (Drive Preview)' : 'Embedded Drive Preview'}</span>
+              </div>
+              <h1 className="text-xs sm:text-sm font-bold truncate leading-tight tracking-tight text-slate-100">
+                {title}
+              </h1>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {externalUrl && (
+              <a
+                href={externalUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2.5 py-1 text-[11px] bg-slate-800 hover:bg-slate-700 text-amber-400 rounded-lg flex items-center gap-1 border border-slate-700"
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Drive App</span>
+              </a>
+            )}
+            {onClose && (
+              <button
+                type="button"
+                onClick={() => { playClickChime(); onClose(); }}
+                className="p-2 rounded-xl hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                title={isAm ? 'ዝጋ' : 'Close'}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </header>
+        <div className="flex-1 w-full h-full relative bg-slate-950">
+          <iframe
+            src={drivePreviewUrl}
+            title={title}
+            className="w-full h-full border-0 block"
+            allow="autoplay; fullscreen; encrypted-media"
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -760,6 +875,15 @@ export default function MobilePdfReader({
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span>{isAm ? 'እንደገና ሞክር' : 'Retry'}</span>
               </button>
+              {drivePreviewUrl && (
+                <button
+                  type="button"
+                  onClick={() => { playClickChime(); setEmbeddedFallback(true); }}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
+                >
+                  <span>{isAm ? 'በዕይታ ክፈት (Embedded)' : 'Open Embedded View'}</span>
+                </button>
+              )}
               {externalUrl && (
                 <a
                   href={externalUrl}
