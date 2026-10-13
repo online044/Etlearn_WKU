@@ -589,39 +589,10 @@ export default function AppSidebar({
 
             </div>
 
-            {/* Bottom Footer with Theme, and Calendar */}
+            {/* Bottom Footer with Ge'ez Calendar */}
             <div className="p-3.5 border-t border-white/10 bg-[#080E21] space-y-2.5 shrink-0 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-medium text-slate-400">
-                  {isAm ? 'የቀለም ገጽታ' : 'Theme Mode'}
-                </span>
-
-                {/* Theme Mode Toggle */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    playClickChime();
-                    setThemeMode(themeMode === 'dark' ? 'light' : 'dark');
-                  }}
-                  className="p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
-                  title="Toggle Theme"
-                >
-                  {themeMode === 'dark' ? (
-                    <>
-                      <Sun className="w-3.5 h-3.5 text-amber-400" />
-                      <span className="text-[11px] font-bold">Light</span>
-                    </>
-                  ) : (
-                    <>
-                      <Moon className="w-3.5 h-3.5 text-slate-400" />
-                      <span className="text-[11px] font-bold">Dark</span>
-                    </>
-                  )}
-                </button>
-              </div>
-
               {ethDateFormatted && (
-                <div className="text-[10px] text-slate-400 flex items-center justify-between pt-1 border-t border-white/5">
+                <div className="text-[10px] text-slate-400 flex items-center justify-between">
                   <span className="flex items-center gap-1 text-slate-300 font-serif">
                     <Calendar className="w-3 h-3 text-emerald-400" />
                     {ethDateFormatted}

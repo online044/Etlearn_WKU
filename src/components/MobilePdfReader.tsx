@@ -121,15 +121,34 @@ export default function MobilePdfReader({
       if (fileUrl.startsWith('blob:') || fileUrl.startsWith('data:') || fileUrl.startsWith('/api/')) {
         const resp = await fetch(fileUrl, { credentials: 'same-origin' });
         if (!resp.ok) {
+          let errText = '';
+          try {
+            const errJson = await resp.json();
+            errText = errJson.error || errJson.message;
+          } catch {
+            errText = await resp.text().catch(() => '');
+          }
           throw new Error(
-            resp.status === 500 
+            errText || (resp.status === 500 
               ? (isAm ? 'የአገልጋይ ጊዜያዊ ችግር (Error 500)። እባክዎ እንደገና ይሞክሩ።' : 'Internal server error (500). Please retry.')
-              : (isAm ? `ሰነዱን ማግኘት አልተቻለም (Status: ${resp.status})` : `Failed to download PDF stream (HTTP ${resp.status})`)
+              : (isAm ? `ሰነዱን ማግኘት አልተቻለም (Status: ${resp.status})` : `Failed to download PDF stream (HTTP ${resp.status})`))
           );
         }
         const ab = await resp.arrayBuffer();
         docData = new Uint8Array(ab);
         setLoadingProgress(60);
+      } else {
+        // Route external URLs through local server proxy to bypass browser CORS restrictions
+        try {
+          const proxyResp = await fetch(`/api/books/download-pdf?url=${encodeURIComponent(fileUrl)}`);
+          if (proxyResp.ok) {
+            const ab = await proxyResp.arrayBuffer();
+            docData = new Uint8Array(ab);
+            setLoadingProgress(60);
+          }
+        } catch {
+          // fallback to direct URL
+        }
       }
 
       // 2. Load into PDF.js engine
@@ -144,7 +163,7 @@ export default function MobilePdfReader({
         getDocConfig.data = docData;
       } else {
         getDocConfig.url = fileUrl;
-        getDocConfig.withCredentials = true;
+        getDocConfig.withCredentials = false;
       }
 
       const loadingTask = pdfjsLib.getDocument(getDocConfig);

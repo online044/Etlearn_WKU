@@ -3100,7 +3100,7 @@ export default function BookStoreView({
                       /* 2. Professional PDF.js Full-bleed Vector Reader */
                       <div className="flex-1 w-full h-full min-h-0 relative flex flex-col">
                         <MobilePdfReader
-                          fileUrl={`/api/books/download-pdf?id=${encodeURIComponent(activePdfBook.id)}&fileId=${encodeURIComponent(extractDriveFileId(activePdfBook.downloadUrl || activePdfBook.pdfUrl))}`}
+                          fileUrl={`/api/books/download-pdf?id=${encodeURIComponent(activePdfBook.id)}&fileId=${encodeURIComponent((activePdfBook as any).googleDriveFileId || activePdfBook.originalModule?.googleDriveFileId || activePdfBook.fileId || extractDriveFileId(activePdfBook.downloadUrl || activePdfBook.pdfUrl) || '')}`}
                           title={activePdfBook.title}
                           courseCode={activePdfBook.code}
                           initialTotalPages={activePdfBook.pages}
@@ -3141,13 +3141,13 @@ export default function BookStoreView({
                         }`}>
                           {pdfViewerMode === 'native' ? (
                             <object
-                              data={`/api/books/download-pdf?id=${encodeURIComponent(activePdfBook.id)}&fileId=${encodeURIComponent(extractDriveFileId(activePdfBook.downloadUrl || activePdfBook.pdfUrl))}`}
+                              data={`/api/books/download-pdf?id=${encodeURIComponent(activePdfBook.id)}&fileId=${encodeURIComponent((activePdfBook as any).googleDriveFileId || activePdfBook.originalModule?.googleDriveFileId || activePdfBook.fileId || extractDriveFileId(activePdfBook.downloadUrl || activePdfBook.pdfUrl) || '')}`}
                               type="application/pdf"
                               className="w-full h-full block"
                             >
                               <iframe
                                 key={`${activePdfBook.id}-${pdfIframeKey}-native`}
-                                src={`/api/books/download-pdf?id=${encodeURIComponent(activePdfBook.id)}&fileId=${encodeURIComponent(extractDriveFileId(activePdfBook.downloadUrl || activePdfBook.pdfUrl))}`}
+                                src={`/api/books/download-pdf?id=${encodeURIComponent(activePdfBook.id)}&fileId=${encodeURIComponent((activePdfBook as any).googleDriveFileId || activePdfBook.originalModule?.googleDriveFileId || activePdfBook.fileId || extractDriveFileId(activePdfBook.downloadUrl || activePdfBook.pdfUrl) || '')}`}
                                 title={activePdfBook.title}
                                 className="absolute inset-0 w-full h-full border-0 block"
                                 allow="autoplay; fullscreen; encrypted-media"

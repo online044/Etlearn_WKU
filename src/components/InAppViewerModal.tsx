@@ -115,6 +115,9 @@ export default function InAppViewerModal({
     if (fileIdMatch && fileIdMatch[1]) {
       return `/api/books/download-pdf?fileId=${encodeURIComponent(fileIdMatch[1])}`;
     }
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return `/api/books/download-pdf?url=${encodeURIComponent(url)}`;
+    }
     return url;
   };
 
