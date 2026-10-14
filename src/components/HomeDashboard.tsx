@@ -319,25 +319,25 @@ export default function HomeDashboard({
             onOpenAnnouncements();
           }
         }}
-        className="px-3 py-2 sm:py-2.5 rounded-xl bg-gradient-to-r from-amber-500/10 via-[#111C35]/90 to-[#0A1128]/90 border border-amber-500/25 hover:border-amber-500/50 transition-all cursor-pointer shadow-sm group flex items-center justify-between gap-2.5"
+        className="px-2.5 py-1.5 sm:py-2 rounded-lg bg-gradient-to-r from-amber-500/10 via-[#111C35]/90 to-[#0A1128]/90 border border-amber-500/25 hover:border-amber-500/40 transition-all cursor-pointer shadow-xs group flex items-center justify-between gap-2 text-xs"
       >
         <div className="flex items-center gap-2 min-w-0">
-          <div className="w-6 h-6 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-105 transition-transform">
-            <Megaphone className="w-3.5 h-3.5 animate-pulse" />
+          <div className="w-5 h-5 rounded-md bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-105 transition-transform">
+            <Megaphone className="w-3 h-3 animate-pulse" />
           </div>
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-amber-400 bg-amber-500/15 border border-amber-500/25 px-1.5 py-0.2 rounded shrink-0">
+            <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-amber-400 bg-amber-500/15 border border-amber-500/25 px-1 py-0.2 rounded shrink-0">
               {latestAnnouncements[0]?.badgeText || (isAmharic ? 'ማስታወቂያ' : 'Notice')}
             </span>
-            <p className="text-[11px] sm:text-xs font-semibold text-slate-200 group-hover:text-amber-300 transition-colors truncate">
+            <p className="text-[11px] font-medium text-slate-200 group-hover:text-amber-300 transition-colors truncate">
               {latestAnnouncements[0]?.title || (isAmharic ? 'የወልቂጤ ዩኒቨርሲቲ እና የብሔራዊ ፈተናዎች ይፋዊ ማስታወቂያ' : 'Official Wolkite University & National Exam Archives Active')}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-1 shrink-0 text-amber-400 text-[10.5px] sm:text-[11px] font-bold group-hover:translate-x-0.5 transition-transform">
+        <div className="flex items-center gap-0.5 shrink-0 text-amber-400 text-[10px] font-bold group-hover:translate-x-0.5 transition-transform">
           <span className="hidden min-[380px]:inline">{isAmharic ? 'እይ' : 'View'}</span>
-          <ChevronRight className="w-3.5 h-3.5" />
+          <ChevronRight className="w-3 h-3" />
         </div>
       </section>
 

@@ -14,9 +14,15 @@ import {
 } from 'lucide-react';
 import { playClickChime, playSuccessChime } from '../utils/audio';
 
-// Set up pdf.js worker URL to local public asset
+import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+
+// Set up pdf.js worker URL using Vite asset bundle with local fallback
 if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker || '/pdfjs/pdf.worker.min.mjs';
+  } catch {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
+  }
 }
 
 export interface MobilePdfReaderProps {

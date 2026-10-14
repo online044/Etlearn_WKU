@@ -214,6 +214,38 @@ export default function AppSidebar({
                 </div>
               </div>
 
+              {/* 📢 Mini Campus Announcements in Sidemenu Bar */}
+              <div
+                onClick={() => {
+                  playClickChime();
+                  onClose();
+                  if (onOpenAnnouncements) onOpenAnnouncements();
+                }}
+                className="p-2.5 rounded-xl bg-gradient-to-r from-amber-500/15 via-[#111C35] to-[#0D152A] border border-amber-500/30 hover:border-amber-400/60 transition-all cursor-pointer shadow-xs group flex items-center justify-between gap-2.5"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-105 transition-transform">
+                    <Megaphone className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-white text-xs truncate">
+                        {isAm ? 'የካምፓስ ማስታወቂያዎች' : 'Campus Notices'}
+                      </span>
+                      <span className="text-[8.5px] font-mono font-bold bg-amber-500/25 text-amber-300 px-1.5 py-0.2 rounded border border-amber-500/30 shrink-0">
+                        {isAm ? 'አዲስ' : 'NEW'}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 block truncate">
+                      {isAm ? 'ይፋዊ መረጃዎች እና ፈተናዎች' : 'Official Notices & Exam Updates'}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-amber-400 group-hover:translate-x-0.5 transition-transform shrink-0">
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </div>
+              </div>
+
               {/* Quick Navigation Links */}
               <div className="space-y-1">
                 <div className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-slate-400 px-1 mb-1">

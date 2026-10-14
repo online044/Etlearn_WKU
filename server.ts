@@ -130,13 +130,13 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
     }
   }
   // If the path was stripped of /api (e.g. /books/download-pdf instead of /api/books/download-pdf)
-  if (!req.url.startsWith('/api') && !req.url.startsWith('/sw.js') && !req.url.startsWith('/manifest')) {
+  if (!req.url.startsWith('/api') && !req.url.startsWith('/sw.js') && !req.url.startsWith('/manifest') && !req.url.startsWith('/pdfjs') && !req.url.startsWith('/icons')) {
     const knownApiPrefixes = [
       '/books', '/content', '/pdf', '/auth', '/user', '/telegram', 
       '/payments', '/admin', '/announcements', '/sync-master-key', 
       '/ai', '/support', '/db', '/supabase-config', '/questions', '/quiz', '/health'
     ];
-    if (knownApiPrefixes.some(p => req.path.startsWith(p))) {
+    if (knownApiPrefixes.some(p => req.path === p || req.path.startsWith(p + '/'))) {
       req.url = '/api' + req.url;
     }
   }
@@ -150,7 +150,6 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   }
   next();
 });
-
 
 // PWA Specific Routes & Cache Control
 app.get('/sw.js', (req: Request, res: Response) => {
@@ -174,12 +173,32 @@ app.get(['/manifest.json', '/manifest.webmanifest'], (req: Request, res: Respons
   return res.status(404).send('Manifest not found');
 });
 
+// Static assets: pdfjs with explicit JavaScript MIME type for .mjs
+app.use('/pdfjs', (req: Request, res: Response, next: NextFunction) => {
+  if (req.path.endsWith('.mjs') || req.path.endsWith('.js')) {
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  }
+  next();
+}, express.static(path.join(process.cwd(), 'public', 'pdfjs'), {
+  maxAge: '7d',
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.mjs') || filePath.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    }
+  }
+}));
+
 app.use('/icons', express.static(path.join(process.cwd(), 'public', 'icons'), {
   maxAge: '1d'
 }));
 
 app.use(express.static(path.join(process.cwd(), 'public'), {
-  maxAge: '1d'
+  maxAge: '1d',
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.mjs') || filePath.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    }
+  }
 }));
 
 // Basic Health Check Endpoint
