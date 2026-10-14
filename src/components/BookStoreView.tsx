@@ -2127,16 +2127,16 @@ export default function BookStoreView({
                     <Star className={`w-3.5 h-3.5 ${isFav ? 'fill-amber-400 text-amber-400' : ''}`} />
                   </button>
 
-                  {/* Bottom Right: Quick Full-Page Cover Preview Button */}
+                  {/* Bottom Right: Quick Read PDF Button */}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleOpenBook(book, 0, 'cover');
+                      handleOpenBook(book, 0, 'drive', 0, true);
                     }}
                     className="absolute bottom-11 right-2 z-10 p-1.5 rounded-lg bg-black/75 hover:bg-amber-500 hover:text-slate-950 text-amber-300 backdrop-blur-sm transition-all cursor-pointer shadow-md border border-white/10"
-                    title={language === 'am' ? 'ሙሉ የሽፋን ገጽ እይ / Full Page Cover' : 'View Full Page Cover'}
+                    title={language === 'am' ? 'ሙሉ ፒዲኤፍ አንብብ / Read Full PDF' : 'Read Full PDF'}
                   >
-                    <Maximize2 className="w-3 h-3" />
+                    <Eye className="w-3 h-3" />
                   </button>
 
                   {/* Bottom Overlay: Course Code & Grade */}
@@ -2219,13 +2219,13 @@ export default function BookStoreView({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleOpenBook(book, 0, 'cover');
+                        handleOpenBook(book, 0, 'notes');
                       }}
                       className="py-1.5 px-1 bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold text-[10.5px] rounded-lg transition-all flex items-center justify-center gap-1 border border-slate-700 cursor-pointer"
-                      title={language === 'am' ? 'የመጽሐፉን ሽፋን ገጽ እይ' : 'View Cover Page'}
+                      title={language === 'am' ? 'የምዕራፍ ማስታወሻዎች' : 'Units & Notes'}
                     >
-                      <BookOpen className="w-3 h-3 text-amber-400 shrink-0" />
-                      <span className="truncate">{language === 'am' ? 'ሽፋን' : 'Cover'}</span>
+                      <Layers className="w-3 h-3 text-amber-400 shrink-0" />
+                      <span className="truncate">{language === 'am' ? 'ማስታወሻ' : 'Notes'}</span>
                     </button>
 
                     <button
@@ -2302,10 +2302,10 @@ export default function BookStoreView({
                   <div 
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleOpenBook(book, 0, 'cover');
+                      handleOpenBook(book, 0, 'drive', 0, true);
                     }}
-                    className="w-20 h-28 sm:w-22 sm:h-30 rounded-lg overflow-hidden border border-slate-700/80 shrink-0 shadow-md group-hover:border-amber-400/60 transition-colors relative select-none bg-slate-900 group/cover cursor-zoom-in"
-                    title={language === 'am' ? 'ሙሉ የሽፋን ገጽ እይ / Full Page Cover' : 'Click to inspect full page cover'}
+                    className="w-20 h-28 sm:w-22 sm:h-30 rounded-lg overflow-hidden border border-slate-700/80 shrink-0 shadow-md group-hover:border-amber-400/60 transition-colors relative select-none bg-slate-900 group/cover cursor-pointer"
+                    title={language === 'am' ? 'ሙሉ ፒዲኤፍ አንብብ / Read Full PDF' : 'Click to read full PDF'}
                   >
                     <img
                       src={book.coverUrl}
@@ -2406,12 +2406,13 @@ export default function BookStoreView({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleOpenBook(book, 0, 'cover');
+                      handleOpenBook(book, 0, 'notes');
                     }}
                     className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1 border border-slate-700 cursor-pointer"
+                    title={language === 'am' ? 'የምዕራፍ ማስታወሻዎች' : 'Units & Notes'}
                   >
-                    <BookOpen className="w-3.5 h-3.5 text-amber-400" />
-                    <span>{language === 'am' ? 'ሽፋን' : 'Cover'}</span>
+                    <Layers className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{language === 'am' ? 'ማስታወሻ' : 'Notes'}</span>
                   </button>
 
                   <button
@@ -2893,25 +2894,24 @@ export default function BookStoreView({
                           <span>{language === 'am' ? 'ፒዲኤፍ አንብብ' : 'Read PDF'}</span>
                         </button>
 
-                        {/* Download if available */}
-                        {activePdfBook.downloadUrl && (
-                          <a
-                            href={activePdfBook.downloadUrl}
-                            download
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={`p-1.5 rounded-lg border transition-colors cursor-pointer hidden xs:flex items-center justify-center ${
-                              readerTheme === 'light'
-                                ? 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
-                                : readerTheme === 'sepia'
-                                ? 'bg-[#FAF3E0] hover:bg-[#F2E5C7] border-[#DECFAF] text-[#332211]'
-                                : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300'
-                            }`}
-                            title="Download PDF File"
-                          >
-                            <Download className="w-3.5 h-3.5 text-amber-500" />
-                          </a>
-                        )}
+                        {/* Direct PDF Download from local proxy */}
+                        <a
+                          href={`/api/books/download-pdf?id=${encodeURIComponent(activePdfBook.id)}&download=true`}
+                          download={`${(activePdfBook.code || activePdfBook.title).replace(/[^a-zA-Z0-9_\-]/g, '_')}.pdf`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => playSuccessChime()}
+                          className={`p-1.5 rounded-lg border transition-colors cursor-pointer flex items-center justify-center ${
+                            readerTheme === 'light'
+                              ? 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
+                              : readerTheme === 'sepia'
+                              ? 'bg-[#FAF3E0] hover:bg-[#F2E5C7] border-[#DECFAF] text-[#332211]'
+                              : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300'
+                          }`}
+                          title={language === 'am' ? 'ፒዲኤፍ አውርድ (Download PDF)' : 'Download PDF File'}
+                        >
+                          <Download className="w-3.5 h-3.5 text-amber-500" />
+                        </a>
 
                         {/* Drive Link */}
                         {activePdfBook.pdfUrl && (
@@ -4124,6 +4124,19 @@ export default function BookStoreView({
                       </button>
                     )}
                   </div>
+
+                  <a
+                    href={`/api/books/download-pdf?id=${encodeURIComponent(coverModalBook.id)}&download=true`}
+                    download={`${(coverModalBook.code || coverModalBook.title).replace(/[^a-zA-Z0-9_\-]/g, '_')}.pdf`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => playSuccessChime()}
+                    className="w-full py-2 px-3 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-bold text-xs rounded-xl border border-amber-500/30 transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                    title={language === 'am' ? 'ፒዲኤፉን ወደ መሳሪያዎ ያውርዱ' : 'Download PDF to device'}
+                  >
+                    <Download className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{language === 'am' ? 'ፒዲኤፍ ወደ ስልክ አውርድ (Direct PDF)' : 'Download PDF File Directly'}</span>
+                  </a>
 
 
                   <button

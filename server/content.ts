@@ -604,7 +604,7 @@ const KNOWN_CURRICULUM_FILE_IDS: Record<string, string> = {
 /**
  * Helper to safely stream an existing PDF file
  */
-function streamPdfFile(res: Response, filePath: string, filename?: string): boolean {
+function streamPdfFile(res: Response, filePath: string, filename?: string, isAttachment: boolean = false): boolean {
   try {
     let resolvedPath = filePath;
     if (!fs.existsSync(resolvedPath)) {
@@ -620,9 +620,10 @@ function streamPdfFile(res: Response, filePath: string, filename?: string): bool
     const stat = fs.statSync(resolvedPath);
     if (stat.size < 500) return false;
 
+    const safeFilename = (filename || 'document').replace(/[^a-zA-Z0-9_\-]/g, '_');
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Length', stat.size);
-    res.setHeader('Content-Disposition', `inline; filename="${(filename || 'document').replace(/[^a-zA-Z0-9_\-]/g, '_')}.pdf"`);
+    res.setHeader('Content-Disposition', `${isAttachment ? 'attachment' : 'inline'}; filename="${safeFilename}.pdf"`);
     res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Accept-Ranges', 'bytes');
@@ -686,6 +687,7 @@ export async function proxyBookPdf(req: Request, res: Response) {
     const rawFileId = (req.query.fileId as string) || '';
     const rawBookId = (req.query.id as string) || '';
     const rawCustomUrl = (req.query.url as string) || '';
+    const isDownload = req.query.download === 'true' || req.query.dl === '1' || req.query.download === '1';
 
     // Sanitize parameters
     const fileId = rawFileId.trim().replace(/^['"]+|['"]+$/g, '');
@@ -695,16 +697,23 @@ export async function proxyBookPdf(req: Request, res: Response) {
     // 1. Check if there is an uploaded private file
     if (bookId) {
       const localBook = readBooksFromStore().find(b => b.id === bookId);
-      if (localBook?.pdfStoragePath && streamPdfFile(res, localBook.pdfStoragePath, localBook.title)) {
+      if (localBook?.pdfStoragePath && streamPdfFile(res, localBook.pdfStoragePath, localBook.title, isDownload)) {
         return;
       }
     }
 
-    // 2. Check direct bookId match in BOOKS_CACHE_DIR
+    // 2. Check direct bookId match in BOOKS_CACHE_DIR and alternative aliases
     if (bookId) {
-      const byBookIdCache = path.join(BOOKS_CACHE_DIR, `${bookId}.pdf`);
-      if (streamPdfFile(res, byBookIdCache, bookId)) {
-        return;
+      const candidates = [
+        path.join(BOOKS_CACHE_DIR, `${bookId}.pdf`),
+        path.join(BOOKS_CACHE_DIR, `${bookId.replace(/^fresh_/, 'freshman_')}.pdf`),
+        path.join(FALLBACK_CACHE_DIR, `${bookId}.pdf`),
+        path.join(FALLBACK_CACHE_DIR, `${bookId.replace(/^fresh_/, 'freshman_')}.pdf`)
+      ];
+      for (const cand of candidates) {
+        if (streamPdfFile(res, cand, bookId, isDownload)) {
+          return;
+        }
       }
     }
 
@@ -747,9 +756,14 @@ export async function proxyBookPdf(req: Request, res: Response) {
 
     // 4. Fast Disk Cache Hit on targetFileId
     if (targetFileId) {
-      const cachePath = path.join(BOOKS_CACHE_DIR, `${targetFileId}.pdf`);
-      if (streamPdfFile(res, cachePath, bookId || targetFileId)) {
-        return;
+      const cacheCandidates = [
+        path.join(BOOKS_CACHE_DIR, `${targetFileId}.pdf`),
+        path.join(FALLBACK_CACHE_DIR, `${targetFileId}.pdf`)
+      ];
+      for (const cand of cacheCandidates) {
+        if (streamPdfFile(res, cand, bookId || targetFileId, isDownload)) {
+          return;
+        }
       }
     }
 
@@ -766,7 +780,7 @@ export async function proxyBookPdf(req: Request, res: Response) {
         try {
           const response = await fetch(driveUrl, { 
             redirect: 'follow',
-            signal: AbortSignal.timeout(3500)
+            signal: AbortSignal.timeout(20000)
           });
           if (!response.ok) continue;
 
@@ -785,7 +799,7 @@ export async function proxyBookPdf(req: Request, res: Response) {
               
               const confirmedResp = await fetch(confirmedUrl, { 
                 redirect: 'follow',
-                signal: AbortSignal.timeout(3500)
+                signal: AbortSignal.timeout(20000)
               });
               if (confirmedResp.ok) {
                 const confirmedAb = await confirmedResp.arrayBuffer();
@@ -824,11 +838,12 @@ export async function proxyBookPdf(req: Request, res: Response) {
           });
         }
 
+        const safeFilename = (bookId || targetFileId || 'document').replace(/[^a-zA-Z0-9_\-]/g, '_');
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Length', pdfBuffer.length);
         res.setHeader('Cache-Control', 'public, max-age=604800');
         res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Content-Disposition', 'inline');
+        res.setHeader('Content-Disposition', `${isDownload ? 'attachment' : 'inline'}; filename="${safeFilename}.pdf"`);
         return res.send(pdfBuffer);
       }
     }
@@ -844,10 +859,12 @@ export async function proxyBookPdf(req: Request, res: Response) {
           const ab = await response.arrayBuffer();
           const buf = Buffer.from(ab);
           if (buf.length > 200 && buf.subarray(0, 5).toString().startsWith('%PDF')) {
+            const safeFilename = (bookId || targetFileId || 'document').replace(/[^a-zA-Z0-9_\-]/g, '_');
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Length', buf.length);
             res.setHeader('Access-Control-Allow-Origin', '*');
             res.setHeader('Cache-Control', 'public, max-age=604800');
+            res.setHeader('Content-Disposition', `${isDownload ? 'attachment' : 'inline'}; filename="${safeFilename}.pdf"`);
             return res.send(buf);
           }
         }
@@ -859,20 +876,22 @@ export async function proxyBookPdf(req: Request, res: Response) {
     // 7. Resilient Fallback: Stream an authorized placeholder document rather than a 500/502 error
     console.warn('[proxyBookPdf] Serving resilient certified fallback PDF for:', { bookId, targetFileId });
     const fallbackBuf = generateFallbackPdfBuffer(bookId || 'Academic Document', 'Ethiopian University Module');
+    const safeFilename = (bookId || targetFileId || 'document').replace(/[^a-zA-Z0-9_\-]/g, '_');
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Length', fallbackBuf.length);
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Content-Disposition', `${isDownload ? 'attachment' : 'inline'}; filename="${safeFilename}.pdf"`);
     return res.send(fallbackBuf);
   } catch (err: any) {
     console.error('[Content API] proxyBookPdf critical error:', err);
     if (!res.headersSent) {
-      // Return a valid fallback PDF even in catch block to ensure browser/PDF.js never encounters 500
       try {
         const fallbackBuf = generateFallbackPdfBuffer('Course Document', 'EthioLearn System');
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Length', fallbackBuf.length);
         res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Content-Disposition', 'inline; filename="course_document.pdf"');
         return res.send(fallbackBuf);
       } catch {
         res.status(200).send(Buffer.from('%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\nxref\n0 3\n0000000000 65535 f \n0000000010 00000 n \n0000000059 00000 n \ntrailer\n<< /Size 3 /Root 1 0 R >>\nstartxref\n114\n%%EOF'));

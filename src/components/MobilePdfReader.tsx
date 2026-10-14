@@ -10,7 +10,7 @@ import {
   Maximize2, Minimize2, RotateCw, RefreshCw, 
   AlertCircle, Loader2, Bookmark, Check, 
   Smartphone, Share2, Search, ArrowUp, ArrowDown,
-  Layers, Sun, Moon, Coffee, Sparkles
+  Layers, Sun, Moon, Coffee, Sparkles, Download
 } from 'lucide-react';
 import { playClickChime, playSuccessChime } from '../utils/audio';
 
@@ -82,10 +82,11 @@ export default function MobilePdfReader({
 
   // Zoom & View modes
   // zoomMode: 'fit-width' | 'fit-page' | 'custom'
+  const initFitScale = typeof window !== 'undefined' ? Math.min(1.2, Math.max(0.4, (window.innerWidth - 16) / 595.32)) : 1.0;
   const [zoomMode, setZoomMode] = useState<'fit-width' | 'fit-page' | 'custom'>('fit-width');
-  const [scale, setScale] = useState<number>(1.0);
-  const [fitWidthScale, setFitWidthScale] = useState<number>(1.0);
-  const [fitPageScale, setFitPageScale] = useState<number>(1.0);
+  const [scale, setScale] = useState<number>(initFitScale);
+  const [fitWidthScale, setFitWidthScale] = useState<number>(initFitScale);
+  const [fitPageScale, setFitPageScale] = useState<number>(initFitScale);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [readerTheme, setReaderTheme] = useState<'dark' | 'light' | 'sepia'>(theme);
   const [showControls, setShowControls] = useState<boolean>(true);
@@ -587,7 +588,7 @@ export default function MobilePdfReader({
     return (
       <div
         ref={rootContainerRef}
-        className="fixed inset-0 z-[999999] w-screen h-[100dvh] max-h-[100dvh] p-0 m-0 border-0 flex flex-col bg-slate-950 text-slate-100 select-none overflow-hidden"
+        className={`w-full h-full flex flex-col bg-slate-950 text-slate-100 select-none overflow-hidden ${isFullscreen ? 'fixed inset-0 z-[999999] w-screen h-[100dvh]' : 'relative flex-1 min-h-0'}`}
       >
         <header className="h-14 sm:h-16 px-2.5 sm:px-4 border-b border-white/10 flex items-center justify-between gap-2 shrink-0 z-30 bg-slate-900/90 backdrop-blur-md">
           <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -650,7 +651,7 @@ export default function MobilePdfReader({
   return (
     <div
       ref={rootContainerRef}
-      className={`fixed inset-0 z-[999999] w-screen h-[100dvh] max-h-[100dvh] p-0 m-0 border-0 flex flex-col select-none overflow-hidden ${themeClasses}`}
+      className={`w-full h-full flex flex-col select-none overflow-hidden ${isFullscreen ? 'fixed inset-0 z-[999999] w-screen h-[100dvh]' : 'relative flex-1 min-h-0'} ${themeClasses}`}
       style={{
         paddingTop: 'env(safe-area-inset-top, 0px)',
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
@@ -804,6 +805,18 @@ export default function MobilePdfReader({
                 <Sun className="w-4 h-4 text-amber-500" />
               )}
             </button>
+
+            {/* Direct Device Download Action */}
+            <a
+              href={fileUrl ? `${fileUrl}${fileUrl.includes('?') ? '&' : '?'}download=true` : '#'}
+              download={`${(courseCode || title || 'document').replace(/[^a-zA-Z0-9_\-]/g, '_')}.pdf`}
+              onClick={() => playSuccessChime()}
+              className="p-2 rounded-xl hover:bg-white/10 text-slate-300 hover:text-amber-400 transition-colors cursor-pointer flex items-center justify-center shrink-0"
+              title={isAm ? 'ፒዲኤፉን ወደ ስልክዎ ያውርዱ (Save PDF)' : 'Download PDF to device'}
+              aria-label="Download PDF"
+            >
+              <Download className="w-4 h-4 text-amber-400" />
+            </a>
 
             {/* Fullscreen Button */}
             <button
