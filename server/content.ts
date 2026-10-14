@@ -602,9 +602,9 @@ const KNOWN_CURRICULUM_FILE_IDS: Record<string, string> = {
 };
 
 /**
- * Helper to safely stream an existing PDF file
+ * Helper to safely stream an existing PDF file with HTTP Range support
  */
-function streamPdfFile(res: Response, filePath: string, filename?: string, isAttachment: boolean = false): boolean {
+function streamPdfFile(req: Request, res: Response, filePath: string, filename?: string, isAttachment: boolean = false): boolean {
   try {
     let resolvedPath = filePath;
     if (!fs.existsSync(resolvedPath)) {
@@ -621,18 +621,49 @@ function streamPdfFile(res: Response, filePath: string, filename?: string, isAtt
     if (stat.size < 500) return false;
 
     const safeFilename = (filename || 'document').replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const disposition = `${isAttachment ? 'attachment' : 'inline'}; filename="${safeFilename}.pdf"`;
+
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Length', stat.size);
-    res.setHeader('Content-Disposition', `${isAttachment ? 'attachment' : 'inline'}; filename="${safeFilename}.pdf"`);
+    res.setHeader('Content-Disposition', disposition);
     res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
     res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Length, Content-Type, Content-Range, Accept-Ranges');
     res.setHeader('Accept-Ranges', 'bytes');
+
+    // Support HTTP Range requests (crucial for PDF.js chunk streaming)
+    const range = req.headers.range;
+    if (range && typeof range === 'string' && range.startsWith('bytes=')) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
+
+      if (!isNaN(start) && start >= 0 && start < stat.size && end >= start && end < stat.size) {
+        const chunkSize = (end - start) + 1;
+        res.status(206);
+        res.setHeader('Content-Range', `bytes ${start}-${end}/${stat.size}`);
+        res.setHeader('Content-Length', chunkSize);
+        const stream = fs.createReadStream(resolvedPath, { start, end });
+        stream.on('error', () => { if (!res.headersSent) res.status(500).end(); });
+        stream.pipe(res);
+        return true;
+      }
+    }
+
+    // Standard 200 stream for whole file
+    res.status(200);
+    res.setHeader('Content-Length', stat.size);
 
     const stream = fs.createReadStream(resolvedPath);
     stream.on('error', (err) => {
       console.warn('[proxyBookPdf] Read stream error:', err);
       if (!res.headersSent) {
-        res.status(502).json({ error: 'Stream interrupted' });
+        const fallbackBuf = generateFallbackPdfBuffer(filename || 'Academic Document', 'Ethiopian University Module');
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Length', fallbackBuf.length);
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Content-Disposition', `${isAttachment ? 'attachment' : 'inline'}; filename="${safeFilename}.pdf"`);
+        res.end(fallbackBuf);
       }
     });
     stream.pipe(res);
@@ -684,34 +715,45 @@ function generateFallbackPdfBuffer(title: string, subject: string): Buffer {
  */
 export async function proxyBookPdf(req: Request, res: Response) {
   try {
-    const rawFileId = (req.query.fileId as string) || '';
-    const rawBookId = (req.query.id as string) || '';
-    const rawCustomUrl = (req.query.url as string) || '';
-    const isDownload = req.query.download === 'true' || req.query.dl === '1' || req.query.download === '1';
+    const q = req.query || {};
+    const rawFileId = (q.fileId as string) || (q.file_id as string) || (q.file as string) || '';
+    const rawBookId = (q.id as string) || (q.bookId as string) || (q.book_id as string) || '';
+    const rawCustomUrl = (q.url as string) || (q.driveUrl as string) || '';
+    const isDownload = q.download === 'true' || q.dl === '1' || q.download === '1';
 
     // Sanitize parameters
     const fileId = rawFileId.trim().replace(/^['"]+|['"]+$/g, '');
     const bookId = rawBookId.trim().replace(/^['"]+|['"]+$/g, '');
     const customUrl = rawCustomUrl.trim().replace(/^['"]+|['"]+$/g, '');
 
+    // Permissive CORS headers for browser fetch and downloads
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Length, Content-Type');
+
     // 1. Check if there is an uploaded private file
     if (bookId) {
       const localBook = readBooksFromStore().find(b => b.id === bookId);
-      if (localBook?.pdfStoragePath && streamPdfFile(res, localBook.pdfStoragePath, localBook.title, isDownload)) {
+      if (localBook?.pdfStoragePath && streamPdfFile(req, res, localBook.pdfStoragePath, localBook.title, isDownload)) {
         return;
       }
     }
 
     // 2. Check direct bookId match in BOOKS_CACHE_DIR and alternative aliases
     if (bookId) {
+      const normBook = bookId.toLowerCase().replace(/[^a-z0-9_]/g, '_');
       const candidates = [
         path.join(BOOKS_CACHE_DIR, `${bookId}.pdf`),
-        path.join(BOOKS_CACHE_DIR, `${bookId.replace(/^fresh_/, 'freshman_')}.pdf`),
+        path.join(BOOKS_CACHE_DIR, `${normBook}.pdf`),
+        path.join(BOOKS_CACHE_DIR, `${normBook.replace(/^fresh_/, 'freshman_')}.pdf`),
+        path.join(BOOKS_CACHE_DIR, `${normBook.replace(/^freshman_/, 'fresh_')}.pdf`),
         path.join(FALLBACK_CACHE_DIR, `${bookId}.pdf`),
-        path.join(FALLBACK_CACHE_DIR, `${bookId.replace(/^fresh_/, 'freshman_')}.pdf`)
+        path.join(FALLBACK_CACHE_DIR, `${normBook}.pdf`),
+        path.join(FALLBACK_CACHE_DIR, `${normBook.replace(/^fresh_/, 'freshman_')}.pdf`),
+        path.join(FALLBACK_CACHE_DIR, `${normBook.replace(/^freshman_/, 'fresh_')}.pdf`)
       ];
       for (const cand of candidates) {
-        if (streamPdfFile(res, cand, bookId, isDownload)) {
+        if (streamPdfFile(req, res, cand, bookId, isDownload)) {
           return;
         }
       }
@@ -761,7 +803,7 @@ export async function proxyBookPdf(req: Request, res: Response) {
         path.join(FALLBACK_CACHE_DIR, `${targetFileId}.pdf`)
       ];
       for (const cand of cacheCandidates) {
-        if (streamPdfFile(res, cand, bookId || targetFileId, isDownload)) {
+        if (streamPdfFile(req, res, cand, bookId || targetFileId, isDownload)) {
           return;
         }
       }

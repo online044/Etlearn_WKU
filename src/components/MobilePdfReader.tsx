@@ -14,12 +14,10 @@ import {
 } from 'lucide-react';
 import { playClickChime, playSuccessChime } from '../utils/audio';
 
-import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-
-// Set up pdf.js worker URL using Vite asset bundle with local fallback
+// Set up pdf.js worker URL with CDN fallback matching the installed version
 if (typeof window !== 'undefined') {
   try {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker || '/pdfjs/pdf.worker.min.mjs';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs`;
   } catch {
     pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
   }
@@ -44,6 +42,14 @@ export interface MobilePdfReaderProps {
   onClose?: () => void;
   /** Offline blob record available */
   isOffline?: boolean;
+  /** Optional mode tabs (e.g. PDF / Lectures / Notes) */
+  tabs?: {
+    id: string;
+    label: string;
+    count?: number;
+    active: boolean;
+    onClick: () => void;
+  }[];
 }
 
 interface PageRenderTask {
@@ -61,7 +67,8 @@ export default function MobilePdfReader({
   language = 'en',
   externalUrl,
   onClose,
-  isOffline = false
+  isOffline = false,
+  tabs
 }: MobilePdfReaderProps) {
   const isAm = language === 'am';
 
@@ -82,7 +89,7 @@ export default function MobilePdfReader({
 
   // Zoom & View modes
   // zoomMode: 'fit-width' | 'fit-page' | 'custom'
-  const initFitScale = typeof window !== 'undefined' ? Math.min(1.2, Math.max(0.4, (window.innerWidth - 16) / 595.32)) : 1.0;
+  const initFitScale = typeof window !== 'undefined' ? Math.max(0.7, (window.innerWidth - 12) / 595.32) : 1.0;
   const [zoomMode, setZoomMode] = useState<'fit-width' | 'fit-page' | 'custom'>('fit-width');
   const [scale, setScale] = useState<number>(initFitScale);
   const [fitWidthScale, setFitWidthScale] = useState<number>(initFitScale);
@@ -128,11 +135,111 @@ export default function MobilePdfReader({
     return null;
   }, [extractedFileId, externalUrl]);
 
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
+
   // --------------------------------------------------------------------------
-  // 1. Load PDF Document via PDF.js
+  // 1. Robust Download Action (Works with Blobs, API streams & iframes)
+  // --------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // 1. Robust Download Action (Works with Blobs, API streams & Google Drive)
+  // --------------------------------------------------------------------------
+  const handleDownload = async (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    playSuccessChime();
+    if (!fileUrl && !extractedFileId && !externalUrl) return;
+
+    const safeFilename = `${(courseCode || title || 'document').replace(/[^a-zA-Z0-9_\-]/g, '_')}.pdf`;
+
+    // A. Blob or data URL: instant local anchor trigger
+    if (fileUrl && (fileUrl.startsWith('blob:') || fileUrl.startsWith('data:'))) {
+      const a = document.createElement('a');
+      a.href = fileUrl;
+      a.download = safeFilename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+
+    // Direct Google Drive download URL fallback (bypasses any server proxy or VPN failure)
+    const googleDirectDl = extractedFileId 
+      ? `https://drive.usercontent.google.com/download?id=${extractedFileId}&export=download`
+      : null;
+
+    // Helper to trigger browser anchor download
+    const triggerAnchorDownload = (url: string) => {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = safeFilename;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    };
+
+    // B. Remote or API URL: stream and trigger download
+    setIsDownloading(true);
+    try {
+      const downloadEndpoint = fileUrl.includes('?') 
+        ? `${fileUrl}&download=true` 
+        : `${fileUrl}?download=true`;
+
+      let resp: Response | null = null;
+      try {
+        resp = await fetch(downloadEndpoint);
+      } catch {}
+
+      // Fallback to secondary proxy alias if primary had an issue
+      if ((!resp || !resp.ok) && fileUrl.includes('/api/books/download-pdf')) {
+        const altEndpoint = downloadEndpoint.replace('/api/books/download-pdf', '/api/pdf/proxy');
+        try {
+          resp = await fetch(altEndpoint);
+        } catch {}
+      }
+
+      if (resp && resp.ok) {
+        const blob = await resp.blob();
+        if (blob.size > 200) {
+          const objUrl = URL.createObjectURL(blob);
+          triggerAnchorDownload(objUrl);
+          setTimeout(() => URL.revokeObjectURL(objUrl), 60000);
+          return;
+        }
+      }
+
+      // If local proxy failed, use Google Drive direct export download
+      if (googleDirectDl) {
+        triggerAnchorDownload(googleDirectDl);
+      } else {
+        const directUrl = fileUrl.includes('?') ? `${fileUrl}&download=true` : `${fileUrl}?download=true`;
+        triggerAnchorDownload(directUrl);
+      }
+    } catch {
+      if (googleDirectDl) {
+        triggerAnchorDownload(googleDirectDl);
+      } else {
+        const directUrl = fileUrl.includes('?') ? `${fileUrl}&download=true` : `${fileUrl}?download=true`;
+        triggerAnchorDownload(directUrl);
+      }
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  // --------------------------------------------------------------------------
+  // 2. Load PDF Document via PDF.js Engine with Instant Preview Fallback
   // --------------------------------------------------------------------------
   const loadDocument = useCallback(async () => {
     if (!fileUrl) {
+      if (drivePreviewUrl) {
+        setEmbeddedFallback(true);
+        setIsLoading(false);
+        return;
+      }
       setErrorMessage(isAm ? 'የፒዲኤፍ አድራሻ አልተገኘም' : 'No PDF document URL provided');
       setIsLoading(false);
       return;
@@ -153,38 +260,39 @@ export default function MobilePdfReader({
 
       // 1. If it's a blob: or data: URL, or local API endpoint, fetch as ArrayBuffer with progress
       if (fileUrl.startsWith('blob:') || fileUrl.startsWith('data:') || fileUrl.startsWith('/api/') || fileUrl.startsWith('/books/')) {
-        let resp: Response;
+        let resp: Response | null = null;
+        const isBlobOrData = fileUrl.startsWith('blob:') || fileUrl.startsWith('data:');
         try {
-          resp = await fetch(fileUrl, { credentials: 'same-origin' });
+          resp = await fetch(fileUrl, isBlobOrData ? undefined : { credentials: 'same-origin' });
         } catch {
           const fullUrl = fileUrl.startsWith('/') ? `${window.location.origin}${fileUrl}` : fileUrl;
-          resp = await fetch(fullUrl);
+          try {
+            resp = await fetch(fullUrl);
+          } catch {}
         }
 
-        if (!resp.ok) {
-          let errText = '';
+        // Automatic retry with fallback alias if primary failed
+        if ((!resp || !resp.ok) && fileUrl.includes('/api/books/download-pdf')) {
+          const fallbackUrl = fileUrl.replace('/api/books/download-pdf', '/api/pdf/proxy');
           try {
-            const errJson = await resp.json();
-            errText = errJson.error || errJson.message;
-          } catch {
-            errText = await resp.text().catch(() => '');
-          }
-          throw new Error(
-            errText || (resp.status === 500 
-              ? (isAm ? 'የአገልጋይ ጊዜያዊ ችግር (Error 500)። እባክዎ እንደገና ይሞክሩ።' : 'Internal server error (500). Please retry.')
-              : (isAm ? `ሰነዱን ማግኘት አልተቻለም (Status: ${resp.status})` : `Failed to download PDF stream (HTTP ${resp.status})`))
-          );
+            const fbResp = await fetch(fallbackUrl);
+            if (fbResp.ok) {
+              resp = fbResp;
+            }
+          } catch {}
         }
-        const ab = await resp.arrayBuffer();
-        if (ab.byteLength > 4) {
-          const firstBytes = new Uint8Array(ab.slice(0, 5));
-          const magic = String.fromCharCode(...firstBytes);
-          if (!magic.startsWith('%PDF')) {
-            throw new Error(isAm ? 'ትክክለኛ የፒዲኤፍ ቅርጸት አልተገኘም' : 'Invalid PDF stream received from server');
+
+        if (resp && resp.ok) {
+          const ab = await resp.arrayBuffer();
+          if (ab.byteLength > 4) {
+            const firstBytes = new Uint8Array(ab.slice(0, 5));
+            const magic = String.fromCharCode(...firstBytes);
+            if (magic.startsWith('%PDF')) {
+              docData = new Uint8Array(ab);
+              setLoadingProgress(60);
+            }
           }
         }
-        docData = new Uint8Array(ab);
-        setLoadingProgress(60);
       } else {
         // Route external URLs through local server proxy to bypass browser CORS restrictions
         try {
@@ -202,6 +310,16 @@ export default function MobilePdfReader({
           }
         } catch {
           // fallback to direct URL
+        }
+      }
+
+      // If document buffer could not be fetched and Drive preview is available, switch immediately
+      if (!docData) {
+        if (drivePreviewUrl) {
+          console.warn('[MobilePdfReader] Local stream not available, switching to embedded drive preview');
+          setEmbeddedFallback(true);
+          setIsLoading(false);
+          return;
         }
       }
 
@@ -249,9 +367,8 @@ export default function MobilePdfReader({
 
       setIsLoading(false);
     } catch (err: any) {
-      console.error('[MobilePdfReader] PDF load error:', err);
+      console.warn('[MobilePdfReader] PDF load error, checking drive fallback:', err);
       if (drivePreviewUrl) {
-        console.warn('[MobilePdfReader] Vector stream fetch failed, switching to embedded Drive preview seamlessly');
         setEmbeddedFallback(true);
         setIsLoading(false);
         return;
@@ -261,7 +378,7 @@ export default function MobilePdfReader({
         err?.message || (isAm ? 'ፒዲኤፉን መጫን አልተቻለም። እባክዎ እንደገና ይሞክሩ።' : 'Failed to load PDF document.')
       );
     }
-  }, [fileUrl, isAm, drivePreviewUrl]);
+  }, [fileUrl, drivePreviewUrl, isAm]);
 
   useEffect(() => {
     loadDocument();
@@ -613,6 +730,18 @@ export default function MobilePdfReader({
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {/* Direct Device Download in Embedded Header */}
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={isDownloading}
+              className="px-2.5 py-1 text-[11px] bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg flex items-center gap-1 cursor-pointer transition-all shadow-xs"
+              title={isAm ? 'ፒዲኤፍ አውርድ' : 'Download PDF'}
+            >
+              {isDownloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+              <span>{isDownloading ? (isAm ? 'እየወረደ...' : 'Downloading...') : (isAm ? 'አውርድ' : 'Download')}</span>
+            </button>
+
             {externalUrl && (
               <a
                 href={externalUrl}
@@ -700,6 +829,33 @@ export default function MobilePdfReader({
               </h1>
             </div>
           </div>
+
+          {/* Optional Mode Switcher Tabs */}
+          {tabs && tabs.length > 0 && (
+            <div className="hidden lg:flex items-center p-0.5 rounded-xl border border-white/10 bg-black/20 shrink-0">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={tab.onClick}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    tab.active
+                      ? 'bg-amber-500 text-slate-950 shadow-xs'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  {tab.count !== undefined && (
+                    <span className={`text-[9.5px] px-1.5 py-0.2 rounded-full font-mono font-black ${
+                      tab.active ? 'bg-slate-950 text-amber-400' : 'bg-amber-500/20 text-amber-400'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* CENTER / RIGHT: Page Navigation Counter & Quick Controls */}
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
@@ -807,16 +963,20 @@ export default function MobilePdfReader({
             </button>
 
             {/* Direct Device Download Action */}
-            <a
-              href={fileUrl ? `${fileUrl}${fileUrl.includes('?') ? '&' : '?'}download=true` : '#'}
-              download={`${(courseCode || title || 'document').replace(/[^a-zA-Z0-9_\-]/g, '_')}.pdf`}
-              onClick={() => playSuccessChime()}
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={isDownloading}
               className="p-2 rounded-xl hover:bg-white/10 text-slate-300 hover:text-amber-400 transition-colors cursor-pointer flex items-center justify-center shrink-0"
               title={isAm ? 'ፒዲኤፉን ወደ ስልክዎ ያውርዱ (Save PDF)' : 'Download PDF to device'}
               aria-label="Download PDF"
             >
-              <Download className="w-4 h-4 text-amber-400" />
-            </a>
+              {isDownloading ? (
+                <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4 text-amber-400" />
+              )}
+            </button>
 
             {/* Fullscreen Button */}
             <button
@@ -893,6 +1053,15 @@ export default function MobilePdfReader({
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span>{isAm ? 'እንደገና ሞክር' : 'Retry'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDownload}
+                disabled={isDownloading}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
+              >
+                {isDownloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                <span>{isDownloading ? (isAm ? 'እየወረደ...' : 'Downloading...') : (isAm ? 'ፒዲኤፍ አውርድ' : 'Download PDF')}</span>
               </button>
               {drivePreviewUrl && (
                 <button

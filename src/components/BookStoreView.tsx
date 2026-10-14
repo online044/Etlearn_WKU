@@ -1468,6 +1468,43 @@ export default function BookStoreView({
 
   const activePdfModule = activePdfBook;
 
+  const readerTabs = useMemo(() => {
+    if (!activePdfModule) return undefined;
+    const t: { id: string; label: string; count?: number; active: boolean; onClick: () => void }[] = [
+      {
+        id: 'drive',
+        label: language === 'am' ? 'ፒዲኤፍ አንብብ' : 'PDF Reader',
+        active: readerTab === 'drive',
+        onClick: () => { playClickChime(); setReaderTab('drive'); }
+      }
+    ];
+    if (activePdfModule.lectures && activePdfModule.lectures.length > 0) {
+      t.push({
+        id: 'video',
+        label: language === 'am' ? 'ቪዲዮ' : 'Lectures',
+        count: activePdfModule.lectures.length,
+        active: readerTab === 'video',
+        onClick: () => { playClickChime(); setReaderTab('video'); }
+      });
+      t.push({
+        id: 'exams',
+        label: language === 'am' ? 'ፈተናዎች' : 'Exams',
+        active: readerTab === 'exams',
+        onClick: () => { playClickChime(); setReaderTab('exams'); }
+      });
+    }
+    if (activePdfModule.chapters && activePdfModule.chapters.length > 0) {
+      t.push({
+        id: 'notes',
+        label: language === 'am' ? 'ማስታወሻዎች' : 'Units & Notes',
+        count: activePdfModule.chapters.length,
+        active: readerTab === 'notes',
+        onClick: () => { playClickChime(); setReaderTab('notes'); }
+      });
+    }
+    return t;
+  }, [activePdfModule, readerTab, language]);
+
   useEffect(() => {
     const handleFsChange = () => {
       setIsTrueFullscreen(!!document.fullscreenElement);
@@ -1527,15 +1564,48 @@ export default function BookStoreView({
           setActiveOfflineBlobUrl(blobUrl);
         }
       } else {
+        // Resilient fallback: Trigger direct device download via Google Drive or direct stream
+        const fileId = extractDriveFileId(book.downloadUrl) || extractDriveFileId(book.pdfUrl) || (book as any).googleDriveFileId || '';
+        const dlUrl = fileId 
+          ? `https://drive.usercontent.google.com/download?id=${fileId}&export=download`
+          : (book.pdfUrl || book.downloadUrl || `/api/books/download-pdf?id=${encodeURIComponent(book.id)}&download=true`);
+
+        const safeName = `${(book.code || book.title).replace(/[^a-zA-Z0-9_\-]/g, '_')}.pdf`;
+        const a = document.createElement('a');
+        a.href = dlUrl;
+        a.download = safeName;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
         showToast(
           language === 'am'
-            ? `ማውረድ አልተሳካም (${res.error || 'ስህተት'})። እባክዎ እንደገና ይሞክሩ።`
-            : `Download failed (${res.error || 'Error'}). Please try again.`
+            ? `✓ "${book.title}" በቀጥታ ወደ መሳሪያዎ እየወረደ ነው...`
+            : `✓ "${book.title}" downloading directly to device...`
         );
       }
     } catch {
+      const fileId = extractDriveFileId(book.downloadUrl) || extractDriveFileId(book.pdfUrl) || (book as any).googleDriveFileId || '';
+      const dlUrl = fileId 
+        ? `https://drive.usercontent.google.com/download?id=${fileId}&export=download`
+        : (book.pdfUrl || book.downloadUrl || `/api/books/download-pdf?id=${encodeURIComponent(book.id)}&download=true`);
+
+      const safeName = `${(book.code || book.title).replace(/[^a-zA-Z0-9_\-]/g, '_')}.pdf`;
+      const a = document.createElement('a');
+      a.href = dlUrl;
+      a.download = safeName;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
       showToast(
-        language === 'am' ? 'የማውረድ ስህተት አጋጥሟል። እባክዎ እንደገና ይሞክሩ።' : 'Download error. Please try again.'
+        language === 'am'
+          ? `✓ "${book.title}" በቀጥታ ወደ መሳሪያዎ እየወረደ ነው...`
+          : `✓ "${book.title}" downloading directly to device...`
       );
     } finally {
       setDownloadingMap(prev => {
@@ -2490,9 +2560,8 @@ export default function BookStoreView({
                     : 'bg-[#0A1128] text-slate-100'
                 }`}
               >
-                {/* 🌟 1. FOCUS MODE FLOATING PILL (Positioned at TOP-LEFT) */}
-                {/* Leaves Google Drive's native top-right pop-out button COMPLETELY clear! */}
-                {isZenMode && (
+                {/* 🌟 1. FOCUS MODE FLOATING PILL (Only for non-drive tabs) */}
+                {isZenMode && readerTab !== 'drive' && (
                   <div className="absolute top-3 left-3 sm:left-4 z-[1000000] flex items-center gap-1.5 bg-slate-950/90 backdrop-blur-xl px-3 py-1.5 rounded-full border border-amber-500/50 shadow-2xl text-white select-none">
                     <button
                       type="button"
@@ -2537,8 +2606,8 @@ export default function BookStoreView({
                   </div>
                 )}
 
-                {/* 🌟 2. UNIFIED REDESIGNED TOP BAR (Clean, Single Line, Responsive) */}
-                {!isZenMode && (
+                {/* 🌟 2. UNIFIED REDESIGNED TOP BAR (Clean, Single Line, Responsive - only for non-drive tabs) */}
+                {!isZenMode && readerTab !== 'drive' && (
                   <header
                     className={`h-14 sm:h-16 px-2.5 sm:px-4 border-b flex items-center justify-between gap-2 shrink-0 z-30 transition-colors backdrop-blur-md ${
                       readerTheme === 'light'
