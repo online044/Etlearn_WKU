@@ -227,7 +227,7 @@ export default function InAppViewerModal({
         {/* 🌟 1. UNIFIED REDESIGNED TOP BAR (Clean, Single Line, Non-Distracting)    */}
         {/* ========================================================================= */}
         <AnimatePresence>
-          {!isFocusMode && (
+          {!isFocusMode && viewerEngine !== 'mobile-native' && (
             <motion.header
               initial={{ y: -60, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}

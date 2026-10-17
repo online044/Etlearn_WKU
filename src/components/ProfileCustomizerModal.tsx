@@ -7,7 +7,7 @@ import React, { useState, useRef } from 'react';
 import {
   X, Palette, Eye, EyeOff, Layout, Layers, Star, MoveUp, MoveDown,
   Sparkles, Check, RefreshCw, Sliders, Image as ImageIcon,
-  Upload, Sun, Moon, Monitor, Tag, Grid, List, Shield, HelpCircle
+  Upload, Sun, Moon, Monitor, Tag, Grid, List, Shield, HelpCircle, Lock
 } from 'lucide-react';
 import {
   ProfileCustomizationPreferences,
@@ -215,6 +215,23 @@ export default function ProfileCustomizerModal({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Pro Only Notice for non-pro users */}
+        {!profile.isPro && (
+          <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2 flex items-center justify-between gap-2 text-xs text-amber-300">
+            <div className="flex items-center gap-2">
+              <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>
+                {language === 'am' 
+                  ? 'የመገለጫ ማበጀት ለEthioLearn Pro አባላት ብቻ ነው። ወደ Pro ያሻሽሉ።' 
+                  : 'Profile Customization is exclusive to EthioLearn Pro members. Upgrade to save changes.'}
+              </span>
+            </div>
+            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded bg-amber-500 text-slate-950 shrink-0">
+              PRO ONLY
+            </span>
+          </div>
+        )}
 
         {/* Navigation Tabs */}
         <div className="flex border-b border-slate-800 bg-slate-950/90 overflow-x-auto no-scrollbar px-2 pt-2 gap-1">

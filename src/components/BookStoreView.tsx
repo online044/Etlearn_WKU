@@ -2137,10 +2137,12 @@ export default function BookStoreView({
                       {/* Read PDF */}
                       <button
                         onClick={() => handleOpenBook(book, 0, 'drive', 0, true)}
-                        className="py-1.5 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1"
+                        className="py-1.5 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+                        title={language === 'am' ? 'ፒዲኤፍ ክፈት / OPEN PDF' : 'OPEN PDF'}
+                        aria-label="OPEN PDF"
                       >
-                        <BookOpen className="w-3 h-3" />
-                        <span>PDF</span>
+                        <BookOpen className="w-3.5 h-3.5 shrink-0" />
+                        <span>OPEN PDF</span>
                       </button>
                     </div>
                   </div>
@@ -2161,8 +2163,8 @@ export default function BookStoreView({
                 onClick={() => handleOpenBook(book, 0, 'drive', 0, true)}
                 className="group relative bg-[#111C35] hover:bg-[#142344] border border-slate-800/90 hover:border-amber-400/50 rounded-2xl p-3 sm:p-3.5 transition-all duration-200 flex flex-col justify-between gap-3 cursor-pointer shadow-md hover:shadow-xl hover:-translate-y-1"
               >
-                {/* 3D Realistic Textbook Cover Page */}
-                <div className="relative w-full aspect-[3/4] rounded-xl overflow-hidden shadow-lg border border-white/10 group-hover:border-amber-400/50 transition-all bg-slate-900 select-none">
+                {/* 3D Realistic Textbook Cover Page - Compatible compact height */}
+                <div className="relative w-full h-36 sm:h-44 md:h-48 rounded-xl overflow-hidden shadow-md border border-white/10 group-hover:border-amber-400/50 transition-all bg-slate-900 select-none">
                   {/* High-Resolution Cover Image */}
                   <img
                     src={book.coverUrl}
@@ -2197,20 +2199,8 @@ export default function BookStoreView({
                     <Star className={`w-3.5 h-3.5 ${isFav ? 'fill-amber-400 text-amber-400' : ''}`} />
                   </button>
 
-                  {/* Bottom Right: Quick Read PDF Button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleOpenBook(book, 0, 'drive', 0, true);
-                    }}
-                    className="absolute bottom-11 right-2 z-10 p-1.5 rounded-lg bg-black/75 hover:bg-amber-500 hover:text-slate-950 text-amber-300 backdrop-blur-sm transition-all cursor-pointer shadow-md border border-white/10"
-                    title={language === 'am' ? 'ሙሉ ፒዲኤፍ አንብብ / Read Full PDF' : 'Read Full PDF'}
-                  >
-                    <Eye className="w-3 h-3" />
-                  </button>
-
                   {/* Bottom Overlay: Course Code & Grade */}
-                  <div className="absolute bottom-0 inset-x-0 p-2.5 bg-gradient-to-t from-black/95 via-black/70 to-transparent text-left">
+                  <div className="absolute bottom-0 inset-x-0 p-2 sm:p-2.5 bg-gradient-to-t from-black/95 via-black/70 to-transparent text-left">
                     <span className="text-[11px] font-mono font-bold text-amber-300 block truncate drop-shadow">
                       {book.code}
                     </span>
@@ -2242,6 +2232,11 @@ export default function BookStoreView({
                       <span className="text-[8.5px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-1 shadow-sm">
                         <Play className="w-2.5 h-2.5 fill-amber-400" />
                         <span>{book.lectures.length} Lectures</span>
+                        {!isProUser && (
+                          <span className="px-1 py-0.2 rounded text-[7.5px] font-black bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 uppercase tracking-wider">
+                            PRO
+                          </span>
+                        )}
                       </span>
                     )}
                   </div>
@@ -2257,98 +2252,111 @@ export default function BookStoreView({
                   )}
                 </div>
 
-                {/* Action Buttons Row */}
-                <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
-                  {book.hasVideoLecture && (
+                {/* Action Buttons Row - Clear, visible button text with prominent OPEN PDF */}
+                <div className="pt-2 border-t border-slate-800/80 space-y-2">
+                  {/* Primary Hero Button: OPEN PDF */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenBook(book, 0, 'drive', 0, true);
+                    }}
+                    className={`w-full py-2 px-3 font-black text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-98 cursor-pointer ${
+                      offlineBookIds.has(book.id)
+                        ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                        : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                    }`}
+                    title="OPEN PDF"
+                    aria-label="OPEN PDF"
+                  >
+                    <Maximize2 className="w-3.5 h-3.5 text-slate-950 shrink-0" />
+                    <span className="font-extrabold whitespace-nowrap">OPEN PDF</span>
+                    {offlineBookIds.has(book.id) && (
+                      <span className="ml-1 text-[9px] bg-slate-950/25 text-slate-950 px-1.5 py-0.2 rounded font-extrabold uppercase">
+                        Offline
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Secondary 2-Column Buttons: Notes and Save */}
+                  <div className="grid grid-cols-2 gap-1.5">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleOpenBook(book, 0, 'video');
+                        handleOpenBook(book, 0, 'notes');
                       }}
-                      className="w-full py-1.5 px-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-[11px] rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-98 cursor-pointer"
-                      title={language === 'am' ? 'የቪዲዮ ትምህርቶች እይ' : 'Watch Video Lectures'}
+                      className="py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 border border-slate-700 cursor-pointer"
+                      title={language === 'am' ? 'የምዕራፍ ማስታወሻዎች' : 'Units & Notes'}
                     >
-                      <Play className="w-3 h-3 fill-slate-950 shrink-0" />
-                      <span className="truncate">{language === 'am' ? 'ቪዲዮ ትምህርት እይ' : 'Watch Lectures'} ({book.lectures.length})</span>
+                      <Layers className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span className="truncate">{language === 'am' ? 'ማስታወሻ' : 'Notes'}</span>
                     </button>
-                  )}
+
+                    {downloadingMap[book.id] !== undefined ? (
+                      <div className="py-1.5 px-2 bg-amber-500/20 border border-amber-500/40 text-amber-400 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5">
+                        <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                        <span className="truncate">{downloadingMap[book.id]}%</span>
+                      </div>
+                    ) : offlineBookIds.has(book.id) ? (
+                      <button
+                        onClick={(e) => handleDeleteOffline(book.id, book.title, e)}
+                        className="py-1.5 px-2 bg-emerald-950/80 hover:bg-red-950/80 text-emerald-300 hover:text-red-300 font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-1 border border-emerald-500/40 hover:border-red-500/40 cursor-pointer group/off"
+                        title={language === 'am' ? 'ከመስመር ውጭ ወርዷል (ለመሰረዝ ጠቅ ያድርጉ)' : 'Downloaded offline (Click to delete file)'}
+                      >
+                        <Check className="w-3.5 h-3.5 text-emerald-400 group-hover/off:hidden shrink-0" />
+                        <Trash2 className="w-3.5 h-3.5 text-red-400 hidden group-hover/off:inline shrink-0" />
+                        <span className="truncate group-hover/off:hidden">{language === 'am' ? 'ወርዷል' : 'Saved'}</span>
+                        <span className="truncate hidden group-hover/off:inline">{language === 'am' ? 'ሰርዝ' : 'Remove'}</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={(e) => handleDownloadBook(book, e)}
+                        className="py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-amber-300 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 border border-slate-700 cursor-pointer"
+                        title={language === 'am' ? 'በመተግበሪያው ውስጥ አውርድ (ያለ ኢንተርኔት ለማንበብ)' : 'Download in app for offline study'}
+                      >
+                        <CloudDownload className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span className="truncate">{language === 'am' ? 'አውርድ' : 'Save'}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Mid & Final Past Exam Drills */}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       playClickChime();
                       setSelectedCourseForDetail(book);
                     }}
-                    className="w-full py-1.5 px-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-bold text-[10.5px] rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
+                    className="w-full py-1.5 px-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
                     title={language === 'am' ? 'የአጋማሽ እና ማጠቃለያ ፈተናዎች' : 'Mid & Final Exam Drills'}
                   >
-                    <FileText className="w-3 h-3 text-amber-400 shrink-0" />
+                    <FileText className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                     <span className="truncate">{language === 'am' ? 'የፈተና ልምምድ' : 'Mid & Final Exams'}</span>
                   </button>
 
-                  <div className="grid grid-cols-3 gap-1">
+                  {/* Video Lectures (if available) */}
+                  {book.hasVideoLecture && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleOpenBook(book, 0, 'notes');
+                        if (!isProUser) {
+                          playClickChime();
+                          onNavigate('upgrade');
+                        } else {
+                          handleOpenBook(book, 0, 'video');
+                        }
                       }}
-                      className="py-1.5 px-1 bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold text-[10.5px] rounded-lg transition-all flex items-center justify-center gap-1 border border-slate-700 cursor-pointer"
-                      title={language === 'am' ? 'የምዕራፍ ማስታወሻዎች' : 'Units & Notes'}
+                      className="w-full py-1.5 px-2 bg-slate-800/90 hover:bg-slate-750 text-amber-300 font-bold text-xs rounded-xl border border-slate-700/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                      title={language === 'am' ? 'የቪዲዮ ትምህርቶች እይ' : 'Watch Video Lectures'}
                     >
-                      <Layers className="w-3 h-3 text-amber-400 shrink-0" />
-                      <span className="truncate">{language === 'am' ? 'ማስታወሻ' : 'Notes'}</span>
+                      <Play className="w-3.5 h-3.5 fill-amber-400 text-amber-400 shrink-0" />
+                      <span className="truncate">{language === 'am' ? 'ቪዲዮ ትምህርት' : 'Watch Lectures'} ({book.lectures.length})</span>
+                      {!isProUser && (
+                        <span className="ml-1 px-1.5 py-0.2 rounded text-[8.5px] font-black bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 uppercase tracking-wider shrink-0 shadow-xs">
+                          PRO
+                        </span>
+                      )}
                     </button>
-
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenBook(book, 0, 'drive', 0, true);
-                      }}
-                      className={`py-1.5 px-1 font-black text-[10.5px] rounded-lg transition-all flex items-center justify-center gap-1 shadow-sm cursor-pointer ${
-                        offlineBookIds.has(book.id)
-                          ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
-                          : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
-                      }`}
-                      title={offlineBookIds.has(book.id) ? (language === 'am' ? 'ሙሉ ገጽ ከመስመር ውጭ አንብብ' : 'Read Full Page Offline') : (language === 'am' ? 'ሙሉ ገጽ ፒዲኤፍ አንብብ' : 'Read Full Page PDF')}
-                    >
-                      <Maximize2 className="w-3 h-3 text-slate-950 shrink-0" />
-                      <span className="truncate">{offlineBookIds.has(book.id) ? (language === 'am' ? 'ከመስመር ውጭ' : 'Offline') : (language === 'am' ? 'ሙሉ ገጽ' : 'Full Page')}</span>
-                    </button>
-
-                    {downloadingMap[book.id] !== undefined ? (
-                      <div className="py-1.5 px-1 bg-amber-500/20 border border-amber-500/40 text-amber-400 font-bold text-[10px] rounded-lg flex flex-col items-center justify-center gap-0.5">
-                        <div className="flex items-center gap-1">
-                          <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                          <span>{downloadingMap[book.id]}%</span>
-                        </div>
-                        <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                          <div 
-                            className="bg-amber-400 h-full transition-all duration-200" 
-                            style={{ width: `${downloadingMap[book.id]}%` }}
-                          />
-                        </div>
-                      </div>
-                    ) : offlineBookIds.has(book.id) ? (
-                      <button
-                        onClick={(e) => handleDeleteOffline(book.id, book.title, e)}
-                        className="py-1.5 px-1 bg-emerald-950/80 hover:bg-red-950/80 text-emerald-400 hover:text-red-300 font-bold text-[10px] rounded-lg transition-colors flex items-center justify-center gap-1 border border-emerald-500/40 hover:border-red-500/40 cursor-pointer group/off"
-                        title={language === 'am' ? 'ከመስመር ውጭ ወርዷል (ለመሰረዝ ጠቅ ያድርጉ)' : 'Downloaded offline (Click to delete file)'}
-                      >
-                        <Check className="w-3 h-3 group-hover/off:hidden" />
-                        <Trash2 className="w-3 h-3 hidden group-hover/off:inline text-red-400" />
-                        <span className="truncate group-hover/off:hidden">{language === 'am' ? 'ወርዷል' : 'Ready'}</span>
-                        <span className="truncate hidden group-hover/off:inline">{language === 'am' ? 'ሰርዝ' : 'Remove'}</span>
-                      </button>
-                    ) : (
-                      <button
-                        onClick={(e) => handleDownloadBook(book, e)}
-                        className="py-1.5 px-1 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-amber-300 font-bold text-[10.5px] rounded-lg transition-all flex items-center justify-center gap-1 border border-slate-700 cursor-pointer"
-                        title={language === 'am' ? 'በመተግበሪያው ውስጥ አውርድ (ያለ ኢንተርኔት ለማንበብ)' : 'Download in app for offline study'}
-                      >
-                        <CloudDownload className="w-3 h-3 text-amber-400 shrink-0" />
-                        <span className="truncate">{language === 'am' ? 'አውርድ' : 'Save'}</span>
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </div>
               </div>
             );
@@ -2450,13 +2458,23 @@ export default function BookStoreView({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleOpenBook(book, 0, 'video');
+                        if (!isProUser) {
+                          playClickChime();
+                          onNavigate('upgrade');
+                        } else {
+                          handleOpenBook(book, 0, 'video');
+                        }
                       }}
                       className="w-full py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-98 cursor-pointer"
                       title={language === 'am' ? 'የቪዲዮ ትምህርቶች እይ' : 'Watch Video Lectures'}
                     >
                       <Play className="w-3.5 h-3.5 fill-slate-950 shrink-0" />
                       <span>{language === 'am' ? 'ቪዲዮ ትምህርት እይ' : 'Watch Video Lectures'} ({book.lectures.length})</span>
+                      {!isProUser && (
+                        <span className="ml-1 px-1.5 py-0.2 rounded text-[8.5px] font-black bg-slate-950 text-amber-400 uppercase tracking-wider shrink-0 shadow-sm border border-amber-400/30">
+                          PRO
+                        </span>
+                      )}
                     </button>
                   )}
                   <button
@@ -2472,60 +2490,69 @@ export default function BookStoreView({
                     <span>{language === 'am' ? 'አጋማሽና ማጠቃለያ ፈተናዎች' : 'Mid & Final Past Exams'}</span>
                   </button>
 
-                  <div className="grid grid-cols-3 gap-1.5">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleOpenBook(book, 0, 'notes');
-                    }}
-                    className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1 border border-slate-700 cursor-pointer"
-                    title={language === 'am' ? 'የምዕራፍ ማስታወሻዎች' : 'Units & Notes'}
-                  >
-                    <Layers className="w-3.5 h-3.5 text-amber-400" />
-                    <span>{language === 'am' ? 'ማስታወሻ' : 'Notes'}</span>
-                  </button>
-
+                  {/* Primary Hero Button: OPEN PDF */}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       handleOpenBook(book, 0, 'drive', 0, true);
                     }}
-                    className={`w-full py-2 font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-98 shadow-sm ${
+                    className={`w-full py-2.5 px-3 font-black text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-98 cursor-pointer ${
                       offlineBookIds.has(book.id)
                         ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black'
                         : 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-black'
                     }`}
+                    title="OPEN PDF"
+                    aria-label="OPEN PDF"
                   >
-                    <Maximize2 className="w-3.5 h-3.5 text-slate-950" />
-                    <span>{offlineBookIds.has(book.id) ? (language === 'am' ? 'ሙሉ ገጽ ከመስመር ውጭ' : 'Offline Full Page') : (language === 'am' ? 'ሙሉ ገጽ አንብብ' : 'Read Full Page')}</span>
+                    <Maximize2 className="w-4 h-4 text-slate-950 shrink-0" />
+                    <span className="font-extrabold tracking-wide">OPEN PDF</span>
+                    {offlineBookIds.has(book.id) && (
+                      <span className="ml-1 text-[9px] bg-slate-950/20 text-slate-950 px-1.5 py-0.5 rounded font-extrabold uppercase">
+                        Offline Ready
+                      </span>
+                    )}
                   </button>
 
-                  {downloadingMap[book.id] !== undefined ? (
-                    <div className="w-full py-2 px-2 bg-amber-500/20 border border-amber-500/40 text-amber-400 font-bold text-xs rounded-xl flex items-center justify-center gap-2">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>{downloadingMap[book.id]}%</span>
-                    </div>
-                  ) : offlineBookIds.has(book.id) ? (
+                  {/* Secondary 2-Column Buttons: Notes and Save */}
+                  <div className="grid grid-cols-2 gap-2">
                     <button
-                      onClick={(e) => handleDeleteOffline(book.id, book.title, e)}
-                      className="w-full py-2 bg-emerald-950/80 hover:bg-red-950/80 text-emerald-400 hover:text-red-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1 border border-emerald-500/40 hover:border-red-500/40 cursor-pointer group/offlist"
-                      title={language === 'am' ? 'ከመስመር ውጭ ወርዷል (ለመሰረዝ ጠቅ ያድርጉ)' : 'Downloaded offline (Click to delete)'}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenBook(book, 0, 'notes');
+                      }}
+                      className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 border border-slate-700 cursor-pointer"
+                      title={language === 'am' ? 'የምዕራፍ ማስታወሻዎች' : 'Units & Notes'}
                     >
-                      <Check className="w-3.5 h-3.5 group-hover/offlist:hidden" />
-                      <Trash2 className="w-3.5 h-3.5 hidden group-hover/offlist:inline text-red-400" />
-                      <span className="group-hover/offlist:hidden">{language === 'am' ? 'ወርዷል' : 'Ready'}</span>
-                      <span className="hidden group-hover/offlist:inline">{language === 'am' ? 'ሰርዝ' : 'Remove'}</span>
+                      <Layers className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span>{language === 'am' ? 'ማስታወሻ' : 'Notes'}</span>
                     </button>
-                  ) : (
-                    <button
-                      onClick={(e) => handleDownloadBook(book, e)}
-                      className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-amber-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1 border border-slate-700 cursor-pointer"
-                      title={language === 'am' ? 'በመተግበሪያው ውስጥ አውርድ' : 'Download in app'}
-                    >
-                      <CloudDownload className="w-3.5 h-3.5 text-amber-400" />
-                      <span>{language === 'am' ? 'አውርድ' : 'Download'}</span>
-                    </button>
-                  )}
+
+                    {downloadingMap[book.id] !== undefined ? (
+                      <div className="w-full py-2 px-2 bg-amber-500/20 border border-amber-500/40 text-amber-400 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                        <span>{downloadingMap[book.id]}%</span>
+                      </div>
+                    ) : offlineBookIds.has(book.id) ? (
+                      <button
+                        onClick={(e) => handleDeleteOffline(book.id, book.title, e)}
+                        className="w-full py-2 bg-emerald-950/80 hover:bg-red-950/80 text-emerald-400 hover:text-red-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 border border-emerald-500/40 hover:border-red-500/40 cursor-pointer group/offlist"
+                        title={language === 'am' ? 'ከመስመር ውጭ ወርዷል (ለመሰረዝ ጠቅ ያድርጉ)' : 'Downloaded offline (Click to delete)'}
+                      >
+                        <Check className="w-3.5 h-3.5 group-hover/offlist:hidden shrink-0" />
+                        <Trash2 className="w-3.5 h-3.5 hidden group-hover/offlist:inline text-red-400 shrink-0" />
+                        <span className="group-hover/offlist:hidden">{language === 'am' ? 'ወርዷል' : 'Saved'}</span>
+                        <span className="hidden group-hover/offlist:inline">{language === 'am' ? 'ሰርዝ' : 'Remove'}</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={(e) => handleDownloadBook(book, e)}
+                        className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-amber-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 border border-slate-700 cursor-pointer"
+                        title={language === 'am' ? 'በመተግበሪያው ውስጥ አውርድ' : 'Download in app'}
+                      >
+                        <CloudDownload className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span>{language === 'am' ? 'አውርድ' : 'Download'}</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -4163,7 +4190,7 @@ export default function BookStoreView({
                       className="py-2.5 px-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
                     >
                       <Maximize2 className="w-4 h-4 text-slate-950" />
-                      <span>{language === 'am' ? 'ሙሉ ገጽ ፒዲኤፍ አንብብ' : 'Read Full Page PDF'}</span>
+                      <span>OPEN PDF</span>
                     </button>
 
                     {downloadingMap[coverModalBook.id] !== undefined ? (

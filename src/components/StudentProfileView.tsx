@@ -9,8 +9,9 @@ import {
   Edit3, Save, X, Clock, AlertCircle, Database, Check, ShieldAlert, KeyRound,
   Copy, RefreshCw, CloudLightning, ChevronDown, ChevronUp, CheckCircle,
   FileText, HelpCircle, ShieldCheck, LogOut, Sparkles, CreditCard,
-  BarChart3, Settings, Send, Camera, LogIn, History, Calendar, Smartphone, Laptop, Activity, CheckCircle2
+  BarChart3, Settings, Send, Camera, LogIn, History, Calendar, Smartphone, Laptop, Activity, CheckCircle2, Crown
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { StudentProfile, AccountInfo, AuthSessionRecord } from '../types';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
 import { getSessionHistory, getLastSignedOutUser, getActiveSessionDurationMinutes, formatSessionDuration } from '../utils/sessionTracker';
@@ -75,6 +76,7 @@ export default function StudentProfileView({
   // Edit Mode Toggle
   const [isEditing, setIsEditing] = useState(false);
   const [isCustomizing, setIsCustomizing] = useState(false);
+  const [showProCustomizationModal, setShowProCustomizationModal] = useState(false);
   const [isModulesCollapsed, setIsModulesCollapsed] = useState(false);
 
   // Form Field States
@@ -652,10 +654,20 @@ export default function StudentProfileView({
   const activeBanner = BANNER_PRESETS.find(b => b.id === prefs.coverBannerUrl);
 
   // Background style calculation for cover
-  const bannerBackground = activeBanner ? activeBanner.css : (prefs.coverBannerUrl?.startsWith('data:image') ? `url("${prefs.coverBannerUrl}") center/cover no-repeat` : undefined);
+  const bannerBackground = activeBanner ? activeBanner.css : (prefs.coverBannerUrl?.startsWith('data:image') ? `url("${prefs.coverBannerUrl}")` : undefined);
 
   // Active badge display title logic
   const displayBadge = prefs.selectedBadgeTitle || (activeProfileData.isPro ? "PRO MEMBER" : "STANDARD");
+
+  // Pro-only Profile Customization Guard
+  const handleOpenCustomize = () => {
+    playClickChime();
+    if (!activeProfileData.isPro) {
+      setShowProCustomizationModal(true);
+    } else {
+      setIsCustomizing(true);
+    }
+  };
 
   return (
     <div className="space-y-4 max-w-5xl mx-auto px-2 sm:px-4 pb-28 font-sans">
@@ -754,12 +766,17 @@ export default function StudentProfileView({
             {/* Action Buttons */}
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap justify-center sm:justify-end w-full sm:w-auto">
               <button
-                onClick={() => { playClickChime(); setIsCustomizing(true); }}
+                onClick={handleOpenCustomize}
                 className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-slate-950 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95 hover:border-slate-500"
                 title={language === 'en' ? "Customize Page" : "ገጹን አብጅ"}
               >
                 <Settings className="w-3.5 h-3.5" style={{ color: currentTheme.hex }} />
                 <span className="hidden md:inline">{language === 'en' ? "Customize" : "አብጅ"}</span>
+                {!activeProfileData.isPro && (
+                  <span className="px-1.5 py-0.2 rounded text-[8.5px] font-black bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 uppercase tracking-wider">
+                    PRO
+                  </span>
+                )}
               </button>
 
               {isAdministratorEmail(activeProfileData.email) && onOpenAdmin && (
@@ -809,20 +826,41 @@ export default function StudentProfileView({
           className="bg-slate-900/90 border rounded-2xl shadow-xl relative overflow-hidden transition-all duration-300"
           style={{ borderColor: `${currentTheme.hex}40` }}
         >
-          {/* Cover / Banner behind Avatar */}
+          {/* Cover / Banner behind Avatar - Full Box, Uncropped with Rich Depth */}
           <div 
-            className="w-full h-28 sm:h-36 relative transition-all duration-300"
+            className="w-full h-44 sm:h-56 md:h-64 relative transition-all duration-300 rounded-t-2xl overflow-hidden shadow-inner group/banner select-none bg-cover bg-center bg-no-repeat"
             style={{
-              background: bannerBackground || 'linear-gradient(135deg, #0A1128 0%, #1E293B 40%, #D97706 100%)'
+              backgroundImage: bannerBackground || 'linear-gradient(135deg, #070D1E 0%, #0F172A 35%, #1E293B 65%, #92400E 90%, #D97706 100%)'
             }}
           >
+            {/* Ambient Star Glow & Depth Gradients */}
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-black/30 pointer-events-none" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-amber-500/15 via-transparent to-transparent pointer-events-none" />
+
+            {/* Top Left: Official University Scholar Insignia Badge */}
+            <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-10 flex items-center gap-2">
+              <div className="px-3 py-1.5 rounded-xl bg-slate-950/80 backdrop-blur-md border border-amber-500/40 text-amber-300 flex items-center gap-2 shadow-2xl text-xs font-bold">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span className="font-extrabold tracking-wide">{activeProfileData.university || 'Wolkite University'}</span>
+                <span className="w-1 h-1 rounded-full bg-amber-400/60" />
+                <span className="text-[10px] uppercase font-mono tracking-wider text-slate-300 font-bold">
+                  {activeProfileData.isPro ? 'Pro Scholar' : 'EthioLearn'}
+                </span>
+              </div>
+            </div>
+
             {/* Quick banner edit shortcut */}
             <button
-              onClick={() => { playClickChime(); setIsCustomizing(true); }}
-              className="absolute top-3 right-3 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/20 text-white rounded-lg text-[10px] font-bold flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
+              onClick={handleOpenCustomize}
+              className="absolute top-3 right-3 sm:top-4 sm:right-4 z-10 px-3 py-1.5 bg-slate-950/80 hover:bg-slate-950 backdrop-blur-md border border-amber-500/30 hover:border-amber-400 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xl cursor-pointer active:scale-95"
             >
-              <Camera className="w-3 h-3" />
+              <Camera className="w-3.5 h-3.5 text-amber-400" />
               <span>{language === 'en' ? "Change Banner" : "ባነር ቀይር"}</span>
+              {!activeProfileData.isPro && (
+                <span className="ml-0.5 px-1.5 py-0.2 rounded text-[8.5px] font-black bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 uppercase tracking-wider">
+                  PRO
+                </span>
+              )}
             </button>
           </div>
 
@@ -928,12 +966,17 @@ export default function StudentProfileView({
               <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0 flex-wrap justify-center md:justify-end pt-2 sm:pt-14 w-full md:w-auto">
                 {/* Customize Page Trigger Button (Gear Icon) */}
                 <button
-                  onClick={() => { playClickChime(); setIsCustomizing(true); }}
+                  onClick={handleOpenCustomize}
                   className="px-2.5 sm:px-3.5 py-2 sm:py-2.5 bg-slate-950 hover:bg-slate-800 border border-slate-700 hover:border-slate-500 text-slate-200 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-md active:scale-95"
                   title={language === 'en' ? "Customize Profile Page" : "የመገለጫ ገጽ አብጅ"}
                 >
                   <Settings className="w-3.5 h-3.5" style={{ color: currentTheme.hex }} />
                   <span>{language === 'en' ? "Customize" : "አብጅ"}</span>
+                  {!activeProfileData.isPro && (
+                    <span className="px-1.5 py-0.2 rounded text-[8.5px] font-black bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 uppercase tracking-wider">
+                      PRO
+                    </span>
+                  )}
                 </button>
 
                 {isAdministratorEmail(activeProfileData.email) && onOpenAdmin && (
@@ -1992,6 +2035,84 @@ export default function StudentProfileView({
 
         </div>
       )}
+
+      {/* 👑 PRO-ONLY CUSTOMIZATION MODAL (When non-pro member tries to customize) */}
+      <AnimatePresence>
+        {showProCustomizationModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative w-full max-w-md bg-[#0F172A] border border-amber-500/40 rounded-2xl p-6 shadow-2xl text-center space-y-5"
+            >
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 p-0.5 shadow-xl flex items-center justify-center">
+                <div className="w-full h-full bg-[#0A1128] rounded-2xl flex items-center justify-center">
+                  <Sparkles className="w-8 h-8 text-amber-400" />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  EthioLearn Pro Exclusive
+                </span>
+                <h3 className="text-xl font-black text-white">
+                  {language === 'am' ? 'የመገለጫ ማበጀት ለPro አባላት ብቻ ነው' : 'Profile Customization is Pro-Only'}
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  {language === 'am'
+                    ? 'የገጽ ቀለም፣ የሽፋን ባነር፣ የአካዳሚክ ማዕረግ ባጆች እና የሞጁል አደረጃጀትን ለማበጀት የEthioLearn Pro አባል ይሁኑ።'
+                    : 'Upgrade to EthioLearn Pro to unlock custom full-box banners, custom accent themes, exclusive scholar badges, and custom module layout.'}
+                </p>
+              </div>
+
+              <div className="bg-slate-900/80 rounded-xl p-3.5 border border-slate-800 text-left text-xs space-y-2.5 text-slate-300">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-emerald-400 font-bold">✓</span>
+                  <span>{language === 'am' ? 'ሙሉ የሽፋን ባነሮች (Full-Box Banners)' : 'Full-Box Banners & Custom Photo Upload'}</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <span className="text-emerald-400 font-bold">✓</span>
+                  <span>{language === 'am' ? '6 የወርቅና የአረንጓዴ ገጽታ ቀለሞች' : '6 Premium Accent Color Themes'}</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <span className="text-emerald-400 font-bold">✓</span>
+                  <span>{language === 'am' ? 'የክብር ባጆች (Scholar Badges)' : 'Prestige Scholar Badges & Custom Titles'}</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <span className="text-emerald-400 font-bold">✓</span>
+                  <span>{language === 'am' ? 'የቪዲዮ ትምህርቶች እና የፈተና መፍትሄዎች' : 'All Video Lectures & Exam Solutions'}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    playSuccessChime();
+                    setShowProCustomizationModal(false);
+                    if (onNavigateToUpgrade) {
+                      onNavigateToUpgrade();
+                    }
+                  }}
+                  className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Crown className="w-4 h-4 text-slate-950" />
+                  <span>{language === 'am' ? 'ወደ Pro አሻሽል (99 ብር / በወር)' : 'Upgrade to Pro (99 ETB / Month)'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowProCustomizationModal(false)}
+                  className="w-full py-2 text-slate-400 hover:text-white text-xs font-semibold cursor-pointer transition-colors"
+                >
+                  {language === 'am' ? 'ይቅር / ተመለስ' : 'Maybe Later'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

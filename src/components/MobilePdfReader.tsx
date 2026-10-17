@@ -10,7 +10,7 @@ import {
   Maximize2, Minimize2, RotateCw, RefreshCw, 
   AlertCircle, Loader2, Bookmark, Check, 
   Smartphone, Share2, Search, ArrowUp, ArrowDown,
-  Layers, Sun, Moon, Coffee, Sparkles, Download
+  Layers, Sun, Moon, Coffee, Sparkles, Download, Eye
 } from 'lucide-react';
 import { playClickChime, playSuccessChime } from '../utils/audio';
 
@@ -405,12 +405,12 @@ export default function MobilePdfReader({
     const basePageWidth = 595.32;
     const basePageHeight = basePageWidth / defaultAspect;
 
-    // Available width with modest padding on mobile
-    const availableWidth = Math.max(300, containerWidth - 16);
+    // Full container width for 100% full screen reading without cropping or side margins
+    const availableWidth = Math.max(320, containerWidth);
     const newFitWidthScale = availableWidth / basePageWidth;
 
-    // Fit page: whole page fits within viewport height with margin
-    const availableHeight = Math.max(400, containerHeight - 32);
+    // Fit page: full page within viewport height with zero crop
+    const availableHeight = Math.max(400, containerHeight);
     const heightScale = availableHeight / basePageHeight;
     const newFitPageScale = Math.min(newFitWidthScale, heightScale);
 
@@ -978,6 +978,17 @@ export default function MobilePdfReader({
               )}
             </button>
 
+            {/* Immersive Reading Mode Toggle (Hide all bars for 100% full screen reading) */}
+            <button
+              type="button"
+              onClick={() => { playClickChime(); setShowControls(false); }}
+              className="p-2 rounded-xl hover:bg-white/10 text-amber-400 transition-colors cursor-pointer"
+              title={isAm ? 'ሙሉ ማያ የንባብ እይታ (መሳሪያዎችን ደብቅ)' : 'Immersive Fullscreen (Hide Bars)'}
+              aria-label="Immersive Fullscreen"
+            >
+              <Eye className="w-4 h-4 text-amber-400" />
+            </button>
+
             {/* Fullscreen Button */}
             <button
               type="button"
@@ -994,6 +1005,19 @@ export default function MobilePdfReader({
             </button>
           </div>
         </header>
+      )}
+
+      {/* Floating Restore Controls Button when in Full Immersion Mode */}
+      {!showControls && (
+        <button
+          type="button"
+          onClick={() => { playClickChime(); setShowControls(true); }}
+          className="fixed top-3 left-3 z-[1000000] px-3.5 py-1.5 bg-black/85 hover:bg-black backdrop-blur-md border border-amber-500/60 text-amber-300 rounded-full text-xs font-bold shadow-2xl flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+          title={isAm ? 'መሳሪያዎችን አሳይ' : 'Show Tools'}
+        >
+          <Eye className="w-3.5 h-3.5 text-amber-400" />
+          <span>{isAm ? 'መሳሪያዎች' : 'Show Tools'}</span>
+        </button>
       )}
 
       {/* ===================================================================== */}
@@ -1087,13 +1111,12 @@ export default function MobilePdfReader({
           </div>
         )}
 
-        {/* Continuous Vertical Pages Flow */}
+        {/* Continuous Vertical Pages Flow - 100% Full-Bleed Uncropped */}
         {!errorMessage && totalPages > 0 && (
           <div 
-            className="w-full flex flex-col items-center py-3 sm:py-6 px-1 sm:px-4 gap-3 sm:gap-6 min-h-full"
+            className="w-full flex flex-col items-center py-1 sm:py-3 px-0 gap-2 sm:gap-4 min-h-full pb-32"
             style={{
-              // Horizontal centering with allowance for pinch zoom
-              minWidth: 'fit-content'
+              minWidth: '100%'
             }}
           >
             {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
@@ -1109,19 +1132,19 @@ export default function MobilePdfReader({
                     if (el) pageContainerRefs.current.set(pageNum, el);
                     else pageContainerRefs.current.delete(pageNum);
                   }}
-                  className="relative group transition-shadow shadow-md hover:shadow-xl rounded-sm overflow-hidden bg-white shrink-0"
+                  className="relative group transition-shadow rounded-none sm:rounded-sm overflow-hidden bg-white shrink-0"
                   style={{
                     width: `${pageW}px`,
                     minHeight: `${pageH}px`,
                     // Clean border and subtle page drop shadow
                     boxShadow: readerTheme === 'dark' 
-                      ? '0 4px 20px -2px rgba(0,0,0,0.7), 0 0 1px rgba(255,255,255,0.1)'
-                      : '0 4px 20px -2px rgba(0,0,0,0.15), 0 0 1px rgba(0,0,0,0.2)'
+                      ? '0 4px 24px -2px rgba(0,0,0,0.8), 0 0 1px rgba(255,255,255,0.1)'
+                      : '0 4px 20px -2px rgba(0,0,0,0.12), 0 0 1px rgba(0,0,0,0.15)'
                   }}
                 >
                   {/* Canvas for rendered PDF Page */}
                   <canvas
-                    className="block mx-auto max-w-full"
+                    className="block mx-auto"
                     style={{
                       width: `${pageW}px`,
                       height: `${pageH}px`,
