@@ -10,11 +10,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   FileText, Plus, Search, Edit3, Trash2, CheckCircle, XCircle, 
   Upload, Download, RefreshCw, AlertCircle, X, Check,
-  BookOpen, Eye, Layers, FileCode, Bold, List, Tag, Shield
+  BookOpen, Eye, Layers, FileCode, Bold, List, Tag, Shield, Sparkles
 } from 'lucide-react';
 import { NoteRecord, ContentAccessLevel, ContentStatus } from '../../types';
 import { saveAdminNote, deleteAdminNote, togglePublishAdminNote } from '../../utils/contentStore';
 import { playClickChime, playSuccessChime, playFailureChime } from '../../utils/audio';
+import AdminSupabaseNotesManager from './AdminSupabaseNotesManager';
 
 interface AdminNotesSectionProps {
   notes: NoteRecord[];
@@ -66,6 +67,7 @@ const ACADEMIC_YEARS = [
 ];
 
 export default function AdminNotesSection({ notes, onRefresh, isAmharic }: AdminNotesSectionProps) {
+  const [notesSubTab, setNotesSubTab] = useState<'supabase' | 'cms'>('supabase');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft' | 'archived'>('all');
   const [uniFilter, setUniFilter] = useState('all');
@@ -256,36 +258,84 @@ export default function AdminNotesSection({ notes, onRefresh, isAmharic }: Admin
 
   return (
     <div className="space-y-6">
-      {/* Top Header & Action */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 rounded-2xl bg-slate-900/60 border border-slate-800">
-        <div>
-          <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2.5">
-            <BookOpen className="w-5 h-5 text-amber-400" />
-            {isAmharic ? 'የጥናት ማስታወሻዎች አስተዳደር (Study Notes CMS)' : 'Study Notes Management (CMS)'}
-          </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            {isAmharic 
-              ? 'በእርስዎ የተዘጋጁ እና የታተሙ የዩኒቨርሲቲ ኮርስ ማጠቃለያዎች፣ ሰነዶች እና ሌክቸር ማስታወሻዎች'
-              : 'Real university department study notes, lecture summaries, and formulas authored and published by you.'}
-          </p>
+      {/* Segmented Sub-Tab Switcher */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-1.5 bg-[#0B1228] border border-slate-800 rounded-2xl">
+        <div className="inline-flex p-1 bg-slate-900/90 rounded-xl border border-slate-800 text-xs font-bold gap-1">
+          <button
+            onClick={() => { playClickChime(); setNotesSubTab('supabase'); }}
+            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
+              notesSubTab === 'supabase'
+                ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Supabase Curriculum Notes & Chapters</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-black ${
+              notesSubTab === 'supabase' ? 'bg-slate-950 text-amber-400' : 'bg-slate-800 text-slate-300'
+            }`}>
+              Live Postgres
+            </span>
+          </button>
+
+          <button
+            onClick={() => { playClickChime(); setNotesSubTab('cms'); }}
+            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
+              notesSubTab === 'cms'
+                ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Faculty Summaries & PDF Notes</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-black ${
+              notesSubTab === 'cms' ? 'bg-slate-950 text-amber-400' : 'bg-slate-800 text-slate-300'
+            }`}>
+              {notes.length}
+            </span>
+          </button>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onRefresh}
-            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-            title="Refresh"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
-          <button
-            onClick={openCreateModal}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-semibold text-sm shadow-md transition-all active:scale-95"
-          >
-            <Plus className="w-4 h-4" />
-            {isAmharic ? 'አዲስ ማስታወሻ ጻፍና አትም' : 'Write & Publish Note'}
-          </button>
+
+        <div className="flex items-center gap-2 px-2 text-xs text-slate-400">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="font-mono text-[11px]">Database Active</span>
         </div>
       </div>
+
+      {notesSubTab === 'supabase' ? (
+        <AdminSupabaseNotesManager isAmharic={isAmharic} onRefreshParent={onRefresh} />
+      ) : (
+        <>
+          {/* Top Header & Action */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 rounded-2xl bg-slate-900/60 border border-slate-800">
+            <div>
+              <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2.5">
+                <BookOpen className="w-5 h-5 text-amber-400" />
+                {isAmharic ? 'የጥናት ማስታወሻዎች አስተዳደር (Study Notes CMS)' : 'Study Notes Management (CMS)'}
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">
+                {isAmharic 
+                  ? 'በእርስዎ የተዘጋጁ እና የታተሙ የዩኒቨርሲቲ ኮርስ ማጠቃለያዎች፣ ሰነዶች እና ሌክቸር ማስታወሻዎች'
+                  : 'Real university department study notes, lecture summaries, and formulas authored and published by you.'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onRefresh}
+                className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+                title="Refresh"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
+              <button
+                onClick={openCreateModal}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-semibold text-sm shadow-md transition-all active:scale-95 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                {isAmharic ? 'አዲስ ማስታወሻ ጻፍና አትም' : 'Write & Publish Note'}
+              </button>
+            </div>
+          </div>
 
       {/* Filters Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
@@ -798,6 +848,8 @@ export default function AdminNotesSection({ notes, onRefresh, isAmharic }: Admin
           </div>
         )}
       </AnimatePresence>
+        </>
+      )}
     </div>
   );
 }

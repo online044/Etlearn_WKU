@@ -115,42 +115,7 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
         console.warn('[CourseDetail] Error querying exams table:', err);
       }
 
-      // If Supabase has no exams recorded yet for this course, provide curated official model exams with YouTube solutions
-      if (examData.length === 0) {
-        const readableName = courseTitle || targetId.replace(/^(course_|fresh_|freshman_)/i, '').replace(/_/g, ' ').toUpperCase();
-        const cleanKey = cleanId.toLowerCase();
-        let midVideo = 'ylOzXfL1QeI';
-        let finalVideo = 'Nq8Wy4B4i3c';
-        for (const [k, v] of Object.entries(COURSE_EXAM_VIDEOS)) {
-          if (cleanKey.includes(k) || (courseTitle && courseTitle.toLowerCase().includes(k))) {
-            midVideo = v.midterm;
-            finalVideo = v.final;
-            break;
-          }
-        }
-
-        examData = [
-          {
-            id: `exam_${cleanId}_midterm`,
-            course_id: targetId,
-            title: `${readableName} - Midterm Examination & Solution`,
-            duration_minutes: 60,
-            exam_type: 'Midterm',
-            youtube_video_id: midVideo,
-            total_questions: 25
-          },
-          {
-            id: `exam_${cleanId}_final`,
-            course_id: targetId,
-            title: `${readableName} - Final Comprehensive Examination (Past Paper)`,
-            duration_minutes: 120,
-            exam_type: 'Final',
-            youtube_video_id: finalVideo,
-            total_questions: 50
-          }
-        ];
-      }
-
+      // Only display authentic exams fetched from Supabase
       if (isMounted) {
         setLessons(lessonData);
         setExams(examData);
@@ -313,8 +278,8 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                         setSelectedVideoId(lesson.youtube_video_id);
                         setSelectedVideoTitle(lesson.title);
                       }}
-                      className="p-2 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-slate-950 transition cursor-pointer shrink-0"
-                      title="Play YouTube Video"
+                      className="p-2 rounded-lg bg-amber-500/15 text-amber-400 hover:bg-amber-500 hover:text-slate-950 transition cursor-pointer shrink-0"
+                      title="Play Lecture Video"
                     >
                       <Play className="w-4 h-4 fill-current" />
                     </button>
@@ -357,9 +322,10 @@ export const CourseDetail: React.FC<CourseDetailProps> = ({
                       setSelectedVideoId(exam.youtube_video_id);
                       setSelectedVideoTitle(`${exam.title} (Solution Video)`);
                     }}
-                    className="flex-1 py-2 px-3 text-xs font-semibold rounded-lg border border-white/10 bg-[#1E293B] hover:bg-[#334155] text-slate-200 hover:text-white transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                    className="flex-1 py-2 px-3 text-xs font-semibold rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 hover:text-amber-200 transition-all cursor-pointer flex items-center justify-center gap-1.5"
                   >
-                    <span>📺 {language === 'am' ? 'የመፍትሔ ቪዲዮ' : 'Solution Video'}</span>
+                    <Play className="w-3.5 h-3.5 fill-amber-400 text-amber-400 shrink-0" />
+                    <span>{language === 'am' ? 'የመፍትሔ ቪዲዮ' : 'Solution Video'}</span>
                   </button>
                 )}
 

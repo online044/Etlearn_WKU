@@ -263,17 +263,17 @@ export default function InAppViewerModal({
 
               {/* RIGHT: Production Tooling Cluster */}
               <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-                {/* ⚡ Open in Google Drive App (Direct 1-tap mobile launch) */}
+                {/* ⚡ Open in External Reader / Native Viewer */}
                 <a
                   href={getDriveAppUrl()}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => playSuccessChime()}
                   className="px-2.5 sm:px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
-                  title={isAm ? 'በGoogle Drive መተግበሪያ ክፈት' : 'Open in Google Drive App'}
+                  title={isAm ? 'ፒዲኤፍ በውጭ ክፈት' : 'Open PDF in External Tab'}
                 >
                   <Smartphone className="w-3.5 h-3.5" />
-                  <span className="hidden xs:inline">Drive App</span>
+                  <span className="hidden xs:inline">{isAm ? 'ፒዲኤፍ ክፈት' : 'Open PDF'}</span>
                 </a>
 
                 {/* 🌙 Reading Filter / Theme Toggle (Slate / Sepia / Light) */}
@@ -477,7 +477,7 @@ export default function InAppViewerModal({
                 rel="noopener noreferrer"
                 onClick={() => playSuccessChime()}
                 className="p-1 rounded-full hover:bg-white/10 text-amber-400 transition-colors"
-                title="Open in Google Drive App"
+                title={isAm ? 'ፒዲኤፍ በውጭ ክፈት' : 'Open PDF in External Tab'}
               >
                 <Smartphone className="w-3.5 h-3.5" />
               </a>

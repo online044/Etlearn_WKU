@@ -1766,7 +1766,12 @@ app.post(['/api/db/test-connection', '/api/db/test-connection/'], async (req: Re
     const tablesFound: string[] = [];
     const counts: Record<string, number> = {};
 
-    const tableNames = ['student_profiles', 'courses', 'lessons', 'payments', 'coupons', 'announcements', 'ethiolearn_sync', 'books', 'subscriptions', 'course_progress'];
+    const tableNames = [
+      'student_profiles', 'courses', 'lessons', 'payments', 'coupons', 
+      'announcements', 'ethiolearn_sync', 'books', 'exams', 'questions', 
+      'subjects', 'chapters', 'notes', 'user_note_state', 'highlights', 'reader_settings',
+      'subscriptions', 'course_progress'
+    ];
 
     for (const t of tableNames) {
       try {

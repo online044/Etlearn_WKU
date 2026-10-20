@@ -866,3 +866,200 @@ CREATE POLICY "qbm_delete"
         auth.uid()::text = user_id OR
         public.is_admin()
     );
+
+-- ====================================================================
+-- 18. SUPABASE NOTES READING EXPERIENCE (LONG-FORM MARKDOWN & READER)
+-- ====================================================================
+
+-- 18.1 Ensure subjects table has color and sort_order columns
+ALTER TABLE public.subjects ADD COLUMN IF NOT EXISTS color TEXT DEFAULT '#4F46E5';
+ALTER TABLE public.subjects ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0;
+
+-- 18.2 CHAPTERS TABLE (Belongs to Subject)
+CREATE TABLE IF NOT EXISTS public.chapters (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    subject_id TEXT NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_chapters_subject ON public.chapters(subject_id, sort_order);
+
+-- 18.3 NOTES TABLE (Markdown Content, Full-Text Search Vector, KaTeX)
+CREATE TABLE IF NOT EXISTS public.notes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    chapter_id UUID NOT NULL REFERENCES public.chapters(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    read_time_min INT NOT NULL DEFAULT 5,
+    sort_order INT NOT NULL DEFAULT 0,
+    is_published BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    search tsvector GENERATED ALWAYS AS (
+        setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+        setweight(to_tsvector('english', coalesce(content, '')), 'B')
+    ) STORED
+);
+
+CREATE INDEX IF NOT EXISTS idx_notes_search ON public.notes USING gin(search);
+CREATE INDEX IF NOT EXISTS idx_notes_chapter ON public.notes(chapter_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_notes_published ON public.notes(is_published);
+
+-- 18.4 PER-STUDENT USER NOTE STATE (Progress, Scroll Position, Bookmarks)
+CREATE TABLE IF NOT EXISTS public.user_note_state (
+    user_id TEXT NOT NULL,
+    note_id UUID NOT NULL REFERENCES public.notes(id) ON DELETE CASCADE,
+    progress NUMERIC(5, 2) NOT NULL DEFAULT 0,
+    scroll_position INT NOT NULL DEFAULT 0,
+    bookmarked BOOLEAN NOT NULL DEFAULT FALSE,
+    last_read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, note_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_note_state_user ON public.user_note_state(user_id, last_read_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_note_state_note ON public.user_note_state(note_id);
+
+-- 18.5 HIGHLIGHTS TABLE (Student Annotations & Color Comments)
+CREATE TABLE IF NOT EXISTS public.highlights (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL,
+    note_id UUID NOT NULL REFERENCES public.notes(id) ON DELETE CASCADE,
+    start_offset INT NOT NULL,
+    end_offset INT NOT NULL,
+    color TEXT NOT NULL DEFAULT 'yellow',
+    comment TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_highlights_user_note ON public.highlights(user_id, note_id);
+
+-- 18.6 READER SETTINGS TABLE (Font Size, Line Height, Theme, Dyslexia Font)
+CREATE TABLE IF NOT EXISTS public.reader_settings (
+    user_id TEXT PRIMARY KEY,
+    font_size INT NOT NULL DEFAULT 17,
+    line_height NUMERIC(3, 2) NOT NULL DEFAULT 1.7,
+    font_family TEXT NOT NULL DEFAULT 'system',
+    theme TEXT NOT NULL DEFAULT 'dark'
+);
+
+-- 18.7 SEARCH FUNCTION (Returns highlighted search snippets and rank)
+CREATE OR REPLACE FUNCTION public.search_notes(q TEXT)
+RETURNS TABLE (
+    id UUID,
+    title TEXT,
+    snippet TEXT,
+    rank REAL
+)
+LANGUAGE sql STABLE AS $$
+    SELECT 
+        n.id,
+        n.title,
+        ts_headline(
+            'english', 
+            n.content, 
+            websearch_to_tsquery('english', q),
+            'MaxWords=30, MinWords=10, StartSel=<mark>, StopSel=</mark>'
+        ) AS snippet,
+        ts_rank(n.search, websearch_to_tsquery('english', q)) AS rank
+    FROM public.notes n
+    WHERE n.is_published AND n.search @@ websearch_to_tsquery('english', q)
+    ORDER BY rank DESC
+    LIMIT 30;
+$$;
+
+-- 18.8 ROW LEVEL SECURITY POLICIES FOR NOTES SUITE
+ALTER TABLE public.chapters ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_note_state ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.highlights ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.reader_settings ENABLE ROW LEVEL SECURITY;
+
+-- Chapters RLS
+DROP POLICY IF EXISTS "chapters_select" ON public.chapters;
+CREATE POLICY "chapters_select" ON public.chapters FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "chapters_admin_all" ON public.chapters;
+CREATE POLICY "chapters_admin_all" ON public.chapters FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
+
+-- Notes RLS
+DROP POLICY IF EXISTS "notes_select" ON public.notes;
+CREATE POLICY "notes_select" ON public.notes FOR SELECT USING (is_published = true OR public.is_admin());
+
+DROP POLICY IF EXISTS "notes_admin_all" ON public.notes;
+CREATE POLICY "notes_admin_all" ON public.notes FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
+
+-- User Note State RLS
+DROP POLICY IF EXISTS "user_note_state_all" ON public.user_note_state;
+CREATE POLICY "user_note_state_all" ON public.user_note_state FOR ALL 
+USING (
+    auth.role() = 'service_role' OR 
+    user_id = auth.uid()::text OR 
+    user_id = (auth.jwt() ->> 'email') OR 
+    public.is_admin()
+)
+WITH CHECK (
+    auth.role() = 'service_role' OR 
+    user_id = auth.uid()::text OR 
+    user_id = (auth.jwt() ->> 'email') OR 
+    public.is_admin()
+);
+
+-- Highlights RLS
+DROP POLICY IF EXISTS "highlights_all" ON public.highlights;
+CREATE POLICY "highlights_all" ON public.highlights FOR ALL
+USING (
+    auth.role() = 'service_role' OR 
+    user_id = auth.uid()::text OR 
+    user_id = (auth.jwt() ->> 'email') OR 
+    public.is_admin()
+)
+WITH CHECK (
+    auth.role() = 'service_role' OR 
+    user_id = auth.uid()::text OR 
+    user_id = (auth.jwt() ->> 'email') OR 
+    public.is_admin()
+);
+
+-- Reader Settings RLS
+DROP POLICY IF EXISTS "reader_settings_all" ON public.reader_settings;
+CREATE POLICY "reader_settings_all" ON public.reader_settings FOR ALL
+USING (
+    auth.role() = 'service_role' OR 
+    user_id = auth.uid()::text OR 
+    user_id = (auth.jwt() ->> 'email') OR 
+    public.is_admin()
+)
+WITH CHECK (
+    auth.role() = 'service_role' OR 
+    user_id = auth.uid()::text OR 
+    user_id = (auth.jwt() ->> 'email') OR 
+    public.is_admin()
+);
+
+-- 18.9 STORAGE BUCKET: note-images (Public bucket for diagrams & illustrations)
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('note-images', 'note-images', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+DROP POLICY IF EXISTS "Allow public view note-images" ON storage.objects;
+CREATE POLICY "Allow public view note-images" ON storage.objects FOR SELECT USING (bucket_id = 'note-images');
+
+DROP POLICY IF EXISTS "Allow upload to note-images" ON storage.objects;
+CREATE POLICY "Allow upload to note-images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'note-images');
+
+DROP POLICY IF EXISTS "Allow update note-images" ON storage.objects;
+CREATE POLICY "Allow update note-images" ON storage.objects FOR UPDATE USING (bucket_id = 'note-images');
+
+DROP POLICY IF EXISTS "Allow delete note-images" ON storage.objects;
+CREATE POLICY "Allow delete note-images" ON storage.objects FOR DELETE USING (bucket_id = 'note-images');
+
+-- Grant permissions across all new objects
+GRANT ALL ON public.chapters TO anon, authenticated, service_role;
+GRANT ALL ON public.notes TO anon, authenticated, service_role;
+GRANT ALL ON public.user_note_state TO anon, authenticated, service_role;
+GRANT ALL ON public.highlights TO anon, authenticated, service_role;
+GRANT ALL ON public.reader_settings TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.search_notes(TEXT) TO anon, authenticated, service_role;
+

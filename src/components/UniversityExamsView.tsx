@@ -20,7 +20,6 @@ import { safeStorage } from '../utils/safeStorage';
 import { fetchPublishedExams } from '../utils/contentStore';
 import { INITIAL_QUESTIONS } from '../data/initialFirestoreContent';
 import { generateRandomExamQuestions, fetchQuestionsPaginated, fetchAllSupabaseQuestions } from '../utils/supabaseQuestions';
-import { getEthiopian10kExamSheets } from '../data/ethiopianExams10kBank';
 import { generateUniqueQuestions } from '../utils/examQuestionGenerator';
 import ExamBrowserView from './ExamBrowserView';
 import FocusedQuestionView from './FocusedQuestionView';
@@ -145,9 +144,9 @@ export function parseQuestionUnitChapter(q: ExamQuestion, index: number): Parsed
 }
 
 // ============================================================================
-// 📚 VERIFIED PAST PAPERS REPOSITORY (Wolkite, AAU, ASTU, Hawassa, Jimma, EUEE)
+// 📚 VERIFIED PAST PAPERS REPOSITORY (Supabase & Published Exams)
 // ============================================================================
-export const UNIVERSITY_SHEETS: ExamPaperSheet[] = getEthiopian10kExamSheets();
+export const UNIVERSITY_SHEETS: ExamPaperSheet[] = [];
 
 export default function UniversityExamsView({
   profile,
@@ -156,23 +155,11 @@ export default function UniversityExamsView({
   onNavigate,
   onStudyAction
 }: UniversityExamsProps) {
-  // Master papers repository state with separated official and student-generated questions
+  // Master papers repository state - authentic exams from Supabase and user custom files
   const [examSheets, setExamSheets] = useState<ExamPaperSheet[]>(() => {
-    const customSheets = loadCustomExamSheets();
-    const baseSheets = UNIVERSITY_SHEETS.map(sheet => {
-      const savedAi = loadGeneratedQuestionsForSheet(sheet.id);
-      const taggedOfficial: ExamQuestion[] = sheet.questions.map(q => ({
-        ...q,
-        sourceType: (q.sourceType || 'official_past_exam') as 'official_past_exam' | 'ai_generated'
-      }));
-      return {
-        ...sheet,
-        questions: [...taggedOfficial, ...savedAi]
-      };
-    });
-    return [...customSheets, ...baseSheets];
+    return loadCustomExamSheets();
   });
-  const [selectedSheetId, setSelectedSheetId] = useState<string>(() => UNIVERSITY_SHEETS[0]?.id || '');
+  const [selectedSheetId, setSelectedSheetId] = useState<string>('');
 
   // 20-Question Free Practice Quota Management
   const isProUser = Boolean(profile?.isPro || profile?.tier?.includes('pro'));
@@ -292,6 +279,7 @@ export default function UniversityExamsView({
           const newItems = mapped.filter(m => !ids.has(m.id));
           return [...newItems, ...prev];
         });
+        setSelectedSheetId(prev => prev || mapped[0]?.id || '');
       }
     }).catch(err => console.warn('Could not fetch remote exams:', err));
 
@@ -360,6 +348,7 @@ export default function UniversityExamsView({
             const uniqueNew = newSheets.filter(ns => !existingIds.has(ns.id));
             return [...uniqueNew, ...prev];
           });
+          setSelectedSheetId(prev => prev || newSheets[0]?.id || '');
         }
       }
     }).catch(err => console.warn('Could not load Supabase university questions:', err));
@@ -855,9 +844,18 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
   };
 
   // Handle Practice Choice Selection
+  // Handle Practice Choice Selection
   const handleSelectChoice = (choiceIdx: number) => {
     if (showAnswerFeedback) return;
-    if (currentQuestion && activeSheet) {
+    const isSheetFree = Boolean(
+      activeSheet && (
+        (activeSheet.subject || '').toLowerCase().includes('bio') ||
+        (activeSheet.subject || '').toLowerCase().includes('chem') ||
+        (activeSheet.title || '').toLowerCase().includes('bio') ||
+        (activeSheet.title || '').toLowerCase().includes('chem')
+      )
+    );
+    if (currentQuestion && activeSheet && !isSheetFree) {
       const qKey = `${activeSheet.id}_q_${currentQuestion.id || activeQuestionIndex}`;
       const alreadyTried = triedQuestionKeys.includes(qKey);
       if (!isProUser && !alreadyTried && questionsTriedCount >= FREE_TRIAL_LIMIT) {
@@ -873,17 +871,26 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
   const handleCheckAnswer = () => {
     if (selectedChoiceIndex === null || !currentQuestion || !activeSheet) return;
 
-    // 20-Question Free Practice Quota Check
+    const isSheetFree = Boolean(
+      activeSheet && (
+        (activeSheet.subject || '').toLowerCase().includes('bio') ||
+        (activeSheet.subject || '').toLowerCase().includes('chem') ||
+        (activeSheet.title || '').toLowerCase().includes('bio') ||
+        (activeSheet.title || '').toLowerCase().includes('chem')
+      )
+    );
+
+    // 20-Question Free Practice Quota Check (Biology & Chemistry are 100% Free!)
     const qKey = `${activeSheet.id}_q_${currentQuestion.id || activeQuestionIndex}`;
     const alreadyTried = triedQuestionKeys.includes(qKey);
 
-    if (!isProUser && !alreadyTried && questionsTriedCount >= FREE_TRIAL_LIMIT) {
+    if (!isProUser && !isSheetFree && !alreadyTried && questionsTriedCount >= FREE_TRIAL_LIMIT) {
       playFailureChime();
       setShowTrialLimitModal(true);
       return;
     }
 
-    if (!alreadyTried) {
+    if (!alreadyTried && !isSheetFree) {
       const updatedKeys = [...triedQuestionKeys, qKey];
       setTriedQuestionKeys(updatedKeys);
       safeStorage.setItem('ethiolearn_tried_question_keys', JSON.stringify(updatedKeys));
@@ -929,7 +936,13 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
 
   const startTimedSimulation = () => {
     if (!activeSheet) return;
-    if (!isProUser && questionsTriedCount >= FREE_TRIAL_LIMIT) {
+    const isSheetFree = Boolean(
+      (activeSheet.subject || '').toLowerCase().includes('bio') ||
+      (activeSheet.subject || '').toLowerCase().includes('chem') ||
+      (activeSheet.title || '').toLowerCase().includes('bio') ||
+      (activeSheet.title || '').toLowerCase().includes('chem')
+    );
+    if (!isProUser && !isSheetFree && questionsTriedCount >= FREE_TRIAL_LIMIT) {
       playFailureChime();
       setShowTrialLimitModal(true);
       return;
@@ -1095,11 +1108,15 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
         return;
       }
 
-      // If database is temporarily unreachable, match from verified static repository
-      const matching = UNIVERSITY_SHEETS.find(s => s.subject.toLowerCase().includes(configSubject.toLowerCase())) || UNIVERSITY_SHEETS[0];
-      setSelectedSheetId(matching.id);
-      setShowConfigModal(false);
-      startTimedSimulation();
+      // Match from existing exam papers repository
+      const matching = examSheets.find(s => s.subject.toLowerCase().includes(configSubject.toLowerCase())) || examSheets[0];
+      if (matching) {
+        setSelectedSheetId(matching.id);
+        setShowConfigModal(false);
+        startTimedSimulation();
+      } else {
+        setShowConfigModal(false);
+      }
     } catch (e: any) {
       alert(`Could not load questions: ${e.message}`);
     } finally {

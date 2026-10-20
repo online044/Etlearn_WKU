@@ -6,7 +6,6 @@ import {
   HelpCircle, Eye, Share2, Layers, AlertCircle, RefreshCw
 } from 'lucide-react';
 import { ExamPaper, ExamQuestion, ExamAttemptRecord, StudentProfile, AITeacherContext } from '../types';
-import { PRACTICE_QUESTIONS } from '../data/practiceQuestions';
 import { saveExamAttempt, fetchStudentExamAttempts } from '../utils/supabaseCourses';
 import { 
   saveExamResultToFirestore, 
@@ -17,238 +16,8 @@ import {
 import { playClickChime, playSuccessChime } from '../utils/audio';
 import { fetchAllSupabaseQuestions } from '../utils/supabaseQuestions';
 
-// Built-in authentic Ethiopian exam papers
-export const ETHIOPIAN_EXAM_PAPERS: ExamPaper[] = [
-  {
-    id: 'exam_euee_math_2025',
-    title: 'EUEE Grade 12 National Matric - Mathematics',
-    subject: 'Mathematics',
-    level: 'Grade 12',
-    durationMinutes: 30,
-    totalQuestions: 15,
-    passingScore: 60,
-    instructions: 'Select the best answer for each question. Negative marking is not applied. You may flag questions for later review.',
-    questions: PRACTICE_QUESTIONS.filter(q => q.subject === 'Mathematics').slice(0, 15).map((q, idx) => ({
-      id: q.id || `m_${idx + 1}`,
-      questionNumber: idx + 1,
-      text: q.question,
-      options: q.options,
-      correctAnswer: q.correctAnswer,
-      explanation: q.explanation,
-      subject: q.subject,
-      topic: 'Algebra & Calculus'
-    }))
-  },
-  {
-    id: 'exam_euee_physics_2025',
-    title: 'EUEE Grade 12 National Matric - General Physics',
-    subject: 'Physics',
-    level: 'Grade 12',
-    durationMinutes: 30,
-    totalQuestions: 15,
-    passingScore: 60,
-    instructions: 'Standard SI units apply. Calculators are permitted. Flag any question you wish to double-check before final submission.',
-    questions: PRACTICE_QUESTIONS.filter(q => q.subject === 'Physics').slice(0, 15).map((q, idx) => ({
-      id: q.id || `p_${idx + 1}`,
-      questionNumber: idx + 1,
-      text: q.question,
-      options: q.options,
-      correctAnswer: q.correctAnswer,
-      explanation: q.explanation,
-      subject: q.subject,
-      topic: 'Mechanics & Electromagnetism'
-    }))
-  },
-  {
-    id: 'exam_freshman_emte_2025',
-    title: 'University Freshman Midterm - Emerging Technologies',
-    subject: 'Emerging Technologies',
-    level: 'University',
-    durationMinutes: 25,
-    totalQuestions: 12,
-    passingScore: 60,
-    instructions: 'Comprehensive exam covering 4IR principles, Artificial Intelligence, Big Data 5Vs, and IoT architectures.',
-    questions: [
-      {
-        id: 'emte_q1',
-        questionNumber: 1,
-        text: 'Which industrial revolution is primarily characterized by Cyber-Physical Systems (CPS), Artificial Intelligence, and the Internet of Things (IoT)?',
-        options: ['First Industrial Revolution (1IR)', 'Second Industrial Revolution (2IR)', 'Third Industrial Revolution (3IR)', 'Fourth Industrial Revolution (4IR)'],
-        correctAnswer: 'Fourth Industrial Revolution (4IR)',
-        explanation: '4IR represents the fusion of digital, biological, and physical systems with autonomous cyber-physical coordination.',
-        subject: 'Emerging Technologies',
-        topic: 'Industry 4.0'
-      },
-      {
-        id: 'emte_q2',
-        questionNumber: 2,
-        text: 'Which of the following is NOT one of the traditional "Five V\'s" of Big Data?',
-        options: ['Volume', 'Velocity', 'Virtualization', 'Veracity'],
-        correctAnswer: 'Virtualization',
-        explanation: 'The standard Five Vs are Volume, Velocity, Variety, Veracity, and Value. Virtualization is a cloud computing technique, not a V of Big Data.',
-        subject: 'Emerging Technologies',
-        topic: 'Big Data'
-      },
-      {
-        id: 'emte_q3',
-        questionNumber: 3,
-        text: 'What machine learning paradigm relies on an agent learning through trial, error, reward penalties, and environmental interaction?',
-        options: ['Supervised Learning', 'Unsupervised Learning', 'Reinforcement Learning', 'Rule-Based Expert System'],
-        correctAnswer: 'Reinforcement Learning',
-        explanation: 'Reinforcement Learning uses reward signals to optimize an agent\'s policy over time in dynamic environments.',
-        subject: 'Emerging Technologies',
-        topic: 'Artificial Intelligence'
-      },
-      {
-        id: 'emte_q4',
-        questionNumber: 4,
-        text: 'What is the primary difference between Cloud Computing and Edge Computing?',
-        options: [
-          'Edge Computing processes data closer to the source/device, reducing latency',
-          'Cloud Computing does not require an internet connection',
-          'Edge Computing only runs on supercomputers',
-          'Cloud Computing is always free of cost'
-        ],
-        correctAnswer: 'Edge Computing processes data closer to the source/device, reducing latency',
-        explanation: 'Edge computing places computation near sensor data generators, minimizing round-trip bandwidth and latency to central cloud servers.',
-        subject: 'Emerging Technologies',
-        topic: 'IoT & Cloud'
-      },
-      {
-        id: 'emte_q5',
-        questionNumber: 5,
-        text: 'Which cryptographic mechanism guarantees that previous transactions in a blockchain ledger cannot be tampered with undetected?',
-        options: ['Lossy Compression', 'Cryptographic Hash Linking (e.g. SHA-256)', 'Optical Character Recognition', 'Rasterization'],
-        correctAnswer: 'Cryptographic Hash Linking (e.g. SHA-256)',
-        explanation: 'Each block contains the cryptographic hash of the prior block. Altering any data changes all following hashes, immediately alerting network nodes.',
-        subject: 'Emerging Technologies',
-        topic: 'Blockchain'
-      },
-      {
-        id: 'emte_q6',
-        questionNumber: 6,
-        text: 'What technology creates a highly accurate, real-time virtual simulation of a physical asset, bridge, or jet engine?',
-        options: ['Digital Twin', 'Deepfake', 'Metamaterial', 'Quantum Qubit'],
-        correctAnswer: 'Digital Twin',
-        explanation: 'A Digital Twin is a software representation of a physical asset receiving real-time IoT sensor telemetry to simulate wear and stress.',
-        subject: 'Emerging Technologies',
-        topic: 'Emerging Tech'
-      },
-      {
-        id: 'emte_q7',
-        questionNumber: 7,
-        text: 'In natural language processing (NLP), what term describes the process of breaking down a body of text into individual words or subwords?',
-        options: ['Tokenization', 'Backpropagation', 'Quantization', 'Convolution'],
-        correctAnswer: 'Tokenization',
-        explanation: 'Tokenization segments raw strings into tokens that neural language models can map to numerical embeddings.',
-        subject: 'Emerging Technologies',
-        topic: 'NLP & AI'
-      },
-      {
-        id: 'emte_q8',
-        questionNumber: 8,
-        text: 'Which protocol is lightweight and specifically designed for constrained IoT telemetry messaging over low-bandwidth networks?',
-        options: ['MQTT (Message Queuing Telemetry Transport)', 'FTP (File Transfer Protocol)', 'SMTP (Simple Mail Transfer Protocol)', 'BGP (Border Gateway Protocol)'],
-        correctAnswer: 'MQTT (Message Queuing Telemetry Transport)',
-        explanation: 'MQTT is an ultra-lightweight publish/subscribe messaging protocol tailored for remote sensors with minimal battery and network overhead.',
-        subject: 'Emerging Technologies',
-        topic: 'IoT Protocols'
-      },
-      {
-        id: 'emte_q9',
-        questionNumber: 9,
-        text: 'What is the primary objective of "Explainable AI" (XAI)?',
-        options: [
-          'To make AI algorithms run twice as fast',
-          'To ensure human experts can understand and audit how the AI derived its specific decision',
-          'To eliminate all neural networks from computer science',
-          'To automatically write code without compilers'
-        ],
-        correctAnswer: 'To ensure human experts can understand and audit how the AI derived its specific decision',
-        explanation: 'Explainable AI removes the "black box" risk, allowing doctors, judges, and engineers to verify algorithmic rationale.',
-        subject: 'Emerging Technologies',
-        topic: 'Ethical AI'
-      },
-      {
-        id: 'emte_q10',
-        questionNumber: 10,
-        text: 'What is the name of self-executing computer programs stored on a blockchain ledger that trigger automatically when contract terms are met?',
-        options: ['Smart Contracts', 'Cold Wallets', 'Hyperthreads', 'Web Crawlers'],
-        correctAnswer: 'Smart Contracts',
-        explanation: 'Smart contracts automate peer-to-peer agreements on decentralized ledgers like Ethereum without intermediaries.',
-        subject: 'Emerging Technologies',
-        topic: 'Blockchain'
-      }
-    ]
-  },
-  {
-    id: 'exam_freshman_math_logic',
-    title: 'University Freshman Mathematics - Logic & Calculus',
-    subject: 'Mathematics',
-    level: 'University',
-    durationMinutes: 25,
-    totalQuestions: 10,
-    passingScore: 60,
-    instructions: 'Test your comprehension of propositional logic, truth tables, complex numbers, limits, and basic differentiation.',
-    questions: [
-      {
-        id: 'math_q1',
-        questionNumber: 1,
-        text: 'What is the contrapositive of the implication "If it rains, then the ground is wet"?',
-        options: [
-          'If the ground is not wet, then it did not rain',
-          'If it did not rain, then the ground is not wet',
-          'If the ground is wet, then it rained',
-          'It is raining and the ground is dry'
-        ],
-        correctAnswer: 'If the ground is not wet, then it did not rain',
-        explanation: 'The contrapositive of p -> q is ~q -> ~p. A conditional and its contrapositive always possess identical truth values.',
-        subject: 'Mathematics',
-        topic: 'Logic'
-      },
-      {
-        id: 'math_q2',
-        questionNumber: 2,
-        text: 'Evaluate: i^18 (where i = sqrt(-1)).',
-        options: ['-1', '1', 'i', '-i'],
-        correctAnswer: '-1',
-        explanation: 'Since i^4 = 1, i^18 = (i^4)^4 * i^2 = 1 * (-1) = -1.',
-        subject: 'Mathematics',
-        topic: 'Complex Numbers'
-      },
-      {
-        id: 'math_q3',
-        questionNumber: 3,
-        text: 'Evaluate the limit: lim (x -> 2) [ (x^2 - 4) / (x - 2) ].',
-        options: ['4', '2', '0', 'Undefined'],
-        correctAnswer: '4',
-        explanation: 'Factor the numerator: (x - 2)(x + 2) / (x - 2) = x + 2. Substituting x = 2 gives 2 + 2 = 4.',
-        subject: 'Mathematics',
-        topic: 'Calculus Limits'
-      },
-      {
-        id: 'math_q4',
-        questionNumber: 4,
-        text: 'What is the derivative of f(x) = x * sin(x)?',
-        options: ['sin(x) + x * cos(x)', 'x * cos(x)', 'cos(x)', 'sin(x) - x * cos(x)'],
-        correctAnswer: 'sin(x) + x * cos(x)',
-        explanation: 'Using the Product Rule d/dx [u * v] = u\'v + uv\': (1)*sin(x) + x*cos(x) = sin(x) + x*cos(x).',
-        subject: 'Mathematics',
-        topic: 'Differentiation'
-      },
-      {
-        id: 'math_q5',
-        questionNumber: 5,
-        text: 'If set A has 4 elements and set B has 3 elements, what is the cardinality of the Cartesian product A x B?',
-        options: ['12', '7', '64', '81'],
-        correctAnswer: '12',
-        explanation: '|A x B| = |A| * |B| = 4 * 3 = 12.',
-        subject: 'Mathematics',
-        topic: 'Set Theory'
-      }
-    ]
-  }
-];
+// Authentic exam papers repository (Loaded dynamically from Supabase)
+export const ETHIOPIAN_EXAM_PAPERS: ExamPaper[] = [];
 
 interface ExamEngineViewProps {
   profile: StudentProfile;
@@ -320,11 +89,7 @@ export default function ExamEngineView({
             };
           });
 
-          setExamPapers(prev => {
-            const dynIds = new Set(dynamicPapers.map(p => p.id));
-            const existingNonDup = prev.filter(p => !dynIds.has(p.id));
-            return [...dynamicPapers, ...existingNonDup];
-          });
+          setExamPapers(dynamicPapers);
         }
       } catch (err) {
         console.warn('Could not load dynamic exam papers from Supabase:', err);
@@ -645,51 +410,63 @@ export default function ExamEngineView({
         </div>
 
         {/* Exam Papers Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-          {filteredPapers.map((paper) => (
-            <div
-              key={paper.id}
-              className="bg-slate-900/90 border border-slate-800 hover:border-amber-500/40 rounded-2xl p-5 flex flex-col justify-between shadow-lg hover:shadow-amber-500/5 transition duration-200"
-            >
-              <div>
-                <div className="flex items-center justify-between gap-2 mb-3">
-                  <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                    {paper.subject}
-                  </span>
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                    {paper.level}
-                  </span>
-                </div>
-
-                <h3 className="text-base font-bold text-white mb-2 leading-snug">
-                  {paper.title}
-                </h3>
-                <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed mb-4">
-                  {paper.instructions}
-                </p>
-
-                <div className="grid grid-cols-2 gap-2 py-3 border-y border-slate-800/80 mb-4 text-xs">
-                  <div className="flex items-center gap-1.5 text-slate-400">
-                    <Clock className="w-3.5 h-3.5 text-amber-400" />
-                    <span>{paper.durationMinutes} {language === 'am' ? 'ደቂቃዎች' : 'Minutes'}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-slate-400">
-                    <HelpCircle className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>{paper.questions.length} {language === 'am' ? 'ጥያቄዎች' : 'Questions'}</span>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={() => handleStartExam(paper)}
-                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 text-xs font-bold flex items-center justify-center gap-2 transition shadow-lg shadow-amber-500/20 group"
+        {filteredPapers.length === 0 ? (
+          <div className="text-center py-12 px-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-2 mb-12">
+            <HelpCircle className="w-8 h-8 text-slate-500 mx-auto" />
+            <h3 className="text-sm font-bold text-white">
+              {language === 'am' ? 'ምንም የተገኘ የፈተና ወረቀት የለም' : 'No matching exam papers found'}
+            </h3>
+            <p className="text-xs text-slate-400">
+              {language === 'am' ? 'የፈተና ጥያቄዎች ከSupabase Question Bank እየተጫኑ ነው።' : 'Loading or filter out questions from Supabase question bank.'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+            {filteredPapers.map((paper) => (
+              <div
+                key={paper.id}
+                className="bg-slate-900/90 border border-slate-800 hover:border-amber-500/40 rounded-2xl p-5 flex flex-col justify-between shadow-lg hover:shadow-amber-500/5 transition duration-200"
               >
-                <span>{language === 'am' ? 'ፈተናውን ጀምር' : 'Start Exam Now'}</span>
-                <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />
-              </button>
-            </div>
-          ))}
-        </div>
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                      {paper.subject}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                      {paper.level}
+                    </span>
+                  </div>
+
+                  <h3 className="text-base font-bold text-white mb-2 leading-snug">
+                    {paper.title}
+                  </h3>
+                  <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed mb-4">
+                    {paper.instructions}
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-2 py-3 border-y border-slate-800/80 mb-4 text-xs">
+                    <div className="flex items-center gap-1.5 text-slate-400">
+                      <Clock className="w-3.5 h-3.5 text-amber-400" />
+                      <span>{paper.durationMinutes} {language === 'am' ? 'ደቂቃዎች' : 'Minutes'}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-slate-400">
+                      <HelpCircle className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>{paper.questions.length} {language === 'am' ? 'ጥያቄዎች' : 'Questions'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => handleStartExam(paper)}
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 text-xs font-bold flex items-center justify-center gap-2 transition shadow-lg shadow-amber-500/20 group"
+                >
+                  <span>{language === 'am' ? 'ፈተናውን ጀምር' : 'Start Exam Now'}</span>
+                  <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Past Exam History */}
         {pastAttempts.length > 0 && (

@@ -3,7 +3,7 @@ import {
   BookOpen, Play, GraduationCap, Calendar,
   Award, Send, ArrowUpRight,
   ShieldCheck, Lock, ChevronRight, X,
-  Megaphone, Bell, Sparkles
+  Megaphone, Bell, Sparkles, FileText, Download
 } from 'lucide-react';
 import StudentAvatar from './StudentAvatar';
 import { StudentProfile, ExamAttemptRecord, PlatformAnnouncement } from '../types';
@@ -55,7 +55,7 @@ const CORE_COURSES: CoreCourseItem[] = [
     stream: 'Natural Science',
     units: 6,
     pages: 218,
-    isVideoFree: false,
+    isVideoFree: true,
     driveFileId: '1gm0FrHxIQhxto8pfrf0Fy8NnHLDAdU0S'
   },
   {
@@ -288,23 +288,23 @@ export default function HomeDashboard({
           </div>
 
           <div
-            onClick={() => { playClickChime(); onNavigate('quiz'); }}
+            onClick={() => { playClickChime(); onNavigate('notes'); }}
             className="p-3.5 rounded-xl bg-[#111C35] border border-slate-800 hover:border-slate-700 transition flex flex-col justify-between cursor-pointer group"
           >
             <div className="flex items-center justify-between mb-2">
               <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-amber-400">
-                <Award className="w-4 h-4" />
+                <FileText className="w-4 h-4" />
               </div>
-              <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
-                DRILLS
+              <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-amber-400/10 border border-amber-400/20 text-amber-300">
+                NOTES
               </span>
             </div>
             <div>
               <h3 className="text-xs sm:text-sm font-bold text-white group-hover:text-amber-400 transition truncate">
-                {isAmharic ? 'የልምምድ ጥያቄዎች' : 'Question Bank'}
+                {isAmharic ? 'የጥናት ማስታወሻዎች' : 'Study Notes & Sheets'}
               </h3>
               <p className="text-[11px] text-slate-400 mt-0.5 truncate">
-                {isAmharic ? 'በምዕራፍ የተከፋፈሉ' : 'Organized by Units'}
+                {isAmharic ? 'የግልና የዩኒቨርሲቲ ማጠቃለያዎች' : 'Personal & Faculty Notes'}
               </p>
             </div>
           </div>
@@ -349,7 +349,7 @@ export default function HomeDashboard({
                 {isAmharic ? 'የዩኒቨርሲቲ ኮርሶች ማውጫ' : 'Curriculum Courses & Study Materials'}
               </h2>
               <p className="text-[11px] text-slate-400">
-                {isAmharic ? 'ፒዲኤፍ በነፃ ያንብቡ • የባዮሎጂ ቪዲዮ ክፍት ነው' : 'PDFs are 100% Free • Biology Video Lectures Unlocked'}
+                {isAmharic ? 'ፒዲኤፍ በነፃ ያንብቡ • የባዮሎጂ እና ኬሚስትሪ ቪዲዮዎች ክፍት ናቸው' : 'PDFs are 100% Free • Biology & Chemistry Videos Unlocked'}
               </p>
             </div>
             <button
@@ -389,10 +389,10 @@ export default function HomeDashboard({
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60">
+                <div className="flex items-center gap-1.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60 flex-wrap">
                   <button
                     onClick={() => { playClickChime(); onNavigate('bookstore'); }}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-95"
+                    className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-95"
                     title="Read 100% Free PDF Textbook"
                   >
                     <BookOpen className="w-3.5 h-3.5" />
@@ -402,10 +402,10 @@ export default function HomeDashboard({
                   {course.isVideoFree ? (
                     <button
                       onClick={() => { playClickChime(); onNavigate('bookstore'); }}
-                      className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-sm"
-                      title="Watch Free Biology Video Lectures & Exams in Bookstore"
+                      className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 hover:text-amber-200 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-xs group/play"
+                      title="Watch Free Biology Video Lectures & Exams"
                     >
-                      <Play className="w-3.5 h-3.5 fill-slate-950" />
+                      <Play className="w-3.5 h-3.5 fill-amber-400 text-amber-400 group-hover/play:scale-110 transition-transform" />
                       <span>{isAmharic ? 'ቪዲዮ (ነፃ)' : 'Watch Video (Free)'}</span>
                     </button>
                   ) : (
@@ -418,16 +418,16 @@ export default function HomeDashboard({
                           onNavigate('upgrade');
                         }
                       }}
-                      className={`px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-95 ${
+                      className={`px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-95 ${
                         isProUser 
-                          ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-black' 
+                          ? 'bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 hover:text-amber-200' 
                           : 'bg-slate-800 hover:bg-slate-750 text-slate-300 border border-slate-700'
                       }`}
                       title={isProUser ? 'Watch Pro Video Lecture in Bookstore' : 'Pro Video Lecture (From 99 ETB)'}
                     >
                       {isProUser ? (
                         <>
-                          <Play className="w-3.5 h-3.5 fill-slate-950" />
+                          <Play className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                           <span>{isAmharic ? 'ቪዲዮ እይ' : 'Watch Video'}</span>
                         </>
                       ) : (

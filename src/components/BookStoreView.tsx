@@ -28,10 +28,16 @@ import {
   deleteOfflineBook, 
   downloadBookInApp, 
   formatBytes,
-  extractDriveFileId,
   OfflineBookRecord 
 } from '../utils/offlineBooksDB';
 import { useOnlineStatus } from '../utils/useOnlineStatus';
+import { 
+  getSupabaseStoragePublicUrl, 
+  listSupabaseBooksFiles, 
+  resolveBookSupabasePdfUrl, 
+  SupabaseStorageFile, 
+  SUPABASE_BOOKS_BUCKET 
+} from '../utils/supabaseStorage';
 
 export interface BookStoreViewProps {
   profile: StudentProfile;
@@ -73,25 +79,7 @@ export const THEMATIC_BOOK_COVERS: Record<string, string> = {
 
 export function resolveBookCover(book: { cover_url?: string | null; pdf_url?: string | null; subject?: string; title?: string }): string {
   if (book.cover_url && typeof book.cover_url === 'string' && book.cover_url.trim().length > 0) {
-    const raw = book.cover_url.trim().replace(/^['"]+|['"]+$/g, '');
-    if (raw.includes('lh3.googleusercontent.com/d/')) {
-      return raw;
-    }
-
-    // Convert Google Drive thumbnail or preview link to high-performance direct CDN image
-    const driveMatch = raw.match(/[?&]id=([a-zA-Z0-9_-]{20,})/) || raw.match(/\/d\/([a-zA-Z0-9_-]{20,})/);
-    if (driveMatch && driveMatch[1]) {
-      return `https://lh3.googleusercontent.com/d/${driveMatch[1]}=w800`;
-    }
-    return raw;
-  }
-
-  // If cover_url is not set, derive directly from pdf_url Google Drive file ID
-  if (book.pdf_url && typeof book.pdf_url === 'string') {
-    const idMatch = book.pdf_url.match(/[?&]id=([a-zA-Z0-9_-]{20,})/) || book.pdf_url.match(/\/file\/d\/([a-zA-Z0-9_-]{20,})/) || book.pdf_url.match(/\/d\/([a-zA-Z0-9_-]{20,})/);
-    if (idMatch && idMatch[1]) {
-      return `https://lh3.googleusercontent.com/d/${idMatch[1]}=w800`;
-    }
+    return book.cover_url.trim().replace(/^['"]+|['"]+$/g, '');
   }
 
   const text = `${book.subject || ''} ${book.title || ''}`.toLowerCase();
@@ -109,39 +97,19 @@ export function getBookPdfLinks(rawUrl?: string) {
       pdfUrl: '',
       previewUrl: '',
       downloadUrl: '',
+      isSupabaseStorage: false,
       isDrive: false
     };
   }
 
   const clean = rawUrl.trim().replace(/^['"]+|['"]+$/g, '');
-  const idMatch = clean.match(/[?&]id=([a-zA-Z0-9_-]{20,})/) || clean.match(/\/file\/d\/([a-zA-Z0-9_-]{20,})/) || clean.match(/\/d\/([a-zA-Z0-9_-]{20,})/);
-  if (idMatch && idMatch[1]) {
-    const fileId = idMatch[1];
-    return {
-      pdfUrl: clean,
-      previewUrl: `https://drive.google.com/file/d/${fileId}/preview`,
-      downloadUrl: `https://drive.google.com/uc?export=download&id=${fileId}`,
-      isDrive: true,
-      fileId
-    };
-  }
-
-  if (clean.includes('drive.google.com/drive/folders/')) {
-    const folderMatch = clean.match(/folders\/([a-zA-Z0-9_-]{20,})/);
-    const folderId = folderMatch ? folderMatch[1] : '';
-    return {
-      pdfUrl: clean,
-      previewUrl: folderId ? `https://drive.google.com/embeddedfolderview?id=${folderId}#grid` : clean,
-      downloadUrl: clean,
-      isDrive: true,
-      folderId
-    };
-  }
+  const publicUrl = getSupabaseStoragePublicUrl('books', clean);
 
   return {
-    pdfUrl: clean,
-    previewUrl: clean,
-    downloadUrl: clean,
+    pdfUrl: publicUrl,
+    previewUrl: publicUrl,
+    downloadUrl: publicUrl,
+    isSupabaseStorage: true,
     isDrive: false
   };
 }
@@ -618,21 +586,8 @@ export function getVideoEmbedUrl(rawUrl: string, useStandardDomain: boolean = fa
   };
 }
 
-// ─── GOOGLE DRIVE REPOSITORY INTEGRATION ───
-export const GOOGLE_DRIVE_FOLDER_ID = '1k7l9mQ0nFUnUIn7CrJwqERAUG0UeVsAF';
-export const GOOGLE_DRIVE_FOLDER_URL = 'https://drive.google.com/drive/folders/1k7l9mQ0nFUnUIn7CrJwqERAUG0UeVsAF?usp=sharing';
-
-export function getGoogleDrivePreviewUrl(fileId: string): string {
-  return `https://drive.google.com/file/d/${fileId}/preview`;
-}
-
-export function getGoogleDriveViewUrl(fileId: string): string {
-  return `https://drive.google.com/file/d/${fileId}/view?usp=sharing`;
-}
-
-export function getGoogleDriveDownloadUrl(fileId: string): string {
-  return `https://drive.google.com/uc?export=download&id=${fileId}`;
-}
+// ─── SUPABASE STORAGE 'books' BUCKET INTEGRATION ───
+export const SUPABASE_BOOKS_BUCKET_NAME = 'books';
 
 export interface FreshmanModule {
   id: string;
@@ -649,6 +604,7 @@ export interface FreshmanModule {
   description: string;
   amharicDescription: string;
   rating: number;
+  storageFileName?: string;
   googleDriveFileId?: string;
   googleDriveFileName?: string;
   googleDriveAltFileId?: string;
@@ -1131,17 +1087,26 @@ export const FRESHMAN_MODULES: FreshmanModule[] = [
 
 export const FREE_TRIAL_COURSE_ID = 'freshman_critical_thinking';
 
-export function isFreeTrialCourse(book?: { id?: string; code?: string; title?: string } | null): boolean {
+export function isFreeTrialCourse(book?: { id?: string; code?: string; title?: string; subject?: string } | null): boolean {
   if (!book) return false;
   const normId = (book.id || '').toLowerCase();
   const normCode = (book.code || '').toLowerCase();
   const normTitle = (book.title || '').toLowerCase();
+  const normSub = ((book as any).subject || '').toLowerCase();
   return (
     normId === 'freshman_critical_thinking' ||
     normId.includes('critical') ||
     normId.includes('phil_1011') ||
     normCode.includes('phil 1011') ||
-    normTitle.includes('critical thinking')
+    normTitle.includes('critical thinking') ||
+    normId.includes('bio') ||
+    normCode.includes('biol') ||
+    normTitle.includes('biology') ||
+    normSub.includes('bio') ||
+    normId.includes('chem') ||
+    normCode.includes('chem') ||
+    normTitle.includes('chemistry') ||
+    normSub.includes('chem')
   );
 }
 
@@ -1209,14 +1174,18 @@ export default function BookStoreView({
     }
   }, [isOnline, offlineBookIds.size]);
 
+  // Supabase Storage 'books' bucket inventory
+  const [supabaseStorageFiles, setSupabaseStorageFiles] = useState<SupabaseStorageFile[]>([]);
+
   // Load books & lessons from Supabase if prop was empty or on manual sync
   const loadSupabaseBooks = async () => {
     setIsSyncingSupabase(true);
     playClickChime();
     try {
-      const [booksData, lessonsData] = await Promise.all([
+      const [booksData, lessonsData, storageFiles] = await Promise.all([
         fetchSupabaseBooks(),
-        fetchSupabaseLessons()
+        fetchSupabaseLessons(),
+        listSupabaseBooksFiles('books')
       ]);
       if (booksData && booksData.length > 0) {
         setSupabaseList(booksData);
@@ -1226,6 +1195,9 @@ export default function BookStoreView({
       if (lessonsData && lessonsData.length > 0) {
         setSupabaseLessons(lessonsData);
       }
+      if (storageFiles && storageFiles.length > 0) {
+        setSupabaseStorageFiles(storageFiles);
+      }
     } catch (err) {
       console.warn('Failed to load books/lessons from Supabase:', err);
     } finally {
@@ -1234,6 +1206,9 @@ export default function BookStoreView({
   };
 
   useEffect(() => {
+    listSupabaseBooksFiles('books').then(files => {
+      if (files && files.length > 0) setSupabaseStorageFiles(files);
+    });
     if (supabaseBooks && supabaseBooks.length > 0) {
       setSupabaseList(supabaseBooks);
       fetchSupabaseLessons().then(data => {
@@ -1271,12 +1246,19 @@ export default function BookStoreView({
     // 1. Seed with official Ethiopian curriculum modules (canonical definitions)
     FRESHMAN_MODULES.forEach((mod) => {
       const cKey = getCanonicalSubjectKey(mod.title, mod.code, mod.subject);
-      const pdfLinks = getBookPdfLinks(
-        mod.googleDriveFileId ? `https://drive.google.com/uc?export=download&id=${mod.googleDriveFileId}` : ''
+      const pdfLinks = resolveBookSupabasePdfUrl(
+        {
+          id: mod.id,
+          code: mod.code,
+          title: mod.title,
+          subject: mod.subject,
+          storageFileName: mod.storageFileName
+        },
+        supabaseStorageFiles
       );
       const coverUrl = resolveBookCover({
         cover_url: null,
-        pdf_url: mod.googleDriveFileId ? `https://drive.google.com/uc?export=download&id=${mod.googleDriveFileId}` : '',
+        pdf_url: pdfLinks.pdfUrl,
         subject: mod.subject,
         title: mod.title
       });
@@ -1286,7 +1268,9 @@ export default function BookStoreView({
         supabaseLessons
       );
 
-      const isBio = cKey === 'biology' || mod.subject.toLowerCase().includes('bio') || mod.title.toLowerCase().includes('bio');
+      const isFreeVid = cKey === 'biology' || cKey === 'chemistry' || 
+        mod.subject.toLowerCase().includes('bio') || mod.subject.toLowerCase().includes('chem') || 
+        mod.title.toLowerCase().includes('bio') || mod.title.toLowerCase().includes('chem');
 
       canonicalMap.set(cKey, {
         id: mod.id,
@@ -1299,7 +1283,7 @@ export default function BookStoreView({
         semester: mod.semester,
         coverUrl,
         pdfUrl: pdfLinks.pdfUrl,
-        previewUrl: pdfLinks.previewUrl,
+        previewUrl: pdfLinks.pdfUrl,
         downloadUrl: pdfLinks.downloadUrl,
         description: mod.description,
         amharicDescription: mod.amharicDescription,
@@ -1308,11 +1292,11 @@ export default function BookStoreView({
         creditHours: mod.creditHours,
         fileSizeMb: mod.fileSizeMb,
         rating: mod.rating,
-        isDrive: pdfLinks.isDrive,
-        isFromSupabase: false,
+        isDrive: false,
+        isFromSupabase: true,
         originalModule: mod,
         hasVideoLecture: lectures.length > 0,
-        isVideoFree: isBio, // General Biology is Open & Free for all students!
+        isVideoFree: isFreeVid, // General Biology & Chemistry are 100% Free Video Lectures!
         lectures,
         videoUrl: lectures[0]?.url || ''
       });
@@ -1328,12 +1312,19 @@ export default function BookStoreView({
       const cKey = getCanonicalSubjectKey(sbTitle, sbCode, sbSubject);
       const existing = canonicalMap.get(cKey);
 
-      const pdfLinks = getBookPdfLinks(
-        sbBook.pdf_url || existing?.pdfUrl || ''
+      const pdfLinks = resolveBookSupabasePdfUrl(
+        {
+          id: sbBook.id || existing?.id,
+          code: sbCode || existing?.code,
+          title: sbTitle || existing?.title,
+          subject: sbSubject || existing?.subject,
+          pdf_url: sbBook.pdf_url || existing?.pdfUrl
+        },
+        supabaseStorageFiles
       );
       const coverUrl = resolveBookCover({
         cover_url: sbBook.cover_url || existing?.coverUrl,
-        pdf_url: sbBook.pdf_url || existing?.pdfUrl || '',
+        pdf_url: pdfLinks.pdfUrl,
         subject: sbSubject || existing?.subject,
         title: sbTitle || existing?.title
       });
@@ -1351,18 +1342,20 @@ export default function BookStoreView({
         supabaseLessons
       );
 
-      const isBio = cKey === 'biology' || sbSubject.toLowerCase().includes('bio') || sbTitle.toLowerCase().includes('bio');
+      const isFreeVid = cKey === 'biology' || cKey === 'chemistry' || 
+        sbSubject.toLowerCase().includes('bio') || sbSubject.toLowerCase().includes('chem') || 
+        sbTitle.toLowerCase().includes('bio') || sbTitle.toLowerCase().includes('chem');
 
       if (existing) {
         // Merge enriched data from Supabase without creating a duplicate card
         canonicalMap.set(cKey, {
           ...existing,
-          pdfUrl: sbBook.pdf_url ? pdfLinks.pdfUrl : existing.pdfUrl,
-          previewUrl: sbBook.pdf_url ? pdfLinks.previewUrl : existing.previewUrl,
-          downloadUrl: sbBook.pdf_url ? pdfLinks.downloadUrl : existing.downloadUrl,
+          pdfUrl: pdfLinks.pdfUrl || existing.pdfUrl,
+          previewUrl: pdfLinks.pdfUrl || existing.previewUrl,
+          downloadUrl: pdfLinks.downloadUrl || existing.downloadUrl,
           coverUrl: sbBook.cover_url ? coverUrl : existing.coverUrl,
           hasVideoLecture: lectures.length > 0 || existing.hasVideoLecture,
-          isVideoFree: isBio,
+          isVideoFree: isFreeVid,
           lectures: lectures.length > 0 ? lectures : existing.lectures,
           videoUrl: lectures[0]?.url || existing.videoUrl || '',
           isFromSupabase: true
@@ -1380,7 +1373,7 @@ export default function BookStoreView({
           semester: sbBook.semester || 'Semester I',
           coverUrl,
           pdfUrl: pdfLinks.pdfUrl,
-          previewUrl: pdfLinks.previewUrl,
+          previewUrl: pdfLinks.pdfUrl,
           downloadUrl: pdfLinks.downloadUrl,
           description: sbBook.description || 'Official Ethiopian higher education university curriculum module textbook.',
           amharicDescription: sbBook.amharicDescription || 'ኦፊሴላዊ የኢትዮጵያ ከፍተኛ ትምህርት ተቋማት የመጀመሪያ ዓመት ካሪኩለም መማሪያ መጽሐፍ።',
@@ -1389,10 +1382,10 @@ export default function BookStoreView({
           creditHours: sbBook.creditHours || 3,
           fileSizeMb: sbBook.fileSizeMb || 4.2,
           rating: sbBook.rating || 4.9,
-          isDrive: pdfLinks.isDrive,
+          isDrive: false,
           isFromSupabase: true,
           hasVideoLecture: lectures.length > 0,
-          isVideoFree: isBio,
+          isVideoFree: isFreeVid,
           lectures,
           videoUrl: lectures[0]?.url || ''
         });
@@ -1463,7 +1456,7 @@ export default function BookStoreView({
   const [aiPanelOpen, setAiPanelOpen] = useState<boolean>(false);
   const [aiMode, setAiMode] = useState<'summary' | 'amharic' | 'quiz' | null>(null);
   const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
-  const [readerTab, setReaderTab] = useState<'drive' | 'video' | 'exams' | 'cover' | 'notes'>('drive');
+  const [readerTab, setReaderTab] = useState<'drive' | 'video' | 'exams' | 'cover'>('drive');
   const [videoDomainAlternative, setVideoDomainAlternative] = useState<boolean>(false);
 
   const activePdfModule = activePdfBook;
@@ -1491,15 +1484,6 @@ export default function BookStoreView({
         label: language === 'am' ? 'ፈተናዎች' : 'Exams',
         active: readerTab === 'exams',
         onClick: () => { playClickChime(); setReaderTab('exams'); }
-      });
-    }
-    if (activePdfModule.chapters && activePdfModule.chapters.length > 0) {
-      t.push({
-        id: 'notes',
-        label: language === 'am' ? 'ማስታወሻዎች' : 'Units & Notes',
-        count: activePdfModule.chapters.length,
-        active: readerTab === 'notes',
-        onClick: () => { playClickChime(); setReaderTab('notes'); }
       });
     }
     return t;
@@ -1564,11 +1548,8 @@ export default function BookStoreView({
           setActiveOfflineBlobUrl(blobUrl);
         }
       } else {
-        // Resilient fallback: Trigger direct device download via Google Drive or direct stream
-        const fileId = extractDriveFileId(book.downloadUrl) || extractDriveFileId(book.pdfUrl) || (book as any).googleDriveFileId || '';
-        const dlUrl = fileId 
-          ? `https://drive.usercontent.google.com/download?id=${fileId}&export=download`
-          : (book.pdfUrl || book.downloadUrl || `/api/books/download-pdf?id=${encodeURIComponent(book.id)}&download=true`);
+        // Direct device download via Supabase Storage URL or local API proxy
+        const dlUrl = book.downloadUrl || book.pdfUrl || `/api/books/download-pdf?id=${encodeURIComponent(book.id)}&download=true`;
 
         const safeName = `${(book.code || book.title).replace(/[^a-zA-Z0-9_\-]/g, '_')}.pdf`;
         const a = document.createElement('a');
@@ -1587,10 +1568,7 @@ export default function BookStoreView({
         );
       }
     } catch {
-      const fileId = extractDriveFileId(book.downloadUrl) || extractDriveFileId(book.pdfUrl) || (book as any).googleDriveFileId || '';
-      const dlUrl = fileId 
-        ? `https://drive.usercontent.google.com/download?id=${fileId}&export=download`
-        : (book.pdfUrl || book.downloadUrl || `/api/books/download-pdf?id=${encodeURIComponent(book.id)}&download=true`);
+      const dlUrl = book.downloadUrl || book.pdfUrl || `/api/books/download-pdf?id=${encodeURIComponent(book.id)}&download=true`;
 
       const safeName = `${(book.code || book.title).replace(/[^a-zA-Z0-9_\-]/g, '_')}.pdf`;
       const a = document.createElement('a');
@@ -1642,7 +1620,7 @@ export default function BookStoreView({
   const handleOpenBook = async (
     book: UnifiedBookItem, 
     chapterIdx: number = 0, 
-    defaultTab: 'drive' | 'video' | 'exams' | 'cover' | 'notes' = 'drive',
+    defaultTab: 'drive' | 'video' | 'exams' | 'cover' = 'drive',
     lectureIdx: number = 0,
     startInFullPage: boolean = true
   ) => {
@@ -2230,7 +2208,7 @@ export default function BookStoreView({
                     )}
                     {book.hasVideoLecture && (
                       <span className="text-[8.5px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-1 shadow-sm">
-                        <Play className="w-2.5 h-2.5 fill-amber-400" />
+                        <Play className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
                         <span>{book.lectures.length} Lectures</span>
                         {!isProUser && (
                           <span className="px-1 py-0.2 rounded text-[7.5px] font-black bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 uppercase tracking-wider">
@@ -2277,48 +2255,6 @@ export default function BookStoreView({
                     )}
                   </button>
 
-                  {/* Secondary 2-Column Buttons: Notes and Save */}
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenBook(book, 0, 'notes');
-                      }}
-                      className="py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 border border-slate-700 cursor-pointer"
-                      title={language === 'am' ? 'የምዕራፍ ማስታወሻዎች' : 'Units & Notes'}
-                    >
-                      <Layers className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                      <span className="truncate">{language === 'am' ? 'ማስታወሻ' : 'Notes'}</span>
-                    </button>
-
-                    {downloadingMap[book.id] !== undefined ? (
-                      <div className="py-1.5 px-2 bg-amber-500/20 border border-amber-500/40 text-amber-400 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5">
-                        <Loader2 className="w-3 h-3 animate-spin shrink-0" />
-                        <span className="truncate">{downloadingMap[book.id]}%</span>
-                      </div>
-                    ) : offlineBookIds.has(book.id) ? (
-                      <button
-                        onClick={(e) => handleDeleteOffline(book.id, book.title, e)}
-                        className="py-1.5 px-2 bg-emerald-950/80 hover:bg-red-950/80 text-emerald-300 hover:text-red-300 font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-1 border border-emerald-500/40 hover:border-red-500/40 cursor-pointer group/off"
-                        title={language === 'am' ? 'ከመስመር ውጭ ወርዷል (ለመሰረዝ ጠቅ ያድርጉ)' : 'Downloaded offline (Click to delete file)'}
-                      >
-                        <Check className="w-3.5 h-3.5 text-emerald-400 group-hover/off:hidden shrink-0" />
-                        <Trash2 className="w-3.5 h-3.5 text-red-400 hidden group-hover/off:inline shrink-0" />
-                        <span className="truncate group-hover/off:hidden">{language === 'am' ? 'ወርዷል' : 'Saved'}</span>
-                        <span className="truncate hidden group-hover/off:inline">{language === 'am' ? 'ሰርዝ' : 'Remove'}</span>
-                      </button>
-                    ) : (
-                      <button
-                        onClick={(e) => handleDownloadBook(book, e)}
-                        className="py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-amber-300 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 border border-slate-700 cursor-pointer"
-                        title={language === 'am' ? 'በመተግበሪያው ውስጥ አውርድ (ያለ ኢንተርኔት ለማንበብ)' : 'Download in app for offline study'}
-                      >
-                        <CloudDownload className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                        <span className="truncate">{language === 'am' ? 'አውርድ' : 'Save'}</span>
-                      </button>
-                    )}
-                  </div>
-
                   {/* Mid & Final Past Exam Drills */}
                   <button
                     onClick={(e) => {
@@ -2333,28 +2269,77 @@ export default function BookStoreView({
                     <span className="truncate">{language === 'am' ? 'የፈተና ልምምድ' : 'Mid & Final Exams'}</span>
                   </button>
 
-                  {/* Video Lectures (if available) */}
+                  {/* Video Lectures (Watch Icon - Signature EthioLearn Gold/Amber) */}
                   {book.hasVideoLecture && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (!isProUser) {
+                        if (!isProUser && !book.isVideoFree) {
                           playClickChime();
                           onNavigate('upgrade');
                         } else {
                           handleOpenBook(book, 0, 'video');
                         }
                       }}
-                      className="w-full py-1.5 px-2 bg-slate-800/90 hover:bg-slate-750 text-amber-300 font-bold text-xs rounded-xl border border-slate-700/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="w-full py-2 px-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 hover:text-amber-200 font-bold text-xs rounded-xl border border-amber-500/30 hover:border-amber-500/60 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-98 group/watch"
                       title={language === 'am' ? 'የቪዲዮ ትምህርቶች እይ' : 'Watch Video Lectures'}
                     >
-                      <Play className="w-3.5 h-3.5 fill-amber-400 text-amber-400 shrink-0" />
-                      <span className="truncate">{language === 'am' ? 'ቪዲዮ ትምህርት' : 'Watch Lectures'} ({book.lectures.length})</span>
-                      {!isProUser && (
+                      <Video className="w-4 h-4 text-amber-400 group-hover/watch:scale-110 transition-transform shrink-0" />
+                      <span className="truncate">{language === 'am' ? 'ቪዲዮ ትምህርቶች' : 'Watch Lectures'} ({book.lectures.length})</span>
+                      {!isProUser && !book.isVideoFree ? (
                         <span className="ml-1 px-1.5 py-0.2 rounded text-[8.5px] font-black bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 uppercase tracking-wider shrink-0 shadow-xs">
                           PRO
                         </span>
+                      ) : (
+                        <span className="ml-1 px-1.5 py-0.2 rounded text-[8.5px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase tracking-wider shrink-0 shadow-xs">
+                          FREE
+                        </span>
                       )}
+                    </button>
+                  )}
+
+                  {/* 📥 Allow PDF Download for Offline Use */}
+                  {downloadingMap[book.id] !== undefined ? (
+                    <div className="w-full py-2 px-2.5 bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-xs">
+                      <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin shrink-0" />
+                      <span className="truncate font-mono">{language === 'am' ? 'እየወረደ ነው...' : 'Downloading Offline...'} {downloadingMap[book.id]}%</span>
+                    </div>
+                  ) : offlineBookIds.has(book.id) ? (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          playClickChime();
+                          handleOpenBook(book, 0, 'drive', 0, true);
+                        }}
+                        className="flex-1 py-1.5 px-2 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-bold text-[11px] rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-98"
+                        title={language === 'am' ? 'ከመስመር ውጭ ወርዷል (ያለ ኢንተርኔት ያንብቡ)' : 'Downloaded offline (Ready to read)'}
+                      >
+                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span className="truncate">{language === 'am' ? 'ከመስመር ውጭ ዝግጁ' : 'Offline Ready'}</span>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDownloadBook(book, e);
+                        }}
+                        className="p-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-amber-400 rounded-xl transition-all cursor-pointer shrink-0"
+                        title={language === 'am' ? 'ወደ ስልክ አስቀምጥ (Save PDF file)' : 'Save PDF file to device'}
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDownloadBook(book, e);
+                      }}
+                      className="w-full py-2 px-2.5 bg-slate-900/90 hover:bg-slate-850 text-slate-200 hover:text-amber-300 font-bold text-xs rounded-xl border border-slate-700/80 hover:border-amber-500/40 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98 shadow-xs group/dl"
+                      title={language === 'am' ? 'ፒዲኤፍ ከመስመር ውጭ ለማንበብ ያውርዱ' : 'Download PDF for 100% Offline Study'}
+                    >
+                      <Download className="w-3.5 h-3.5 text-amber-400 group-hover/dl:translate-y-0.5 transition-transform shrink-0" />
+                      <span className="truncate">{language === 'am' ? 'ፒዲኤፍ አውርድ (ከመስመር ውጭ)' : 'Download PDF (Offline)'}</span>
                     </button>
                   )}
                 </div>
@@ -2458,21 +2443,25 @@ export default function BookStoreView({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (!isProUser) {
+                        if (!isProUser && !book.isVideoFree) {
                           playClickChime();
                           onNavigate('upgrade');
                         } else {
                           handleOpenBook(book, 0, 'video');
                         }
                       }}
-                      className="w-full py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-98 cursor-pointer"
+                      className="w-full py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 hover:text-amber-200 font-bold text-xs rounded-xl border border-amber-500/30 hover:border-amber-500/60 transition-all flex items-center justify-center gap-1.5 shadow-xs active:scale-98 cursor-pointer group/v"
                       title={language === 'am' ? 'የቪዲዮ ትምህርቶች እይ' : 'Watch Video Lectures'}
                     >
-                      <Play className="w-3.5 h-3.5 fill-slate-950 shrink-0" />
-                      <span>{language === 'am' ? 'ቪዲዮ ትምህርት እይ' : 'Watch Video Lectures'} ({book.lectures.length})</span>
-                      {!isProUser && (
-                        <span className="ml-1 px-1.5 py-0.2 rounded text-[8.5px] font-black bg-slate-950 text-amber-400 uppercase tracking-wider shrink-0 shadow-sm border border-amber-400/30">
+                      <Video className="w-4 h-4 text-amber-400 group-hover/v:scale-110 transition-transform shrink-0" />
+                      <span>{language === 'am' ? 'ቪዲዮ ትምህርቶች እይ' : 'Watch Lectures'} ({book.lectures.length})</span>
+                      {!isProUser && !book.isVideoFree ? (
+                        <span className="ml-1 px-1.5 py-0.2 rounded text-[8.5px] font-black bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 uppercase tracking-wider shrink-0 shadow-xs">
                           PRO
+                        </span>
+                      ) : (
+                        <span className="ml-1 px-1.5 py-0.2 rounded text-[8.5px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase tracking-wider shrink-0 shadow-xs">
+                          FREE
                         </span>
                       )}
                     </button>
@@ -2513,47 +2502,51 @@ export default function BookStoreView({
                     )}
                   </button>
 
-                  {/* Secondary 2-Column Buttons: Notes and Save */}
-                  <div className="grid grid-cols-2 gap-2">
+                  {/* 📥 Allow PDF Download for Offline Use */}
+                  {downloadingMap[book.id] !== undefined ? (
+                    <div className="w-full py-2 px-3 bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-xs">
+                      <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin shrink-0" />
+                      <span className="truncate font-mono">{language === 'am' ? 'እየወረደ ነው...' : 'Downloading Offline...'} {downloadingMap[book.id]}%</span>
+                    </div>
+                  ) : offlineBookIds.has(book.id) ? (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          playClickChime();
+                          handleOpenBook(book, 0, 'drive', 0, true);
+                        }}
+                        className="flex-1 py-2 px-2 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
+                        title={language === 'am' ? 'ከመስመር ውጭ ወርዷል (ያለ ኢንተርኔት ያንብቡ)' : 'Downloaded offline (Ready to read)'}
+                      >
+                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span className="truncate">{language === 'am' ? 'ከመስመር ውጭ ዝግጁ' : 'Offline Ready'}</span>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDownloadBook(book, e);
+                        }}
+                        className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-amber-400 rounded-xl transition-all cursor-pointer shrink-0"
+                        title={language === 'am' ? 'ወደ ስልክ አስቀምጥ (Save PDF file)' : 'Save PDF file to device'}
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleOpenBook(book, 0, 'notes');
+                        handleDownloadBook(book, e);
                       }}
-                      className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 border border-slate-700 cursor-pointer"
-                      title={language === 'am' ? 'የምዕራፍ ማስታወሻዎች' : 'Units & Notes'}
+                      className="w-full py-2 px-3 bg-slate-900/90 hover:bg-slate-850 text-slate-200 hover:text-amber-300 font-bold text-xs rounded-xl border border-slate-700/80 hover:border-amber-500/40 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98 shadow-xs group/dl2"
+                      title={language === 'am' ? 'ፒዲኤፍ ከመስመር ውጭ ለማንበብ ያውርዱ' : 'Download PDF for 100% Offline Study'}
                     >
-                      <Layers className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                      <span>{language === 'am' ? 'ማስታወሻ' : 'Notes'}</span>
+                      <Download className="w-3.5 h-3.5 text-amber-400 group-hover/dl2:translate-y-0.5 transition-transform shrink-0" />
+                      <span className="truncate">{language === 'am' ? 'ፒዲኤፍ አውርድ (ከመስመር ውጭ)' : 'Download PDF (Offline)'}</span>
                     </button>
+                  )}
 
-                    {downloadingMap[book.id] !== undefined ? (
-                      <div className="w-full py-2 px-2 bg-amber-500/20 border border-amber-500/40 text-amber-400 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-                        <span>{downloadingMap[book.id]}%</span>
-                      </div>
-                    ) : offlineBookIds.has(book.id) ? (
-                      <button
-                        onClick={(e) => handleDeleteOffline(book.id, book.title, e)}
-                        className="w-full py-2 bg-emerald-950/80 hover:bg-red-950/80 text-emerald-400 hover:text-red-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 border border-emerald-500/40 hover:border-red-500/40 cursor-pointer group/offlist"
-                        title={language === 'am' ? 'ከመስመር ውጭ ወርዷል (ለመሰረዝ ጠቅ ያድርጉ)' : 'Downloaded offline (Click to delete)'}
-                      >
-                        <Check className="w-3.5 h-3.5 group-hover/offlist:hidden shrink-0" />
-                        <Trash2 className="w-3.5 h-3.5 hidden group-hover/offlist:inline text-red-400 shrink-0" />
-                        <span className="group-hover/offlist:hidden">{language === 'am' ? 'ወርዷል' : 'Saved'}</span>
-                        <span className="hidden group-hover/offlist:inline">{language === 'am' ? 'ሰርዝ' : 'Remove'}</span>
-                      </button>
-                    ) : (
-                      <button
-                        onClick={(e) => handleDownloadBook(book, e)}
-                        className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-amber-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 border border-slate-700 cursor-pointer"
-                        title={language === 'am' ? 'በመተግበሪያው ውስጥ አውርድ' : 'Download in app'}
-                      >
-                        <CloudDownload className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                        <span>{language === 'am' ? 'አውርድ' : 'Download'}</span>
-                      </button>
-                    )}
-                  </div>
                 </div>
               </div>
             );
@@ -2625,7 +2618,7 @@ export default function BookStoreView({
                         rel="noopener noreferrer"
                         onClick={() => playSuccessChime()}
                         className="p-1 rounded-full hover:bg-white/10 text-amber-400 transition-colors"
-                        title="Open in Google Drive App"
+                        title={language === 'am' ? 'ፒዲኤፍ በውጭ ክፈት' : 'Open PDF in External Tab'}
                       >
                         <Smartphone className="w-3.5 h-3.5" />
                       </a>
@@ -2693,8 +2686,8 @@ export default function BookStoreView({
                               : 'text-slate-400 hover:text-slate-200'
                           }`}
                         >
-                          <Play className="w-3.5 h-3.5 fill-current" />
-                          <span>{language === 'am' ? 'ቪዲዮ' : 'Lectures'}</span>
+                          <Video className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          <span>{language === 'am' ? 'ቪዲዮ ትምህርቶች' : 'Video Lectures'}</span>
                           <span className={`text-[9.5px] px-1.5 py-0.2 rounded-full font-mono font-black ${
                             readerTab === 'video' ? 'bg-slate-950 text-amber-400' : 'bg-amber-500/20 text-amber-400'
                           }`}>
@@ -2719,7 +2712,7 @@ export default function BookStoreView({
 
                     {/* RIGHT: Production Action Controls */}
                     <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-                      {/* ⚡ Open in Google Drive App */}
+                      {/* ⚡ Open in External Tab / Native PDF viewer */}
                       {activePdfModule.pdfUrl && (
                         <a
                           href={activePdfModule.pdfUrl}
@@ -2727,10 +2720,10 @@ export default function BookStoreView({
                           rel="noopener noreferrer"
                           onClick={() => playSuccessChime()}
                           className="px-2.5 sm:px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
-                          title={language === 'am' ? 'በGoogle Drive መተግበሪያ ክፈት' : 'Open in Google Drive App'}
+                          title={language === 'am' ? 'ፒዲኤፍ በውጭ ክፈት' : 'Open PDF in External Tab'}
                         >
                           <Smartphone className="w-3.5 h-3.5" />
-                          <span className="hidden xs:inline">Drive App</span>
+                          <span className="hidden xs:inline">{language === 'am' ? 'ፒዲኤፍ ክፈት' : 'Open PDF'}</span>
                         </a>
                       )}
 
@@ -3022,7 +3015,7 @@ export default function BookStoreView({
                                 ? 'bg-[#FAF3E0] hover:bg-[#F2E5C7] border-[#DECFAF] text-[#332211]'
                                 : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300'
                             }`}
-                            title="Open Google Drive Link in New Tab"
+                            title={language === 'am' ? 'ፒዲኤፍ በውጭ ክፈት' : 'Open PDF in External Tab'}
                           >
                             <ExternalLink className="w-3.5 h-3.5 text-amber-500" />
                           </a>
@@ -3141,23 +3134,7 @@ export default function BookStoreView({
                                 <span>{language === 'am' ? 'ኦፊሴላዊ ፒዲኤፍ አንብብ' : 'Read Official PDF'}</span>
                               </button>
 
-                              <button
-                                onClick={() => {
-                                  playClickChime();
-                                  setCoverInfoOpen(false);
-                                  setReaderTab('notes');
-                                }}
-                                className={`w-full py-2 px-3 font-semibold text-xs rounded-xl border transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
-                                  readerTheme === 'light'
-                                    ? 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
-                                    : readerTheme === 'sepia'
-                                    ? 'bg-[#FAF3E0] hover:bg-[#F2E5C7] text-[#332211] border-[#DECFAF]'
-                                    : 'bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border-white/10'
-                                }`}
-                              >
-                                <Layers className="w-3.5 h-3.5 text-amber-500" />
-                                <span>{language === 'am' ? 'የምዕራፍ ማስታወሻዎች' : 'Units & Notes'}</span>
-                              </button>
+
                             </div>
                           </motion.aside>
                         )}
@@ -3188,7 +3165,7 @@ export default function BookStoreView({
                       /* 2. Professional PDF.js Full-bleed Vector Reader */
                       <div className="flex-1 w-full h-full min-h-0 relative flex flex-col">
                         <MobilePdfReader
-                          fileUrl={`/api/books/download-pdf?id=${encodeURIComponent(activePdfBook.id)}&fileId=${encodeURIComponent((activePdfBook as any).googleDriveFileId || activePdfBook.originalModule?.googleDriveFileId || activePdfBook.fileId || extractDriveFileId(activePdfBook.downloadUrl || activePdfBook.pdfUrl) || '')}`}
+                          fileUrl={`/api/books/download-pdf?id=${encodeURIComponent(activePdfBook.id)}&url=${encodeURIComponent(activePdfBook.pdfUrl || activePdfBook.downloadUrl || '')}`}
                           title={activePdfBook.title}
                           courseCode={activePdfBook.code}
                           initialTotalPages={activePdfBook.pages}
@@ -3205,13 +3182,13 @@ export default function BookStoreView({
                             type="button"
                             onClick={() => {
                               playClickChime();
-                              setPdfViewerMode('drive');
+                              setPdfViewerMode('native');
                               setPdfIframeKey((k) => k + 1);
                             }}
                             className="pointer-events-auto text-[10px] bg-slate-950/80 backdrop-blur-md px-2.5 py-1 rounded-full border border-slate-700 text-slate-300 hover:text-amber-400 cursor-pointer shadow-md"
-                            title="Switch to Drive Embedded Mode"
+                            title="Switch to Embed Mode"
                           >
-                            Drive Embed ↗
+                            Embed Mode ↗
                           </button>
                         </div>
                       </div>
@@ -3229,13 +3206,13 @@ export default function BookStoreView({
                         }`}>
                           {pdfViewerMode === 'native' ? (
                             <object
-                              data={`/api/books/download-pdf?id=${encodeURIComponent(activePdfBook.id)}&fileId=${encodeURIComponent((activePdfBook as any).googleDriveFileId || activePdfBook.originalModule?.googleDriveFileId || activePdfBook.fileId || extractDriveFileId(activePdfBook.downloadUrl || activePdfBook.pdfUrl) || '')}`}
+                              data={`/api/books/download-pdf?id=${encodeURIComponent(activePdfBook.id)}&url=${encodeURIComponent(activePdfBook.pdfUrl || activePdfBook.downloadUrl || '')}`}
                               type="application/pdf"
                               className="w-full h-full block"
                             >
                               <iframe
                                 key={`${activePdfBook.id}-${pdfIframeKey}-native`}
-                                src={`/api/books/download-pdf?id=${encodeURIComponent(activePdfBook.id)}&fileId=${encodeURIComponent((activePdfBook as any).googleDriveFileId || activePdfBook.originalModule?.googleDriveFileId || activePdfBook.fileId || extractDriveFileId(activePdfBook.downloadUrl || activePdfBook.pdfUrl) || '')}`}
+                                src={`/api/books/download-pdf?id=${encodeURIComponent(activePdfBook.id)}&url=${encodeURIComponent(activePdfBook.pdfUrl || activePdfBook.downloadUrl || '')}`}
                                 title={activePdfBook.title}
                                 className="absolute inset-0 w-full h-full border-0 block"
                                 allow="autoplay; fullscreen; encrypted-media"
@@ -3245,9 +3222,7 @@ export default function BookStoreView({
                             <iframe
                               key={`${activePdfBook.id}-${pdfIframeKey}-${pdfViewerMode}`}
                               src={
-                                pdfViewerMode === 'gdocs' && activePdfBook.downloadUrl
-                                  ? `https://docs.google.com/viewer?url=${encodeURIComponent(activePdfBook.downloadUrl)}&embedded=true`
-                                  : activePdfBook.previewUrl
+                                activePdfBook.previewUrl || activePdfBook.pdfUrl || `/api/books/download-pdf?id=${encodeURIComponent(activePdfBook.id)}`
                               }
                               title={activePdfBook.title}
                               className="absolute inset-0 w-full h-full border-0 block"
@@ -3279,7 +3254,7 @@ export default function BookStoreView({
                                 rel="noopener noreferrer"
                                 className="text-emerald-400 font-bold hover:underline flex items-center gap-0.5 cursor-pointer"
                               >
-                                <span>Drive App</span>
+                                <span>{language === 'am' ? 'ፒዲኤፍ ክፈት' : 'Open PDF'}</span>
                                 <ExternalLink className="w-2.5 h-2.5" />
                               </a>
                             )}
@@ -3289,11 +3264,11 @@ export default function BookStoreView({
                     ) : (
                       <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-3">
                         <FileText className="w-12 h-12 text-slate-500" />
-                        <h3 className="text-base font-bold">Google Drive PDF Ready</h3>
+                        <h3 className="text-base font-bold">Supabase Storage PDF Ready</h3>
                         <p className="text-xs text-slate-400 max-w-md">
                           {language === 'am'
-                            ? 'ይህ መጽሐፍ በGoogle Drive ማከማቻ ላይ ይገኛል። በቀጥታ ማውረድ ወይም ማንበብ ይችላሉ።'
-                            : 'This module is hosted in the official Google Drive repository. You can download it directly or open in Drive.'}
+                            ? 'ይህ መጽሐፍ በSupabase Storage (“books” bucket) ላይ ይገኛል። በቀጥታ ማውረድ ወይም ማንበብ ይችላሉ።'
+                            : 'This textbook is hosted in the official Supabase Storage (“books” bucket). You can stream or download it directly.'}
                         </p>
                         <div className="flex items-center gap-2">
                           {activePdfBook.pdfUrl && (
@@ -3304,16 +3279,9 @@ export default function BookStoreView({
                               className="px-4 py-2 bg-amber-500 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1.5"
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
-                              <span>{language === 'am' ? 'በGoogle Drive ክፈት' : 'Open in Google Drive'}</span>
+                              <span>{language === 'am' ? 'ፒዲኤፍ ክፈት' : 'Open Supabase PDF'}</span>
                             </a>
                           )}
-                          <button
-                            onClick={() => setReaderTab('notes')}
-                            className="px-4 py-2 bg-slate-800 text-slate-200 font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer"
-                          >
-                            <Layers className="w-3.5 h-3.5 text-amber-400" />
-                            <span>{language === 'am' ? 'ወደ ማስታወሻ ቀይር' : 'Switch to Notes'}</span>
-                          </button>
                         </div>
                       </div>
                     )}
@@ -3342,7 +3310,7 @@ export default function BookStoreView({
                       {/* Left: Active lecture info */}
                       <div className="flex items-center gap-2 min-w-0">
                         <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 shrink-0">
-                          <Play className="w-3.5 h-3.5 fill-amber-400" />
+                          <Video className="w-4 h-4 text-amber-400" />
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
@@ -3463,20 +3431,26 @@ export default function BookStoreView({
                               </button>
                             </div>
 
-                            {/* Direct Open in Official YouTube App */}
-                            {getVideoEmbedUrl(currentLecture.url).youtubeUrl && (
-                              <a
-                                href={getVideoEmbedUrl(currentLecture.url).youtubeUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={() => playSuccessChime()}
-                                className="px-2.5 py-1 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg flex items-center gap-1 cursor-pointer transition-all active:scale-95 shrink-0"
-                                title={language === 'am' ? 'በዩቲዩብ መተግበሪያ ክፈት' : 'Open in YouTube App'}
-                              >
-                                <span>YouTube App</span>
-                                <ExternalLink className="w-3 h-3" />
-                              </a>
-                            )}
+                            {/* Direct Open in Official YouTube App with Offline Download info */}
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="hidden md:inline-flex text-[10px] text-slate-400 font-medium">
+                                {language === 'am' ? 'ከመስመር ውጭ ለማየት:' : 'Offline watch:'}
+                              </span>
+                              {getVideoEmbedUrl(currentLecture.url).youtubeUrl && (
+                                <a
+                                  href={getVideoEmbedUrl(currentLecture.url).youtubeUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={() => playSuccessChime()}
+                                  className="px-2.5 py-1 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg flex items-center gap-1 cursor-pointer transition-all active:scale-95 shrink-0 shadow-xs"
+                                  title={language === 'am' ? 'በዩቲዩብ መተግበሪያ ክፈት እና “Download” የሚለውን በመጫን ያለ ኢንተርኔት ተመልከት' : 'Open in YouTube App and tap Download to watch offline without internet'}
+                                >
+                                  <Download className="w-3 h-3 text-white" />
+                                  <span>{language === 'am' ? 'በYouTube አውርድ' : 'Download in YouTube'}</span>
+                                  <ExternalLink className="w-2.5 h-2.5 opacity-75" />
+                                </a>
+                              )}
+                            </div>
                           </div>
                         )}
 
@@ -3516,13 +3490,12 @@ export default function BookStoreView({
                             <button
                               onClick={() => {
                                 playClickChime();
-                                setActiveChapterIndex(activeLectureIndex);
-                                setReaderTab('notes');
+                                setReaderTab('drive');
                               }}
                               className="px-3 py-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 font-bold text-xs flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer"
                             >
-                              <Layers className="w-3.5 h-3.5 text-amber-400" />
-                              <span>{language === 'am' ? 'የክፍሉ ማስታወሻ' : 'Chapter Notes'}</span>
+                              <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+                              <span>{language === 'am' ? 'ፒዲኤፍ አንብብ' : 'Read PDF'}</span>
                             </button>
                           </div>
 
@@ -3578,7 +3551,7 @@ export default function BookStoreView({
                                       : 'bg-white/10 text-slate-400'
                                   }`}>
                                     {isPlaying ? (
-                                      <Play className="w-3.5 h-3.5 fill-slate-950" />
+                                      <Play className="w-3.5 h-3.5 fill-current" />
                                     ) : (
                                       <span>{lec.chapterNumber || actualIdx + 1}</span>
                                     )}
@@ -3628,467 +3601,7 @@ export default function BookStoreView({
                   </div>
                 )}
 
-                {/* ================================================================= */}
-                {/* TAB 4: 📝 A4 STYLE INTERACTIVE CURRICULUM NOTES & ASGOBNYI AI     */}
-                {/* ================================================================= */}
-                {readerTab === 'notes' && (
-                  <div className="flex-1 w-full h-full min-h-0 grid grid-cols-1 lg:grid-cols-12 relative overflow-hidden">
-                    
-                    {/* 3.1 PDF OUTLINE / TABLE OF CONTENTS (Left Drawer - 3 Cols) */}
-                    {pdfSidebarOpen && (
-                      <div className={`lg:col-span-3 border-r p-4 overflow-y-auto space-y-3 hidden lg:block transition-colors ${
-                        readerTheme === 'light'
-                          ? 'bg-[#FFFFFF] border-slate-200 text-slate-800'
-                          : readerTheme === 'sepia'
-                          ? 'bg-[#F9F2E1] border-[#DFCFA8] text-[#382617]'
-                          : 'bg-[#0B132B]/95 border-white/10 text-slate-200'
-                      }`}>
-                        <div className="flex items-center justify-between pb-2 border-b border-inherit">
-                          <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
-                            <Bookmark className="w-3.5 h-3.5 text-amber-500" />
-                            <span>{language === 'am' ? 'የይዘት ማውጫ' : 'Module Outline'}</span>
-                          </h4>
-                          <span className="text-[10px] font-mono opacity-70">
-                            {activePdfModule.chapters.length} Units
-                          </span>
-                        </div>
-
-                        <div className="space-y-1.5">
-                          {activePdfModule.chapters.map((ch, idx) => {
-                            const isSelected = activeChapterIndex === idx;
-                            return (
-                              <button
-                                key={idx}
-                                onClick={() => {
-                                  playClickChime();
-                                  setActiveChapterIndex(idx);
-                                  setAiMode(null);
-                                }}
-                                className={`w-full text-left p-2.5 rounded-xl text-xs font-semibold leading-relaxed transition-all cursor-pointer flex items-start gap-2 border ${
-                                  isSelected
-                                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md font-bold'
-                                    : readerTheme === 'light'
-                                    ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-                                    : readerTheme === 'sepia'
-                                    ? 'bg-[#F2E7CD] hover:bg-[#EADBBD] text-[#3A2818] border-[#DFCFA8]'
-                                    : 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/5'
-                                }`}
-                              >
-                                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded mt-0.5 ${
-                                  isSelected ? 'bg-black/20 text-slate-950 font-black' : 'bg-black/10 text-current opacity-70'
-                                }`}>
-                                  Unit {idx + 1}
-                                </span>
-                                <span className="flex-1 line-clamp-2">{ch}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        {/* Official Academic Metadata */}
-                        <div className={`p-3.5 rounded-xl border space-y-2 text-xs ${
-                          readerTheme === 'light'
-                            ? 'bg-slate-50 border-slate-200 text-slate-700'
-                            : readerTheme === 'sepia'
-                            ? 'bg-[#F2E7CD] border-[#DFCFA8] text-[#3A2818]'
-                            : 'bg-black/40 border-white/5 text-slate-300'
-                        }`}>
-                          <div className="text-[10px] font-bold uppercase text-amber-500 tracking-wider">
-                            Official Academic Metadata
-                          </div>
-                          <div className="space-y-1 text-[11px]">
-                            <div><strong>Code:</strong> {activePdfModule.code}</div>
-                            <div><strong>Credit Hours:</strong> {activePdfModule.creditHours}</div>
-                            <div><strong>Semester:</strong> {activePdfModule.semester}</div>
-                            <div><strong>Target:</strong> First Year Students (Freshman)</div>
-                            <div><strong>Publisher:</strong> MoE Ethiopia / Wolkite Univ</div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* 3.2 CENTER A4 PAGE CANVAS */}
-                    <div className={`${
-                      aiPanelOpen ? (pdfSidebarOpen ? 'lg:col-span-6' : 'lg:col-span-8') : (pdfSidebarOpen ? 'lg:col-span-9' : 'lg:col-span-12')
-                    } overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center transition-all ${
-                      readerTheme === 'light'
-                        ? 'bg-[#F1F5F9]'
-                        : readerTheme === 'sepia'
-                        ? 'bg-[#EFE6CF]'
-                        : 'bg-[#070D1E]'
-                    }`}>
-                      
-                      {/* Interactive Unit Navigation Toolbar on Top of Notes */}
-                      <div className="w-full max-w-3xl mb-4 flex flex-wrap items-center justify-between gap-2 text-xs">
-                        {/* Prev / Next Unit Buttons */}
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => {
-                              if (activeChapterIndex > 0) {
-                                playClickChime();
-                                setActiveChapterIndex(p => p - 1);
-                              }
-                            }}
-                            disabled={activeChapterIndex === 0}
-                            className={`p-1.5 rounded-lg border transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
-                              readerTheme === 'light' ? 'bg-white border-slate-300 text-slate-700' : 'bg-white/5 border-white/10 text-slate-300'
-                            }`}
-                            title="Previous Unit"
-                          >
-                            <ChevronLeft className="w-4 h-4" />
-                          </button>
-
-                          <span className="font-mono text-xs px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-500 dark:text-amber-400 font-bold">
-                            Unit {activeChapterIndex + 1} of {activePdfModule.chapters.length}
-                          </span>
-
-                          <button
-                            onClick={() => {
-                              if (activeChapterIndex < activePdfModule.chapters.length - 1) {
-                                playClickChime();
-                                setActiveChapterIndex(p => p + 1);
-                              }
-                            }}
-                            disabled={activeChapterIndex === activePdfModule.chapters.length - 1}
-                            className={`p-1.5 rounded-lg border transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
-                              readerTheme === 'light' ? 'bg-white border-slate-300 text-slate-700' : 'bg-white/5 border-white/10 text-slate-300'
-                            }`}
-                            title="Next Unit"
-                          >
-                            <ChevronRight className="w-4 h-4" />
-                          </button>
-                        </div>
-
-                        {/* Text Zoom & Font Sizing Controls */}
-                        <div className="flex items-center gap-2">
-                          <div className={`flex items-center px-2 py-1 rounded-lg border gap-1.5 ${
-                            readerTheme === 'light' ? 'bg-white border-slate-300 text-slate-700' : 'bg-white/5 border-white/10 text-slate-300'
-                          }`}>
-                            <button
-                              onClick={() => { playClickChime(); setReaderFontSize(s => Math.max(13, s - 1)); }}
-                              className="px-1 font-bold hover:text-amber-500 cursor-pointer text-xs"
-                              title="Decrease Font Size"
-                            >
-                              A-
-                            </button>
-                            <span className="font-mono text-[11px] px-1">{readerFontSize}px</span>
-                            <button
-                              onClick={() => { playClickChime(); setReaderFontSize(s => Math.min(22, s + 1)); }}
-                              className="px-1 font-bold hover:text-amber-500 cursor-pointer text-xs"
-                              title="Increase Font Size"
-                            >
-                              A+
-                            </button>
-                          </div>
-
-                          <button
-                            onClick={handlePrintPdf}
-                            className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
-                              readerTheme === 'light' ? 'bg-white border-slate-300 text-slate-700' : 'bg-white/5 border-white/10 text-slate-300'
-                            }`}
-                            title={language === 'am' ? 'ሞጁሉን አትም / Print' : 'Print Module PDF'}
-                          >
-                            <Printer className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* A4 Academic Sheet */}
-                      <div 
-                        className={`w-full max-w-3xl rounded-xl shadow-2xl p-6 sm:p-10 transition-all ${
-                          readerTheme === 'light' 
-                            ? 'bg-[#FFFFFF] text-slate-900 border border-slate-300 shadow-xl' 
-                            : readerTheme === 'sepia'
-                            ? 'bg-[#FCF7EB] text-[#2C2014] border border-[#DFCFA8] shadow-amber-950/10'
-                            : 'bg-[#0F172A] text-slate-100 border border-slate-700/80 shadow-2xl'
-                        }`}
-                        style={{
-                          transform: `scale(${pdfZoom / 100})`,
-                          transformOrigin: 'top center',
-                          fontSize: `${readerFontSize}px`,
-                          lineHeight: 1.65
-                        }}
-                      >
-                        {/* OFFICIAL MOE ETHIOPIA HEADER BANNER */}
-                        <div className="border-b-2 border-inherit pb-4 mb-6 text-center space-y-1">
-                          <div className="text-[9px] sm:text-[10px] font-mono tracking-widest uppercase font-extrabold text-amber-600 dark:text-amber-400">
-                            Federal Democratic Republic of Ethiopia • Ministry of Education
-                          </div>
-                          <div className="text-xs sm:text-sm font-serif font-black uppercase tracking-wider">
-                            Higher Education Common Curriculum For First Year Students
-                          </div>
-                          <div className={`inline-flex items-center gap-2 mt-1 px-3 py-0.5 rounded-full text-[11px] font-bold ${
-                            readerTheme === 'light' ? 'bg-slate-100 text-slate-700' : readerTheme === 'sepia' ? 'bg-[#F2E7CD] text-[#3A2818]' : 'bg-slate-800 text-slate-300'
-                          }`}>
-                            <span>Course: {activePdfModule.title}</span>
-                            <span>•</span>
-                            <span>Course Code: {activePdfModule.code}</span>
-                          </div>
-                        </div>
-
-                        {/* CHAPTER TITLE & COMPETENCIES */}
-                        <div className="space-y-3 mb-6">
-                          <div className="flex items-center justify-between text-xs font-bold uppercase text-amber-600 dark:text-amber-400">
-                            <span>Unit {activeChapterIndex + 1} of {activePdfModule.chapters.length}</span>
-                            <span>Credit Hours: {activePdfModule.creditHours}</span>
-                          </div>
-
-                          <h1 className="text-xl sm:text-2xl font-serif font-black leading-tight">
-                            {currentChapterContent?.title || currentChapterTitle}
-                          </h1>
-
-                          {/* Intro Abstract Box */}
-                          <div className={`p-4 rounded-xl border italic text-sm leading-relaxed ${
-                            readerTheme === 'light'
-                              ? 'bg-slate-50 border-slate-200 text-slate-700'
-                              : readerTheme === 'sepia'
-                              ? 'bg-[#F5EBD4] border-[#DECFAF] text-[#332211]'
-                              : 'bg-white/5 border-white/10 text-slate-300'
-                          }`}>
-                            {currentChapterContent?.intro}
-                          </div>
-                        </div>
-
-                        {/* CHAPTER CONTENT SECTIONS */}
-                        <div className="space-y-6">
-                          {currentChapterContent?.sections.map((sec, idx) => (
-                            <div key={idx} className="space-y-2">
-                              <h2 className="text-base sm:text-lg font-bold text-amber-600 dark:text-amber-400 border-l-3 border-amber-500 pl-3">
-                                {sec.title}
-                              </h2>
-                              <p className="leading-relaxed whitespace-pre-line text-sm sm:text-base opacity-90">
-                                {sec.body}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* FORMULAS & COMPUTATIONS (if applicable) */}
-                        {currentChapterContent?.formulas && currentChapterContent.formulas.length > 0 && (
-                          <div className={`my-6 p-4 rounded-xl border space-y-3 ${
-                            readerTheme === 'light'
-                              ? 'bg-slate-50 border-slate-200'
-                              : readerTheme === 'sepia'
-                              ? 'bg-[#F5EBD4] border-[#DECFAF]'
-                              : 'bg-black/50 border-amber-500/30'
-                          }`}>
-                            <div className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-                              <span>🧮</span>
-                              <span>{language === 'am' ? 'ቀመሮችና ህጎች' : 'Core Mathematical & Scientific Formulas'}</span>
-                            </div>
-                            <div className="space-y-2.5">
-                              {currentChapterContent.formulas.map((f, i) => (
-                                <div key={i} className={`p-2.5 rounded-lg border space-y-1 ${
-                                  readerTheme === 'light'
-                                    ? 'bg-white border-slate-200'
-                                    : readerTheme === 'sepia'
-                                    ? 'bg-[#FCF7EB] border-[#DFCFA8]'
-                                    : 'bg-white/5 border-white/5'
-                                }`}>
-                                  <div className="font-bold text-xs">{f.name}</div>
-                                  <div className="p-2 rounded bg-slate-900 text-amber-300 font-mono text-xs overflow-x-auto">
-                                    {f.formula}
-                                  </div>
-                                  <div className="text-[11px] opacity-75">{f.description}</div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* KEY TERMINOLOGY & BILINGUAL AMHARIC GLOSSARY */}
-                        {currentChapterContent?.keyTerms && currentChapterContent.keyTerms.length > 0 && (
-                          <div className={`my-6 p-4 rounded-xl border space-y-3 ${
-                            readerTheme === 'light'
-                              ? 'bg-slate-50 border-slate-200'
-                              : readerTheme === 'sepia'
-                              ? 'bg-[#F5EBD4] border-[#DECFAF]'
-                              : 'bg-white/5 border-white/10'
-                          }`}>
-                            <div className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
-                              <span>📖</span>
-                              <span>{language === 'am' ? 'ቁልፍ ቃላትና ፍቺዎች' : 'Essential Academic Terminology & Definitions'}</span>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                              {currentChapterContent.keyTerms.map((t, i) => (
-                                <div key={i} className={`p-2.5 rounded-lg border space-y-0.5 ${
-                                  readerTheme === 'light'
-                                    ? 'bg-white border-slate-200'
-                                    : readerTheme === 'sepia'
-                                    ? 'bg-[#FCF7EB] border-[#DFCFA8]'
-                                    : 'bg-black/40 border-white/5'
-                                }`}>
-                                  <div className="font-bold text-xs text-amber-600 dark:text-amber-400">
-                                    {t.term} {t.amharic ? `(${t.amharic})` : ''}
-                                  </div>
-                                  <div className="text-[11px] leading-snug opacity-80">
-                                    {t.definition}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* EXAM ALERT BOX */}
-                        {currentChapterContent?.examAlert && (
-                          <div className="my-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs sm:text-sm leading-relaxed">
-                            <strong className="block font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide mb-1">
-                              ⚠️ University Mid-Term / Final Exam Guidance:
-                            </strong>
-                            {currentChapterContent.examAlert}
-                          </div>
-                        )}
-
-                        {/* OFFICIAL FOOTER */}
-                        <div className="border-t border-inherit pt-4 mt-8 flex flex-col sm:flex-row items-center justify-between text-[10px] opacity-70 gap-2">
-                          <span>Federal Democratic Republic of Ethiopia — Ministry of Education</span>
-                          <span className="font-mono font-bold">
-                            Unit {activeChapterIndex + 1} • {activePdfModule.code} Module
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 3.3 RIGHT SIDEBAR: ASGOBNYI AI STUDY COMPANION */}
-                    {aiPanelOpen && (
-                      <div className={`lg:col-span-3 border-l p-4 overflow-y-auto space-y-4 transition-colors ${
-                        readerTheme === 'light'
-                          ? 'bg-[#FFFFFF] border-slate-200 text-slate-800'
-                          : readerTheme === 'sepia'
-                          ? 'bg-[#F9F2E1] border-[#DFCFA8] text-[#382617]'
-                          : 'bg-[#0B132B]/95 border-white/10 text-slate-200'
-                      }`}>
-                        <div className="flex items-center justify-between pb-2 border-b border-inherit">
-                          <div className="flex items-center gap-1.5">
-                            <Bot className="w-4 h-4 text-amber-500" />
-                            <h4 className="text-xs font-bold uppercase tracking-wider">
-                              {language === 'am' ? 'አስጎብኚ AI' : 'Asgobnyi AI'}
-                            </h4>
-                          </div>
-                          <button
-                            onClick={() => setAiPanelOpen(false)}
-                            className="p-1 cursor-pointer opacity-70 hover:opacity-100"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-
-                        <div className="space-y-2">
-                          <button
-                            onClick={() => { playClickChime(); setAiMode('summary'); }}
-                            className={`w-full text-left p-2.5 rounded-xl text-xs font-bold flex items-center justify-between border cursor-pointer ${
-                              aiMode === 'summary'
-                                ? 'bg-amber-500 text-slate-950 border-amber-400'
-                                : readerTheme === 'light'
-                                ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-                                : 'bg-white/5 hover:bg-white/10 text-slate-200 border-white/5'
-                            }`}
-                          >
-                            <span>📝 {language === 'am' ? 'የምዕራፍ ማጠቃለያ' : 'Summarize Unit'}</span>
-                            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                          </button>
-
-                          <button
-                            onClick={() => { playClickChime(); setAiMode('amharic'); }}
-                            className={`w-full text-left p-2.5 rounded-xl text-xs font-bold flex items-center justify-between border cursor-pointer ${
-                              aiMode === 'amharic'
-                                ? 'bg-amber-500 text-slate-950 border-amber-400'
-                                : readerTheme === 'light'
-                                ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-                                : 'bg-white/5 hover:bg-white/10 text-slate-200 border-white/5'
-                            }`}
-                          >
-                            <span>🇪🇹 {language === 'am' ? 'የአማርኛ ማብራሪያ' : 'Amharic Explanation'}</span>
-                            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                          </button>
-
-                          <button
-                            onClick={() => { playClickChime(); setAiMode('quiz'); }}
-                            className={`w-full text-left p-2.5 rounded-xl text-xs font-bold flex items-center justify-between border cursor-pointer ${
-                              aiMode === 'quiz'
-                                ? 'bg-amber-500 text-slate-950 border-amber-400'
-                                : readerTheme === 'light'
-                                ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-                                : 'bg-white/5 hover:bg-white/10 text-slate-200 border-white/5'
-                            }`}
-                          >
-                            <span>❓ {language === 'am' ? 'የፈተና ጥያቄዎች' : 'Exam Practice'}</span>
-                            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                          </button>
-                        </div>
-
-                        {aiMode === 'summary' && (
-                          <div className={`p-3.5 rounded-xl border space-y-2 text-xs ${
-                            readerTheme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-black/40 border-white/10'
-                          }`}>
-                            <div className="font-bold text-amber-500">Unit Summary:</div>
-                            <p className="leading-relaxed opacity-90">
-                              {currentChapterContent?.intro || 'Reviewing key concepts in this syllabus unit for examination readiness.'}
-                            </p>
-                          </div>
-                        )}
-
-                        {aiMode === 'amharic' && (
-                          <div className={`p-3.5 rounded-xl border space-y-2 text-xs ${
-                            readerTheme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-black/40 border-white/10'
-                          }`}>
-                            <div className="font-bold text-amber-500">የአማርኛ ይዘት ማብራሪያ:</div>
-                            <p className="leading-[1.7] opacity-90">
-                              ይህ ምዕራፍ በ{activePdfModule.title} ኮርስ ውስጥ የተካተተ ሲሆን ለፈተና ዝግጅት የሚያስፈልጉ ቁልፍ ነጥቦችንና ቀመሮችን ያብራራል።
-                            </p>
-                          </div>
-                        )}
-
-                        {aiMode === 'quiz' && (
-                          <div className={`p-3.5 rounded-xl border space-y-3 text-xs ${
-                            readerTheme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-black/40 border-white/10'
-                          }`}>
-                            <div className="font-bold text-amber-500">Practice Question:</div>
-                            <div className="space-y-1.5">
-                              <p className="font-medium">
-                                1. In the official Ethiopian university syllabus for {activePdfModule.code}, what is primary in "{currentChapterTitle}"?
-                              </p>
-                              <div className="space-y-1 pt-1">
-                                {[
-                                  `Understanding the core principles of: ${currentChapterContent?.sections[0]?.title || 'Section 1'}`,
-                                  'Memorizing random terms without applying them to exam cases',
-                                  'Ignoring definitions and focusing only on informal rumors'
-                                ].map((opt, i) => {
-                                  const isSelected = quizAnswers[1] === i;
-                                  const isCorrect = i === 0;
-                                  return (
-                                    <button
-                                      key={i}
-                                      onClick={() => {
-                                        playClickChime();
-                                        setQuizAnswers(prev => ({ ...prev, 1: i }));
-                                      }}
-                                      className={`w-full text-left p-2 rounded-lg text-[11px] border transition-colors cursor-pointer ${
-                                        isSelected
-                                          ? isCorrect
-                                            ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border-emerald-500/40'
-                                            : 'bg-red-500/20 text-red-600 dark:text-red-300 border-red-500/40'
-                                          : 'bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 border-inherit'
-                                      }`}
-                                    >
-                                      {opt}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                              {quizAnswers[1] !== undefined && (
-                                <div className="text-[11px] text-amber-500 pt-1 font-medium">
-                                  {quizAnswers[1] === 0 ? '✅ Correct! Verified syllabus standard.' : '❌ Try again. Review Section 1 of this unit.'}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
+                
               </div>
             </motion.div>
           </motion.div>
@@ -4233,19 +3746,6 @@ export default function BookStoreView({
                     <Download className="w-3.5 h-3.5 text-amber-400" />
                     <span>{language === 'am' ? 'ፒዲኤፍ ወደ ስልክ አውርድ (Direct PDF)' : 'Download PDF File Directly'}</span>
                   </a>
-
-
-                  <button
-                    onClick={() => {
-                      const b = coverModalBook;
-                      setCoverModalBook(null);
-                      handleOpenBook(b, 0, 'notes');
-                    }}
-                    className="w-full py-2 px-3 bg-white/5 hover:bg-white/10 text-slate-300 font-semibold text-xs rounded-xl border border-white/10 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <Layers className="w-3.5 h-3.5 text-amber-400" />
-                    <span>{language === 'am' ? 'የምዕራፍ ማስታወሻዎች እና አስጎብኚ' : 'Interactive Units & Notes'}</span>
-                  </button>
                 </div>
               </div>
             </motion.div>

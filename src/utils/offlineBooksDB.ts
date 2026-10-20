@@ -224,7 +224,7 @@ export function extractDriveFileId(url?: string): string {
 }
 
 /**
- * In-app download executor with real-time percentage tracking
+ * In-app download executor with real-time percentage tracking for Supabase Storage PDFs
  */
 export async function downloadBookInApp(
   book: {
@@ -254,63 +254,46 @@ export async function downloadBookInApp(
       return { success: true, record: existing };
     }
 
-    // 2. Determine download target & file ID
-    const fileId = extractDriveFileId(book.downloadUrl) || extractDriveFileId(book.pdfUrl) || (book as any).googleDriveFileId || '';
-    
-    // Multiple fallback endpoints on the local proxy server (immune to external VPN blocks)
-    const primaryUrl = `/api/books/download-pdf?id=${encodeURIComponent(book.id)}${fileId ? `&fileId=${encodeURIComponent(fileId)}` : ''}`;
-    const secondaryUrl = `/api/pdf/proxy?id=${encodeURIComponent(book.id)}${fileId ? `&fileId=${encodeURIComponent(fileId)}` : ''}`;
-
     if (onProgress) onProgress(5, 0, 0);
 
+    const targetUrl = book.downloadUrl || book.pdfUrl || '';
     let response: Response | null = null;
     
-    // First attempt: primary local proxy endpoint
-    try {
-      response = await fetch(primaryUrl);
-    } catch (e) {
-      console.warn('[OfflineDB] Primary proxy attempt error:', e);
-    }
-
-    // Second attempt: secondary alias proxy endpoint
-    if (!response || !response.ok) {
-      await new Promise(r => setTimeout(r, 600));
+    // Attempt 1: Direct fetch from Supabase Storage Public URL
+    if (targetUrl && (targetUrl.startsWith('http://') || targetUrl.startsWith('https://'))) {
       try {
-        response = await fetch(secondaryUrl);
-      } catch (e) {
-        console.warn('[OfflineDB] Secondary proxy attempt error:', e);
-      }
-    }
-
-    // Third attempt: with custom url param
-    if (!response || !response.ok) {
-      await new Promise(r => setTimeout(r, 1000));
-      try {
-        const fullProxyUrl = `${primaryUrl}&url=${encodeURIComponent(book.downloadUrl || book.pdfUrl || '')}`;
-        response = await fetch(fullProxyUrl);
-      } catch (e) {
-        console.warn('[OfflineDB] Extended proxy attempt error:', e);
-      }
-    }
-
-    // Fourth attempt: direct Google Drive download link (if user VPN allows direct Google)
-    if (!response || !response.ok) {
-      const directGoogleUrls = [
-        fileId ? `https://drive.usercontent.google.com/download?id=${fileId}&export=download` : null,
-        fileId ? `https://drive.google.com/uc?export=download&id=${fileId}` : null,
-        book.downloadUrl
-      ].filter(Boolean) as string[];
-
-      for (const directUrl of directGoogleUrls) {
-        try {
-          const directResp = await fetch(directUrl);
-          if (directResp.ok && directResp.headers.get('content-type')?.includes('application/')) {
-            response = directResp;
-            break;
-          }
-        } catch (dirErr) {
-          console.warn('[OfflineDB] Direct Google URL attempt notice:', dirErr);
+        const directResp = await fetch(targetUrl);
+        if (directResp.ok && directResp.headers.get('content-type')?.includes('application/')) {
+          response = directResp;
         }
+      } catch (dirErr) {
+        console.warn('[OfflineDB] Direct Supabase Storage fetch notice:', dirErr);
+      }
+    }
+
+    // Attempt 2: Local proxy with custom url param
+    if (!response || !response.ok) {
+      try {
+        const proxyUrl = `/api/books/download-pdf?id=${encodeURIComponent(book.id)}&url=${encodeURIComponent(targetUrl)}`;
+        const pResp = await fetch(proxyUrl);
+        if (pResp.ok) {
+          response = pResp;
+        }
+      } catch (pErr) {
+        console.warn('[OfflineDB] Proxy attempt error:', pErr);
+      }
+    }
+
+    // Attempt 3: Local proxy alias
+    if (!response || !response.ok) {
+      try {
+        const proxyUrl2 = `/api/pdf/proxy?id=${encodeURIComponent(book.id)}&url=${encodeURIComponent(targetUrl)}`;
+        const pResp2 = await fetch(proxyUrl2);
+        if (pResp2.ok) {
+          response = pResp2;
+        }
+      } catch (pErr2) {
+        console.warn('[OfflineDB] Secondary proxy attempt error:', pErr2);
       }
     }
 

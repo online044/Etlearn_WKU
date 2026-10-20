@@ -232,6 +232,25 @@
         "createdAt": { "type": "string" }
       },
       "required": ["id", "type", "email", "timestamp"]
+    },
+    "subject": {
+      "title": "Subject",
+      "description": "University curriculum subject module with code, department, and academic level.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "department": { "type": "string" },
+        "year": { "type": "string" },
+        "semester": { "type": "string" },
+        "description": { "type": "string" },
+        "color": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "sortOrder": { "type": "integer" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "code", "department"]
     }
   },
   "firestore": {
@@ -242,6 +261,10 @@
     "/users/{userId}": {
       "schema": "user",
       "description": "Collection of student learning profiles, progress, and settings."
+    },
+    "/subjects/{subjectId}": {
+      "schema": "subject",
+      "description": "Collection of university curriculum subjects and course codes."
     },
     "/books/{bookId}": {
       "schema": "book",
@@ -281,3 +304,4 @@
     }
   }
 }
+

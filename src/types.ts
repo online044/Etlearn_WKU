@@ -626,6 +626,8 @@ export interface CustomNote {
   color: string; // Tailwind bg color class
   createdAt?: string;
   date?: string;
+  imageUrl?: string;
+  images?: string[]; // Array of base64 data URLs or uploaded image URLs
 }
 
 export interface ExamSession {

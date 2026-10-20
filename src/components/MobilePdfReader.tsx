@@ -13,6 +13,7 @@ import {
   Layers, Sun, Moon, Coffee, Sparkles, Download, Eye
 } from 'lucide-react';
 import { playClickChime, playSuccessChime } from '../utils/audio';
+import { getOfflineBook, saveBookOffline } from '../utils/offlineBooksDB';
 
 // Set up pdf.js worker URL with CDN fallback matching the installed version
 if (typeof window !== 'undefined') {
@@ -211,16 +212,16 @@ export default function MobilePdfReader({
         }
       }
 
-      // If local proxy failed, use Google Drive direct export download
-      if (googleDirectDl) {
-        triggerAnchorDownload(googleDirectDl);
+      // If local proxy failed, use externalUrl (direct Supabase storage) or direct download
+      if (externalUrl) {
+        triggerAnchorDownload(externalUrl);
       } else {
         const directUrl = fileUrl.includes('?') ? `${fileUrl}&download=true` : `${fileUrl}?download=true`;
         triggerAnchorDownload(directUrl);
       }
     } catch {
-      if (googleDirectDl) {
-        triggerAnchorDownload(googleDirectDl);
+      if (externalUrl) {
+        triggerAnchorDownload(externalUrl);
       } else {
         const directUrl = fileUrl.includes('?') ? `${fileUrl}&download=true` : `${fileUrl}?download=true`;
         triggerAnchorDownload(directUrl);
@@ -257,9 +258,23 @@ export default function MobilePdfReader({
 
     try {
       let docData: Uint8Array | null = null;
+      const offlineKey = courseCode || title || fileUrl;
 
-      // 1. If it's a blob: or data: URL, or local API endpoint, fetch as ArrayBuffer with progress
-      if (fileUrl.startsWith('blob:') || fileUrl.startsWith('data:') || fileUrl.startsWith('/api/') || fileUrl.startsWith('/books/')) {
+      // 0. Check offline IndexedDB store first for instant zero-network offline loading
+      try {
+        const offlineRecord = await getOfflineBook(offlineKey);
+        if (offlineRecord?.pdfBlob && offlineRecord.pdfBlob.size > 200) {
+          const ab = await offlineRecord.pdfBlob.arrayBuffer();
+          docData = new Uint8Array(ab);
+          setLoadingProgress(100);
+        }
+      } catch (offErr) {
+        console.warn('[MobilePdfReader] Offline check notice:', offErr);
+      }
+
+      // 1. If not in offline cache, fetch from network
+      if (!docData) {
+        if (fileUrl.startsWith('blob:') || fileUrl.startsWith('data:') || fileUrl.startsWith('/api/') || fileUrl.startsWith('/books/')) {
         let resp: Response | null = null;
         const isBlobOrData = fileUrl.startsWith('blob:') || fileUrl.startsWith('data:');
         try {
@@ -312,15 +327,41 @@ export default function MobilePdfReader({
           // fallback to direct URL
         }
       }
+    }
 
-      // If document buffer could not be fetched and Drive preview is available, switch immediately
-      if (!docData) {
-        if (drivePreviewUrl) {
-          console.warn('[MobilePdfReader] Local stream not available, switching to embedded drive preview');
-          setEmbeddedFallback(true);
-          setIsLoading(false);
-          return;
-        }
+      if (docData) {
+        // Auto-cache to IndexedDB for offline access
+        try {
+          const blob = new Blob([docData], { type: 'application/pdf' });
+          saveBookOffline({
+            id: offlineKey,
+            title: title || 'Academic Module',
+            code: courseCode || '',
+            stream: 'University',
+            grade: 'University',
+            semester: 'Semester I',
+            pages: totalPages || 1,
+            coverUrl: '',
+            description: '',
+            amharicDescription: '',
+            chapters: [],
+            lecturesCount: 0,
+            hasVideoLecture: false,
+            fileSize: docData.byteLength,
+            downloadedAt: Date.now(),
+            pdfBlob: blob
+          }).catch(() => {});
+        } catch {}
+      } else {
+        // Last fallback: check IndexedDB again
+        try {
+          const fallbackOffline = await getOfflineBook(offlineKey);
+          if (fallbackOffline?.pdfBlob && fallbackOffline.pdfBlob.size > 200) {
+            const ab = await fallbackOffline.pdfBlob.arrayBuffer();
+            docData = new Uint8Array(ab);
+            setLoadingProgress(100);
+          }
+        } catch {}
       }
 
       // 2. Load into PDF.js engine
@@ -1085,17 +1126,8 @@ export default function MobilePdfReader({
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
               >
                 {isDownloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                <span>{isDownloading ? (isAm ? 'እየወረደ...' : 'Downloading...') : (isAm ? 'ፒዲኤፍ አውርድ' : 'Download PDF')}</span>
+                <span>{isDownloading ? (isAm ? 'እየወረደ...' : 'Saving...') : (isAm ? 'ከመስመር ውጭ አስቀምጥ' : 'Save for Offline Reading')}</span>
               </button>
-              {drivePreviewUrl && (
-                <button
-                  type="button"
-                  onClick={() => { playClickChime(); setEmbeddedFallback(true); }}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
-                >
-                  <span>{isAm ? 'በዕይታ ክፈት (Embedded)' : 'Open Embedded View'}</span>
-                </button>
-              )}
               {externalUrl && (
                 <a
                   href={externalUrl}
@@ -1104,7 +1136,7 @@ export default function MobilePdfReader({
                   className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all border border-slate-700 cursor-pointer"
                 >
                   <Smartphone className="w-3.5 h-3.5 text-amber-400" />
-                  <span>{isAm ? 'በDrive መተግበሪያ ክፈት' : 'Open in Drive App'}</span>
+                  <span>{isAm ? 'በውጭ ትር ክፈት' : 'Open Direct PDF'}</span>
                 </a>
               )}
             </div>

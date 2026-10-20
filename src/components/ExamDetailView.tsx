@@ -135,8 +135,13 @@ export default function ExamDetailView({
         </div>
 
         <div className="flex items-center gap-2.5">
-          {/* Pro / Trial Status */}
-          {isProUser ? (
+          {/* Pro / Trial / 100% Free Status */}
+          {((activeSheet?.subject || '').toLowerCase().includes('bio') || (activeSheet?.subject || '').toLowerCase().includes('chem') || (activeSheet?.title || '').toLowerCase().includes('bio') || (activeSheet?.title || '').toLowerCase().includes('chem')) ? (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{language === 'am' ? '100% ነፃ ፈተና' : '100% Free Exam'}</span>
+            </div>
+          ) : isProUser ? (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
               <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
               <span>{language === 'am' ? 'ፕሮ አባል' : 'Pro Scholar'}</span>

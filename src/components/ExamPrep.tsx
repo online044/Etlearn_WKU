@@ -496,9 +496,10 @@ export default function ExamPrep({
         return;
       }
 
-      // Pro Access Check if Pro questions requested
+      // Pro Access Check if Pro questions requested (Biology and Chemistry are 100% Free!)
       let questionsToUse = candidates;
-      if (!isPro) {
+      const isFreeSubject = targetSubject.toLowerCase().includes('bio') || targetSubject.toLowerCase().includes('chem');
+      if (!isPro && !isFreeSubject) {
         const hasProQuestions = candidates.some(c => c.is_pro);
         if (hasProQuestions) {
           const freeCandidates = candidates.filter(c => !c.is_pro);
@@ -589,7 +590,8 @@ export default function ExamPrep({
       }
 
       let questionsToUse = candidates;
-      if (!isPro) {
+      const isFreeCourse = courseName.toLowerCase().includes('bio') || courseName.toLowerCase().includes('chem');
+      if (!isPro && !isFreeCourse) {
         const freeCandidates = candidates.filter(c => !c.is_pro);
         if (freeCandidates.length >= 3) {
           questionsToUse = freeCandidates;

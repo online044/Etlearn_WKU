@@ -361,6 +361,129 @@ CREATE POLICY "Allow update to exams bucket" ON storage.objects FOR UPDATE USING
 
 DROP POLICY IF EXISTS "Allow delete to exams bucket" ON storage.objects;
 CREATE POLICY "Allow delete to exams bucket" ON storage.objects FOR DELETE USING (bucket_id = 'exams');
+
+-- 16. Notes Reading Experience & Long-form Markdown Suite
+ALTER TABLE public.subjects ADD COLUMN IF NOT EXISTS color TEXT DEFAULT '#4F46E5';
+ALTER TABLE public.subjects ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS public.chapters (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  subject_id TEXT NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_chapters_subject ON public.chapters(subject_id, sort_order);
+
+CREATE TABLE IF NOT EXISTS public.notes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  chapter_id UUID NOT NULL REFERENCES public.chapters(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL DEFAULT '',
+  read_time_min INT NOT NULL DEFAULT 5,
+  sort_order INT NOT NULL DEFAULT 0,
+  is_published BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  search tsvector GENERATED ALWAYS AS (
+    setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+    setweight(to_tsvector('english', coalesce(content, '')), 'B')
+  ) STORED
+);
+CREATE INDEX IF NOT EXISTS idx_notes_search ON public.notes USING gin(search);
+CREATE INDEX IF NOT EXISTS idx_notes_chapter ON public.notes(chapter_id, sort_order);
+
+CREATE TABLE IF NOT EXISTS public.user_note_state (
+  user_id TEXT NOT NULL,
+  note_id UUID NOT NULL REFERENCES public.notes(id) ON DELETE CASCADE,
+  progress NUMERIC(5, 2) NOT NULL DEFAULT 0,
+  scroll_position INT NOT NULL DEFAULT 0,
+  bookmarked BOOLEAN NOT NULL DEFAULT FALSE,
+  last_read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, note_id)
+);
+CREATE INDEX IF NOT EXISTS idx_user_note_state_user ON public.user_note_state(user_id, last_read_at DESC);
+
+CREATE TABLE IF NOT EXISTS public.highlights (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL,
+  note_id UUID NOT NULL REFERENCES public.notes(id) ON DELETE CASCADE,
+  start_offset INT NOT NULL,
+  end_offset INT NOT NULL,
+  color TEXT NOT NULL DEFAULT 'yellow',
+  comment TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_highlights_user_note ON public.highlights(user_id, note_id);
+
+CREATE TABLE IF NOT EXISTS public.reader_settings (
+  user_id TEXT PRIMARY KEY,
+  font_size INT NOT NULL DEFAULT 17,
+  line_height NUMERIC(3, 2) NOT NULL DEFAULT 1.7,
+  font_family TEXT NOT NULL DEFAULT 'system',
+  theme TEXT NOT NULL DEFAULT 'dark'
+);
+
+-- Search function for notes
+CREATE OR REPLACE FUNCTION public.search_notes(q TEXT)
+RETURNS TABLE (id UUID, title TEXT, snippet TEXT, rank REAL)
+LANGUAGE sql STABLE AS $$
+  SELECT 
+    n.id,
+    n.title,
+    ts_headline('english', n.content, websearch_to_tsquery('english', q), 'MaxWords=30, MinWords=10, StartSel=<mark>, StopSel=</mark>') AS snippet,
+    ts_rank(n.search, websearch_to_tsquery('english', q)) AS rank
+  FROM public.notes n
+  WHERE n.is_published AND n.search @@ websearch_to_tsquery('english', q)
+  ORDER BY rank DESC
+  LIMIT 30;
+$$;
+
+-- RLS policies for notes suite
+ALTER TABLE public.chapters ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_note_state ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.highlights ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.reader_settings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "chapters_all_access" ON public.chapters;
+CREATE POLICY "chapters_all_access" ON public.chapters FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "notes_all_access" ON public.notes;
+CREATE POLICY "notes_all_access" ON public.notes FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "user_note_state_all_access" ON public.user_note_state;
+CREATE POLICY "user_note_state_all_access" ON public.user_note_state FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "highlights_all_access" ON public.highlights;
+CREATE POLICY "highlights_all_access" ON public.highlights FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "reader_settings_all_access" ON public.reader_settings;
+CREATE POLICY "reader_settings_all_access" ON public.reader_settings FOR ALL USING (true) WITH CHECK (true);
+
+-- 17. Storage Bucket note-images for diagrams
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('note-images', 'note-images', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+DROP POLICY IF EXISTS "Allow public view note-images" ON storage.objects;
+CREATE POLICY "Allow public view note-images" ON storage.objects FOR SELECT USING (bucket_id = 'note-images');
+
+DROP POLICY IF EXISTS "Allow upload to note-images" ON storage.objects;
+CREATE POLICY "Allow upload to note-images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'note-images');
+
+DROP POLICY IF EXISTS "Allow update note-images" ON storage.objects;
+CREATE POLICY "Allow update note-images" ON storage.objects FOR UPDATE USING (bucket_id = 'note-images');
+
+DROP POLICY IF EXISTS "Allow delete note-images" ON storage.objects;
+CREATE POLICY "Allow delete note-images" ON storage.objects FOR DELETE USING (bucket_id = 'note-images');
+
+GRANT ALL ON public.chapters TO anon, authenticated, service_role;
+GRANT ALL ON public.notes TO anon, authenticated, service_role;
+GRANT ALL ON public.user_note_state TO anon, authenticated, service_role;
+GRANT ALL ON public.highlights TO anon, authenticated, service_role;
+GRANT ALL ON public.reader_settings TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.search_notes(TEXT) TO anon, authenticated, service_role;
 `;
 
 /**
@@ -556,54 +679,18 @@ export async function testSupabaseConnection(overrideUrl?: string, overrideKey?:
   }
 
   const tablesFound: string[] = [];
+  const tablesToCheck = [
+    'student_profiles', 'courses', 'lessons', 'payments', 'announcements', 
+    'coupons', 'ethiolearn_sync', 'books', 'exams', 'questions', 
+    'subjects', 'chapters', 'notes', 'user_note_state', 'highlights', 'reader_settings'
+  ];
 
-  // Check table courses
-  try {
-    const { error: coursesErr } = await client.from('courses').select('id').limit(1);
-    if (!coursesErr) tablesFound.push('courses');
-  } catch (e) {}
-
-  // Check table lessons
-  try {
-    const { error: lessonsErr } = await client.from('lessons').select('id').limit(1);
-    if (!lessonsErr) tablesFound.push('lessons');
-  } catch (e) {}
-
-  // Check table student_profiles
-  try {
-    const { error: profErr } = await client.from('student_profiles').select('email').limit(1);
-    if (!profErr) tablesFound.push('student_profiles');
-  } catch (e) {}
-
-  // Check table payments
-  try {
-    const { error: payErr } = await client.from('payments').select('id').limit(1);
-    if (!payErr) tablesFound.push('payments');
-  } catch (e) {}
-
-  // Check table announcements
-  try {
-    const { error: annErr } = await client.from('announcements').select('id').limit(1);
-    if (!annErr) tablesFound.push('announcements');
-  } catch (e) {}
-
-  // Check table coupons
-  try {
-    const { error: coupErr } = await client.from('coupons').select('code').limit(1);
-    if (!coupErr) tablesFound.push('coupons');
-  } catch (e) {}
-
-  // Check table ethiolearn_sync
-  try {
-    const { error: syncErr } = await client.from('ethiolearn_sync').select('email').limit(1);
-    if (!syncErr) tablesFound.push('ethiolearn_sync');
-  } catch (e) {}
-
-  // Check table books
-  try {
-    const { error: booksErr } = await client.from('books').select('id').limit(1);
-    if (!booksErr) tablesFound.push('books');
-  } catch (e) {}
+  for (const t of tablesToCheck) {
+    try {
+      const { error: tblErr } = await client.from(t).select('*', { count: 'exact', head: true });
+      if (!tblErr) tablesFound.push(t);
+    } catch (e) {}
+  }
 
   if (tablesFound.length > 0) {
     // Perform a test write check on student_profiles to detect RLS permission issues

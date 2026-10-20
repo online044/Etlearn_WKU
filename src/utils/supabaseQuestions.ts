@@ -10,10 +10,6 @@ import {
   BankDifficulty,
   BankExamCategory
 } from '../types';
-import { SEED_QUESTION_BANK } from '../data/seedQuestions';
-import { getAll10kQuestionBankRecords } from '../data/ethiopianExams10kBank';
-import { getFreshmanQuestionBankRecords } from '../data/questionBanks/freshmanCurriculumBank';
-import { GENERAL_BIOLOGY_QUESTIONS } from '../data/generalBiologyQuestions';
 
 export const LOCAL_STORAGE_QUESTIONS_KEY = 'ethiolearn_supabase_questions_cache';
 export const LOCAL_STORAGE_PROGRESS_KEY = 'ethiolearn_user_question_progress';
@@ -56,68 +52,20 @@ export function getCachedQuestions(): QuestionBankRecord[] {
     if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        // Filter out any previous assistant-generated mock IDs
+        const authenticOnly = parsed.filter(q => 
+          !q.id.startsWith('ethio10k_') && 
+          !q.id.startsWith('freshman_') &&
+          q.id !== 'm_1' && q.id !== 'p_1'
+        );
+        return authenticOnly;
       }
     }
   } catch (e) {
     console.warn('[getCachedQuestions error]:', e);
   }
 
-  // Combine authentic 10k university exam bank with 19 freshman curriculum modules & General Biology
-  const master10k = getAll10kQuestionBankRecords();
-  const freshmanCurriculum = getFreshmanQuestionBankRecords();
-  
-  const mergedMap = new Map<string, QuestionBankRecord>();
-  master10k.forEach(q => mergedMap.set(q.id, q));
-  freshmanCurriculum.forEach(q => mergedMap.set(q.id, q));
-
-  // Add General Biology questions following exact user structure
-  GENERAL_BIOLOGY_QUESTIONS.forEach(q => {
-    const optionsRaw = [
-      { id: 'A', text: q.options.A },
-      { id: 'B', text: q.options.B },
-      { id: 'C', text: q.options.C },
-      { id: 'D', text: q.options.D }
-    ];
-    const optionTexts = [q.options.A, q.options.B, q.options.C, q.options.D];
-    const correctLetter = q.correct_answer;
-    const letterIdx = correctLetter.charCodeAt(0) - 65;
-    const correctText = optionTexts[letterIdx] || q.options.A;
-
-    const record: QuestionBankRecord = {
-      id: String(q.id),
-      module_id: q.module_id,
-      module_name: q.module_name,
-      chapter: q.chapter,
-      subject_id: String(q.module_id),
-      subject: q.module_name,
-      course: q.module_name,
-      unit: q.chapter,
-      topic: q.chapter,
-      question: q.question,
-      question_text: q.question,
-      question_type: 'multiple_choice' as BankQuestionType,
-      options: optionTexts,
-      options_raw: optionsRaw,
-      correct_answer: correctText,
-      explanation: q.explanation,
-      difficulty: q.difficulty as BankDifficulty,
-      exam_category: 'practice_exam' as BankExamCategory,
-      source: 'General Biology Module',
-      source_unit: q.chapter,
-      batch_id: 'general_biology_master',
-      fingerprint: generateQuestionFingerprint(q.module_name, q.module_name, q.question),
-      is_published: true,
-      is_pro: false,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-    mergedMap.set(String(q.id), record);
-  });
-
-  const allCombined = Array.from(mergedMap.values());
-  setCachedQuestions(allCombined);
-  return allCombined;
+  return [];
 }
 
 export function setCachedQuestions(questions: QuestionBankRecord[]) {
@@ -361,14 +309,8 @@ export async function fetchAllSupabaseQuestions(forceRefresh = false): Promise<Q
     console.log(`[Supabase Questions] Successfully loaded ${liveRows.length} questions from '${foundTable}'`);
     const mappedQuestions = liveRows.map(mapDbQuestion);
 
-    // Merge into local cache so questions are accessible offline and immediately
-    const currentCached = getCachedQuestions();
-    const map = new Map<string, QuestionBankRecord>();
-    currentCached.forEach(q => map.set(q.id, q));
-    mappedQuestions.forEach(q => map.set(q.id, q));
-    const merged = Array.from(map.values());
-    setCachedQuestions(merged);
-
+    // Save only live authentic Supabase questions into cache
+    setCachedQuestions(mappedQuestions);
     return mappedQuestions;
   }
 

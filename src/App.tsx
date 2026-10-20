@@ -1404,17 +1404,6 @@ export default function App() {
               <span>{language === 'en' ? 'University Exams' : 'የዩኒቨርሲቲ ፈተናዎች'}</span>
             </button>
             <button
-              onClick={() => { playClickChime(); setCurrentPage('quiz'); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                currentPage === 'quiz'
-                  ? 'bg-amber-500 text-slate-950 shadow-xs'
-                  : 'text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <Trophy className="w-3.5 h-3.5" />
-              <span>{language === 'en' ? 'Quizzes' : 'ፈተናዎች'}</span>
-            </button>
-            <button
               onClick={() => { playClickChime(); setCurrentPage('notes'); }}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                 currentPage === 'notes'
@@ -1423,7 +1412,7 @@ export default function App() {
               }`}
             >
               <FileText className="w-3.5 h-3.5" />
-              <span>{language === 'en' ? 'Notes' : 'ማስታወሻ'}</span>
+              <span>{language === 'en' ? 'Study Notes' : 'የጥናት ማስታወሻ'}</span>
             </button>
           </nav>
 
@@ -1750,6 +1739,8 @@ export default function App() {
                 decksState={decksState}
                 onSaveDecksState={handleSaveDecksState}
                 onOpenInAppViewer={(url, title) => { setInAppViewerUrl(url); setInAppViewerTitle(title); }}
+                language={language}
+                userId={profile.firebaseUid || profile.email || 'student_wku'}
               />
             )}
 
@@ -1817,18 +1808,18 @@ export default function App() {
             </span>
           </button>
 
-          {/* Quizzes Tab */}
+          {/* Notes Tab */}
           <button
-            onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('quiz'); }}
+            onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('notes'); }}
             className={`flex flex-col items-center justify-center w-full min-h-[48px] py-1 transition-colors cursor-pointer rounded-xl px-0.5 min-[360px]:px-1 ${
-              currentPage === 'quiz' || currentPage === 'tutor' || currentPage === 'examprep' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'
+              currentPage === 'notes' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <div className={`px-2 min-[360px]:px-3 py-0.5 min-[360px]:py-1 rounded-full transition-colors ${currentPage === 'quiz' || currentPage === 'tutor' || currentPage === 'examprep' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
-              <Trophy className="w-4 h-4 min-[360px]:w-5 min-[360px]:h-5 shrink-0" />
+            <div className={`px-2 min-[360px]:px-3 py-0.5 min-[360px]:py-1 rounded-full transition-colors ${currentPage === 'notes' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
+              <FileText className="w-4 h-4 min-[360px]:w-5 min-[360px]:h-5 shrink-0" />
             </div>
-            <span className={`text-[10px] min-[360px]:text-[11px] sm:text-xs mt-0.5 truncate max-w-[58px] min-[360px]:max-w-[76px] sm:max-w-[88px] text-center leading-tight ${currentPage === 'quiz' || currentPage === 'tutor' || currentPage === 'examprep' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
-              {language === 'en' ? 'Quizzes' : 'ፈተናዎች'}
+            <span className={`text-[10px] min-[360px]:text-[11px] sm:text-xs mt-0.5 truncate max-w-[58px] min-[360px]:max-w-[76px] sm:max-w-[88px] text-center leading-tight ${currentPage === 'notes' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
+              {language === 'en' ? 'Notes' : 'ማስታወሻ'}
             </span>
           </button>
 
@@ -1836,13 +1827,13 @@ export default function App() {
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('bookstore'); }}
             className={`flex flex-col items-center justify-center w-full min-h-[48px] py-1 transition-colors cursor-pointer rounded-xl px-0.5 min-[360px]:px-1 ${
-              currentPage === 'bookstore' || currentPage === 'notes' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'
+              currentPage === 'bookstore' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <div className={`px-2 min-[360px]:px-3 py-0.5 min-[360px]:py-1 rounded-full transition-colors ${currentPage === 'bookstore' || currentPage === 'notes' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
+            <div className={`px-2 min-[360px]:px-3 py-0.5 min-[360px]:py-1 rounded-full transition-colors ${currentPage === 'bookstore' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
               <BookOpen className="w-4 h-4 min-[360px]:w-5 min-[360px]:h-5 shrink-0" />
             </div>
-            <span className={`text-[10px] min-[360px]:text-[11px] sm:text-xs mt-0.5 truncate max-w-[58px] min-[360px]:max-w-[76px] sm:max-w-[88px] text-center leading-tight ${currentPage === 'bookstore' || currentPage === 'notes' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
+            <span className={`text-[10px] min-[360px]:text-[11px] sm:text-xs mt-0.5 truncate max-w-[58px] min-[360px]:max-w-[76px] sm:max-w-[88px] text-center leading-tight ${currentPage === 'bookstore' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
               {language === 'en' ? 'Books' : 'መጽሐፍት'}
             </span>
           </button>

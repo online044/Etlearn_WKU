@@ -130,6 +130,15 @@ service cloud.firestore {
         && (data.status == 'draft' || data.status == 'published' || data.status == 'archived');
     }
 
+    // 10. Subjects Schema Validation
+    function isValidSubject(data) {
+      return data.keys().hasAll(['id', 'name', 'code', 'department'])
+        && data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() <= 200
+        && data.code is string && data.code.size() <= 50
+        && data.department is string && data.department.size() <= 200;
+    }
+
     // ================= COLLECTIONS =================
 
     // 0. Student Activation Codes (Verified by Firebase)
@@ -137,6 +146,14 @@ service cloud.firestore {
       allow read, create, update: if true;
       allow delete: if isAdmin();
     }
+
+    // Subjects Collection (Curriculum Subjects)
+    match /subjects/{subjectId} {
+      allow get, list: if true;
+      allow create, update: if isAdmin() && isValidId(subjectId) && isValidSubject(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
 
     // 1. Users Collection
     match /users/{userId} {

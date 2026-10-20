@@ -25,6 +25,7 @@ import AdminExamsSection from './admin/AdminExamsSection';
 import AdminNotesSection from './admin/AdminNotesSection';
 import { AdminQuestionBankSection } from './AdminQuestionBankSection';
 import { testSupabaseConnection, ETHIOLEARN_SUPABASE_SQL_SCRIPT, getSupabase, getAuthHeaders, syncAuthSessionWithServer } from '../utils/supabaseClient';
+import { notesRepository } from '../repositories/notesRepository';
 import { safeStorage } from '../utils/safeStorage';
 
 interface AdminDashboardViewProps {
@@ -891,6 +892,25 @@ export default function AdminDashboardView({
       alert(`Sync encountered error: ${e.message}`);
     } finally {
       setDbSyncing(false);
+    }
+  };
+
+  const [dbSeedingNotes, setDbSeedingNotes] = useState(false);
+  const handleSeedCurriculumNotes = async () => {
+    setDbSeedingNotes(true);
+    playClickChime();
+    try {
+      const res = await notesRepository.adminSeedAllCurriculumData();
+      playSuccessChime();
+      setDbSyncSuccess(`Successfully seeded ${res.subjectsCount} subjects, ${res.chaptersCount} chapters, and ${res.notesCount} notes into Supabase.`);
+      setTimeout(() => setDbSyncSuccess(null), 6000);
+      await handleRunDatabaseDiagnostics();
+      loadAllAdminData(true);
+    } catch (e: any) {
+      playFailureChime();
+      alert(`Seeding error: ${e.message}`);
+    } finally {
+      setDbSeedingNotes(false);
     }
   };
 
@@ -2077,6 +2097,16 @@ export default function AdminDashboardView({
                       <ArrowUpRight className={`w-3.5 h-3.5 ${dbSyncing ? 'animate-spin' : ''}`} />
                       <span>{dbSyncing ? 'Syncing...' : 'Sync Local Data to Supabase'}</span>
                     </button>
+
+                    <button
+                      onClick={handleSeedCurriculumNotes}
+                      disabled={dbSeedingNotes}
+                      className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-xs cursor-pointer flex items-center gap-1.5 border border-amber-500/30 transition-all disabled:opacity-50"
+                      title="Seed university curriculum notes, chapters, and subjects to Supabase"
+                    >
+                      <Sparkles className={`w-3.5 h-3.5 ${dbSeedingNotes ? 'animate-spin' : ''}`} />
+                      <span>{dbSeedingNotes ? 'Seeding Notes...' : 'Seed University Notes'}</span>
+                    </button>
                   </div>
                 </div>
 
@@ -2221,7 +2251,7 @@ export default function AdminDashboardView({
                       <span>PostgreSQL Master Database Schema (Supabase SQL Script)</span>
                     </h4>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      This script initializes all tables (<span className="font-mono text-amber-400">student_profiles</span>, <span className="font-mono text-amber-400">courses</span>, <span className="font-mono text-amber-400">lessons</span>, <span className="font-mono text-amber-400">payments</span>, <span className="font-mono text-amber-400">coupons</span>, <span className="font-mono text-amber-400">announcements</span>, <span className="font-mono text-amber-400">ethiolearn_sync</span>) and configures full RLS access policies.
+                      This script initializes all 16 production tables (<span className="font-mono text-amber-400">student_profiles</span>, <span className="font-mono text-amber-400">courses</span>, <span className="font-mono text-amber-400">lessons</span>, <span className="font-mono text-amber-400">payments</span>, <span className="font-mono text-amber-400">coupons</span>, <span className="font-mono text-amber-400">announcements</span>, <span className="font-mono text-amber-400">books</span>, <span className="font-mono text-amber-400">exams</span>, <span className="font-mono text-amber-400">questions</span>, <span className="font-mono text-amber-400">subjects</span>, <span className="font-mono text-amber-400">chapters</span>, <span className="font-mono text-amber-400">notes</span>, <span className="font-mono text-amber-400">user_note_state</span>, <span className="font-mono text-amber-400">highlights</span>, <span className="font-mono text-amber-400">reader_settings</span>), the <span className="font-mono text-amber-400">search_notes</span> full-text RPC, and storage buckets (<span className="font-mono text-amber-400">books</span>, <span className="font-mono text-amber-400">exams</span>, <span className="font-mono text-amber-400">note-images</span>).
                     </p>
                   </div>
 

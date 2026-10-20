@@ -300,17 +300,17 @@ export default function AppSidebar({
                   <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-amber-400 transition-all" />
                 </button>
 
-                {/* Quizzes & Practice Tests */}
+                {/* Study Notes & Notepad */}
                 <button
                   type="button"
-                  onClick={() => handleNavClick('quiz')}
+                  onClick={() => handleNavClick('notes')}
                   className="w-full px-2.5 py-2 rounded-xl hover:bg-slate-900 text-slate-200 hover:text-white transition-all flex items-center justify-between group cursor-pointer"
                 >
                   <div className="flex items-center gap-2.5">
                     <div className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-amber-400">
-                      <Trophy className="w-3.5 h-3.5" />
+                      <FileText className="w-3.5 h-3.5" />
                     </div>
-                    <span className="font-semibold text-xs">{isAm ? 'የልምምድ ፈተናዎችና ጥያቄዎች' : 'Quizzes & Practice Tests'}</span>
+                    <span className="font-semibold text-xs">{isAm ? 'የጥናት ማስታወሻዎች (Image & Text)' : 'Study Notes & Notepad'}</span>
                   </div>
                   <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-amber-400 transition-all" />
                 </button>

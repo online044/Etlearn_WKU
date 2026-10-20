@@ -130,11 +130,19 @@ export default function AppDrawer({
           </button>
 
           <button
+            onClick={() => handleItemClick(() => onNavigate('notes'))}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-200 hover:text-white hover:bg-slate-800/80 transition cursor-pointer"
+          >
+            <FileText className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="flex-1 text-left">{isAmharic ? 'የጥናት ማስታወሻዎች (Image & Text)' : 'Study Notes & Notepad'}</span>
+          </button>
+
+          <button
             onClick={() => handleItemClick(() => onNavigate('bookstore'))}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-200 hover:text-white hover:bg-slate-800/80 transition cursor-pointer"
           >
-            <FileText className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="flex-1 text-left">{isAmharic ? 'መጻሕፍት እና ማስታወሻዎች' : 'Books & Study Notes'}</span>
+            <BookOpen className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="flex-1 text-left">{isAmharic ? 'መጻሕፍት (Digital Books)' : 'Digital Bookstore'}</span>
           </button>
 
           <button

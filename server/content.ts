@@ -508,97 +508,99 @@ const FALLBACK_CACHE_DIR = path.join(os.tmpdir(), 'ethiolearn_books_cache');
 try { if (!fs.existsSync(BOOKS_CACHE_DIR)) fs.mkdirSync(BOOKS_CACHE_DIR, { recursive: true }); } catch (e) {}
 try { if (!fs.existsSync(FALLBACK_CACHE_DIR)) fs.mkdirSync(FALLBACK_CACHE_DIR, { recursive: true }); } catch (e) {}
 
-const KNOWN_CURRICULUM_FILE_IDS: Record<string, string> = {
+// Map curriculum module IDs & course codes directly to Supabase Storage 'books' bucket files
+const KNOWN_CURRICULUM_STORAGE_FILES: Record<string, string> = {
   // Canonical freshman module IDs
-  'freshman_critical_thinking': '124Fl_yC-lWM4JiKuFwMItJUDJM5NmV9F',
-  'freshman_economics': '1nTlrUtAVzOSOsoeG4AX883sVlIxkfDrz',
-  'freshman_emerging_tech': '1sqKFF2o8ORHOnoF9VRy4x5hgY7lp-Uub',
-  'freshman_entrepreneurship': '14DKK75SxkylV4sLdaYTu_6dj7Y1nXKWu',
-  'freshman_biology': '1On4zzWIFDWypb7kU-HMTOmx6SRwp-K7Q',
-  'freshman_chemistry': '1gm0FrHxIQhxto8pfrf0Fy8NnHLDAdU0S',
-  'freshman_physics': '1JUJ1wclP4yNyyv1bb8kNXOsfHDKvJqXJ',
-  'freshman_psychology': '1FAVXFQheYxYKFh_PI2RkcW31HZa-SdTm',
-  'freshman_geography': '1gJJgwSipt30xDslO7JAvMMWz2QNVMtHN',
-  'freshman_global_trends': '1t4g5MyBhPhXRsXPXA01Zc6GfxAB9LVAq',
-  'freshman_inclusiveness': '1hWYVvjJB3LkndfAlbGJDtlVBzmBgkY3i',
-  'freshman_fitness': '18MIM7eTALuYt3NoRD7UeaS0mFeKcQTKg',
-  'freshman_physical_fitness': '18MIM7eTALuYt3NoRD7UeaS0mFeKcQTKg',
-  'freshman_history': '1kM_myBDzTTw9gt76uhhEzCdlpJXrMIZD',
-  'freshman_math_nat': '1JvIpwqFCHhcme03f_MFOH7hG2x4zV9JP',
-  'freshman_math_natural': '1JvIpwqFCHhcme03f_MFOH7hG2x4zV9JP',
-  'freshman_math_soc': '1r--ekd2ZqN5eKuRInRh7geVCVso1FrNr',
-  'freshman_math_social': '1r--ekd2ZqN5eKuRInRh7geVCVso1FrNr',
-  'freshman_anthropology': '1ZFRYrwL3hrd5jT_rtwvHXq7240qhbCtM',
-  'freshman_english_1': '1Jq2IhWPcEoXg9If7sDlP8caqwqcjfNDk',
-  'freshman_english_2': '1Ih7e_MhTWbKk9Gw-UaW1Cbs_J47cyOZp',
-  'freshman_civics': '1irrsbxQWb2ZbTscmXp0hF9qzgDrZCQoV',
+  'freshman_critical_thinking': 'Critical_Thinking.pdf',
+  'freshman_economics': 'Economics.pdf',
+  'freshman_emerging_tech': 'Emerging_Technologies.pdf',
+  'freshman_entrepreneurship': 'Entrepreneurship.pdf',
+  'freshman_biology': 'General_Biology.pdf',
+  'freshman_chemistry': 'General_Chemistry.pdf',
+  'freshman_physics': 'General_Physics.pdf',
+  'freshman_psychology': 'General_Psychology.pdf',
+  'freshman_geography': 'Geography_of_Ethiopia.pdf',
+  'freshman_global_trends': 'Global_Trends.pdf',
+  'freshman_inclusiveness': 'Inclusiveness.pdf',
+  'freshman_fitness': 'Physical_Fitness.pdf',
+  'freshman_physical_fitness': 'Physical_Fitness.pdf',
+  'freshman_history': 'History_of_Ethiopia.pdf',
+  'freshman_math_nat': 'Mathematics_Natural.pdf',
+  'freshman_math_natural': 'Mathematics_Natural.pdf',
+  'freshman_math_soc': 'Mathematics_Social.pdf',
+  'freshman_math_social': 'Mathematics_Social.pdf',
+  'freshman_anthropology': 'Social_Anthropology.pdf',
+  'freshman_english_1': 'Communicative_English.pdf',
+  'freshman_english_2': 'Basic_Writing_Skills.pdf',
+  'freshman_civics': 'Moral_and_Civic_Education.pdf',
 
   // Supabase book ID aliases (fresh_*)
-  'fresh_english_1': '1Jq2IhWPcEoXg9If7sDlP8caqwqcjfNDk',
-  'fresh_english_2': '1Ih7e_MhTWbKk9Gw-UaW1Cbs_J47cyOZp',
-  'fresh_civics': '1irrsbxQWb2ZbTscmXp0hF9qzgDrZCQoV',
-  'fresh_entrepreneurship': '14DKK75SxkylV4sLdaYTu_6dj7Y1nXKWu',
-  'fresh_biology': '1On4zzWIFDWypb7kU-HMTOmx6SRwp-K7Q',
-  'fresh_chemistry': '1gm0FrHxIQhxto8pfrf0Fy8NnHLDAdU0S',
-  'fresh_psychology': '1FAVXFQheYxYKFh_PI2RkcW31HZa-SdTm',
-  'fresh_geography': '1gJJgwSipt30xDslO7JAvMMWz2QNVMtHN',
-  'fresh_global_trends': '1t4g5MyBhPhXRsXPXA01Zc6GfxAB9LVAq',
-  'fresh_history': '1kM_myBDzTTw9gt76uhhEzCdlpJXrMIZD',
-  'fresh_inclusiveness': '1hWYVvjJB3LkndfAlbGJDtlVBzmBgkY3i',
-  'fresh_economics': '1nTlrUtAVzOSOsoeG4AX883sVlIxkfDrz',
-  'fresh_emerging_tech': '1sqKFF2o8ORHOnoF9VRy4x5hgY7lp-Uub',
-  'fresh_logic': '124Fl_yC-lWM4JiKuFwMItJUDJM5NmV9F',
-  'fresh_math_nat': '1JvIpwqFCHhcme03f_MFOH7hG2x4zV9JP',
-  'fresh_math_natural': '1JvIpwqFCHhcme03f_MFOH7hG2x4zV9JP',
-  'fresh_math_soc': '1r--ekd2ZqN5eKuRInRh7geVCVso1FrNr',
-  'fresh_math_social': '1r--ekd2ZqN5eKuRInRh7geVCVso1FrNr',
-  'fresh_physical_fitness': '18MIM7eTALuYt3NoRD7UeaS0mFeKcQTKg',
-  'fresh_fitness': '18MIM7eTALuYt3NoRD7UeaS0mFeKcQTKg',
-  'fresh_anthro': '1ZFRYrwL3hrd5jT_rtwvHXq7240qhbCtM',
-  'fresh_physics': '1JUJ1wclP4yNyyv1bb8kNXOsfHDKvJqXJ',
+  'fresh_english_1': 'Communicative_English.pdf',
+  'fresh_english_2': 'Basic_Writing_Skills.pdf',
+  'fresh_civics': 'Moral_and_Civic_Education.pdf',
+  'fresh_entrepreneurship': 'Entrepreneurship.pdf',
+  'fresh_biology': 'General_Biology.pdf',
+  'fresh_chemistry': 'General_Chemistry.pdf',
+  'fresh_psychology': 'General_Psychology.pdf',
+  'fresh_geography': 'Geography_of_Ethiopia.pdf',
+  'fresh_global_trends': 'Global_Trends.pdf',
+  'fresh_history': 'History_of_Ethiopia.pdf',
+  'fresh_inclusiveness': 'Inclusiveness.pdf',
+  'fresh_economics': 'Economics.pdf',
+  'fresh_emerging_tech': 'Emerging_Technologies.pdf',
+  'fresh_logic': 'Critical_Thinking.pdf',
+  'fresh_math_nat': 'Mathematics_Natural.pdf',
+  'fresh_math_natural': 'Mathematics_Natural.pdf',
+  'fresh_math_soc': 'Mathematics_Social.pdf',
+  'fresh_math_social': 'Mathematics_Social.pdf',
+  'fresh_physical_fitness': 'Physical_Fitness.pdf',
+  'fresh_fitness': 'Physical_Fitness.pdf',
+  'fresh_anthro': 'Social_Anthropology.pdf',
+  'fresh_physics': 'General_Physics.pdf',
 
   // Official Ethiopian course code aliases
-  'phil_1011': '124Fl_yC-lWM4JiKuFwMItJUDJM5NmV9F',
-  'econ_1011': '1nTlrUtAVzOSOsoeG4AX883sVlIxkfDrz',
-  'emte_1012': '1sqKFF2o8ORHOnoF9VRy4x5hgY7lp-Uub',
-  'mgmt_1012': '14DKK75SxkylV4sLdaYTu_6dj7Y1nXKWu',
-  'biol_1012': '1On4zzWIFDWypb7kU-HMTOmx6SRwp-K7Q',
-  'chem_1011': '1gm0FrHxIQhxto8pfrf0Fy8NnHLDAdU0S',
-  'phys_1011': '1JUJ1wclP4yNyyv1bb8kNXOsfHDKvJqXJ',
-  'psyc_1011': '1FAVXFQheYxYKFh_PI2RkcW31HZa-SdTm',
-  'geog_1011': '1gJJgwSipt30xDslO7JAvMMWz2QNVMtHN',
-  'gltr_1012': '1t4g5MyBhPhXRsXPXA01Zc6GfxAB9LVAq',
-  'snie_1012': '1hWYVvjJB3LkndfAlbGJDtlVBzmBgkY3i',
-  'spsc_1011': '18MIM7eTALuYt3NoRD7UeaS0mFeKcQTKg',
-  'flen_1011': '1Jq2IhWPcEoXg9If7sDlP8caqwqcjfNDk',
-  'flen_1012': '1Ih7e_MhTWbKk9Gw-UaW1Cbs_J47cyOZp',
-  'hist_1012': '1kM_myBDzTTw9gt76uhhEzCdlpJXrMIZD',
-  'math_1011': '1JvIpwqFCHhcme03f_MFOH7hG2x4zV9JP',
-  'math_1012': '1r--ekd2ZqN5eKuRInRh7geVCVso1FrNr',
-  'anth_1012': '1ZFRYrwL3hrd5jT_rtwvHXq7240qhbCtM',
+  'phil_1011': 'Critical_Thinking.pdf',
+  'econ_1011': 'Economics.pdf',
+  'emte_1012': 'Emerging_Technologies.pdf',
+  'mgmt_1012': 'Entrepreneurship.pdf',
+  'biol_1012': 'General_Biology.pdf',
+  'biol_1011': 'General_Biology.pdf',
+  'chem_1011': 'General_Chemistry.pdf',
+  'phys_1011': 'General_Physics.pdf',
+  'psyc_1011': 'General_Psychology.pdf',
+  'geog_1011': 'Geography_of_Ethiopia.pdf',
+  'gltr_1012': 'Global_Trends.pdf',
+  'snie_1012': 'Inclusiveness.pdf',
+  'spsc_1011': 'Physical_Fitness.pdf',
+  'flen_1011': 'Communicative_English.pdf',
+  'flen_1012': 'Basic_Writing_Skills.pdf',
+  'hist_1012': 'History_of_Ethiopia.pdf',
+  'math_1011': 'Mathematics_Natural.pdf',
+  'math_1012': 'Mathematics_Social.pdf',
+  'anth_1012': 'Social_Anthropology.pdf',
 
   // Subject title keywords
-  'critical_thinking': '124Fl_yC-lWM4JiKuFwMItJUDJM5NmV9F',
-  'economics': '1nTlrUtAVzOSOsoeG4AX883sVlIxkfDrz',
-  'emerging_technologies': '1sqKFF2o8ORHOnoF9VRy4x5hgY7lp-Uub',
-  'entrepreneurship': '14DKK75SxkylV4sLdaYTu_6dj7Y1nXKWu',
-  'general_biology': '1On4zzWIFDWypb7kU-HMTOmx6SRwp-K7Q',
-  'biology': '1On4zzWIFDWypb7kU-HMTOmx6SRwp-K7Q',
-  'general_chemistry': '1gm0FrHxIQhxto8pfrf0Fy8NnHLDAdU0S',
-  'chemistry': '1gm0FrHxIQhxto8pfrf0Fy8NnHLDAdU0S',
-  'general_physics': '1JUJ1wclP4yNyyv1bb8kNXOsfHDKvJqXJ',
-  'physics': '1JUJ1wclP4yNyyv1bb8kNXOsfHDKvJqXJ',
-  'general_psychology': '1FAVXFQheYxYKFh_PI2RkcW31HZa-SdTm',
-  'psychology': '1FAVXFQheYxYKFh_PI2RkcW31HZa-SdTm',
-  'geography': '1gJJgwSipt30xDslO7JAvMMWz2QNVMtHN',
-  'global_trends': '1t4g5MyBhPhXRsXPXA01Zc6GfxAB9LVAq',
-  'inclusiveness': '1hWYVvjJB3LkndfAlbGJDtlVBzmBgkY3i',
-  'physical_fitness': '18MIM7eTALuYt3NoRD7UeaS0mFeKcQTKg',
-  'communicative_english': '1Jq2IhWPcEoXg9If7sDlP8caqwqcjfNDk',
-  'basic_writing_skills': '1Ih7e_MhTWbKk9Gw-UaW1Cbs_J47cyOZp',
-  'history_of_ethiopia': '1kM_myBDzTTw9gt76uhhEzCdlpJXrMIZD',
-  'moral_civic_education': '1irrsbxQWb2ZbTscmXp0hF9qzgDrZCQoV',
-  'social_anthropology': '1ZFRYrwL3hrd5jT_rtwvHXq7240qhbCtM'
+  'critical_thinking': 'Critical_Thinking.pdf',
+  'economics': 'Economics.pdf',
+  'emerging_technologies': 'Emerging_Technologies.pdf',
+  'entrepreneurship': 'Entrepreneurship.pdf',
+  'general_biology': 'General_Biology.pdf',
+  'biology': 'General_Biology.pdf',
+  'general_chemistry': 'General_Chemistry.pdf',
+  'chemistry': 'General_Chemistry.pdf',
+  'general_physics': 'General_Physics.pdf',
+  'physics': 'General_Physics.pdf',
+  'general_psychology': 'General_Psychology.pdf',
+  'psychology': 'General_Psychology.pdf',
+  'geography': 'Geography_of_Ethiopia.pdf',
+  'global_trends': 'Global_Trends.pdf',
+  'inclusiveness': 'Inclusiveness.pdf',
+  'physical_fitness': 'Physical_Fitness.pdf',
+  'communicative_english': 'Communicative_English.pdf',
+  'basic_writing_skills': 'Basic_Writing_Skills.pdf',
+  'history_of_ethiopia': 'History_of_Ethiopia.pdf',
+  'moral_civic_education': 'Moral_and_Civic_Education.pdf',
+  'social_anthropology': 'Social_Anthropology.pdf'
 };
 
 /**
@@ -759,135 +761,145 @@ export async function proxyBookPdf(req: Request, res: Response) {
       }
     }
 
-    // 3. Determine target Google Drive File ID
-    let targetFileId = fileId;
+    // 3. Resolve target file from Supabase Storage 'books' bucket
+    let targetFileName = fileId.endsWith('.pdf') ? fileId : '';
+    const normBookId = bookId.toLowerCase().replace(/[^a-z0-9_]/g, '_');
 
-    if (!targetFileId && bookId) {
-      const normBookId = bookId.toLowerCase().replace(/[^a-z0-9_]/g, '_');
-      if (KNOWN_CURRICULUM_FILE_IDS[bookId]) {
-        targetFileId = KNOWN_CURRICULUM_FILE_IDS[bookId];
-      } else if (KNOWN_CURRICULUM_FILE_IDS[normBookId]) {
-        targetFileId = KNOWN_CURRICULUM_FILE_IDS[normBookId];
+    if (!targetFileName && bookId) {
+      if (KNOWN_CURRICULUM_STORAGE_FILES[bookId]) {
+        targetFileName = KNOWN_CURRICULUM_STORAGE_FILES[bookId];
+      } else if (KNOWN_CURRICULUM_STORAGE_FILES[normBookId]) {
+        targetFileName = KNOWN_CURRICULUM_STORAGE_FILES[normBookId];
       } else {
-        // Partial keyword search in known IDs
-        for (const [key, fid] of Object.entries(KNOWN_CURRICULUM_FILE_IDS)) {
+        // Partial keyword search in known curriculum files
+        for (const [key, fname] of Object.entries(KNOWN_CURRICULUM_STORAGE_FILES)) {
           if (normBookId.includes(key) || key.includes(normBookId)) {
-            targetFileId = fid;
+            targetFileName = fname;
             break;
           }
         }
       }
-
-      if (!targetFileId) {
-        const dbBook = readBooksFromStore().find(b => b.id === bookId || (b as any).code === bookId || b.course === bookId);
-        if (dbBook?.pdfUrl) {
-          const m = dbBook.pdfUrl.match(/[?&]id=([a-zA-Z0-9_-]{20,})/) || dbBook.pdfUrl.match(/\/file\/d\/([a-zA-Z0-9_-]{20,})/);
-          if (m && m[1]) targetFileId = m[1];
-        }
-      }
     }
 
-    if (!targetFileId && customUrl) {
-      const match = customUrl.match(/[?&]id=([a-zA-Z0-9_-]{20,})/) || 
-                    customUrl.match(/\/file\/d\/([a-zA-Z0-9_-]{20,})/) || 
-                    customUrl.match(/\/d\/([a-zA-Z0-9_-]{20,})/);
-      if (match && match[1]) {
-        targetFileId = match[1];
-      }
-    }
-
-    // 4. Fast Disk Cache Hit on targetFileId
-    if (targetFileId) {
+    // 4. Fast Disk Cache Hit on targetFileName or bookId
+    if (targetFileName) {
       const cacheCandidates = [
-        path.join(BOOKS_CACHE_DIR, `${targetFileId}.pdf`),
-        path.join(FALLBACK_CACHE_DIR, `${targetFileId}.pdf`)
+        path.join(BOOKS_CACHE_DIR, targetFileName),
+        path.join(FALLBACK_CACHE_DIR, targetFileName),
+        path.join(BOOKS_CACHE_DIR, `${bookId}.pdf`),
+        path.join(FALLBACK_CACHE_DIR, `${bookId}.pdf`)
       ];
       for (const cand of cacheCandidates) {
-        if (streamPdfFile(req, res, cand, bookId || targetFileId, isDownload)) {
+        if (streamPdfFile(req, res, cand, bookId || targetFileName, isDownload)) {
           return;
         }
       }
     }
 
-    // 5. Remote Fetch from Google Drive with mirrors & retry
-    if (targetFileId) {
-      const candidateUrls = [
-        `https://drive.usercontent.google.com/download?id=${targetFileId}&export=download`,
-        `https://drive.google.com/uc?export=download&id=${targetFileId}`
-      ];
+    let pdfBuffer: Buffer | null = null;
 
-      let pdfBuffer: Buffer | null = null;
+    // 5. Fetch directly from custom URL (e.g. Supabase Storage Public URL)
+    if (customUrl && (customUrl.startsWith('http://') || customUrl.startsWith('https://'))) {
+      try {
+        const response = await fetch(customUrl, { 
+          redirect: 'follow',
+          signal: AbortSignal.timeout(25000)
+        });
+        if (response.ok) {
+          const ab = await response.arrayBuffer();
+          const buf = Buffer.from(ab);
+          if (buf.length > 200 && buf.subarray(0, 5).toString().startsWith('%PDF')) {
+            pdfBuffer = buf;
+          }
+        }
+      } catch (custErr) {
+        console.warn('[proxyBookPdf] Custom URL fetch error:', custErr);
+      }
+    }
 
-      for (const driveUrl of candidateUrls) {
+    // 6. Direct Download from Supabase Storage 'books' bucket
+    if (!pdfBuffer) {
+      const supabase = getSupabaseAdmin();
+      if (supabase) {
         try {
-          const response = await fetch(driveUrl, { 
-            redirect: 'follow',
-            signal: AbortSignal.timeout(20000)
-          });
-          if (!response.ok) continue;
+          const { data: bucketFiles } = await supabase.storage.from('books').list('', { limit: 100 });
+          let matchedFile = '';
 
-          const contentType = response.headers.get('content-type') || '';
-          if (contentType.includes('text/html')) {
-            const html = await response.text();
-            const confirmMatch = html.match(/confirm=([0-9A-Za-z_-]+)/) || 
-                                 html.match(/name="confirm"\s+value="([0-9A-Za-z_-]+)"/) ||
-                                 html.match(/href="(\/uc\?export=download&amp;confirm=[^"]+)"/);
-            
-            if (confirmMatch && confirmMatch[1]) {
-              const confirmToken = confirmMatch[1].replace(/&amp;/g, '&');
-              const confirmedUrl = confirmToken.startsWith('/uc') 
-                ? `https://drive.google.com${confirmToken}` 
-                : `https://drive.google.com/uc?export=download&id=${targetFileId}&confirm=${confirmToken}`;
-              
-              const confirmedResp = await fetch(confirmedUrl, { 
-                redirect: 'follow',
-                signal: AbortSignal.timeout(20000)
-              });
-              if (confirmedResp.ok) {
-                const confirmedAb = await confirmedResp.arrayBuffer();
-                const buf = Buffer.from(confirmedAb);
-                if (buf.length > 500 && buf.subarray(0, 5).toString().startsWith('%PDF')) {
-                  pdfBuffer = buf;
-                  break;
-                }
-              }
+          if (bucketFiles && bucketFiles.length > 0) {
+            // A. Exact match by targetFileName or fileId
+            if (targetFileName) {
+              const exact = bucketFiles.find(f => f.name.toLowerCase() === targetFileName.toLowerCase());
+              if (exact) matchedFile = exact.name;
             }
-          } else {
-            const ab = await response.arrayBuffer();
-            const buf = Buffer.from(ab);
-            if (buf.length > 500 && buf.subarray(0, 5).toString().startsWith('%PDF')) {
-              pdfBuffer = buf;
-              break;
+            if (!matchedFile && fileId) {
+              const byFileId = bucketFiles.find(f => f.name.toLowerCase() === fileId.toLowerCase() || f.name.toLowerCase() === `${fileId.toLowerCase()}.pdf`);
+              if (byFileId) matchedFile = byFileId.name;
+            }
+            // B. Match by bookId / course code keywords
+            if (!matchedFile && normBookId) {
+              const cleanQuery = normBookId.replace(/^freshman_|^fresh_/, '').replace(/[^a-z0-9]/g, '');
+              const fuzzy = bucketFiles.find(f => {
+                const fn = f.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                return cleanQuery && (fn.includes(cleanQuery) || cleanQuery.includes(fn));
+              });
+              if (fuzzy) matchedFile = fuzzy.name;
             }
           }
-        } catch (fetchErr) {
-          console.warn('[proxyBookPdf] Candidate URL failed:', driveUrl, fetchErr);
+
+          // If matched, download file bytes from Supabase
+          if (matchedFile) {
+            const { data: downloadedBlob, error: dlErr } = await supabase.storage.from('books').download(matchedFile);
+            if (downloadedBlob && !dlErr) {
+              const ab = await downloadedBlob.arrayBuffer();
+              const buf = Buffer.from(ab);
+              if (buf.length > 200 && buf.subarray(0, 5).toString().startsWith('%PDF')) {
+                pdfBuffer = buf;
+              }
+            }
+          }
+
+          // C. Try download directly by candidates if list was empty
+          if (!pdfBuffer) {
+            const candidates = [
+              targetFileName,
+              fileId.endsWith('.pdf') ? fileId : `${fileId}.pdf`,
+              `${bookId}.pdf`,
+              `${normBookId}.pdf`
+            ].filter(Boolean);
+
+            for (const cand of candidates) {
+              try {
+                const { data: blob } = await supabase.storage.from('books').download(cand);
+                if (blob) {
+                  const ab = await blob.arrayBuffer();
+                  const buf = Buffer.from(ab);
+                  if (buf.length > 200 && buf.subarray(0, 5).toString().startsWith('%PDF')) {
+                    pdfBuffer = buf;
+                    break;
+                  }
+                }
+              } catch {}
+            }
+          }
+        } catch (supaErr) {
+          console.warn('[proxyBookPdf] Supabase Storage books bucket error:', supaErr);
         }
       }
+    }
 
-      if (pdfBuffer) {
-        // Asynchronously save to server disk cache for subsequent instant delivery
-        const savePath = path.join(BOOKS_CACHE_DIR, `${targetFileId}.pdf`);
-        fs.promises.writeFile(savePath, pdfBuffer).catch(() => {
-          const tempPath = path.join(FALLBACK_CACHE_DIR, `${targetFileId}.pdf`);
-          return fs.promises.writeFile(tempPath, pdfBuffer).catch(() => {});
-        });
-        if (bookId) {
-          const aliasPath = path.join(BOOKS_CACHE_DIR, `${bookId}.pdf`);
-          fs.promises.writeFile(aliasPath, pdfBuffer).catch(() => {
-            const tempAlias = path.join(FALLBACK_CACHE_DIR, `${bookId}.pdf`);
-            return fs.promises.writeFile(tempAlias, pdfBuffer).catch(() => {});
-          });
-        }
+    if (pdfBuffer) {
+      // Save to server cache for instant subsequent loading
+      const cacheKey = targetFileName || (fileId.endsWith('.pdf') ? fileId : `${bookId || 'book'}.pdf`);
+      const savePath = path.join(BOOKS_CACHE_DIR, cacheKey);
+      fs.promises.writeFile(savePath, pdfBuffer).catch(() => {});
 
-        const safeFilename = (bookId || targetFileId || 'document').replace(/[^a-zA-Z0-9_\-]/g, '_');
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Length', pdfBuffer.length);
-        res.setHeader('Cache-Control', 'public, max-age=604800');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Content-Disposition', `${isDownload ? 'attachment' : 'inline'}; filename="${safeFilename}.pdf"`);
-        return res.send(pdfBuffer);
-      }
+      const safeFilename = (bookId || targetFileName || 'textbook').replace(/[^a-zA-Z0-9_\-]/g, '_');
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Length', pdfBuffer.length);
+      res.setHeader('Cache-Control', 'public, max-age=604800');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Content-Disposition', `${isDownload ? 'attachment' : 'inline'}; filename="${safeFilename}.pdf"`);
+      return res.send(pdfBuffer);
     }
 
     // 6. Custom URL fallback (if an external direct PDF link was passed)
@@ -901,7 +913,7 @@ export async function proxyBookPdf(req: Request, res: Response) {
           const ab = await response.arrayBuffer();
           const buf = Buffer.from(ab);
           if (buf.length > 200 && buf.subarray(0, 5).toString().startsWith('%PDF')) {
-            const safeFilename = (bookId || targetFileId || 'document').replace(/[^a-zA-Z0-9_\-]/g, '_');
+            const safeFilename = (bookId || targetFileName || 'document').replace(/[^a-zA-Z0-9_\-]/g, '_');
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Length', buf.length);
             res.setHeader('Access-Control-Allow-Origin', '*');
@@ -916,9 +928,9 @@ export async function proxyBookPdf(req: Request, res: Response) {
     }
 
     // 7. Resilient Fallback: Stream an authorized placeholder document rather than a 500/502 error
-    console.warn('[proxyBookPdf] Serving resilient certified fallback PDF for:', { bookId, targetFileId });
+    console.warn('[proxyBookPdf] Serving resilient certified fallback PDF for:', { bookId, targetFileName });
     const fallbackBuf = generateFallbackPdfBuffer(bookId || 'Academic Document', 'Ethiopian University Module');
-    const safeFilename = (bookId || targetFileId || 'document').replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const safeFilename = (bookId || targetFileName || 'document').replace(/[^a-zA-Z0-9_\-]/g, '_');
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Length', fallbackBuf.length);
     res.setHeader('Access-Control-Allow-Origin', '*');
