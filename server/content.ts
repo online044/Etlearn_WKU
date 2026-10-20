@@ -817,72 +817,98 @@ export async function proxyBookPdf(req: Request, res: Response) {
       }
     }
 
-    // 6. Direct Download from Supabase Storage 'books' bucket
+    // 6. Direct Download from Supabase Storage buckets ('books', 'book', 'pdfs', etc.)
     if (!pdfBuffer) {
       const supabase = getSupabaseAdmin();
       if (supabase) {
         try {
-          const { data: bucketFiles } = await supabase.storage.from('books').list('', { limit: 100 });
-          let matchedFile = '';
+          // Attempt to auto-create 'books' bucket if missing
+          await supabase.storage.createBucket('books', { public: true }).catch(() => {});
 
-          if (bucketFiles && bucketFiles.length > 0) {
-            // A. Exact match by targetFileName or fileId
-            if (targetFileName) {
-              const exact = bucketFiles.find(f => f.name.toLowerCase() === targetFileName.toLowerCase());
-              if (exact) matchedFile = exact.name;
-            }
-            if (!matchedFile && fileId) {
-              const byFileId = bucketFiles.find(f => f.name.toLowerCase() === fileId.toLowerCase() || f.name.toLowerCase() === `${fileId.toLowerCase()}.pdf`);
-              if (byFileId) matchedFile = byFileId.name;
-            }
-            // B. Match by bookId / course code keywords
-            if (!matchedFile && normBookId) {
-              const cleanQuery = normBookId.replace(/^freshman_|^fresh_/, '').replace(/[^a-z0-9]/g, '');
-              const fuzzy = bucketFiles.find(f => {
-                const fn = f.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-                return cleanQuery && (fn.includes(cleanQuery) || cleanQuery.includes(fn));
-              });
-              if (fuzzy) matchedFile = fuzzy.name;
-            }
-          }
-
-          // If matched, download file bytes from Supabase
-          if (matchedFile) {
-            const { data: downloadedBlob, error: dlErr } = await supabase.storage.from('books').download(matchedFile);
-            if (downloadedBlob && !dlErr) {
-              const ab = await downloadedBlob.arrayBuffer();
-              const buf = Buffer.from(ab);
-              if (buf.length > 200 && buf.subarray(0, 5).toString().startsWith('%PDF')) {
-                pdfBuffer = buf;
+          const candidateBuckets = ['books', 'book', 'pdfs', 'pdf', 'textbooks', 'documents', 'files', 'public', 'modules', 'courses'];
+          
+          // Discover actual buckets in Supabase Storage if possible
+          try {
+            const { data: discovered } = await supabase.storage.listBuckets();
+            if (discovered && discovered.length > 0) {
+              for (const b of discovered) {
+                if (b.name && !candidateBuckets.includes(b.name)) {
+                  candidateBuckets.unshift(b.name);
+                }
               }
             }
-          }
+          } catch {}
 
-          // C. Try download directly by candidates if list was empty
-          if (!pdfBuffer) {
-            const candidates = [
-              targetFileName,
-              fileId.endsWith('.pdf') ? fileId : `${fileId}.pdf`,
-              `${bookId}.pdf`,
-              `${normBookId}.pdf`
-            ].filter(Boolean);
+          for (const bucketName of candidateBuckets) {
+            if (pdfBuffer) break;
 
-            for (const cand of candidates) {
-              try {
-                const { data: blob } = await supabase.storage.from('books').download(cand);
-                if (blob) {
-                  const ab = await blob.arrayBuffer();
+            try {
+              const { data: bucketFiles, error: listErr } = await supabase.storage.from(bucketName).list('', { limit: 100 });
+              let matchedFile = '';
+
+              if (!listErr && bucketFiles && bucketFiles.length > 0) {
+                // A. Exact match by targetFileName or fileId
+                if (targetFileName) {
+                  const exact = bucketFiles.find(f => f.name.toLowerCase() === targetFileName.toLowerCase());
+                  if (exact) matchedFile = exact.name;
+                }
+                if (!matchedFile && fileId) {
+                  const byFileId = bucketFiles.find(f => f.name.toLowerCase() === fileId.toLowerCase() || f.name.toLowerCase() === `${fileId.toLowerCase()}.pdf`);
+                  if (byFileId) matchedFile = byFileId.name;
+                }
+                // B. Match by bookId / course code keywords
+                if (!matchedFile && normBookId) {
+                  const cleanQuery = normBookId.replace(/^freshman_|^fresh_/, '').replace(/[^a-z0-9]/g, '');
+                  const fuzzy = bucketFiles.find(f => {
+                    const fn = f.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                    return cleanQuery && (fn.includes(cleanQuery) || cleanQuery.includes(fn));
+                  });
+                  if (fuzzy) matchedFile = fuzzy.name;
+                }
+              }
+
+              // If matched, download file bytes from Supabase
+              if (matchedFile) {
+                const { data: downloadedBlob, error: dlErr } = await supabase.storage.from(bucketName).download(matchedFile);
+                if (downloadedBlob && !dlErr) {
+                  const ab = await downloadedBlob.arrayBuffer();
                   const buf = Buffer.from(ab);
                   if (buf.length > 200 && buf.subarray(0, 5).toString().startsWith('%PDF')) {
                     pdfBuffer = buf;
                     break;
                   }
                 }
-              } catch {}
+              }
+
+              // Try direct candidates
+              if (!pdfBuffer) {
+                const candidates = [
+                  targetFileName,
+                  fileId.endsWith('.pdf') ? fileId : `${fileId}.pdf`,
+                  `${bookId}.pdf`,
+                  `${normBookId}.pdf`
+                ].filter(Boolean);
+
+                for (const cand of candidates) {
+                  try {
+                    const { data: blob, error: candErr } = await supabase.storage.from(bucketName).download(cand);
+                    if (blob && !candErr) {
+                      const ab = await blob.arrayBuffer();
+                      const buf = Buffer.from(ab);
+                      if (buf.length > 200 && buf.subarray(0, 5).toString().startsWith('%PDF')) {
+                        pdfBuffer = buf;
+                        break;
+                      }
+                    }
+                  } catch {}
+                }
+              }
+            } catch (bErr) {
+              // Ignore missing bucket errors and try next bucket
             }
           }
         } catch (supaErr) {
-          console.warn('[proxyBookPdf] Supabase Storage books bucket error:', supaErr);
+          console.warn('[proxyBookPdf] Supabase Storage multi-bucket search notice:', supaErr);
         }
       }
     }

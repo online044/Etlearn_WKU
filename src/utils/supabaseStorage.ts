@@ -18,9 +18,27 @@ export interface SupabaseStorageFile {
 }
 
 export const SUPABASE_BOOKS_BUCKET = 'books';
+export const CANDIDATE_BOOK_BUCKETS = ['books', 'book', 'pdfs', 'pdf', 'textbooks', 'documents', 'files', 'public', 'modules', 'courses', 'exams'];
 
 /**
- * Derives a full public URL for a file in Supabase Storage 'books' bucket
+ * Auto-creates the 'books' storage bucket in Supabase if missing
+ */
+export async function ensureBooksBucketExists(bucket: string = SUPABASE_BOOKS_BUCKET): Promise<boolean> {
+  try {
+    const supa = getSupabase();
+    if (!supa) return false;
+    const { error } = await supa.storage.createBucket(bucket, { public: true });
+    if (!error || error.message?.includes('already exists') || (error as any).statusCode === '409') {
+      return true;
+    }
+  } catch {
+    // Ignore permissions notice
+  }
+  return false;
+}
+
+/**
+ * Derives a full public URL for a file in Supabase Storage
  */
 export function getSupabaseStoragePublicUrl(bucket: string = SUPABASE_BOOKS_BUCKET, pathOrFilename: string): string {
   if (!pathOrFilename || typeof pathOrFilename !== 'string') return '';
@@ -32,14 +50,23 @@ export function getSupabaseStoragePublicUrl(bucket: string = SUPABASE_BOOKS_BUCK
     return clean;
   }
 
-  // Strip bucket prefix if user passed "books/Economics.pdf"
-  const cleanPath = clean.replace(new RegExp(`^${bucket}/`, 'i'), '').replace(/^\/+/, '');
+  // Detect bucket if prefix supplied in path (e.g. "pdfs/Economics.pdf" or "book/file.pdf")
+  let targetBucket = bucket;
+  let cleanPath = clean;
+
+  const parts = clean.split('/');
+  if (parts.length > 1 && CANDIDATE_BOOK_BUCKETS.includes(parts[0].toLowerCase())) {
+    targetBucket = parts[0];
+    cleanPath = parts.slice(1).join('/');
+  } else {
+    cleanPath = clean.replace(new RegExp(`^${bucket}/`, 'i'), '').replace(/^\/+/, '');
+  }
 
   // 1. Try via Supabase client instance
   try {
     const supa = getSupabase();
     if (supa) {
-      const { data } = supa.storage.from(bucket).getPublicUrl(cleanPath);
+      const { data } = supa.storage.from(targetBucket).getPublicUrl(cleanPath);
       if (data?.publicUrl) {
         return data.publicUrl;
       }
@@ -54,16 +81,16 @@ export function getSupabaseStoragePublicUrl(bucket: string = SUPABASE_BOOKS_BUCK
   const baseUrl = (storedUrl || envUrl || '').trim().replace(/\/+$/, '');
 
   if (baseUrl) {
-    return `${baseUrl}/storage/v1/object/public/${bucket}/${encodeURIComponent(cleanPath)}`;
+    return `${baseUrl}/storage/v1/object/public/${targetBucket}/${encodeURIComponent(cleanPath)}`;
   }
 
   return cleanPath;
 }
 
 /**
- * Lists all uploaded PDF books inside the Supabase 'books' bucket
+ * Lists all uploaded PDF books across available Supabase Storage buckets ('books', 'book', 'pdfs', etc.)
  */
-export async function listSupabaseBooksFiles(bucket: string = SUPABASE_BOOKS_BUCKET): Promise<SupabaseStorageFile[]> {
+export async function listSupabaseBooksFiles(preferredBucket: string = SUPABASE_BOOKS_BUCKET): Promise<SupabaseStorageFile[]> {
   try {
     const supa = getSupabase();
     if (!supa) {
@@ -71,33 +98,59 @@ export async function listSupabaseBooksFiles(bucket: string = SUPABASE_BOOKS_BUC
       return [];
     }
 
-    const { data, error } = await supa.storage.from(bucket).list('', {
-      limit: 100,
-      sortBy: { column: 'name', order: 'asc' }
-    });
+    // Try creating preferred 'books' bucket if missing
+    await ensureBooksBucketExists(preferredBucket);
 
-    if (error) {
-      console.warn(`[supabaseStorage] Error listing files from '${bucket}' bucket:`, error.message);
-      return [];
+    // Dynamically discover actual buckets present in the user's Supabase Storage project
+    let bucketsToSearch = Array.from(new Set([preferredBucket, ...CANDIDATE_BOOK_BUCKETS]));
+    try {
+      const { data: userBuckets } = await supa.storage.listBuckets();
+      if (userBuckets && userBuckets.length > 0) {
+        const discoveredNames = userBuckets.map(b => b.name).filter(Boolean);
+        bucketsToSearch = Array.from(new Set([preferredBucket, ...discoveredNames, ...CANDIDATE_BOOK_BUCKETS]));
+      }
+    } catch {}
+
+    const allFiles: SupabaseStorageFile[] = [];
+    const seenFileKeys = new Set<string>();
+
+    for (const bName of bucketsToSearch) {
+      try {
+        const { data, error } = await supa.storage.from(bName).list('', {
+          limit: 100,
+          sortBy: { column: 'name', order: 'asc' }
+        });
+
+        if (error || !data || data.length === 0) {
+          // Silent skip for missing bucket ("no such bucket", 404, etc.)
+          continue;
+        }
+
+        for (const item of data) {
+          if (!item.name || item.name.startsWith('.')) continue;
+
+          const uniqueKey = `${bName}/${item.name}`.toLowerCase();
+          if (seenFileKeys.has(uniqueKey)) continue;
+          seenFileKeys.add(uniqueKey);
+
+          const { data: urlData } = supa.storage.from(bName).getPublicUrl(item.name);
+          const publicUrl = urlData?.publicUrl || getSupabaseStoragePublicUrl(bName, item.name);
+
+          allFiles.push({
+            name: item.name,
+            id: item.id || uniqueKey,
+            size: (item as any).metadata?.size,
+            publicUrl,
+            created_at: item.created_at,
+            updated_at: item.updated_at
+          });
+        }
+      } catch {
+        // Continue searching next candidate bucket
+      }
     }
 
-    if (!data || data.length === 0) {
-      return [];
-    }
-
-    return data
-      .filter(item => item.name && !item.name.startsWith('.'))
-      .map(item => {
-        const { data: urlData } = supa.storage.from(bucket).getPublicUrl(item.name);
-        return {
-          name: item.name,
-          id: item.id,
-          size: (item as any).metadata?.size,
-          publicUrl: urlData?.publicUrl || getSupabaseStoragePublicUrl(bucket, item.name),
-          created_at: item.created_at,
-          updated_at: item.updated_at
-        };
-      });
+    return allFiles;
   } catch (err) {
     console.warn('[supabaseStorage] Exception in listSupabaseBooksFiles:', err);
     return [];
