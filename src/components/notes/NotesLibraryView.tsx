@@ -244,8 +244,8 @@ export const NotesLibraryView: React.FC<NotesLibraryViewProps> = ({
         if (fallback) return fallback;
       }
 
-      // 4. Default fallback to subject matching BIO_SUBJECT_ID or first subject
-      return subjects.find(s => canonicalSubjectId(s.id) === 'subj_general_biology') || subjects[0];
+      // 4. Return undefined when no subject matches, ensuring Biology only shows Biology notes
+      return undefined;
     };
   }, [chapterMap, subjectMap, subjects]);
 
@@ -279,6 +279,37 @@ export const NotesLibraryView: React.FC<NotesLibraryViewProps> = ({
     });
   }, [notes, userStates, resolveNoteSubject, selectedSubjectId, activeFilter]);
 
+  // Active subjects with uploaded notes for clean pill filters
+  const activeSubjects = useMemo(() => {
+    const presentSubjectIds = new Set<string>();
+    notes.forEach((n) => {
+      const sub = resolveNoteSubject(n);
+      if (sub) {
+        presentSubjectIds.add(sub.id);
+        presentSubjectIds.add(canonicalSubjectId(sub.id));
+      }
+      const direct = (n as any).subject_id || (n as any).subject || (n as any).course;
+      if (direct) {
+        presentSubjectIds.add(direct);
+        presentSubjectIds.add(canonicalSubjectId(direct));
+      }
+    });
+
+    if (presentSubjectIds.size === 0) {
+      return subjects;
+    }
+
+    return subjects.filter((s) => {
+      const canon = canonicalSubjectId(s.id);
+      return (
+        presentSubjectIds.has(s.id) ||
+        presentSubjectIds.has(canon) ||
+        selectedSubjectId === s.id ||
+        canonicalSubjectId(selectedSubjectId) === canon
+      );
+    });
+  }, [subjects, notes, resolveNoteSubject, selectedSubjectId]);
+
   // Group notes into Subject Columns in strict numerical order
   const subjectColumns = useMemo(() => {
     const list: {
@@ -304,7 +335,7 @@ export const NotesLibraryView: React.FC<NotesLibraryViewProps> = ({
       for (const ch of subChapters) {
         const chNotes = filteredNotes
           .filter(n => n.chapter_id === ch.id)
-          .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+          .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || (a.title || '').localeCompare(b.title || '', undefined, { numeric: true, sensitivity: 'base' }));
 
         chNotes.forEach(n => handledNoteIds.add(n.id));
         if (chNotes.length > 0) {
@@ -318,7 +349,7 @@ export const NotesLibraryView: React.FC<NotesLibraryViewProps> = ({
           resolveNoteSubject(n)?.id === sub.id || 
           canonicalSubjectId(resolveNoteSubject(n)?.id) === subCanonical
         ))
-        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || (a.title || '').localeCompare(b.title || '', undefined, { numeric: true, sensitivity: 'base' }));
 
       if (unassignedNotes.length > 0) {
         chapterGroups.push({
@@ -597,7 +628,7 @@ export const NotesLibraryView: React.FC<NotesLibraryViewProps> = ({
                 </button>
               </div>
 
-              {/* Subject selector pills */}
+              {/* Subject selector pills (Shows only subjects with uploaded notes) */}
               <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
                 <button
                   onClick={() => setSelectedSubjectId(null)}
@@ -609,11 +640,11 @@ export const NotesLibraryView: React.FC<NotesLibraryViewProps> = ({
                 >
                   {isAm ? 'ሁሉም የትምህርት ዘርፎች' : 'All Subjects'}
                 </button>
-                {subjects.map((sub) => {
+                {activeSubjects.map((sub, sIdx) => {
                   const isSelected = selectedSubjectId === sub.id;
                   return (
                     <button
-                      key={sub.id}
+                      key={`${sub.id}_pill_${sIdx}`}
                       onClick={() => setSelectedSubjectId(isSelected ? null : sub.id)}
                       className={`px-3 py-1 rounded-xl text-xs font-medium border whitespace-nowrap flex items-center gap-1.5 transition-all ${
                         isSelected
@@ -696,14 +727,14 @@ export const NotesLibraryView: React.FC<NotesLibraryViewProps> = ({
             ) : layoutMode === 'columns' ? (
               /* ─── 1. SUBJECT COLUMNS BOARD VIEW ─── */
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
-                {subjectColumns.map((col) => {
+                {subjectColumns.map((col, cIdx) => {
                   const percent = col.totalNotes > 0 
                     ? Math.round((col.completedCount / col.totalNotes) * 100) 
                     : 0;
 
                   return (
                     <div
-                      key={col.subject.id}
+                      key={`${col.subject.id}_col_${cIdx}`}
                       className="rounded-2xl bg-[#111C35] border border-white/10 hover:border-white/20 transition-all flex flex-col overflow-hidden shadow-lg"
                     >
                       {/* Column Header */}
@@ -748,7 +779,18 @@ export const NotesLibraryView: React.FC<NotesLibraryViewProps> = ({
 
                       {/* Column Chapters & Ordered Notes */}
                       <div className="p-3 space-y-4 max-h-[70vh] overflow-y-auto scrollbar-thin">
-                        {col.chapters.map(({ chapter, notes: chNotes }) => (
+                        {col.chapters.length === 0 || col.totalNotes === 0 ? (
+                          <div className="p-6 text-center text-slate-500 space-y-2 my-auto">
+                            <FolderOpen className="w-8 h-8 mx-auto text-slate-600 opacity-60" />
+                            <p className="text-xs font-semibold text-slate-300">
+                              {isAm ? 'ለዚህ ትምህርት ምንም የተጫነ ማስታወሻ የለም' : 'No uploaded notes for this subject'}
+                            </p>
+                            <p className="text-[10px] text-slate-500">
+                              {isAm ? 'አስተዳዳሪው በሚያክለው መሰረት እዚህ ይታያሉ።' : 'Notes uploaded to Supabase or Admin will appear here.'}
+                            </p>
+                          </div>
+                        ) : (
+                          col.chapters.map(({ chapter, notes: chNotes }) => (
                           <div key={chapter.id} className="space-y-2">
                             <div className="flex items-center justify-between text-[11px] font-bold text-slate-300 px-1 border-b border-white/5 pb-1">
                               <span className="truncate">{chapter.title}</span>
@@ -806,7 +848,7 @@ export const NotesLibraryView: React.FC<NotesLibraryViewProps> = ({
                               })}
                             </div>
                           </div>
-                        ))}
+                        )))}
                       </div>
                     </div>
                   );

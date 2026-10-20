@@ -18,7 +18,10 @@ export interface SupabaseStorageFile {
 }
 
 export const SUPABASE_BOOKS_BUCKET = 'books';
-export const CANDIDATE_BOOK_BUCKETS = ['books', 'book', 'pdfs', 'pdf', 'textbooks', 'documents', 'files', 'public', 'modules', 'courses', 'exams'];
+export const CANDIDATE_BOOK_BUCKETS = [
+  'course-books', 'course_books', 'coursebooks', 'course-book', 'course_book', 'books-course', 'course', 'courses',
+  'books', 'book', 'pdfs', 'pdf', 'textbooks', 'documents', 'files', 'public', 'modules', 'exams'
+];
 
 /**
  * Auto-creates the 'books' storage bucket in Supabase if missing
@@ -50,7 +53,7 @@ export function getSupabaseStoragePublicUrl(bucket: string = SUPABASE_BOOKS_BUCK
     return clean;
   }
 
-  // Detect bucket if prefix supplied in path (e.g. "pdfs/Economics.pdf" or "book/file.pdf")
+  // Detect bucket if prefix supplied in path (e.g. "course-books/Biology.pdf" or "pdfs/Economics.pdf")
   let targetBucket = bucket;
   let cleanPath = clean;
 
@@ -88,7 +91,7 @@ export function getSupabaseStoragePublicUrl(bucket: string = SUPABASE_BOOKS_BUCK
 }
 
 /**
- * Lists all uploaded PDF books across available Supabase Storage buckets ('books', 'book', 'pdfs', etc.)
+ * Lists all uploaded PDF books across available Supabase Storage buckets ('course-books', 'books', 'pdfs', etc.)
  */
 export async function listSupabaseBooksFiles(preferredBucket: string = SUPABASE_BOOKS_BUCKET): Promise<SupabaseStorageFile[]> {
   try {
@@ -107,47 +110,54 @@ export async function listSupabaseBooksFiles(preferredBucket: string = SUPABASE_
       const { data: userBuckets } = await supa.storage.listBuckets();
       if (userBuckets && userBuckets.length > 0) {
         const discoveredNames = userBuckets.map(b => b.name).filter(Boolean);
-        bucketsToSearch = Array.from(new Set([preferredBucket, ...discoveredNames, ...CANDIDATE_BOOK_BUCKETS]));
+        bucketsToSearch = Array.from(new Set(['course-books', preferredBucket, ...discoveredNames, ...CANDIDATE_BOOK_BUCKETS]));
       }
     } catch {}
 
     const allFiles: SupabaseStorageFile[] = [];
     const seenFileKeys = new Set<string>();
 
-    for (const bName of bucketsToSearch) {
+    const scanDirectory = async (bName: string, prefix: string = '') => {
       try {
-        const { data, error } = await supa.storage.from(bName).list('', {
+        const { data, error } = await supa.storage.from(bName).list(prefix, {
           limit: 100,
           sortBy: { column: 'name', order: 'asc' }
         });
 
-        if (error || !data || data.length === 0) {
-          // Silent skip for missing bucket ("no such bucket", 404, etc.)
-          continue;
-        }
+        if (error || !data || data.length === 0) return;
 
         for (const item of data) {
           if (!item.name || item.name.startsWith('.')) continue;
 
-          const uniqueKey = `${bName}/${item.name}`.toLowerCase();
-          if (seenFileKeys.has(uniqueKey)) continue;
-          seenFileKeys.add(uniqueKey);
+          const itemPath = prefix ? `${prefix}/${item.name}` : item.name;
+          const isFolder = !item.id && (!item.metadata || !(item as any).metadata?.mimetype);
 
-          const { data: urlData } = supa.storage.from(bName).getPublicUrl(item.name);
-          const publicUrl = urlData?.publicUrl || getSupabaseStoragePublicUrl(bName, item.name);
+          if (isFolder && prefix.split('/').length < 2) {
+            // Recurse into subfolder up to 2 levels
+            await scanDirectory(bName, itemPath);
+          } else {
+            const uniqueKey = `${bName}/${itemPath}`.toLowerCase();
+            if (seenFileKeys.has(uniqueKey)) continue;
+            seenFileKeys.add(uniqueKey);
 
-          allFiles.push({
-            name: item.name,
-            id: item.id || uniqueKey,
-            size: (item as any).metadata?.size,
-            publicUrl,
-            created_at: item.created_at,
-            updated_at: item.updated_at
-          });
+            const { data: urlData } = supa.storage.from(bName).getPublicUrl(itemPath);
+            const publicUrl = urlData?.publicUrl || getSupabaseStoragePublicUrl(bName, itemPath);
+
+            allFiles.push({
+              name: item.name,
+              id: item.id || uniqueKey,
+              size: (item as any).metadata?.size,
+              publicUrl,
+              created_at: item.created_at,
+              updated_at: item.updated_at
+            });
+          }
         }
-      } catch {
-        // Continue searching next candidate bucket
-      }
+      } catch {}
+    };
+
+    for (const bName of bucketsToSearch) {
+      await scanDirectory(bName, '');
     }
 
     return allFiles;

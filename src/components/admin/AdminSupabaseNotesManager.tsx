@@ -450,12 +450,12 @@ export default function AdminSupabaseNotesManager({ isAmharic, onRefreshParent }
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-1.5 max-h-[460px] pr-1 scrollbar-thin">
-            {subjects.map((sub) => {
+            {subjects.map((sub, sIdx) => {
               const isSelected = selectedSubjectId === sub.id;
               const subChaptersCount = chapters.filter(c => c.subject_id === sub.id).length;
               return (
                 <div
-                  key={sub.id}
+                  key={`${sub.id}_admin_sub_${sIdx}`}
                   onClick={() => { setSelectedSubjectId(sub.id); setSelectedChapterId(null); }}
                   className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between group ${
                     isSelected

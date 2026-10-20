@@ -189,6 +189,9 @@ export const PHYS_CH1_ID = 'f8c2b345-9d7f-4b1c-8e23-2a4b6c8d0f14';
 export const TECH_CH1_ID = 'f8c2b345-9d7f-4b1c-8e23-2a4b6c8d0f41';
 export const MATH_CH1_ID = 'f8c2b345-9d7f-4b1c-8e23-2a4b6c8d0f51';
 export const ECON_CH1_ID = 'f8c2b345-9d7f-4b1c-8e23-2a4b6c8d0f61';
+export const ANTHRO_CH1_ID = 'f8c2b345-9d7f-4b1c-8e23-2a4b6c8d0f81';
+export const ANTHRO_CH2_ID = 'f8c2b345-9d7f-4b1c-8e23-2a4b6c8d0f82';
+export const ENGL_CH1_ID = 'f8c2b345-9d7f-4b1c-8e23-2a4b6c8d0f91';
 
 export const SEED_CHAPTERS: Chapter[] = [
   // Biology Chapters
@@ -256,6 +259,26 @@ export const SEED_CHAPTERS: Chapter[] = [
     id: ECON_CH1_ID,
     subject_id: ECON_SUBJECT_ID,
     title: 'Unit 1: Fundamentals of Microeconomics & Market Dynamics',
+    sort_order: 1
+  },
+  // Social Anthropology
+  {
+    id: ANTHRO_CH1_ID,
+    subject_id: ANTHRO_SUBJECT_ID,
+    title: 'Unit 1: Introducing Social Anthropology & Its Sub-Fields',
+    sort_order: 1
+  },
+  {
+    id: ANTHRO_CH2_ID,
+    subject_id: ANTHRO_SUBJECT_ID,
+    title: 'Unit 2: Culture, Marriage, Kinship & Customary Systems in Ethiopia',
+    sort_order: 2
+  },
+  // Communicative English
+  {
+    id: ENGL_CH1_ID,
+    subject_id: ENGLISH_SUBJECT_ID,
+    title: 'Unit 1: Academic Reading Comprehension & Discourse Markers',
     sort_order: 1
   }
 ];
@@ -671,6 +694,96 @@ $$E_d = \\frac{\\% \\Delta Q_d}{\\% \\Delta P} = \\frac{\\Delta Q / Q}{\\Delta P
 When $|E_d| > 1$, demand is price-elastic.
 :::
 `
+  },
+
+  // ─── SOCIAL ANTHROPOLOGY NOTES ────────────────────────────────────────────
+  {
+    id: 'a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c81',
+    chapter_id: ANTHRO_CH1_ID,
+    title: '1.1 Introduction to Social Anthropology & Its Sub-Fields',
+    read_time_min: 7,
+    sort_order: 1,
+    is_published: true,
+    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
+    updated_at: new Date().toISOString(),
+    content: `# 1.1 Introduction to Social Anthropology & Its Sub-Fields
+
+Welcome to **Anth 1012: Social Anthropology**. Anthropology is the comparative, holistic, and empirical study of human diversity across space and time.
+
+:::definition
+**Cultural Relativism**: The foundational methodological principle requiring researchers to evaluate cultural practices, beliefs, and customs within their own local socio-cultural matrix rather than judging them through foreign ethnocentric standards.
+:::
+
+## 1. The Four Major Sub-Fields of Anthropology
+
+| Sub-Field | Focus Area | Key Methodologies |
+| :--- | :--- | :--- |
+| **Socio-Cultural Anthropology** | Living human societies, kinship, rituals, and belief systems | Long-term Ethnographic Fieldwork & Participant Observation |
+| **Archaeology** | Past human societies through material culture and artifacts | Stratigraphic Excavation & Radiocarbon Dating |
+| **Linguistic Anthropology** | Structure, evolution, and social context of human languages | Discourse Analysis & Sociolinguistics |
+| **Biological / Physical Anthropology** | Human biological variation, paleoanthropology, and genetics | Fossil Analysis, Osteology & Primatology |
+
+:::key-point
+**Ethnography vs Ethnology**: Ethnography is the detailed descriptive account of a specific community based on fieldwork. Ethnology is the cross-cultural comparative analysis of ethnographic data across multiple societies.
+:::
+`
+  },
+  {
+    id: 'a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c82',
+    chapter_id: ANTHRO_CH2_ID,
+    title: '2.1 Kinship, Marriage & Customary Systems in Ethiopia',
+    read_time_min: 6,
+    sort_order: 2,
+    is_published: true,
+    created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
+    updated_at: new Date().toISOString(),
+    content: `# 2.1 Kinship, Marriage & Customary Systems in Ethiopia
+
+In social anthropology, kinship systems structure social organization, inheritance, marriage alliances, and community leadership.
+
+:::definition
+**Rules of Descent**:
+- **Patrilineal Descent**: Lineage traced exclusively through the father's male ancestors.
+- **Matrilineal Descent**: Lineage traced exclusively through the mother's female ancestors.
+- **Bilateral Descent**: Lineage traced equally through both maternal and paternal kin.
+:::
+
+## 1. Marriage & Alliance Rules
+
+- **Exogamy**: Rule requiring individuals to marry outside their specific clan or descent group.
+- **Endogamy**: Rule requiring individuals to marry within their specific socio-cultural group.
+- **Bridewealth (Brideprice)**: Transfer of goods/livestock from the groom's family to the bride's kin group to legitimize marriage alliances.
+`
+  },
+
+  // ─── COMMUNICATIVE ENGLISH NOTES ──────────────────────────────────────────
+  {
+    id: 'a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c91',
+    chapter_id: ENGL_CH1_ID,
+    title: '1.1 Academic Reading Comprehension & Discourse Markers',
+    read_time_min: 6,
+    sort_order: 1,
+    is_published: true,
+    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
+    updated_at: new Date().toISOString(),
+    content: `# 1.1 Academic Reading Comprehension & Discourse Markers
+
+Welcome to **FLEn 1011: Communicative English Language Skills I**. Mastery of academic English requires efficient reading strategies and precise signal transitions.
+
+:::definition
+**Skimming vs Scanning**:
+- **Skimming**: Reading rapidly to identify the main central thesis or macro-structure.
+- **Scanning**: Searching targeted text for specific facts, numbers, or technical terminology.
+:::
+
+## 1. Key Discourse Transition Markers
+
+| Function | Transition Signals | Example Usage |
+| :--- | :--- | :--- |
+| **Exemplification** | *For instance, Specifically, Namely* | "Many renewable energy sources, specifically solar, are abundant in Ethiopia." |
+| **Contradiction / Contrast** | *However, Conversely, Nevertheless* | "The hypothesis seemed plausible; nevertheless, experimental data disproved it." |
+| **Causation** | *Consequently, Therefore, As a result* | "The sample exceeded boiling point; consequently, pressure rose sharply." |
+`
   }
 ];
 
@@ -678,23 +791,18 @@ export const PHYS_NOTE1_ID = 'a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c31';
 export const TECH_NOTE1_ID = 'a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c41';
 export const MATH_NOTE1_ID = 'a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c51';
 export const ECON_NOTE1_ID = 'a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c61';
+export const ANTHRO_NOTE1_ID = 'a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c81';
+export const ENGL_NOTE1_ID = 'a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c91';
 
 // ─── REPOSITORY IMPLEMENTATION ─────────────────────────────────────────────
 
 export class NotesRepository {
   constructor() {
-    // Automatically pre-cache all seed data so the app is 100% offline-ready immediately
     try {
       const existingSub = getCachedSubjectsLocally();
       if (!existingSub || existingSub.length === 0) cacheSubjectsLocally(SEED_SUBJECTS);
       const existingCh = getCachedChaptersLocally();
       if (!existingCh || existingCh.length === 0) cacheChaptersLocally(SEED_CHAPTERS);
-      const existingList = getCachedNotesListLocally();
-      if (!existingList || existingList.length === 0) {
-        const items: NoteListItem[] = SEED_NOTES.map(({ content, ...rest }) => rest);
-        cacheNotesListLocally(items);
-        SEED_NOTES.forEach(sn => cacheFullNoteLocally(sn));
-      }
     } catch {}
   }
 
@@ -718,12 +826,19 @@ export class NotesRepository {
         }
 
         if (!error && data && data.length > 0) {
-          const formatted: Subject[] = data.map((s: any, idx: number) => ({
-            id: canonicalSubjectId(s.id),
-            name: s.name || s.title || 'Untitled Subject',
-            color: s.color || '#D97706',
-            sort_order: typeof s.sort_order === 'number' ? s.sort_order : idx + 1
-          }));
+          const formattedMap = new Map<string, Subject>();
+          data.forEach((s: any, idx: number) => {
+            const id = canonicalSubjectId(s.id);
+            if (!formattedMap.has(id)) {
+              formattedMap.set(id, {
+                id,
+                name: s.name || s.title || 'Untitled Subject',
+                color: s.color || '#D97706',
+                sort_order: typeof s.sort_order === 'number' ? s.sort_order : idx + 1
+              });
+            }
+          });
+          const formatted = Array.from(formattedMap.values());
           cacheSubjectsLocally(formatted);
           return formatted;
         }
@@ -732,9 +847,18 @@ export class NotesRepository {
       }
     }
 
-    // Check offline local cache
+    // Check offline local cache (deduplicated)
     const cached = getCachedSubjectsLocally();
-    if (cached && cached.length > 0) return cached;
+    if (cached && cached.length > 0) {
+      const cachedMap = new Map<string, Subject>();
+      cached.forEach(s => {
+        const id = canonicalSubjectId(s.id);
+        if (!cachedMap.has(id)) {
+          cachedMap.set(id, { ...s, id });
+        }
+      });
+      return Array.from(cachedMap.values());
+    }
 
     // Fall back to seed subjects
     cacheSubjectsLocally(SEED_SUBJECTS);
@@ -881,30 +1005,31 @@ export class NotesRepository {
           });
 
           // Sort formatted list by sort_order ascending
-          formatted.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+          formatted.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || (a.title || '').localeCompare(b.title || '', undefined, { numeric: true, sensitivity: 'base' }));
 
-          if (!chapterId && formatted.length > 0) {
+          if (!chapterId) {
             cacheNotesListLocally(formatted);
           }
           return formatted;
+        } else if (listRes.status === 'fulfilled' || notesRes.status === 'fulfilled') {
+          // Supabase connected and returned 0 records -> sync local cache to empty list
+          if (!chapterId) {
+            cacheNotesListLocally([]);
+          }
+          return [];
         }
       } catch (err) {
         console.warn('[notesRepository] Supabase fetchNotesList integration error:', err);
       }
     }
 
-    // Check offline cached notes list
+    // Check offline cached notes list (filtered from seed IDs)
     const cached = getCachedNotesListLocally();
-    if (cached && cached.length > 0) {
+    if (cached) {
       return chapterId ? cached.filter((n) => n.chapter_id === chapterId) : cached;
     }
 
-    // Map seed notes omitting content
-    const items: NoteListItem[] = SEED_NOTES.map(({ content, ...rest }) => rest);
-    cacheNotesListLocally(items);
-    // Pre-cache full seed notes so every note is readable offline immediately
-    SEED_NOTES.forEach(sn => cacheFullNoteLocally(sn));
-    return chapterId ? items.filter((n) => n.chapter_id === chapterId) : items;
+    return [];
   }
 
   /**

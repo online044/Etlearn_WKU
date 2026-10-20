@@ -43,6 +43,7 @@ import {
   deleteNoteFromFirestore, 
   fetchNotesFromFirestore,
   auth,
+  wakeAuth,
   formatFirebaseAuthError
 } from './utils/firebaseStore';
 import { signOut as firebaseSignOut } from 'firebase/auth';
@@ -52,7 +53,7 @@ import { recordSignIn, recordSignOut } from './utils/sessionTracker';
 import { playClickChime, playSuccessChime, playFailureChime } from './utils/audio';
 import { initAuth, googleSignIn, googleSignInRedirect, logoutGoogle, exportAnalyticsToGoogleSheets } from './utils/workspace';
 import { User as FirebaseUser } from 'firebase/auth';
-import { initSupabaseConfig, getSupabase, clearSessionToken, syncAuthSessionWithServer, fetchProfileFromSupabase, saveProfileToSupabase } from './utils/supabaseClient';
+import { initSupabaseConfig, getSupabase, wakeSupabaseAuth, clearSessionToken, syncAuthSessionWithServer, fetchProfileFromSupabase, saveProfileToSupabase } from './utils/supabaseClient';
 import { fetchAllSupabaseQuestions } from './utils/supabaseQuestions';
 import { safeStorage } from './utils/safeStorage';
 import { isAdministratorEmail, ADMIN_EMAIL } from './utils/adminAuth';
@@ -735,6 +736,31 @@ export default function App() {
     };
   }, []);
 
+
+  // Proactive Session Awakening ("Wake the auth") on mount & window focus
+  useEffect(() => {
+    const awakenAllAuthSessions = async () => {
+      try {
+        await Promise.allSettled([
+          wakeAuth(),
+          wakeSupabaseAuth()
+        ]);
+      } catch (err) {
+        console.warn('[Wake Auth] Session awakening notice:', err);
+      }
+    };
+
+    awakenAllAuthSessions();
+
+    const handleFocus = () => {
+      awakenAllAuthSessions();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
 
   // Supabase auth state listener & bidirectional data sync
   useEffect(() => {

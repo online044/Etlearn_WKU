@@ -630,6 +630,25 @@ export function getSupabase(): SupabaseClient | null {
 }
 
 /**
+ * Proactively awakens and refreshes Supabase Auth session
+ */
+export async function wakeSupabaseAuth(): Promise<boolean> {
+  try {
+    const supa = getSupabase();
+    if (!supa) return false;
+    const { data, error } = await supa.auth.getSession();
+    if (!error && data?.session) {
+      await supa.auth.refreshSession();
+      console.log('[Supabase Auth] Session refreshed & awakened for:', data.session.user?.email);
+      return true;
+    }
+  } catch (err) {
+    console.warn('[Supabase Auth] wakeSupabaseAuth notice:', err);
+  }
+  return false;
+}
+
+/**
  * Comprehensive diagnostic check for Supabase connection
  */
 export async function testSupabaseConnection(overrideUrl?: string, overrideKey?: string): Promise<{

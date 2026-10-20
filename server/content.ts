@@ -822,10 +822,14 @@ export async function proxyBookPdf(req: Request, res: Response) {
       const supabase = getSupabaseAdmin();
       if (supabase) {
         try {
-          // Attempt to auto-create 'books' bucket if missing
+          // Attempt to auto-create 'books' and 'course-books' buckets if missing
           await supabase.storage.createBucket('books', { public: true }).catch(() => {});
+          await supabase.storage.createBucket('course-books', { public: true }).catch(() => {});
 
-          const candidateBuckets = ['books', 'book', 'pdfs', 'pdf', 'textbooks', 'documents', 'files', 'public', 'modules', 'courses'];
+          const candidateBuckets = [
+            'course-books', 'course_books', 'coursebooks', 'course-book', 'course_book', 'books-course', 'course', 'courses',
+            'books', 'book', 'pdfs', 'pdf', 'textbooks', 'documents', 'files', 'public', 'modules', 'exams'
+          ];
           
           // Discover actual buckets in Supabase Storage if possible
           try {

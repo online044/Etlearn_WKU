@@ -198,6 +198,24 @@ export function getAuthInstance() {
 }
 
 /**
+ * Proactively awakens and refreshes Firebase Auth session & tokens
+ */
+export async function wakeAuth(): Promise<FirebaseUser | null> {
+  try {
+    if (!auth) return null;
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      await currentUser.getIdToken(true);
+      console.log('[Firebase Auth] Token refreshed & session awakened for:', currentUser.email);
+      return currentUser;
+    }
+  } catch (err) {
+    console.warn('[Firebase Auth] wakeAuth notice:', err);
+  }
+  return null;
+}
+
+/**
  * Format any Firebase Auth error into user-friendly message for students
  */
 export function formatFirebaseAuthError(err: any, lang: 'en' | 'am' = 'en'): string {
