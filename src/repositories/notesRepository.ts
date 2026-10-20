@@ -58,6 +58,13 @@ export const PHYS_SUBJECT_ID = 'subj_general_physics';
 export const TECH_SUBJECT_ID = 'subj_emerging_technologies';
 export const MATH_SUBJECT_ID = 'subj_math_natural';
 export const ECON_SUBJECT_ID = 'subj_economics';
+export const ANTHRO_SUBJECT_ID = 'subj_social_anthropology';
+export const INCLUSIVENESS_SUBJECT_ID = 'subj_inclusiveness';
+export const PSYCH_SUBJECT_ID = 'subj_general_psychology';
+export const GEOG_SUBJECT_ID = 'subj_geography';
+export const CIVICS_SUBJECT_ID = 'subj_moral_and_civic';
+export const ENGLISH_SUBJECT_ID = 'subj_english_1';
+export const HISTORY_SUBJECT_ID = 'subj_history';
 
 // Backward compatibility map for legacy UUIDs stored in student sessions
 export const LEGACY_SUBJECT_ID_MAP: Record<string, string> = {
@@ -68,19 +75,58 @@ export const LEGACY_SUBJECT_ID_MAP: Record<string, string> = {
   'e7b1a234-8c6e-4a0b-9d12-1f3a5b7c9e03': TECH_SUBJECT_ID,
   'e7b1a234-8c6e-4a0b-9d12-1f3a5b7c9e05': MATH_SUBJECT_ID,
   'e7b1a234-8c6e-4a0b-9d12-1f3a5b7c9e04': ECON_SUBJECT_ID,
+  'e7b1a234-8c6e-4a0b-9d12-1f3a5b7c9e08': ANTHRO_SUBJECT_ID,
 };
 
 export function canonicalSubjectId(idOrName?: string | null): string {
-  if (!idOrName) return SAMPLE_SUBJECT_ID;
+  if (!idOrName) return BIO_SUBJECT_ID;
   if (LEGACY_SUBJECT_ID_MAP[idOrName]) return LEGACY_SUBJECT_ID_MAP[idOrName];
-  const s = idOrName.toLowerCase();
-  if (s.includes('bio')) return BIO_SUBJECT_ID;
-  if (s.includes('chem')) return CHEM_SUBJECT_ID;
-  if (s.includes('logic') || s.includes('critical') || s.includes('phil')) return SAMPLE_SUBJECT_ID;
-  if (s.includes('phys')) return PHYS_SUBJECT_ID;
-  if (s.includes('tech') || s.includes('emte')) return TECH_SUBJECT_ID;
-  if (s.includes('math')) return MATH_SUBJECT_ID;
-  if (s.includes('econ')) return ECON_SUBJECT_ID;
+  const s = idOrName.toLowerCase().trim();
+
+  // Check Anthropology explicitly first so 'biological anthropology' or 'cultural' doesn't misroute to Biology
+  if (s.includes('anthro') || s.includes('anthropology') || s.includes('anth 1012') || s === 'anthro' || s === 'anth') {
+    return ANTHRO_SUBJECT_ID;
+  }
+  if (s.includes('bio') || s.includes('biol')) {
+    return BIO_SUBJECT_ID;
+  }
+  if (s.includes('chem')) {
+    return CHEM_SUBJECT_ID;
+  }
+  if (s.includes('logic') || s.includes('critical') || s.includes('phil') || s.includes('philosophy')) {
+    return SAMPLE_SUBJECT_ID;
+  }
+  if (s.includes('phys')) {
+    return PHYS_SUBJECT_ID;
+  }
+  if (s.includes('tech') || s.includes('emerging') || s.includes('emte')) {
+    return TECH_SUBJECT_ID;
+  }
+  if (s.includes('math') || s.includes('precalculus')) {
+    return MATH_SUBJECT_ID;
+  }
+  if (s.includes('econ')) {
+    return ECON_SUBJECT_ID;
+  }
+  if (s.includes('inclusive') || s.includes('snie')) {
+    return INCLUSIVENESS_SUBJECT_ID;
+  }
+  if (s.includes('psych')) {
+    return PSYCH_SUBJECT_ID;
+  }
+  if (s.includes('geog') || s.includes('geography')) {
+    return GEOG_SUBJECT_ID;
+  }
+  if (s.includes('civic') || s.includes('moral') || s.includes('ethics')) {
+    return CIVICS_SUBJECT_ID;
+  }
+  if (s.includes('english') || s.includes('communicat') || s.includes('flen')) {
+    return ENGLISH_SUBJECT_ID;
+  }
+  if (s.includes('hist') || s.includes('history')) {
+    return HISTORY_SUBJECT_ID;
+  }
+
   return idOrName;
 }
 
@@ -126,6 +172,12 @@ export const SEED_SUBJECTS: Subject[] = [
     name: 'Economics for Engineers (Econ 1011)',
     color: '#F59E0B', // Gold
     sort_order: 7
+  },
+  {
+    id: ANTHRO_SUBJECT_ID,
+    name: 'Social Anthropology (Anth 1012)',
+    color: '#F43F5E', // Rose
+    sort_order: 8
   }
 ];
 

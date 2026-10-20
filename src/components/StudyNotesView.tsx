@@ -28,6 +28,7 @@ import { safeStorage } from '../utils/safeStorage';
 import DOMPurify from 'dompurify';
 import { NotesLibraryView } from './notes/NotesLibraryView';
 import { NoteReaderView } from './notes/NoteReaderView';
+import { canonicalSubjectId } from '../repositories/notesRepository';
 
 interface StudyNotesViewProps {
   apiKey?: string;
@@ -149,7 +150,8 @@ export default function StudyNotesView({
         (n.university && n.university.toLowerCase().includes(searchQuery.toLowerCase()));
 
       const matchesSubject = selectedSubjectFilter === 'All' || 
-        (n.subject && n.subject.toLowerCase() === selectedSubjectFilter.toLowerCase());
+        (n.subject && n.subject.toLowerCase() === selectedSubjectFilter.toLowerCase()) ||
+        (n.subject && canonicalSubjectId(n.subject) === canonicalSubjectId(selectedSubjectFilter));
 
       return matchesSearch && matchesSubject;
     });
@@ -157,8 +159,8 @@ export default function StudyNotesView({
 
   // Active selected note
   const activeSelectedNote = useMemo(() => {
-    return publishedNotes.find(n => n.id === selectedNoteId) || publishedNotes[0] || null;
-  }, [publishedNotes, selectedNoteId]);
+    return filteredPublishedNotes.find(n => n.id === selectedNoteId) || filteredPublishedNotes[0] || null;
+  }, [filteredPublishedNotes, selectedNoteId]);
 
   // Filtered personal notes
   const filteredPersonalNotes = useMemo(() => {

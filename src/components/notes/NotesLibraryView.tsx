@@ -167,26 +167,43 @@ export const NotesLibraryView: React.FC<NotesLibraryViewProps> = ({
       const noteObj = note as any;
       const directKey = note.subject_id || noteObj.subject || noteObj.course;
       if (directKey) {
-        const sub = subjectMap.get(directKey) || subjectMap.get(canonicalSubjectId(directKey));
+        const canonicalKey = canonicalSubjectId(directKey);
+        const sub = subjectMap.get(directKey) || subjectMap.get(canonicalKey);
         if (sub) return sub;
       }
 
       // 1. Direct match through chapter
       const ch = chapterMap.get(note.chapter_id);
       if (ch?.subject_id) {
-        const sub = subjectMap.get(ch.subject_id) || subjectMap.get(canonicalSubjectId(ch.subject_id));
+        const canonicalKey = canonicalSubjectId(ch.subject_id);
+        const sub = subjectMap.get(ch.subject_id) || subjectMap.get(canonicalKey);
         if (sub) return sub;
       }
 
       // 2. Comprehensive keyword matching across note title, chapter_id, subject, and content snippet
-      const noteText = `${note.title || ''} ${note.chapter_id || ''} ${noteObj.subject || ''} ${noteObj.course || ''} ${(noteObj.content || '').slice(0, 300)}`.toLowerCase();
+      const noteText = `${note.title || ''} ${note.chapter_id || ''} ${noteObj.subject || ''} ${noteObj.course || ''} ${(noteObj.content || '').slice(0, 400)}`.toLowerCase();
+
+      // Check Anthropology FIRST to prevent phrases like 'biological anthropology' or 'cultural life' from matching Biology
+      if (
+        noteText.includes('anthro') ||
+        noteText.includes('ethnograph') ||
+        noteText.includes('kinship') ||
+        noteText.includes('ethnicity') ||
+        noteText.includes('marriage rules')
+      ) {
+        const anthroSub = subjects.find(s => canonicalSubjectId(s.id) === 'subj_social_anthropology' || s.name.toLowerCase().includes('anthro'));
+        if (anthroSub) return anthroSub;
+      }
+
       for (const sub of subjects) {
         const sCanon = canonicalSubjectId(sub.id);
         const sName = sub.name.toLowerCase();
 
         if (
-          (sCanon === 'subj_general_biology' || sName.includes('bio')) &&
-          (noteText.includes('bio') || noteText.includes('cell') || noteText.includes('life') || noteText.includes('genet') || noteText.includes('biomolecule') || noteText.includes('photosynth'))
+          (sCanon === 'subj_general_biology' || sName.includes('biology')) &&
+          !noteText.includes('anthro') &&
+          !noteText.includes('ethnograph') &&
+          (noteText.includes('biology') || noteText.includes('cell') || noteText.includes('genet') || noteText.includes('biomolecule') || noteText.includes('photosynth') || noteText.includes('enzyme') || noteText.includes('mitosis') || noteText.includes('meiosis') || noteText.includes('dna'))
         ) return sub;
 
         if (
@@ -220,13 +237,15 @@ export const NotesLibraryView: React.FC<NotesLibraryViewProps> = ({
         ) return sub;
       }
 
-      // 3. Fallback: match by chapter's or direct key's canonical subject or default to first subject
+      // 3. Fallback: match by chapter's or direct key's canonical subject
       const fallbackKey = directKey || ch?.subject_id;
       if (fallbackKey) {
         const fallback = subjects.find(s => canonicalSubjectId(s.id) === canonicalSubjectId(fallbackKey));
         if (fallback) return fallback;
       }
-      return subjects[0];
+
+      // 4. Default fallback to subject matching BIO_SUBJECT_ID or first subject
+      return subjects.find(s => canonicalSubjectId(s.id) === 'subj_general_biology') || subjects[0];
     };
   }, [chapterMap, subjectMap, subjects]);
 
