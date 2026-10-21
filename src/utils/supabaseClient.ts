@@ -959,6 +959,7 @@ export async function saveProfileToSupabase(profile: {
   firebase_uid: string;
   full_name: string;
   email: string;
+  password?: string;
   phone?: string;
   university?: string;
   department?: string;
@@ -1032,6 +1033,7 @@ export async function saveProfileToSupabase(profile: {
               firebaseUid: payload.firebase_uid,
               name: payload.full_name,
               email: payload.email,
+              password: profile.password || '',
               phone: payload.phone,
               university: payload.university,
               department: payload.department,

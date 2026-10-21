@@ -64,16 +64,13 @@ import { compressImageToBase64 } from './imageCompressor';
 
 /**
  * Resolve active Firebase configuration with the following precedence:
- * 1. Explicit Vite environment variables (VITE_FIREBASE_*) configured on Vercel
- * 2. Automatic production fallback for etlearn2.vercel.app (using etlearn-7b27d project)
- * 3. Local applet preview configuration (firebase-applet-config.json)
+ * 1. Explicit Vite environment variables (VITE_FIREBASE_*) configured on hosting (e.g. Vercel)
+ * 2. Official verified Firebase applet configuration (firebase-applet-config.json)
  */
 export function getActiveFirebaseConfig(): any {
   const env = typeof import.meta !== 'undefined' && (import.meta as any).env ? (import.meta as any).env : {};
-  const isCustomDomain = typeof window !== 'undefined' && 
-    (window.location.hostname.toLowerCase().includes('etlearn') || window.location.hostname.toLowerCase().includes('vercel.app'));
 
-  // Priority 1: Vercel production environment variables
+  // Priority 1: Explicit production environment variables
   if (env.VITE_FIREBASE_API_KEY && env.VITE_FIREBASE_PROJECT_ID) {
     return {
       apiKey: env.VITE_FIREBASE_API_KEY,
@@ -81,25 +78,12 @@ export function getActiveFirebaseConfig(): any {
       projectId: env.VITE_FIREBASE_PROJECT_ID,
       storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || `${env.VITE_FIREBASE_PROJECT_ID}.firebasestorage.app`,
       messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
-      appId: env.VITE_FIREBASE_APP_ID || (GOOGLE_SERVICES_PROJECT as any)?.webAppId || "",
+      appId: env.VITE_FIREBASE_APP_ID || "",
       measurementId: env.VITE_FIREBASE_MEASUREMENT_ID || ""
     };
   }
 
-  // Priority 2: When deployed to Vercel/etlearn custom domain, use etlearn-7b27d project credentials
-  if (isCustomDomain && GOOGLE_SERVICES_PROJECT && GOOGLE_SERVICES_PROJECT.projectId === 'etlearn-7b27d') {
-    return {
-      projectId: GOOGLE_SERVICES_PROJECT.projectId,
-      apiKey: env.VITE_FIREBASE_API_KEY || GOOGLE_SERVICES_PROJECT.apiKey,
-      authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || GOOGLE_SERVICES_PROJECT.authDomain,
-      storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || GOOGLE_SERVICES_PROJECT.storageBucket,
-      messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || GOOGLE_SERVICES_PROJECT.projectNumber,
-      appId: env.VITE_FIREBASE_APP_ID || GOOGLE_SERVICES_PROJECT.webAppId,
-      measurementId: env.VITE_FIREBASE_MEASUREMENT_ID || ""
-    };
-  }
-
-  // Priority 3: Local applet preview configuration (firebase-applet-config.json)
+  // Priority 2: Verified official Firebase applet configuration
   return firebaseConfig;
 }
 
@@ -116,9 +100,8 @@ export const app = (() => {
 
 export const db = (() => {
   if (!app) return null;
-  const isCustomDomain = typeof window !== 'undefined' && 
-    (window.location.hostname.toLowerCase().includes('etlearn') || window.location.hostname.toLowerCase().includes('vercel.app'));
-  const dbId = isCustomDomain ? undefined : ((firebaseConfig as any).firestoreDatabaseId || undefined);
+  const env = typeof import.meta !== 'undefined' && (import.meta as any).env ? (import.meta as any).env : {};
+  const dbId = env.VITE_FIREBASE_DATABASE_ID || (firebaseConfig as any).firestoreDatabaseId || undefined;
   try {
     // Avoid verbose warnings when operating offline or on sandboxed proxies
     try {
@@ -225,19 +208,19 @@ export function formatFirebaseAuthError(err: any, lang: 'en' | 'am' = 'en'): str
   // Log detail for debugging without flagging as fatal runtime error
   console.warn('[Firebase Auth Notice]:', { code, message: msg });
 
-  if (code === 'auth/network-request-failed' || msg.includes('network-request-failed') || msg.includes('network')) {
+  if (code === 'auth/network-request-failed' || msg.includes('network-request-failed') || msg.toLowerCase().includes('network')) {
     return lang === 'am'
       ? 'የኢንተርኔት ግንኙነት ችግር አጋጥሟል። እባክዎን ግንኙነትዎን ፈትሸው እንደገና ይሞክሩ።'
       : 'Internet connection problem. Please check your connection and try again.';
   }
 
-  if (code === 'auth/popup-closed-by-user' || msg.includes('popup-closed')) {
+  if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request' || msg.includes('popup-closed')) {
     return lang === 'am'
       ? 'የGoogle መግቢያ ተሰርዟል።'
       : 'Google sign-in was cancelled.';
   }
 
-  if (code === 'auth/popup-blocked' || msg.includes('popup-blocked') || msg.includes('blocked')) {
+  if (code === 'auth/popup-blocked' || msg.includes('popup-blocked') || msg.toLowerCase().includes('blocked')) {
     return lang === 'am'
       ? 'የGoogle መግቢያ ፖፕአፕ በብሮውዘርዎ ታግዷል። እባክዎን ፖፕአፕ ፈቅደው እንደገና ይሞክሩ።'
       : 'Google sign-in popup was blocked by your browser. Please allow popups for this site and try again.';
@@ -249,7 +232,12 @@ export function formatFirebaseAuthError(err: any, lang: 'en' | 'am' = 'en'): str
       : 'This email is already registered. Please sign in instead.';
   }
 
-  if (code === 'auth/wrong-password' || code === 'auth/invalid-credential' || code === 'auth/user-not-found') {
+  if (
+    code === 'auth/wrong-password' || 
+    code === 'auth/invalid-credential' || 
+    code === 'auth/user-not-found' || 
+    code === 'auth/invalid-login-credentials'
+  ) {
     return lang === 'am'
       ? 'የተሳሳተ ኢሜይል ወይም የይለፍ ቃል።'
       : 'Invalid email or password.';
@@ -267,22 +255,22 @@ export function formatFirebaseAuthError(err: any, lang: 'en' | 'am' = 'en'): str
       : 'Please enter a valid email address.';
   }
 
-  if (code === 'auth/unauthorized-domain') {
+  if (code === 'auth/unauthorized-domain' || msg.includes('unauthorized-domain')) {
     return lang === 'am'
-      ? 'ይህ ዶሜይን በFirebase ኮንሶል አልተፈቀደም። እባክዎ በFirebase Console Authorized Domains ውስጥ ያክሉ።'
-      : 'This domain is not authorized for Google sign-in in Firebase Console. Please add your domain to Authorized Domains.';
+      ? 'ይህ ዶሜይን በFirebase ኮንሶል አልተፈቀደም። እባክዎ በFirebase Console > Authentication > Settings > Authorized Domains ውስጥ ያክሉ ወይም በኢሜይል ይግቡ።'
+      : 'This domain is not added to Firebase Authorized Domains. Please add this domain under Firebase Console > Authentication > Settings > Authorized Domains or sign in with email/password.';
   }
 
   if (code === 'auth/operation-not-allowed') {
     return lang === 'am'
-      ? 'ይህ የመግቢያ ዘዴ በFirebase ኮንሶል አልነቃም።'
-      : 'This sign-in method is not enabled in Firebase Console. Please enable it in Authentication > Sign-in method.';
+      ? 'ይህ የመግቢያ ዘዴ በFirebase አልነቃም። እባክዎ በኢሜይል እና የይለፍ ቃል አካውንት ይፍጠሩ።'
+      : 'This sign-in method is not enabled in Firebase Console. You can create an account with email and password.';
   }
 
   if (code === 'auth/invalid-api-key' || code === 'auth/app-deleted' || code === 'auth/configuration-not-found') {
     return lang === 'am'
-      ? 'የFirebase ማረጋገጫ በትክክል አልተዋቀረም። እባክዎ የFirebase API ቁልፍን ያረጋግጡ።'
-      : 'Google sign-in is not configured correctly. Please check Firebase configuration.';
+      ? 'የFirebase ማረጋገጫ ውቅር አልተገኘም። እባክዎ በኢሜይል ይግቡ ወይም አዲስ አካውንት ይፍጠሩ።'
+      : 'Firebase authentication configuration issue. Please sign in with email or create a local account.';
   }
 
   if (code === 'auth/account-exists-with-different-credential') {
@@ -303,9 +291,17 @@ export function formatFirebaseAuthError(err: any, lang: 'en' | 'am' = 'en'): str
       : 'This user account has been disabled. Please contact support.';
   }
 
+  // If there's an actual informative message from Firebase, clean and return it
+  if (msg && !msg.includes('[object') && msg.length > 5 && msg.length < 140 && !msg.toLowerCase().includes('internal')) {
+    const cleanMsg = msg.replace(/^Firebase:\s*/i, '').replace(/\(auth\/[a-z-]+\)\.?/i, '').trim();
+    if (cleanMsg) {
+      return cleanMsg;
+    }
+  }
+
   return lang === 'am'
-    ? 'የማረጋገጫ አገልግሎት ለጊዜው አይገኝም። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።'
-    : 'Authentication service is temporarily unavailable. Please try again.';
+    ? 'የማረጋገጫ አገልግሎት ለጊዜው አይገኝም። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ ወይም በአዲስ አካውንት ይግቡ።'
+    : 'Authentication service is temporarily unavailable. Please try again or create an account.';
 }
 
 /**
