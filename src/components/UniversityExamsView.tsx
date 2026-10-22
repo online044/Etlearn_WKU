@@ -21,6 +21,7 @@ import { fetchPublishedExams } from '../utils/contentStore';
 import { INITIAL_QUESTIONS } from '../data/initialFirestoreContent';
 import { generateRandomExamQuestions, fetchQuestionsPaginated, fetchAllSupabaseQuestions } from '../utils/supabaseQuestions';
 import { generateUniqueQuestions } from '../utils/examQuestionGenerator';
+import { getBuiltinAuthenticExamSheets } from '../data/authenticExamSheets';
 import ExamBrowserView from './ExamBrowserView';
 import FocusedQuestionView from './FocusedQuestionView';
 import ExamDetailView from './ExamDetailView';
@@ -146,7 +147,7 @@ export function parseQuestionUnitChapter(q: ExamQuestion, index: number): Parsed
 // ============================================================================
 // 📚 VERIFIED PAST PAPERS REPOSITORY (Supabase & Published Exams)
 // ============================================================================
-export const UNIVERSITY_SHEETS: ExamPaperSheet[] = [];
+export const UNIVERSITY_SHEETS: ExamPaperSheet[] = getBuiltinAuthenticExamSheets();
 
 export default function UniversityExamsView({
   profile,
@@ -155,11 +156,35 @@ export default function UniversityExamsView({
   onNavigate,
   onStudyAction
 }: UniversityExamsProps) {
-  // Master papers repository state - authentic exams from Supabase and user custom files
+  // Master papers repository state - authentic exams from Supabase, local cache, and user custom files
   const [examSheets, setExamSheets] = useState<ExamPaperSheet[]>(() => {
-    return loadCustomExamSheets();
+    const builtins = getBuiltinAuthenticExamSheets();
+    const custom = loadCustomExamSheets();
+    let cached: ExamPaperSheet[] = [];
+    try {
+      const raw = safeStorage.getItem('ethiolearn_cached_exam_sheets');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          cached = parsed;
+        }
+      }
+    } catch {}
+
+    const combinedMap = new Map<string, ExamPaperSheet>();
+    for (const b of builtins) combinedMap.set(b.id, b);
+    for (const c of cached) combinedMap.set(c.id, c);
+    for (const u of custom) combinedMap.set(u.id, u);
+
+    const merged = Array.from(combinedMap.values());
+    try {
+      safeStorage.setItem('ethiolearn_cached_exam_sheets', JSON.stringify(merged));
+    } catch {}
+    return merged;
   });
-  const [selectedSheetId, setSelectedSheetId] = useState<string>('');
+  const [selectedSheetId, setSelectedSheetId] = useState<string>(() => {
+    return UNIVERSITY_SHEETS[0]?.id || 'wku_math_1011';
+  });
 
   // 20-Question Free Practice Quota Management
   const isProUser = Boolean(profile?.isPro || profile?.tier?.includes('pro'));
@@ -277,7 +302,11 @@ export default function UniversityExamsView({
         setExamSheets(prev => {
           const ids = new Set(prev.map(s => s.id));
           const newItems = mapped.filter(m => !ids.has(m.id));
-          return [...newItems, ...prev];
+          const merged = [...newItems, ...prev];
+          try {
+            safeStorage.setItem('ethiolearn_cached_exam_sheets', JSON.stringify(merged));
+          } catch {}
+          return merged;
         });
         setSelectedSheetId(prev => prev || mapped[0]?.id || '');
       }
@@ -346,7 +375,11 @@ export default function UniversityExamsView({
           setExamSheets(prev => {
             const existingIds = new Set(prev.map(s => s.id));
             const uniqueNew = newSheets.filter(ns => !existingIds.has(ns.id));
-            return [...uniqueNew, ...prev];
+            const updated = [...uniqueNew, ...prev];
+            try {
+              safeStorage.setItem('ethiolearn_cached_exam_sheets', JSON.stringify(updated));
+            } catch {}
+            return updated;
           });
           setSelectedSheetId(prev => prev || newSheets[0]?.id || '');
         }

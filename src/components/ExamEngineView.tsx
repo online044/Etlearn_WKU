@@ -15,9 +15,11 @@ import {
 } from '../utils/firebaseStore';
 import { playClickChime, playSuccessChime } from '../utils/audio';
 import { fetchAllSupabaseQuestions } from '../utils/supabaseQuestions';
+import { safeStorage } from '../utils/safeStorage';
+import { getBuiltinExamPapersForEngine } from '../data/authenticExamSheets';
 
-// Authentic exam papers repository (Loaded dynamically from Supabase)
-export const ETHIOPIAN_EXAM_PAPERS: ExamPaper[] = [];
+// Authentic exam papers repository (Available 100% offline & augmented with live Supabase questions)
+export const ETHIOPIAN_EXAM_PAPERS: ExamPaper[] = getBuiltinExamPapersForEngine();
 
 interface ExamEngineViewProps {
   profile: StudentProfile;
@@ -47,7 +49,21 @@ export default function ExamEngineView({
   const [pastAttempts, setPastAttempts] = useState<any[]>([]);
   const [reviewFilter, setReviewFilter] = useState<'all' | 'incorrect' | 'correct' | 'flagged'>('all');
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string>('All');
-  const [examPapers, setExamPapers] = useState<ExamPaper[]>(ETHIOPIAN_EXAM_PAPERS);
+  const [examPapers, setExamPapers] = useState<ExamPaper[]>(() => {
+    let cached: ExamPaper[] = [];
+    try {
+      const raw = safeStorage.getItem('ethiolearn_cached_exam_engine_papers');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) cached = parsed;
+      }
+    } catch {}
+
+    const map = new Map<string, ExamPaper>();
+    for (const b of ETHIOPIAN_EXAM_PAPERS) map.set(b.id, b);
+    for (const c of cached) map.set(c.id, c);
+    return Array.from(map.values());
+  });
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const userId = profile?.email || 'guest_user';
@@ -89,7 +105,16 @@ export default function ExamEngineView({
             };
           });
 
-          setExamPapers(dynamicPapers);
+          setExamPapers(prev => {
+            const map = new Map<string, ExamPaper>();
+            for (const p of prev) map.set(p.id, p);
+            for (const d of dynamicPapers) map.set(d.id, d);
+            const merged = Array.from(map.values());
+            try {
+              safeStorage.setItem('ethiolearn_cached_exam_engine_papers', JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
         }
       } catch (err) {
         console.warn('Could not load dynamic exam papers from Supabase:', err);
@@ -98,9 +123,20 @@ export default function ExamEngineView({
     loadSupabaseExams();
   }, []);
 
-  // Load past attempts from Firestore and Supabase
+  // Load past attempts from local cache, Firestore, and Supabase
   useEffect(() => {
     async function loadPastAttempts() {
+      // 1. Immediately display cached attempts for instant offline review
+      const localAttemptsStr = safeStorage.getItem(`ethiolearn_exam_attempts_${userId}`);
+      if (localAttemptsStr) {
+        try {
+          const parsed = JSON.parse(localAttemptsStr);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setPastAttempts(parsed);
+          }
+        } catch {}
+      }
+
       try {
         const firestoreResults = await fetchUserExamResultsFromFirestore(userId);
         if (firestoreResults && firestoreResults.length > 0) {
@@ -123,12 +159,20 @@ export default function ExamEngineView({
             date: r.createdAt
           }));
           setPastAttempts(mapped);
+          try {
+            safeStorage.setItem(`ethiolearn_exam_attempts_${userId}`, JSON.stringify(mapped));
+          } catch {}
           return;
         }
         const history = await fetchStudentExamAttempts(userId);
-        setPastAttempts(history || []);
+        if (history && history.length > 0) {
+          setPastAttempts(history);
+          try {
+            safeStorage.setItem(`ethiolearn_exam_attempts_${userId}`, JSON.stringify(history));
+          } catch {}
+        }
       } catch (err) {
-        console.warn('Error loading past attempts:', err);
+        console.warn('Error loading past attempts (offline fallback active):', err);
       }
     }
     loadPastAttempts();
@@ -266,7 +310,17 @@ export default function ExamEngineView({
 
     if (onStudyAction) onStudyAction();
 
-    // Persist attempt to Firestore and Supabase
+    // Persist attempt locally to safeStorage so it survives offline reloads
+    try {
+      const updatedAttempts = [attemptRecord, ...pastAttempts];
+      setPastAttempts(updatedAttempts);
+      safeStorage.setItem(`ethiolearn_exam_attempts_${userId}`, JSON.stringify(updatedAttempts));
+    } catch (e) {
+      console.warn('Error caching exam attempt locally:', e);
+      setPastAttempts(prev => [attemptRecord, ...prev]);
+    }
+
+    // Persist attempt to Firestore and Supabase when network is reachable
     try {
       await saveExamResultToFirestore({
         userId,
@@ -285,10 +339,8 @@ export default function ExamEngineView({
         incorrectQuestions
       });
       await saveExamAttempt(attemptRecord, userId);
-      setPastAttempts(prev => [attemptRecord, ...prev]);
     } catch (e) {
-      console.warn('Error recording exam attempt to Firestore/Supabase:', e);
-      setPastAttempts(prev => [attemptRecord, ...prev]);
+      console.warn('Error recording exam attempt to Firestore/Supabase (offline mode active):', e);
     }
   };
 

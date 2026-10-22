@@ -803,6 +803,24 @@ export class NotesRepository {
       if (!existingSub || existingSub.length === 0) cacheSubjectsLocally(SEED_SUBJECTS);
       const existingCh = getCachedChaptersLocally();
       if (!existingCh || existingCh.length === 0) cacheChaptersLocally(SEED_CHAPTERS);
+      const existingNotes = getCachedNotesListLocally();
+      if (!existingNotes || existingNotes.length === 0) {
+        const seedItems: NoteListItem[] = SEED_NOTES.map((n, idx) => ({
+          id: n.id,
+          chapter_id: n.chapter_id,
+          title: n.title,
+          read_time_min: n.read_time_min,
+          sort_order: typeof n.sort_order === 'number' ? n.sort_order : idx + 1,
+          is_published: true,
+          created_at: n.created_at,
+          updated_at: n.updated_at,
+          subject_id: n.subject_id,
+          subject: n.subject,
+          course: n.course
+        }));
+        cacheNotesListLocally(seedItems);
+        SEED_NOTES.forEach((note) => cacheFullNoteLocally(note));
+      }
     } catch {}
   }
 
@@ -1012,24 +1030,57 @@ export class NotesRepository {
           }
           return formatted;
         } else if (listRes.status === 'fulfilled' || notesRes.status === 'fulfilled') {
-          // Supabase connected and returned 0 records -> sync local cache to empty list
-          if (!chapterId) {
-            cacheNotesListLocally([]);
+          // Supabase connected and returned 0 records -> fall back to seed notes
+          const cached = getCachedNotesListLocally();
+          if (cached && cached.length > 0) {
+            return chapterId ? cached.filter((n) => n.chapter_id === chapterId) : cached;
           }
-          return [];
+          const seedItems: NoteListItem[] = SEED_NOTES.map((n, idx) => ({
+            id: n.id,
+            chapter_id: n.chapter_id,
+            title: n.title,
+            read_time_min: n.read_time_min,
+            sort_order: typeof n.sort_order === 'number' ? n.sort_order : idx + 1,
+            is_published: true,
+            created_at: n.created_at,
+            updated_at: n.updated_at,
+            subject_id: n.subject_id,
+            subject: n.subject,
+            course: n.course
+          }));
+          if (!chapterId) {
+            cacheNotesListLocally(seedItems);
+          }
+          return chapterId ? seedItems.filter((n) => n.chapter_id === chapterId) : seedItems;
         }
       } catch (err) {
         console.warn('[notesRepository] Supabase fetchNotesList integration error:', err);
       }
     }
 
-    // Check offline cached notes list (filtered from seed IDs)
+    // Check offline cached notes list
     const cached = getCachedNotesListLocally();
-    if (cached) {
+    if (cached && cached.length > 0) {
       return chapterId ? cached.filter((n) => n.chapter_id === chapterId) : cached;
     }
 
-    return [];
+    // Fallback to seed notes if nothing in cache
+    const seedFallback: NoteListItem[] = SEED_NOTES.map((n, idx) => ({
+      id: n.id,
+      chapter_id: n.chapter_id,
+      title: n.title,
+      read_time_min: n.read_time_min,
+      sort_order: typeof n.sort_order === 'number' ? n.sort_order : idx + 1,
+      is_published: true,
+      created_at: n.created_at,
+      updated_at: n.updated_at,
+      subject_id: n.subject_id,
+      subject: n.subject,
+      course: n.course
+    }));
+    cacheNotesListLocally(seedFallback);
+    SEED_NOTES.forEach((note) => cacheFullNoteLocally(note));
+    return chapterId ? seedFallback.filter((n) => n.chapter_id === chapterId) : seedFallback;
   }
 
   /**

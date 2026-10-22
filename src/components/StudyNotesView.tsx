@@ -116,21 +116,39 @@ export default function StudyNotesView({
     return Array.from(new Set(list));
   }, [enrolledSubjects, fallbackSubjects]);
 
-  // Load published study notes from Firestore on mount
+  // Load published study notes from local safeStorage and Firestore on mount
   useEffect(() => {
     let isMounted = true;
     const loadNotes = async () => {
+      // 1. Immediately load cached published notes for offline readiness
+      try {
+        const cachedStr = safeStorage.getItem('ethiolearn_cached_published_notes');
+        if (cachedStr) {
+          const parsed = JSON.parse(cachedStr);
+          if (Array.isArray(parsed) && parsed.length > 0 && isMounted) {
+            setPublishedNotes(parsed);
+            if (!parsed.find(n => n.id === selectedNoteId)) {
+              setSelectedNoteId(parsed[0].id);
+            }
+          }
+        }
+      } catch {}
+
+      // 2. Fetch fresh published notes when online and cache them
       try {
         setIsLoadingNotes(true);
         const notes = await fetchPublishedNotes();
         if (isMounted && notes && notes.length > 0) {
           setPublishedNotes(notes);
+          try {
+            safeStorage.setItem('ethiolearn_cached_published_notes', JSON.stringify(notes));
+          } catch {}
           if (!notes.find(n => n.id === selectedNoteId)) {
             setSelectedNoteId(notes[0].id);
           }
         }
       } catch (e) {
-        console.warn('Error loading published study notes:', e);
+        console.warn('Error loading published study notes (offline mode active):', e);
       } finally {
         if (isMounted) setIsLoadingNotes(false);
       }
