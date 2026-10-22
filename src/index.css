@@ -1,0 +1,553 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Ethiopic:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;700&family=Lexend:wght@400;500;600;700&display=swap');
+@import url('https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css');
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", "Noto Sans Ethiopic", system-ui, -apple-system, sans-serif;
+  --font-serif: "Georgia", "Playfair Display", serif;
+  --font-mono: "JetBrains Mono", monospace;
+  
+  --text-2xs: 0.6875rem; /* 11px */
+  --text-xs: 0.75rem; /* 12px */
+  --text-xs--line-height: 1.45;
+  --text-sm: 0.875rem; /* 14px */
+  --text-sm--line-height: 1.5;
+  --text-base: 1rem; /* 16px */
+  --text-base--line-height: 1.6;
+  --text-lg: 1.125rem; /* 18px */
+  --text-lg--line-height: 1.5;
+  --text-xl: 1.25rem; /* 20px */
+  --text-xl--line-height: 1.4;
+  --text-2xl: 1.5rem; /* 24px */
+  --text-2xl--line-height: 1.35;
+  
+  --color-gold-cream: #F0EDE8;
+  --color-gold-muted: #8A8480;
+  --color-ethio-black: #0D0D0D;
+  --color-ethio-surface: #161616;
+  --color-ethio-gold: #C8962E;
+  --color-ethio-green: #1A7A3C;
+  --color-ethio-red: #BE1931;
+
+  --color-main-bg: var(--bg-main);
+  --color-surface-elevated: var(--bg-surface);
+  --color-divider-subtle: var(--border-subtle);
+  --color-title-dominant: var(--text-title);
+  --color-subtext-explain: var(--text-explain);
+  --color-accent-active: var(--accent-interactive);
+  --shadow-ambient-purple: var(--shadow-ambient);
+}
+
+/* Responsive Base & Container Safety for Mobile Screens */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+/* Phone-First Fluid Base Scale: smoothly scales across all phone widths (320px to 430px+) */
+:root {
+  font-size: clamp(14px, 3.8vw, 16px);
+  line-height: 1.6;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+@media (min-width: 640px) {
+  :root {
+    font-size: 16px;
+  }
+}
+
+html[data-text-size="normal"] {
+  font-size: clamp(13px, 3.4vw, 15px);
+}
+@media (min-width: 640px) {
+  html[data-text-size="normal"] {
+    font-size: 15px;
+  }
+}
+
+html[data-text-size="moderate"],
+html:not([data-text-size]) {
+  font-size: clamp(14px, 3.8vw, 16px);
+}
+@media (min-width: 640px) {
+  html[data-text-size="moderate"],
+  html:not([data-text-size]) {
+    font-size: 16px;
+  }
+}
+
+html[data-text-size="large"] {
+  font-size: clamp(15px, 4.2vw, 17.5px);
+}
+@media (min-width: 640px) {
+  html[data-text-size="large"] {
+    font-size: 17.5px;
+  }
+}
+
+html[data-text-size="xlarge"] {
+  font-size: clamp(16px, 4.6vw, 19px);
+}
+@media (min-width: 640px) {
+  html[data-text-size="xlarge"] {
+    font-size: 19px;
+  }
+}
+
+html {
+  min-height: 100%;
+  max-width: 100vw;
+  overflow-x: clip;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+body {
+  min-height: 100%;
+  max-width: 100vw;
+  overflow-x: clip;
+  overflow-y: auto;
+  font-size: 1rem;
+  line-height: 1.65;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: auto;
+  letter-spacing: -0.01em;
+}
+
+#root {
+  min-height: 100%;
+  max-width: 100vw;
+  overflow-x: clip;
+  display: flex;
+  flex-direction: column;
+}
+
+img, video, canvas, svg, iframe {
+  max-width: 100%;
+  height: auto;
+}
+
+:root {
+  --bg-main: #F1F5F9; /* Clean, modern slate blue-grey page background */
+  --bg-surface: #FFFFFF; /* Crisp white card surface */
+  --border-subtle: #E2E8F0; /* Clean light slate border */
+  --text-title: #0F172A; /* High contrast deep navy/slate */
+  --text-explain: #334155; /* Highly readable dark slate for long reading sessions */
+  --accent-interactive: #4F46E5; /* Vibrant indigo brand color */
+  --shadow-ambient: 0 4px 18px rgba(79, 70, 229, 0.04);
+}
+
+.dark {
+  --bg-main: #0B0F19; /* Eye-safe deep space midnight blue page background */
+  --bg-surface: #121A2E; /* Distinct elevated deep blue-slate card background */
+  --border-subtle: #1E293B; /* Subtle slate blue border */
+  --text-title: #F8FAFC; /* Crisp light white-slate */
+  --text-explain: #94A3B8; /* Highly readable soft lavender-slate */
+  --accent-interactive: #6366F1; /* Vibrant indigo brand color for dark mode */
+  --shadow-ambient: 0 8px 30px rgba(99, 102, 241, 0.12);
+}
+
+/* Dynamic High-Readability Safety Net for Dark Mode */
+.dark .bg-white,
+.dark .bg-slate-50,
+.dark .bg-slate-100,
+.dark .bg-zinc-50,
+.dark .bg-zinc-100,
+.dark .bg-gray-50,
+.dark .bg-gray-100 {
+  background-color: var(--bg-surface) !important;
+}
+
+.dark .border-slate-100,
+.dark .border-slate-200,
+.dark .border-zinc-100,
+.dark .border-zinc-200,
+.dark .border-gray-100,
+.dark .border-gray-200 {
+  border-color: var(--border-subtle) !important;
+}
+
+.dark .text-slate-950,
+.dark .text-slate-900,
+.dark .text-slate-850,
+.dark .text-slate-800,
+.dark .text-zinc-950,
+.dark .text-zinc-900,
+.dark .text-zinc-850,
+.dark .text-zinc-800,
+.dark .text-gray-950,
+.dark .text-gray-900,
+.dark .text-gray-800,
+.dark .text-neutral-950,
+.dark .text-neutral-900,
+.dark .text-neutral-800 {
+  color: var(--text-title) !important;
+}
+
+.dark .text-slate-700,
+.dark .text-slate-600,
+.dark .text-slate-500,
+.dark .text-zinc-700,
+.dark .text-zinc-600,
+.dark .text-zinc-500,
+.dark .text-gray-700,
+.dark .text-gray-600,
+.dark .text-gray-500,
+.dark .text-neutral-700,
+.dark .text-neutral-600,
+.dark .text-neutral-500 {
+  color: var(--text-explain) !important;
+}
+
+.dark input,
+.dark textarea,
+.dark select {
+  background-color: var(--bg-surface) !important;
+  color: var(--text-title) !important;
+  border-color: var(--border-subtle) !important;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: var(--text-explain) !important;
+  opacity: 0.65;
+}
+
+/* Custom premium scrollbar - High Density style */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #0D0D0D;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #C8962E;
+  border-radius: 10px;
+}
+
+/* Global scrollbars mapping */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0D0D0D;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2A2A2A;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #C8962E;
+}
+
+/* Ethiopian serif helper */
+.ethio-serif {
+  font-family: 'Georgia', serif;
+}
+
+/* Accent board accent-border */
+.accent-border {
+  border-left: 3px solid #C8962E;
+}
+
+/* Glass panel */
+.glass {
+  background: rgba(22, 22, 22, 0.7);
+  backdrop-filter: blur(10px);
+}
+
+/* Premium gradient Pro badge */
+.pro-badge {
+  background: linear-gradient(45deg, #C8962E, #f0cf8e);
+  color: #000;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+/* Floating animation for Lalibela cross */
+@keyframes slow-rotate {
+  0% { transform: rotate(0deg); }
+  50% { transform: rotate(180deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.animate-slow-rotate {
+  animation: slow-rotate 25s linear infinite;
+}
+
+/* Shimmer load skeletons */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #161616 25%, #222222 50%, #161616 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.shimmer-sweep-animation {
+  animation: shimmer-sweep 1.6s linear infinite;
+}
+
+@keyframes dopamine-pop {
+  0% { transform: scale(0.9); opacity: 0; filter: brightness(1.8); }
+  45% { transform: scale(1.1); filter: brightness(1.2); }
+  70% { transform: scale(0.98); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.dopamine-pop-active {
+  animation: dopamine-pop 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes rise-and-fade {
+  0% { transform: translateY(0) scale(0); opacity: 1; }
+  100% { transform: translateY(-120px) scale(0.85); opacity: 0; }
+}
+
+.particle-reward-rise {
+  animation: rise-and-fade 1.3s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+}
+
+/* Dynamic premium color mappings across both light and dark states */
+.premium-card, .premium-box {
+  background-color: var(--bg-surface) !important;
+  border-color: var(--border-subtle) !important;
+  color: var(--text-title) !important;
+  box-shadow: var(--shadow-ambient) !important;
+}
+
+/* Background properties mapping */
+.bg-main-bg, 
+.bg-\[\#070913\], 
+.bg-\[\#040816\], 
+.bg-\[\#0D0D0D\], 
+.bg-zinc-950, 
+.bg-slate-950,
+.dark\:bg-\[\#050508\],
+.dark\:bg-slate-950,
+.dark\:bg-black,
+.bg-\[\#060a1a\] {
+  background-color: var(--bg-main) !important;
+}
+
+.bg-surface-elevated, 
+.bg-\[\#0E1126\], 
+.bg-\[\#161616\], 
+.bg-\[\#0B0D1A\], 
+.bg-\[\#0A0E1D\], 
+.bg-\[\#111111\], 
+.bg-\[\#121212\], 
+.bg-\[\#111\],
+.dark\:bg-\[\#0c0d12\],
+.dark\:bg-\[\#0c0d12\]\/95,
+.dark\:bg-\[\#08090d\],
+.bg-\[\#151515\] {
+  background-color: var(--bg-surface) !important;
+}
+
+/* Scrollbars mapping */
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: var(--bg-main) !important;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--accent-interactive) !important;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-main) !important;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-subtle) !important;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-interactive) !important;
+}
+
+/* Border lines mapping */
+.border-divider-subtle, 
+.border-\[\#1E293B\], 
+.border-\[\#2a2a2a\], 
+.border-\[\#2A2A2A\], 
+.border-zinc-800, 
+.border-zinc-900 {
+  border-color: var(--border-subtle) !important;
+}
+
+/* Title text color mappings excluding interactive icons, actions or flags */
+.text-title-dominant {
+  color: var(--text-title) !important;
+}
+
+/* Subtext/Explanation text color mappings */
+.text-subtext-explain {
+  color: var(--text-explain) !important;
+}
+
+/* Interactive accents & Active states */
+.text-accent-interactive, 
+.text-\[\#A855F7\], 
+.text-\[\#7C3AED\] {
+  color: var(--accent-interactive) !important;
+}
+
+.bg-accent-interactive, 
+.bg-\[\#A855F7\], 
+.bg-\[\#7C3AED\] {
+  background-color: var(--accent-interactive) !important;
+}
+
+.border-accent-interactive,
+.border-\[\#A855F7\],
+.border-\[\#7C3AED\] {
+  border-color: var(--accent-interactive) !important;
+}
+
+/* Shadow drop bounds mapping */
+.premium-shadow, 
+.shadow-ambient-purple,
+.shadow-2xl,
+.shadow-xl {
+  box-shadow: var(--shadow-ambient) !important;
+}
+
+/* Native App PWA & iOS Safari Styling Enhancements */
+html, body {
+  overscroll-behavior-y: auto;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Enable smooth momentum scrolling on iOS */
+.overflow-y-auto,
+.overflow-x-auto,
+.overflow-auto,
+.custom-scrollbar {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* iOS Safe Area Utilities */
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.mb-safe {
+  margin-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Prevent auto-zoom on iOS Safari when tapping input fields by ensuring >= 16px font-size on mobile */
+@media screen and (max-width: 767px) {
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Optimize touch interactions for buttons/links without blocking scroll gestures */
+button, 
+a, 
+input[type="button"], 
+input[type="submit"],
+[role="button"] {
+  touch-action: manipulation;
+}
+
+/* Disable text selection where desired without disabling touch scrolling */
+button, 
+a, 
+nav, 
+.select-none {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Ensure smooth tap highlights on iOS and Android devices */
+button,
+a,
+input,
+select,
+textarea,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Telegram Mini App & PWA Native App Polish */
+:root {
+  --tg-viewport-height: 100vh;
+  --tg-viewport-stable-height: 100vh;
+}
+
+html, body {
+  overscroll-behavior-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tma-container {
+  min-height: var(--tg-viewport-height, 100vh);
+  max-width: 100vw;
+  overflow-x: clip;
+}
+
+.pb-tma-nav {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 4.75rem);
+}
+
+/* ============================================================================ */
+/* 🎓 PHONE-FIRST STUDENT ACCESSIBILITY & BILINGUAL READABILITY                 */
+/* ============================================================================ */
+/* Fluid text wrapping and word breaking on narrow mobile screens */
+p, h1, h2, h3, h4, h5, h6, span, label, button, a {
+  overflow-wrap: break-word;
+}
+
+/* Ensure Amharic / Ge'ez text has ample vertical height so diacritics and ascenders never clip */
+:lang(am),
+[lang="am"],
+.font-amharic {
+  line-height: 1.68 !important;
+  font-feature-settings: "kern" 1;
+}
+
+/* Phone-first touch target compliance (>= 44px touch targets on mobile) */
+@media (max-width: 640px) {
+  .touch-target-mobile {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+
+
