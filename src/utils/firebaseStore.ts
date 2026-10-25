@@ -83,8 +83,21 @@ export function getActiveFirebaseConfig(): any {
     };
   }
 
-  // Priority 2: Verified official Firebase applet configuration
-  return firebaseConfig;
+  // Priority 2: Verified original Firebase configuration (etlearn-7b27d)
+  if (firebaseConfig && (firebaseConfig as any).projectId) {
+    return firebaseConfig;
+  }
+
+  // Priority 3: Extracted Google Services fallback (etlearn-7b27d)
+  return {
+    apiKey: GOOGLE_SERVICES_PROJECT.apiKey,
+    authDomain: GOOGLE_SERVICES_PROJECT.authDomain,
+    projectId: GOOGLE_SERVICES_PROJECT.projectId,
+    storageBucket: GOOGLE_SERVICES_PROJECT.storageBucket,
+    messagingSenderId: GOOGLE_SERVICES_PROJECT.projectNumber,
+    appId: GOOGLE_SERVICES_PROJECT.webAppId,
+    measurementId: ""
+  };
 }
 
 // Safe initialization to prevent "duplicate default app" warnings and missing service crashes
@@ -256,9 +269,10 @@ export function formatFirebaseAuthError(err: any, lang: 'en' | 'am' = 'en'): str
   }
 
   if (code === 'auth/unauthorized-domain' || msg.includes('unauthorized-domain')) {
+    const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'current domain';
     return lang === 'am'
-      ? 'ይህ ዶሜይን በFirebase ኮንሶል አልተፈቀደም። እባክዎ በFirebase Console > Authentication > Settings > Authorized Domains ውስጥ ያክሉ ወይም በኢሜይል ይግቡ።'
-      : 'This domain is not added to Firebase Authorized Domains. Please add this domain under Firebase Console > Authentication > Settings > Authorized Domains or sign in with email/password.';
+      ? `ይህ ዶሜይን (${currentDomain}) በFirebase ኮንሶል (etlearn-7b27d) አልተፈቀደም። እባክዎ በFirebase Console > Authentication > Settings > Authorized Domains ውስጥ "${currentDomain}" ያክሉ፤ ወይም ከታች በኢሜይል/ይለፍ ቃል ይግቡ።`
+      : `Domain "${currentDomain}" is not in Firebase Authorized Domains (project: etlearn-7b27d). Please add "${currentDomain}" under Firebase Console > Authentication > Settings > Authorized Domains, or sign in below with your email & password.`;
   }
 
   if (code === 'auth/operation-not-allowed') {

@@ -1,10 +1,9 @@
 {
-  "projectId": "lyrical-waters-psjh2",
-  "appId": "1:798360135860:web:08c9d809bc717c94e14fe1",
-  "apiKey": "AIzaSyBVfPCHBtGAibMAnkcJ4Lf9vgh4gLvMQLw",
-  "authDomain": "lyrical-waters-psjh2.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-ethiolearnpro-7054e383-a276-45e6-981f-1a52674d650a",
-  "storageBucket": "lyrical-waters-psjh2.firebasestorage.app",
-  "messagingSenderId": "798360135860",
+  "projectId": "etlearn-7b27d",
+  "appId": "1:782413162967:web:etlearn2prodweb",
+  "apiKey": "AIzaSyCpPQ9ehHqtdjUo_T6DWXKQNRE5XGMp34c",
+  "authDomain": "etlearn-7b27d.firebaseapp.com",
+  "storageBucket": "etlearn-7b27d.firebasestorage.app",
+  "messagingSenderId": "782413162967",
   "measurementId": ""
 }
