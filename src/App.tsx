@@ -1146,6 +1146,62 @@ export default function App() {
     showToast(language === 'en' ? "Signed out successfully. Session recorded." : "በተሳካ ሁኔታ ወጥተዋል። የመውጫ ሰዓትዎ ተመዝግቧል።");
   };
 
+  const handleDirectGoogleSignIn = async () => {
+    try {
+      playClickChime();
+      const res = await googleSignIn();
+      if (res?.user?.email) {
+        const emailTrim = res.user.email.toLowerCase().trim();
+        const uid = res.user.uid;
+        let supaProfile = null;
+        try {
+          supaProfile = await fetchProfileFromSupabase(uid, emailTrim);
+        } catch (e) {}
+
+        const nameToUse = supaProfile?.full_name || supaProfile?.name || res.user.displayName || emailTrim.split('@')[0];
+        const univToUse = supaProfile?.university || "Wolkite University";
+        const deptToUse = supaProfile?.department || "Freshman Common Courses";
+        const yearToUse = supaProfile?.year_level || "Freshman (1st Year)";
+        const phoneToUse = supaProfile?.phone || '';
+
+        const updatedProfile: StudentProfile = {
+          id: uid,
+          firebaseUid: uid,
+          name: nameToUse,
+          email: emailTrim,
+          phone: phoneToUse,
+          university: univToUse,
+          department: deptToUse,
+          year: yearToUse,
+          grade: 'University',
+          stream: 'Natural',
+          subjects: ["Emerging Technologies", "Communicative English", "Mathematics", "Logic and Critical Thinking"],
+          claudeApiKey: '',
+          dailyGoalHours: 2,
+          theme: 'dark',
+          language: language,
+          avatar: (supaProfile?.profile_photo as any) || 'champion',
+          isPro: supaProfile?.subscription_status === 'pro' || isAdministratorEmail(emailTrim),
+          userRole: isAdministratorEmail(emailTrim) ? 'super_admin' : 'student',
+          isRegistered: true,
+          unregisteredAICredits: 10,
+          emailVerified: res.user.emailVerified
+        };
+
+        setProfile(updatedProfile);
+        safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(updatedProfile));
+        safeStorage.setItem('ethiolearn_active_email', emailTrim);
+        playSuccessChime();
+        showToast(language === 'am' ? 'በGoogle አካውንትዎ በተሳካ ሁኔታ ገብተዋል!' : 'Signed in with your Google account successfully!');
+      }
+    } catch (err: any) {
+      console.error('[Direct Google Sign-in error]:', err);
+      safeStorage.removeItem('ethiolearn_current_profile');
+      safeStorage.removeItem('ethiolearn_active_email');
+      setProfile(null);
+    }
+  };
+
   const handleSyncStatsToSheets = async () => {
     if (!googleToken || !googleUser || !profile) {
       showToast("Please sign in with Google first in the profile section!");
@@ -1390,6 +1446,18 @@ export default function App() {
                   <span className="font-serif font-black text-slate-900 dark:text-white text-base sm:text-lg tracking-tight">EthioLearn</span>
                   {profile.isPro ? (
                     <span className="text-[#F59E0B] text-[9px] sm:text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-500 font-sans tracking-wide">PRO</span>
+                  ) : (!profile.isRegistered || profile.id?.startsWith('guest')) ? (
+                    <span 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        playClickChime();
+                        setCurrentPage('upgrade');
+                      }}
+                      className="text-emerald-400 text-[9px] sm:text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 font-sans tracking-wide cursor-pointer hover:bg-emerald-500/25"
+                      title={language === 'am' ? 'የእንግዳ መለያ (ማየት ብቻ) - ለመመዝገብ ወይም ፕሮ ለማድረግ ይጫኑ' : 'Guest mode (Preview only) - Tap to register or upgrade'}
+                    >
+                      {language === 'am' ? 'እንግዳ' : 'GUEST'}
+                    </span>
                   ) : (
                     <span className="text-slate-400 dark:text-zinc-400 text-[9px] sm:text-[10px] font-bold px-1 py-0.2 rounded bg-slate-200 dark:bg-zinc-800 font-sans">CAMPUS</span>
                   )}
@@ -1814,6 +1882,13 @@ export default function App() {
                 language={language}
                 onUpdateProfile={handleUpdateProfile}
                 onClose={() => setCurrentPage('home')}
+                onRequireAuth={() => {
+                  playClickChime();
+                  safeStorage.removeItem('ethiolearn_current_profile');
+                  safeStorage.removeItem('ethiolearn_active_email');
+                  setProfile(null);
+                }}
+                onGoogleSignIn={handleDirectGoogleSignIn}
               />
             )}
 

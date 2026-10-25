@@ -23,14 +23,21 @@ interface UpgradeProViewProps {
   language: 'en' | 'am';
   onUpdateProfile: (updated: StudentProfile) => void;
   onClose?: () => void;
+  onRequireAuth?: () => void;
+  onGoogleSignIn?: () => Promise<void> | void;
 }
 
 export default function UpgradeProView({
   profile,
   language,
   onUpdateProfile,
-  onClose
+  onClose,
+  onRequireAuth,
+  onGoogleSignIn
 }: UpgradeProViewProps) {
+  const isGuest = !profile.isRegistered || profile.id?.startsWith('guest') || profile.email?.includes('guest') || profile.email === 'scholar.guest@ethiolearn.com';
+  const [showGuestAuthModal, setShowGuestAuthModal] = useState(false);
+
   const [activeTab, setActiveTab] = useState<'tiers' | 'pay' | 'status'>('tiers');
   const [selectedTier, setSelectedTier] = useState<SubscriptionTier>('pro_semester');
   const [selectedSubjectBundle, setSelectedSubjectBundle] = useState<string>('Critical Thinking');
@@ -128,6 +135,11 @@ export default function UpgradeProView({
 
   const handleSubmitPayment = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isGuest) {
+      playFailureChime();
+      setShowGuestAuthModal(true);
+      return;
+    }
     const effectiveTxn = txnRef.trim();
 
     if (!senderName.trim() || !effectiveTxn) {
@@ -203,6 +215,68 @@ export default function UpgradeProView({
   return (
     <div className="max-w-5xl mx-auto space-y-6 text-white pb-10">
       
+      {/* Guest Account Preview Alert Banner */}
+      {isGuest && (
+        <div className="rounded-2xl bg-gradient-to-r from-amber-950/50 via-[#101a2e] to-emerald-950/40 border-2 border-amber-500/50 p-4 sm:p-5 shadow-xl relative overflow-hidden">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 mt-0.5">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="text-sm font-serif font-black text-amber-300">
+                    {language === 'am' ? 'የእንግዳ መለያ (Guest Account) ማየት ብቻ ነው' : 'Guest Accounts Are Preview-Only'}
+                  </h4>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[9px] font-mono font-bold uppercase tracking-wider">
+                    {language === 'am' ? 'Gmail ያስፈልጋል' : 'GMAIL REQUIRED'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed max-w-2xl">
+                  {language === 'am'
+                    ? 'የእንግዳ መለያ የትምህርት ይዘቶችንና ዋጋዎችን ለማየት ብቻ ነው። የፕሮ አባልነት ለማንሳት እባክዎ በእውነተኛ የGoogle (Gmail) አካውንትዎ ይግቡ ወይም ይመዝገቡ።'
+                    : 'Guest mode lets you browse and explore plans. To upgrade to EthioLearn Pro, keep your past exams and AI tutor forever, and confirm your payment, you must sign in or register with your real Gmail account.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+              {onGoogleSignIn && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    playClickChime();
+                    await onGoogleSignIn();
+                  }}
+                  className="flex-1 sm:flex-none py-2 px-3.5 bg-white hover:bg-slate-100 text-slate-900 font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm transition"
+                >
+                  <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" aria-hidden="true">
+                    <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
+                    <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.26v3.15C3.26 21.36 7.33 24 12 24z"/>
+                    <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.26C.46 8.16 0 9.94 0 12s.46 3.84 1.26 5.42l4.02-3.15z"/>
+                    <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.26 6.58l4.02 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+                  </svg>
+                  <span>{language === 'am' ? 'በGoogle ግባ' : 'Sign in with Google'}</span>
+                </button>
+              )}
+
+              {onRequireAuth && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    playClickChime();
+                    onRequireAuth();
+                  }}
+                  className="flex-1 sm:flex-none py-2 px-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition"
+                >
+                  <span>{language === 'am' ? 'መለያ ፍጠር / ግባ' : 'Sign In / Register'}</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Premium Header Banner */}
       <div className="relative overflow-hidden rounded-3xl bg-[#0A1128] border border-amber-500/30 shadow-2xl p-6 md:p-8">
         <div className="absolute top-0 right-0 p-8 opacity-5 leading-none font-serif text-9xl select-none">PRO</div>
@@ -352,7 +426,15 @@ export default function UpgradeProView({
                 </ul>
               </div>
               <button 
-                onClick={() => { playClickChime(); setSelectedTier('pro_monthly'); setActiveTab('pay'); }}
+                onClick={() => {
+                  playClickChime();
+                  if (isGuest) {
+                    setShowGuestAuthModal(true);
+                    return;
+                  }
+                  setSelectedTier('pro_monthly');
+                  setActiveTab('pay');
+                }}
                 className="mt-6 w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer transition border border-slate-700"
               >
                 {language === 'en' ? 'Select Monthly (99 ETB)' : 'ወርሃዊ ይምረጡ (99 ብር)'}
@@ -387,7 +469,15 @@ export default function UpgradeProView({
                 </ul>
               </div>
               <button 
-                onClick={() => { playClickChime(); setSelectedTier('pro_semester'); setActiveTab('pay'); }}
+                onClick={() => {
+                  playClickChime();
+                  if (isGuest) {
+                    setShowGuestAuthModal(true);
+                    return;
+                  }
+                  setSelectedTier('pro_semester');
+                  setActiveTab('pay');
+                }}
                 className="mt-6 w-full py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider cursor-pointer shadow-lg transition active:scale-98"
               >
                 {language === 'en' ? 'Get Semester Pass (199 ETB)' : 'የሴሚስተር ፓስ ይውሰዱ (199 ብር)'}
@@ -419,7 +509,15 @@ export default function UpgradeProView({
                 </ul>
               </div>
               <button 
-                onClick={() => { playClickChime(); setSelectedTier('pro_annual'); setActiveTab('pay'); }}
+                onClick={() => {
+                  playClickChime();
+                  if (isGuest) {
+                    setShowGuestAuthModal(true);
+                    return;
+                  }
+                  setSelectedTier('pro_annual');
+                  setActiveTab('pay');
+                }}
                 className="mt-6 w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer transition shadow-md"
               >
                 {language === 'en' ? 'Select Annual (250 ETB)' : 'ዓመታዊ ይምረጡ (250 ብር)'}
@@ -433,7 +531,62 @@ export default function UpgradeProView({
       {/* ========================================================================= */}
       {/* TAB 2: TELEBIRR / CBE CHANNELS & ACTIVATION                               */}
       {/* ========================================================================= */}
-      {activeTab === 'pay' && (
+      {activeTab === 'pay' && isGuest ? (
+        <div className="bg-[#0A1128] border-2 border-amber-500/50 rounded-2xl p-6 sm:p-10 text-center max-w-xl mx-auto space-y-5 shadow-2xl">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 mx-auto shadow-inner">
+            <Lock className="w-8 h-8" />
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-xl font-serif font-black text-white">
+              {language === 'am' ? 'የእውነተኛ Gmail መለያ ያስፈልጋል' : 'Gmail Account Required to Upgrade'}
+            </h3>
+            <p className="text-xs text-slate-300 leading-relaxed max-w-md mx-auto">
+              {language === 'am'
+                ? 'የእንግዳ መለያዎች የክፍያ ደረሰኝ ማስገባት አይችሉም። ክፍያዎ ከቋሚ የተማሪ መዝገብዎ ጋር እንዲገናኝ እና የፕሮ አገልግሎትዎ እንዳይቋረጥ እባክዎን በእውነተኛ የGoogle (Gmail) አካውንትዎ ይግቡ ወይም ይመዝገቡ።'
+                : 'Guest accounts cannot submit payment receipts. Subscriptions must be tied to a verified student Google / Gmail account so your payment verification and lifetime academic records are preserved.'}
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-3">
+            {onGoogleSignIn && (
+              <button
+                type="button"
+                onClick={async () => {
+                  playClickChime();
+                  await onGoogleSignIn();
+                }}
+                className="w-full sm:w-auto py-3 px-5 bg-white hover:bg-slate-100 text-slate-900 font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-lg transition"
+              >
+                <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
+                  <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
+                  <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.26v3.15C3.26 21.36 7.33 24 12 24z"/>
+                  <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.26C.46 8.16 0 9.94 0 12s.46 3.84 1.26 5.42l4.02-3.15z"/>
+                  <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.26 6.58l4.02 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+                </svg>
+                <span>{language === 'am' ? 'በGoogle አካውንት ግባ' : 'Sign in with Google'}</span>
+              </button>
+            )}
+            {onRequireAuth && (
+              <button
+                type="button"
+                onClick={() => {
+                  playClickChime();
+                  onRequireAuth();
+                }}
+                className="w-full sm:w-auto py-3 px-5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-lg transition"
+              >
+                <span>{language === 'am' ? 'መለያ ፍጠር ወይም ግባ' : 'Create Account / Sign In'}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => { playClickChime(); setActiveTab('tiers'); }}
+              className="w-full sm:w-auto py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl cursor-pointer transition"
+            >
+              <span>{language === 'am' ? 'ወደ እቅዶች ተመለስ' : 'Back to Plans'}</span>
+            </button>
+          </div>
+        </div>
+      ) : activeTab === 'pay' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
           {/* Left: Transfer details */}
@@ -790,6 +943,75 @@ export default function UpgradeProView({
                 ? 'All subscriptions and payments are verified securely by our academic administration team.'
                 : 'ሁሉም የፕሮ አባልነቶች እና ክፍያዎች በአስተዳዳሪዎች በጥንቃቄ የተረጋገጡ ናቸው።'}
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Guest Upgrade Authentication Required Modal */}
+      {showGuestAuthModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-[#0e1628] border-2 border-amber-500/50 rounded-2xl max-w-md w-full p-6 space-y-5 text-center shadow-2xl relative">
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 mx-auto shadow-inner">
+              <Lock className="w-7 h-7" />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-lg font-serif font-black text-white">
+                {language === 'am' ? 'ለማሻሻል እውነተኛ የGmail መለያ ያስፈልጋል' : 'Real Gmail Account Required'}
+              </h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                {language === 'am'
+                  ? 'የእንግዳ መለያ (Guest account) ለማየት ብቻ የተፈቀደ ነው። የፕሮ አባልነትዎን ለማንቃትና ከቋሚ የተማሪ መዝገብዎ ጋር ለማገናኘት እባክዎን በእውነተኛ የGoogle (Gmail) አካውንትዎ ይግቡ ወይም ይመዝገቡ።'
+                  : 'Guest accounts can only explore and view materials. To upgrade to EthioLearn Pro, please sign in or register with your real Gmail account.'}
+              </p>
+            </div>
+
+            <div className="space-y-2.5 pt-2">
+              {onGoogleSignIn && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    playClickChime();
+                    setShowGuestAuthModal(false);
+                    await onGoogleSignIn();
+                  }}
+                  className="w-full py-3 px-4 bg-white hover:bg-slate-100 text-slate-900 font-extrabold text-xs rounded-xl flex items-center justify-center gap-2.5 cursor-pointer shadow-md transition"
+                >
+                  <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" aria-hidden="true">
+                    <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
+                    <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.26v3.15C3.26 21.36 7.33 24 12 24z"/>
+                    <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.26C.46 8.16 0 9.94 0 12s.46 3.84 1.26 5.42l4.02-3.15z"/>
+                    <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.26 6.58l4.02 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+                  </svg>
+                  <span>{language === 'am' ? 'በGoogle (Gmail) ቀጥል' : 'Continue with Google (Gmail)'}</span>
+                </button>
+              )}
+
+              {onRequireAuth && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    playClickChime();
+                    setShowGuestAuthModal(false);
+                    onRequireAuth();
+                  }}
+                  className="w-full py-2.5 px-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md transition"
+                >
+                  <span>{language === 'am' ? 'አካውንት ፍጠር ወይም ግባ' : 'Register or Sign In with Email'}</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  playClickChime();
+                  setShowGuestAuthModal(false);
+                }}
+                className="w-full py-2 px-4 bg-transparent hover:bg-slate-800/60 text-slate-400 hover:text-slate-200 text-xs font-semibold rounded-xl cursor-pointer transition"
+              >
+                <span>{language === 'am' ? 'እንደ እንግዳ ማየት ቀጥል' : 'Keep Browsing as Guest'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
