@@ -181,20 +181,22 @@ export default function AuthPortalView({
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Memoized university and department lists to keep typing and rendering lag-free
+  // Memoized university and department lists only computed when dropdowns are visible
   const filteredUniversities = useMemo(() => {
+    if (!showUnivDropdown) return [];
     const q = (univSearch || '').toLowerCase().trim();
     if (!q) return ETHIOPIAN_UNIVERSITIES.slice(0, 30);
     return ETHIOPIAN_UNIVERSITIES.filter(u => u.toLowerCase().includes(q)).slice(0, 30);
-  }, [univSearch]);
+  }, [univSearch, showUnivDropdown]);
 
   const filteredDepartments = useMemo(() => {
+    if (!showDeptDropdown) return [];
     const q = (deptSearch || '').toLowerCase().trim();
     if (!q) return POPULAR_DEPARTMENTS;
     return POPULAR_DEPARTMENTS.filter(d =>
       d.labelEn.toLowerCase().includes(q) || d.labelAm.includes(q)
     );
-  }, [deptSearch]);
+  }, [deptSearch, showDeptDropdown]);
 
   // States for verification codes & asynchronous actions
   const [loading, setLoading] = useState(false);
@@ -715,64 +717,7 @@ export default function AuthPortalView({
     onComplete(guestProfile);
   };
 
-  // 3b. Quick Direct Scholar Access for Instant Campus Exploration
-  const handleQuickScholarLogin = async () => {
-    playSuccessChime();
-    setLoading(true);
-    setAuthError(null);
-    const scholarEmail = 'scholar.wku@ethiolearn.edu.et';
-    const profileToUse: StudentProfile = {
-      id: `scholar_${Date.now()}`,
-      firebaseUid: `scholar_${Date.now()}`,
-      name: 'WKU Scholar',
-      email: scholarEmail,
-      phone: '0911223344',
-      university: 'Wolkite University (WKU)',
-      department: 'Freshman Common Courses',
-      year: 'Freshman (1st Year)',
-      grade: 'University',
-      stream: 'Natural',
-      subjects: ["Emerging Technologies", "Communicative English", "Mathematics", "Logic and Critical Thinking"],
-      claudeApiKey: "",
-      dailyGoalHours: 2,
-      theme: 'dark',
-      language: lang,
-      avatar: 'champion',
-      isRegistered: true,
-      isPro: false,
-      userRole: 'student',
-      emailVerified: true,
-      unregisteredAICredits: 20
-    };
-
-    const newAccount: AccountInfo = {
-      email: scholarEmail,
-      passwordEncrypted: 'scholar_demo',
-      rememberMe: true,
-      profile: profileToUse
-    };
-
-    const updatedAccs = [...registeredAccounts.filter(acc => acc.email.toLowerCase() !== scholarEmail), newAccount];
-    setRegisteredAccounts(updatedAccs);
-    safeStorage.setItem('ethiolearn_accounts', JSON.stringify(updatedAccs));
-    safeStorage.setItem('ethiolearn_active_email', scholarEmail);
-    safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(profileToUse));
-    safeStorage.setItem('ethiolearn_has_seen_onboarding', 'true');
-
-    try {
-      await syncAuthSessionWithServer({
-        email: scholarEmail,
-        uid: profileToUse.id,
-        role: 'student',
-        displayName: 'WKU Scholar'
-      });
-    } catch (e) {}
-
-    setLoading(false);
-    onComplete(profileToUse);
-  };
-
-  // 3c. Quick Login from Saved Device
+  // 3b. Quick Login from Saved Device
   const handleQuickLogin = (acc: AccountInfo) => {
     playClickChime();
     setEmail(acc.email);
@@ -1467,13 +1412,13 @@ export default function AuthPortalView({
   };
 
   return (
-    <div className="w-full max-w-lg mx-auto select-none">
+    <div className="w-full max-w-lg mx-auto">
       {/* Container Card */}
       <motion.div
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: "easeOut" }}
-        className="w-full bg-[#0e1628]/95 backdrop-blur-xl p-4 sm:p-6 md:p-8 rounded-2xl md:rounded-3xl border border-slate-700/60 relative z-10 shadow-[0_24px_64px_-12px_rgba(0,0,0,0.8)] space-y-6"
+        transition={{ duration: 0.25, ease: "easeOut" }}
+        className="w-full bg-[#0e1628] p-4 sm:p-6 md:p-8 rounded-2xl md:rounded-3xl border border-slate-700/70 relative z-10 shadow-2xl space-y-6"
       >
         {/* Glowing Ambient Top Edge Line */}
         <div className="absolute top-0 inset-x-8 h-[2px] bg-gradient-to-r from-transparent via-[#F59E0B]/50 to-transparent" />
@@ -1535,7 +1480,7 @@ export default function AuthPortalView({
               <ShieldAlert className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
               <p className="leading-relaxed flex-1">{authError}</p>
             </div>
-            <div className="pt-2 border-t border-red-500/30 flex items-center gap-2 flex-wrap">
+            <div className="pt-2 border-t border-red-500/30 flex items-center gap-2">
               <button
                 type="button"
                 onClick={handleContinueAsGuest}
@@ -1543,14 +1488,6 @@ export default function AuthPortalView({
               >
                 <UserCheck className="w-3.5 h-3.5 text-white" />
                 <span>{lang === 'am' ? 'እንደ እንግዳ ቀጥል (Guest)' : 'Continue as Guest'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleQuickScholarLogin}
-                className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10.5px] font-bold rounded-lg cursor-pointer flex items-center gap-1"
-              >
-                <GraduationCap className="w-3 h-3 text-emerald-400" />
-                <span>{lang === 'am' ? 'የተማሪ ማሳያ' : 'Scholar Demo'}</span>
               </button>
             </div>
           </motion.div>
@@ -1778,25 +1715,15 @@ export default function AuthPortalView({
               </span>
             </button>
 
-            {/* Quick 1-Tap Authorization Options: Continue as Guest or Scholar Demo */}
-            <div className="flex items-center gap-2 pt-0.5">
-              <button
-                type="button"
-                onClick={handleContinueAsGuest}
-                className="flex-1 py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-950/60 to-slate-900 hover:from-emerald-900/80 hover:to-slate-800 border border-emerald-500/50 hover:border-emerald-400 text-emerald-300 text-[11px] font-extrabold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs group"
-              >
-                <UserCheck className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
-                <span>{lang === 'am' ? '🚀 እንደ እንግዳ ቀጥል (Guest)' : '🚀 Continue as Guest'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleQuickScholarLogin}
-                className="flex-1 py-2.5 px-2.5 rounded-xl bg-[#0e1628] hover:bg-[#141f38] border border-slate-700/80 text-slate-300 text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs"
-              >
-                <GraduationCap className="w-3.5 h-3.5 text-emerald-400" />
-                <span>{lang === 'am' ? '🎓 የተማሪ ማሳያ (Demo)' : '🎓 Scholar Demo'}</span>
-              </button>
-            </div>
+            {/* Quick 1-Tap Guest Access */}
+            <button
+              type="button"
+              onClick={handleContinueAsGuest}
+              className="w-full py-2.5 px-3 rounded-xl bg-[#0a1526] hover:bg-[#0f1f38] border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs group"
+            >
+              <UserCheck className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+              <span>{lang === 'am' ? '🚀 እንደ እንግዳ ያለመለያ ግባ (Continue as Guest)' : '🚀 Continue as Guest (Instant Access)'}</span>
+            </button>
 
             {/* Separator */}
             <div className="relative flex items-center justify-center py-1">
@@ -1829,7 +1756,7 @@ export default function AuthPortalView({
                       }}
                       className={`w-full bg-[#0a0f1d] border ${
                         emailError ? 'border-red-500/80 focus:border-red-500' : 'border-slate-800 focus:border-[#F59E0B]'
-                      } rounded-xl pl-10 pr-4 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-all focus:ring-1 focus:ring-[#F59E0B]/20`}
+                      } rounded-xl pl-10 pr-4 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-colors duration-150 focus:ring-1 focus:ring-[#F59E0B]/20`}
                     />
                   </div>
                   {emailError && (
@@ -1851,7 +1778,7 @@ export default function AuthPortalView({
                         setAuthError(null);
                         setInfoMessage(null);
                       }}
-                      className="text-[11px] text-[#F59E0B] hover:underline transition-all cursor-pointer font-medium"
+                      className="text-[11px] text-[#F59E0B] hover:underline transition-colors cursor-pointer font-medium"
                     >
                       {t.forgotPassword}
                     </button>
@@ -1869,7 +1796,7 @@ export default function AuthPortalView({
                       }}
                       className={`w-full bg-[#0a0f1d] border ${
                         passwordError ? 'border-red-500/80 focus:border-red-500' : 'border-slate-800 focus:border-[#F59E0B]'
-                      } rounded-xl pl-10 pr-10 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-all font-mono focus:ring-1 focus:ring-[#F59E0B]/20`}
+                      } rounded-xl pl-10 pr-10 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-colors duration-150 font-mono focus:ring-1 focus:ring-[#F59E0B]/20`}
                     />
                     <button
                       type="button"
@@ -2014,7 +1941,7 @@ export default function AuthPortalView({
                       }}
                       className={`w-full bg-[#0a0f1d] border ${
                         nameError ? 'border-red-500/80 focus:border-red-500' : 'border-slate-800 focus:border-[#F59E0B]'
-                      } rounded-xl pl-10 pr-4 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-all focus:ring-1 focus:ring-[#F59E0B]/20`}
+                      } rounded-xl pl-10 pr-4 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-colors duration-150 focus:ring-1 focus:ring-[#F59E0B]/20`}
                     />
                   </div>
                   {nameError && (
@@ -2047,7 +1974,7 @@ export default function AuthPortalView({
                       }}
                       className={`w-full bg-[#0a0f1d] border ${
                         phoneError ? 'border-red-500/80 focus:border-red-500' : 'border-slate-800 focus:border-[#F59E0B]'
-                      } rounded-xl pl-20 pr-4 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs font-mono transition-all focus:ring-1 focus:ring-[#F59E0B]/20`}
+                      } rounded-xl pl-20 pr-4 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs font-mono transition-colors duration-150 focus:ring-1 focus:ring-[#F59E0B]/20`}
                     />
                   </div>
                   {phoneError ? (
@@ -2081,7 +2008,7 @@ export default function AuthPortalView({
                       }}
                       className={`w-full bg-[#0a0f1d] border ${
                         universityError ? 'border-red-500/80 focus:border-red-500' : 'border-slate-800 focus:border-[#F59E0B]'
-                      } rounded-xl pl-10 pr-10 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-all focus:ring-1 focus:ring-[#F59E0B]/20`}
+                      } rounded-xl pl-10 pr-10 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-colors duration-150 focus:ring-1 focus:ring-[#F59E0B]/20`}
                     />
                     <button
                       type="button"
@@ -2163,7 +2090,7 @@ export default function AuthPortalView({
                       }}
                       className={`w-full bg-[#0a0f1d] border ${
                         departmentError ? 'border-red-500/80 focus:border-red-500' : 'border-slate-800 focus:border-[#F59E0B]'
-                      } rounded-xl pl-10 pr-10 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-all focus:ring-1 focus:ring-[#F59E0B]/20`}
+                      } rounded-xl pl-10 pr-10 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-colors duration-150 focus:ring-1 focus:ring-[#F59E0B]/20`}
                     />
                     <button
                       type="button"
@@ -2270,7 +2197,7 @@ export default function AuthPortalView({
                       }}
                       className={`w-full bg-[#0a0f1d] border ${
                         emailError ? 'border-red-500/80 focus:border-red-500' : 'border-slate-800 focus:border-[#F59E0B]'
-                      } rounded-xl pl-10 pr-4 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-all focus:ring-1 focus:ring-[#F59E0B]/20`}
+                      } rounded-xl pl-10 pr-4 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-colors duration-150 focus:ring-1 focus:ring-[#F59E0B]/20`}
                     />
                   </div>
                   {emailError && (
@@ -2296,7 +2223,7 @@ export default function AuthPortalView({
                         }}
                         className={`w-full bg-[#0a0f1d] border ${
                           passwordError ? 'border-red-500/80 focus:border-red-500' : 'border-slate-800 focus:border-[#F59E0B]'
-                        } rounded-xl pl-9 pr-3 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-all font-mono focus:ring-1 focus:ring-[#F59E0B]/20`}
+                        } rounded-xl pl-9 pr-3 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-colors duration-150 font-mono focus:ring-1 focus:ring-[#F59E0B]/20`}
                       />
                     </div>
                   </div>
@@ -2317,7 +2244,7 @@ export default function AuthPortalView({
                         }}
                         className={`w-full bg-[#0a0f1d] border ${
                           confirmPasswordError ? 'border-red-500/80 focus:border-red-500' : 'border-slate-800 focus:border-[#F59E0B]'
-                        } rounded-xl pl-9 pr-3 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-all font-mono focus:ring-1 focus:ring-[#F59E0B]/20`}
+                        } rounded-xl pl-9 pr-3 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-colors duration-150 font-mono focus:ring-1 focus:ring-[#F59E0B]/20`}
                       />
                     </div>
                   </div>
@@ -2802,7 +2729,7 @@ export default function AuthPortalView({
                       setEmail(e.target.value);
                       if (emailError) setEmailError(null);
                     }}
-                    className="w-full bg-[#0a0f1d] border border-slate-700 focus:border-[#F59E0B] rounded-xl pl-10 pr-4 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-all focus:ring-1 focus:ring-[#F59E0B]/20"
+                    className="w-full bg-[#0a0f1d] border border-slate-700 focus:border-[#F59E0B] rounded-xl pl-10 pr-4 py-2.5 text-slate-100 placeholder-slate-500 outline-none text-xs transition-colors duration-150 focus:ring-1 focus:ring-[#F59E0B]/20"
                   />
                 </div>
                 {emailError && (
