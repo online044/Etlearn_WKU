@@ -30,7 +30,7 @@ import {
   Key, User, Landmark, GraduationCap, ArrowRight, Eye, EyeOff, 
   Mail, Lock, LogIn, UserPlus, ArrowLeft, ShieldAlert, CheckCircle, 
   Sparkles, RefreshCw, Trash2, Smartphone, ShieldCheck, Check, Copy, 
-  CheckCircle2, FileText, ChevronDown, ExternalLink, Clock
+  CheckCircle2, FileText, ChevronDown, ExternalLink, Clock, UserCheck
 } from 'lucide-react';
 import EthioLearnLogo from './EthioLearnLogo';
 import LegalPrivacyTermsModal from './LegalPrivacyTermsModal';
@@ -232,15 +232,31 @@ export default function AuthPortalView({
     try {
       const recentSignOut = getLastSignedOutUser();
       setLastSignedOutUser(recentSignOut);
-      if (recentSignOut?.email && !email) {
+      // Only prefill recent email if it is not the admin email
+      if (recentSignOut?.email && !email && recentSignOut.email.toLowerCase() !== 'ezrat2116@gmail.com') {
         setEmail(recentSignOut.email);
+      }
+
+      // Security Cleanup: Purge any mock admin account created by the old one-click button
+      const currentProfileStr = safeStorage.getItem('ethiolearn_current_profile');
+      if (currentProfileStr) {
+        try {
+          const parsedProf = JSON.parse(currentProfileStr);
+          if (parsedProf.id === 'usr_admin_ezrat2116' || (parsedProf.email?.toLowerCase() === 'ezrat2116@gmail.com' && parsedProf.firebaseUid === 'usr_admin_ezrat2116')) {
+            safeStorage.removeItem('ethiolearn_current_profile');
+            safeStorage.removeItem('ethiolearn_active_email');
+          }
+        } catch {}
       }
 
       const stored = safeStorage.getItem('ethiolearn_accounts');
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setRegisteredAccounts(parsed);
+          // Exclude any mock admin account
+          const sanitized = parsed.filter(a => !(a.email?.toLowerCase() === 'ezrat2116@gmail.com' && (a.passwordEncrypted === 'admin_session_active' || a.profile?.id === 'usr_admin_ezrat2116')));
+          setRegisteredAccounts(sanitized);
+          safeStorage.setItem('ethiolearn_accounts', JSON.stringify(sanitized));
         }
       }
 
@@ -651,73 +667,52 @@ export default function AuthPortalView({
     setLoading(false);
   };
 
-  // 3. Quick Direct Master Authorization for Ezra (Admin)
-  const handleQuickAdminLogin = async () => {
+  // 3. Continue as Guest (instant access without credentials or accounts)
+  const handleContinueAsGuest = () => {
     playSuccessChime();
     setLoading(true);
     setAuthError(null);
-    const adminEmail = 'ezrat2116@gmail.com';
-    const profileToUse: StudentProfile = {
-      id: 'usr_admin_ezrat2116',
-      firebaseUid: 'usr_admin_ezrat2116',
-      name: 'Ezra (Admin)',
-      email: adminEmail,
-      phone: '0906046518',
+
+    const guestId = `guest_${Date.now()}`;
+    const guestProfile: StudentProfile = {
+      id: guestId,
+      firebaseUid: guestId,
+      name: lang === 'am' ? 'እንግዳ ተማሪ' : 'Guest Scholar',
+      email: 'scholar.guest@ethiolearn.com',
+      phone: '',
       university: 'Wolkite University (WKU)',
-      department: 'Software Engineering',
-      year: 'Graduating Class (4th Year)',
+      department: 'Freshman Common Courses',
+      year: 'Freshman (1st Year)',
       grade: 'University',
       stream: 'Natural',
-      subjects: ["Emerging Technologies", "Communicative English", "Mathematics", "Logic and Critical Thinking"],
+      subjects: [
+        "Emerging Technologies",
+        "Communicative English",
+        "Mathematics",
+        "Logic and Critical Thinking",
+        "General Physics",
+        "General Biology",
+        "General Chemistry",
+        "Introduction to Economics"
+      ],
       claudeApiKey: "",
-      dailyGoalHours: 3,
+      dailyGoalHours: 2,
       theme: 'dark',
       language: lang,
       avatar: 'champion',
-      isRegistered: true,
-      isPro: true,
-      userRole: 'super_admin',
-      emailVerified: true,
-      unregisteredAICredits: 100
+      isRegistered: false,
+      isPro: false,
+      userRole: 'student',
+      emailVerified: false,
+      unregisteredAICredits: 20
     };
 
-    const newAccount: AccountInfo = {
-      email: adminEmail,
-      passwordEncrypted: 'admin_session_active',
-      rememberMe: true,
-      profile: profileToUse
-    };
-
-    const updatedAccs = [...registeredAccounts.filter(acc => acc.email.toLowerCase() !== adminEmail), newAccount];
-    setRegisteredAccounts(updatedAccs);
-    safeStorage.setItem('ethiolearn_accounts', JSON.stringify(updatedAccs));
-    safeStorage.setItem('ethiolearn_active_email', adminEmail);
-    safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(profileToUse));
+    safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(guestProfile));
+    safeStorage.setItem('ethiolearn_active_email', guestProfile.email);
     safeStorage.setItem('ethiolearn_has_seen_onboarding', 'true');
 
-    try {
-      await syncAuthSessionWithServer({
-        email: adminEmail,
-        uid: 'usr_admin_ezrat2116',
-        role: 'super_admin',
-        displayName: 'Ezra (Admin)'
-      });
-    } catch (e) {}
-
-    saveProfileToSupabase({
-      firebase_uid: 'usr_admin_ezrat2116',
-      full_name: 'Ezra (Admin)',
-      email: adminEmail,
-      phone: '0906046518',
-      university: 'Wolkite University (WKU)',
-      department: 'Software Engineering',
-      year_level: 'Graduating Class (4th Year)',
-      profile_photo: 'champion',
-      subscription_status: 'pro'
-    }).catch(() => {});
-
     setLoading(false);
-    onComplete(profileToUse);
+    onComplete(guestProfile);
   };
 
   // 3b. Quick Direct Scholar Access for Instant Campus Exploration
@@ -1543,11 +1538,11 @@ export default function AuthPortalView({
             <div className="pt-2 border-t border-red-500/30 flex items-center gap-2 flex-wrap">
               <button
                 type="button"
-                onClick={handleQuickAdminLogin}
-                className="px-2.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 text-black font-extrabold text-[10.5px] rounded-lg cursor-pointer hover:brightness-110 flex items-center gap-1.5 shadow-xs"
+                onClick={handleContinueAsGuest}
+                className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white font-extrabold text-[10.5px] rounded-lg cursor-pointer hover:brightness-110 flex items-center gap-1.5 shadow-xs"
               >
-                <Sparkles className="w-3 h-3 text-black" />
-                <span>{lang === 'am' ? 'እንደ Ezra (Admin) ይግቡ' : 'Sign in as Ezra (Admin)'}</span>
+                <UserCheck className="w-3.5 h-3.5 text-white" />
+                <span>{lang === 'am' ? 'እንደ እንግዳ ቀጥል (Guest)' : 'Continue as Guest'}</span>
               </button>
               <button
                 type="button"
@@ -1783,20 +1778,20 @@ export default function AuthPortalView({
               </span>
             </button>
 
-            {/* Quick 1-Tap Authorization Options (Instant access for Ezra Admin & Scholar Demo) */}
+            {/* Quick 1-Tap Authorization Options: Continue as Guest or Scholar Demo */}
             <div className="flex items-center gap-2 pt-0.5">
               <button
                 type="button"
-                onClick={handleQuickAdminLogin}
-                className="flex-1 py-2 px-2.5 rounded-xl bg-[#141d33] hover:bg-[#1a2745] border border-amber-500/40 text-amber-300 text-[10.5px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs"
+                onClick={handleContinueAsGuest}
+                className="flex-1 py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-950/60 to-slate-900 hover:from-emerald-900/80 hover:to-slate-800 border border-emerald-500/50 hover:border-emerald-400 text-emerald-300 text-[11px] font-extrabold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs group"
               >
-                <Sparkles className="w-3.5 h-3.5 text-[#F59E0B]" />
-                <span>{lang === 'am' ? '⚡ እንደ Ezra (Admin) ይግቡ' : '⚡ Sign in as Ezra (Admin)'}</span>
+                <UserCheck className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+                <span>{lang === 'am' ? '🚀 እንደ እንግዳ ቀጥል (Guest)' : '🚀 Continue as Guest'}</span>
               </button>
               <button
                 type="button"
                 onClick={handleQuickScholarLogin}
-                className="flex-1 py-2 px-2.5 rounded-xl bg-[#0e1628] hover:bg-[#141f38] border border-slate-700/80 text-slate-300 text-[10.5px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs"
+                className="flex-1 py-2.5 px-2.5 rounded-xl bg-[#0e1628] hover:bg-[#141f38] border border-slate-700/80 text-slate-300 text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs"
               >
                 <GraduationCap className="w-3.5 h-3.5 text-emerald-400" />
                 <span>{lang === 'am' ? '🎓 የተማሪ ማሳያ (Demo)' : '🎓 Scholar Demo'}</span>

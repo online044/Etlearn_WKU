@@ -801,19 +801,28 @@ export default function StudentProfileView({
               {onSignOut && (
                 <button
                   onClick={() => {
-                    const confirmSignOut = window.confirm(
-                      language === 'en'
-                        ? 'Sign out of EthioLearn? Your sign-in and sign-out timestamps will be safely recorded.'
-                        : 'እርግጠኛ ነዎት መውጣት ይፈልጋሉ? የመግቢያና የመውጫ ሰዓትዎ በደህንነት ተመዝግቦ ይቀመጣል።'
-                    );
-                    if (confirmSignOut) onSignOut();
+                    const isGuest = !profile.isRegistered || profile.id?.startsWith('guest');
+                    if (isGuest) {
+                      onSignOut();
+                    } else {
+                      const confirmSignOut = window.confirm(
+                        language === 'en'
+                          ? 'Sign out of EthioLearn? Your sign-in and sign-out timestamps will be safely recorded.'
+                          : 'እርግጠኛ ነዎት መውጣት ይፈልጋሉ? የመግቢያና የመውጫ ሰዓትዎ በደህንነት ተመዝግቦ ይቀመጣል።'
+                      );
+                      if (confirmSignOut) onSignOut();
+                    }
                   }}
-                  className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
-                  title={language === 'en' ? "Sign Out" : "ውጣ"}
+                  className={`px-2.5 sm:px-3 py-1.5 sm:py-2 border font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95 ${
+                    !profile.isRegistered || profile.id?.startsWith('guest')
+                      ? 'bg-amber-500/15 hover:bg-amber-500/25 border-amber-500/40 text-amber-300'
+                      : 'bg-red-500/10 hover:bg-red-500/20 border-red-500/30 text-red-400 hover:text-red-300'
+                  }`}
+                  title={(!profile.isRegistered || profile.id?.startsWith('guest')) ? (language === 'en' ? "Sign In / Register" : "ግባ / መለያ ፍጠር") : (language === 'en' ? "Sign Out" : "ውጣ")}
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline uppercase tracking-wider text-[11px] font-bold">
-                    {language === 'en' ? "Sign Out" : "ውጣ"}
+                    {(!profile.isRegistered || profile.id?.startsWith('guest')) ? (language === 'en' ? "Sign In" : "ግባ") : (language === 'en' ? "Sign Out" : "ውጣ")}
                   </span>
                 </button>
               )}
@@ -1001,19 +1010,28 @@ export default function StudentProfileView({
                 {onSignOut && (
                   <button
                     onClick={() => {
-                      const confirmSignOut = window.confirm(
-                        language === 'en'
-                          ? 'Sign out of EthioLearn? Your sign-in and sign-out timestamps will be safely recorded.'
-                          : 'እርግጠኛ ነዎት መውጣት ይፈልጋሉ? የመግቢያና የመውጫ ሰዓትዎ በደህንነት ተመዝግቦ ይቀመጣል።'
-                      );
-                      if (confirmSignOut) onSignOut();
+                      const isGuest = !profile.isRegistered || profile.id?.startsWith('guest');
+                      if (isGuest) {
+                        onSignOut();
+                      } else {
+                        const confirmSignOut = window.confirm(
+                          language === 'en'
+                            ? 'Sign out of EthioLearn? Your sign-in and sign-out timestamps will be safely recorded.'
+                            : 'እርግጠኛ ነዎት መውጣት ይፈልጋሉ? የመግቢያና የመውጫ ሰዓትዎ በደህንነት ተመዝግቦ ይቀመጣል።'
+                        );
+                        if (confirmSignOut) onSignOut();
+                      }
                     }}
-                    className="px-2.5 sm:px-3 py-2 sm:py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
-                    title={language === 'en' ? "Sign Out" : "ውጣ"}
+                    className={`px-2.5 sm:px-3 py-2 sm:py-2.5 border font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95 ${
+                      !profile.isRegistered || profile.id?.startsWith('guest')
+                        ? 'bg-amber-500/15 hover:bg-amber-500/25 border-amber-500/40 text-amber-300'
+                        : 'bg-red-500/10 hover:bg-red-500/20 border-red-500/30 text-red-400 hover:text-red-300'
+                    }`}
+                    title={(!profile.isRegistered || profile.id?.startsWith('guest')) ? (language === 'en' ? "Sign In / Register" : "ግባ / መለያ ፍጠር") : (language === 'en' ? "Sign Out" : "ውጣ")}
                   >
                     <LogOut className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline font-bold uppercase tracking-wider">
-                      {language === 'en' ? "Sign Out" : "ውጣ"}
+                      {(!profile.isRegistered || profile.id?.startsWith('guest')) ? (language === 'en' ? "Sign In" : "ግባ") : (language === 'en' ? "Sign Out" : "ውጣ")}
                     </span>
                   </button>
                 )}

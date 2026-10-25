@@ -167,19 +167,29 @@ const DEFAULT_STUDENT_PROFILE: StudentProfile = {
 };
 
 export default function App() {
-  // Load profile with multi-layer fallback to reliably remember registered students
+  // Load profile with multi-layer fallback to reliably remember registered students and guest scholars
   const [profile, setProfile] = useState<StudentProfile | null>(() => {
-    // 1. Check primary current profile - must be a registered student with valid credentials
+    // 1. Check primary current profile
     const saved = safeStorage.getItem('ethiolearn_current_profile');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        // Security Protection: If this device has the old mock admin 'usr_admin_ezrat2116', purge it immediately!
+        if (
+          parsed &&
+          (parsed.id === 'usr_admin_ezrat2116' ||
+            (parsed.email?.toLowerCase() === 'ezrat2116@gmail.com' &&
+              (parsed.firebaseUid === 'usr_admin_ezrat2116' || parsed.passwordEncrypted === 'admin_session_active')))
+        ) {
+          safeStorage.removeItem('ethiolearn_current_profile');
+          safeStorage.removeItem('ethiolearn_active_email');
+          return null;
+        }
+
         if (
           parsed && 
           typeof parsed === 'object' && 
-          parsed.id !== 'guest-scholar' &&
-          (parsed.email || parsed.phone) &&
-          parsed.isRegistered !== false
+          (parsed.email || parsed.phone || parsed.id)
         ) {
           return parsed;
         }
@@ -193,16 +203,21 @@ export default function App() {
       try {
         const accounts = JSON.parse(accountsRaw);
         if (Array.isArray(accounts) && accounts.length > 0) {
-          if (activeEmail) {
-            const match = accounts.find(a => a.email && a.email.toLowerCase() === activeEmail.toLowerCase());
-            if (match?.profile && match.profile.id !== 'guest-scholar') {
+          // Filter out mock admin accounts
+          const safeAccounts = accounts.filter(
+            a => !(a.email?.toLowerCase() === 'ezrat2116@gmail.com' && (a.passwordEncrypted === 'admin_session_active' || a.profile?.id === 'usr_admin_ezrat2116'))
+          );
+
+          if (activeEmail && activeEmail.toLowerCase() !== 'ezrat2116@gmail.com') {
+            const match = safeAccounts.find(a => a.email && a.email.toLowerCase() === activeEmail.toLowerCase());
+            if (match?.profile) {
               safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(match.profile));
               return match.profile;
             }
           }
           // If any account has rememberMe active
-          const remembered = accounts.find(a => a.rememberMe);
-          if (remembered?.profile && remembered.profile.id !== 'guest-scholar') {
+          const remembered = safeAccounts.find(a => a.rememberMe);
+          if (remembered?.profile) {
             safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(remembered.profile));
             safeStorage.setItem('ethiolearn_active_email', remembered.email);
             return remembered.profile;
@@ -211,7 +226,7 @@ export default function App() {
       } catch (e) {}
     }
 
-    // Student must register or sign in before using the app
+    // Student must register, sign in, or continue as guest before using the app
     return null;
   });
 
@@ -2044,6 +2059,7 @@ export default function App() {
           setIsSidebarOpen(false);
           setIsAdminOpen(true);
         } : undefined}
+        onSignOut={handleSignOut}
       />
 
       {/* 📜 Legal, Privacy & About EthioLearn Modal */}

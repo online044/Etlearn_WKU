@@ -9,7 +9,7 @@ import {
   X, Phone, Mail, Send, Copy, Check, Info, ShieldCheck, 
   FileText, BookOpen, GraduationCap, Trophy, User, Sparkles, 
   ExternalLink, Sun, Moon, Globe, Calendar, Award, ChevronRight,
-  HelpCircle, Scale, Lock, HeartHandshake, Layers, Megaphone
+  HelpCircle, Scale, Lock, HeartHandshake, Layers, Megaphone, LogOut
 } from 'lucide-react';
 import EthioLearnLogo from './EthioLearnLogo';
 import StudentAvatar from './StudentAvatar';
@@ -31,6 +31,7 @@ export interface AppSidebarProps {
   onOpenAnnouncements?: () => void;
   isUserAdmin?: boolean;
   onOpenAdmin?: () => void;
+  onSignOut?: () => void;
 }
 
 export default function AppSidebar({
@@ -46,11 +47,13 @@ export default function AppSidebar({
   onOpenLegal,
   onOpenAnnouncements,
   isUserAdmin,
-  onOpenAdmin
+  onOpenAdmin,
+  onSignOut
 }: AppSidebarProps) {
   const [copiedText, setCopiedText] = useState<string | null>(null);
 
   const isAm = language === 'am';
+  const isGuestUser = !profile.isRegistered || profile.id?.startsWith('guest') || profile.id === 'guest-scholar';
 
   const copyToClipboard = (text: string, label: string) => {
     playClickChime();
@@ -144,11 +147,15 @@ export default function AppSidebar({
                     <div className="min-w-0">
                       <div className="font-bold text-white text-xs flex items-center gap-1.5 truncate">
                         <span className="truncate group-hover:text-amber-400 transition-colors">{profile.name || (isAm ? 'ተማሪ' : 'Student')}</span>
-                        {profile.isPro && (
+                        {profile.isPro ? (
                           <span className="px-1 py-0.2 rounded text-[8.5px] font-black bg-amber-400 text-slate-950 uppercase shrink-0">
                             PRO
                           </span>
-                        )}
+                        ) : isGuestUser ? (
+                          <span className="px-1.5 py-0.2 rounded text-[8.5px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase shrink-0">
+                            {isAm ? 'እንግዳ' : 'GUEST'}
+                          </span>
+                        ) : null}
                       </div>
                       <div className="text-[10px] text-slate-400 truncate">
                         {profile.university || 'Wolkite University'}
@@ -648,8 +655,31 @@ export default function AppSidebar({
 
             </div>
 
-            {/* Bottom Footer with Ge'ez Calendar */}
+            {/* Bottom Footer with Ge'ez Calendar and Account Action */}
             <div className="p-3.5 border-t border-white/10 bg-[#080E21] space-y-2.5 shrink-0 text-xs">
+              {onSignOut && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    playClickChime();
+                    onClose();
+                    onSignOut();
+                  }}
+                  className={`w-full py-2 px-3 rounded-xl border font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-xs ${
+                    isGuestUser
+                      ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 border-amber-400 hover:brightness-110'
+                      : 'bg-red-500/10 hover:bg-red-500/20 border-red-500/30 text-red-300'
+                  }`}
+                >
+                  <LogOut className="w-3.5 h-3.5 shrink-0" />
+                  <span>
+                    {isGuestUser
+                      ? (isAm ? 'መለያ ይፍጠሩ / በGoogle ይግቡ' : 'Sign In / Register Account')
+                      : (isAm ? 'ውጣ / አካውንት ቀይር' : 'Sign Out / Switch Account')}
+                  </span>
+                </button>
+              )}
+
               {ethDateFormatted && (
                 <div className="text-[10px] text-slate-400 flex items-center justify-between">
                   <span className="flex items-center gap-1 text-slate-300 font-serif">

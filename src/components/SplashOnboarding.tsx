@@ -1885,6 +1885,7 @@ export default function SplashOnboarding({ onComplete, initialProfile }: SplashO
   const handleGuestQuickStart = () => {
     playSuccessChime();
     const guestProfile: StudentProfile = {
+      id: "guest-scholar",
       name: "Ethiopian Scholar",
       email: "scholar.guest@ethiolearn.com",
       university: "Addis Ababa University",
