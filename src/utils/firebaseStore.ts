@@ -1977,4 +1977,39 @@ export async function deleteAnnouncementFromFirestore(annId: string): Promise<bo
   return true;
 }
 
+/**
+ * Update Pro subscription status in Firestore
+ */
+export async function grantProStatusInFirestore(emailOrUid: string, isPro: boolean = true): Promise<void> {
+  const currentDb = getDb();
+  if (!currentDb || !emailOrUid) return;
+  const target = emailOrUid.toLowerCase().trim();
+  try {
+    // 1. Direct doc write if target is UID
+    try {
+      await updateDoc(doc(currentDb, 'users', target), {
+        isPro: Boolean(isPro),
+        subscriptionStatus: isPro ? 'pro' : 'free',
+        updatedAt: new Date().toISOString()
+      });
+    } catch {}
+
+    // 2. Query by email
+    if (target.includes('@')) {
+      const q = query(collection(currentDb, 'users'), where('email', '==', target));
+      const snaps = await getDocs(q);
+      for (const d of snaps.docs) {
+        await updateDoc(doc(currentDb, 'users', d.id), {
+          isPro: Boolean(isPro),
+          subscriptionStatus: isPro ? 'pro' : 'free',
+          updatedAt: new Date().toISOString()
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('[Firestore] grantProStatusInFirestore notice:', err);
+  }
+}
+
+
 

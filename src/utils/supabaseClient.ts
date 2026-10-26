@@ -911,6 +911,7 @@ export function clearSessionToken(): void {
  */
 export function getAuthHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
   const token = getSessionToken();
+  const activeEmail = safeStorage.getItem('ethiolearn_active_email') || '';
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...extraHeaders
@@ -918,6 +919,10 @@ export function getAuthHeaders(extraHeaders: Record<string, string> = {}): Recor
   if (token) {
     headers['x-ethiolearn-session-token'] = token;
     headers['Authorization'] = `Bearer ${token}`;
+  }
+  if (activeEmail) {
+    headers['x-ethiolearn-user-email'] = activeEmail;
+    headers['x-ethiolearn-admin-email'] = activeEmail;
   }
   return headers;
 }

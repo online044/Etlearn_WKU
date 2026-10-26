@@ -455,8 +455,28 @@ export default function AdminDashboardView({
     playSuccessChime();
     setPaymentActionLoading(prev => ({ ...prev, [id]: true }));
     try {
-      await updatePaymentStatus(id, 'completed');
+      const paymentItem = payments.find(p => p.id === id);
+      await updatePaymentStatus(id, 'completed', paymentItem);
       setPayments(prev => prev.map(p => p.id === id ? { ...p, status: 'completed' } : p));
+      
+      // If the approved payment belongs to the current profile, update currentProfile immediately
+      if (paymentItem && currentProfile) {
+        const userEmail = (paymentItem.user_id || paymentItem.userId || paymentItem.email || '').toLowerCase().trim();
+        const userPhone = (paymentItem.sender_phone || paymentItem.senderPhone || '').trim();
+        const myEmail = (currentProfile.email || '').toLowerCase().trim();
+        const myPhone = (currentProfile.phone || '').trim();
+        if ((userEmail && userEmail === myEmail) || (userPhone && myPhone && (userPhone.includes(myPhone) || myPhone.includes(userPhone)))) {
+          const updated: StudentProfile = {
+            ...currentProfile,
+            isPro: true,
+            tier: (paymentItem.tier as any) || 'pro_semester',
+            proStatus: 'active',
+            proPaymentDate: new Date().toISOString()
+          };
+          onUpdateProfile?.(updated);
+        }
+      }
+
       loadAllAdminData(true);
     } finally {
       setPaymentActionLoading(prev => ({ ...prev, [id]: false }));
@@ -467,7 +487,8 @@ export default function AdminDashboardView({
     playFailureChime();
     setPaymentActionLoading(prev => ({ ...prev, [id]: true }));
     try {
-      await updatePaymentStatus(id, 'failed');
+      const paymentItem = payments.find(p => p.id === id);
+      await updatePaymentStatus(id, 'failed', paymentItem);
       setPayments(prev => prev.map(p => p.id === id ? { ...p, status: 'failed' } : p));
       loadAllAdminData(true);
     } finally {
@@ -687,6 +708,17 @@ export default function AdminDashboardView({
           }
           return s;
         }));
+
+        // If the modified user is currently active profile, update it
+        if (currentProfile && (currentProfile.email || '').toLowerCase().trim() === studentEmail) {
+          const updated: StudentProfile = {
+            ...currentProfile,
+            isPro: newPro,
+            tier: newPro ? 'pro_semester' : 'free',
+            proStatus: newPro ? 'active' : 'none'
+          };
+          onUpdateProfile?.(updated);
+        }
 
         loadAllAdminData(true);
       } else {

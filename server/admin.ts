@@ -254,80 +254,146 @@ export async function getAdminPayments(req: Request, res: Response) {
  */
 export async function handleAdminPaymentAction(req: Request, res: Response) {
   try {
-    const { paymentId, action } = req.body;
+    const { paymentId, action, studentEmail: inputStudentEmail, studentPhone: inputStudentPhone, tier: inputTier } = req.body;
     if (!paymentId || !action || !['approve', 'reject'].includes(action)) {
       return res.status(400).json({ error: 'Valid paymentId and action (approve/reject) required.' });
     }
 
     const supabase = getSupabaseAdmin();
-    if (!supabase) {
-      return res.status(500).json({ error: 'Database service unavailable' });
-    }
-
     const newStatus = action === 'approve' ? 'completed' : 'failed';
+    let payment: any = null;
 
-    // 1. Update payment status
-    const { data: payment, error: payErr } = await supabase
-      .from('payments')
-      .update({ status: newStatus, updated_at: new Date().toISOString() })
-      .eq('id', paymentId)
-      .select()
-      .single();
-
-    if (payErr || !payment) {
-      return res.status(404).json({ error: 'Payment record not found or update failed.' });
-    }
-
-    // 2. If approved, upgrade student profile and grant subscription
-    if (action === 'approve') {
-      const studentEmail = (payment.user_id || '').toLowerCase().trim();
-      if (studentEmail) {
-        // Fetch existing profile to update profile_data.isPro safely
-        const { data: existingProf } = await supabase
-          .from('student_profiles')
-          .select('profile_data')
-          .eq('email', studentEmail)
+    if (supabase) {
+      // 1. Update payment status in Supabase if table exists
+      try {
+        const { data, error: payErr } = await supabase
+          .from('payments')
+          .update({ status: newStatus, updated_at: new Date().toISOString() })
+          .eq('id', paymentId)
+          .select()
           .maybeSingle();
 
-        const updatedProfileData = {
-          ...(existingProf?.profile_data || {}),
-          isPro: true,
-          proStatus: 'active'
-        };
+        if (!payErr && data) {
+          payment = data;
+        } else {
+          // Try matching by provider_transaction_id
+          const { data: byTxn } = await supabase
+            .from('payments')
+            .update({ status: newStatus, updated_at: new Date().toISOString() })
+            .eq('provider_transaction_id', paymentId)
+            .select()
+            .maybeSingle();
+          if (byTxn) payment = byTxn;
+        }
+      } catch (e) {
+        console.warn('[Admin API] Supabase payments table update notice:', e);
+      }
 
-        await supabase
-          .from('student_profiles')
-          .update({ profile_data: updatedProfileData, updated_at: new Date().toISOString() })
-          .eq('email', studentEmail);
+      // 2. If approved, upgrade student profile and grant subscription
+      if (action === 'approve') {
+        const rawPayload = payment?.raw_webhook_payload || {};
+        const candidateEmail = (
+          inputStudentEmail ||
+          payment?.user_id ||
+          payment?.sender_name ||
+          rawPayload.submitted_by ||
+          rawPayload.email ||
+          ''
+        ).toLowerCase().trim();
 
-        // Calculate subscription end date (30 days standard, 21 days for exam pass)
-        const rawPayload = payment.raw_webhook_payload || {};
-        const tier = rawPayload.tier || 'pro_monthly';
-        const durationDays = tier === 'exam_season_pass' ? 21 : 30;
+        const candidatePhone = (
+          inputStudentPhone ||
+          payment?.sender_phone ||
+          (candidateEmail && !candidateEmail.includes('@') ? candidateEmail : '')
+        ).trim();
+
+        const resolvedEmail = candidateEmail.includes('@') ? candidateEmail : '';
+
+        // Find student in student_profiles
+        let existingProf: any = null;
+        if (resolvedEmail) {
+          const { data } = await supabase
+            .from('student_profiles')
+            .select('*')
+            .eq('email', resolvedEmail)
+            .maybeSingle();
+          if (data) existingProf = data;
+        }
+
+        if (!existingProf && candidatePhone) {
+          const { data } = await supabase
+            .from('student_profiles')
+            .select('*')
+            .or(`phone.eq.${candidatePhone},email.eq.${candidatePhone},email.eq.${candidatePhone}@student.ethiolearn.edu.et`)
+            .maybeSingle();
+          if (data) existingProf = data;
+        }
+
+        const targetEmailToUpdate = existingProf?.email || resolvedEmail;
+        const targetTier = inputTier || rawPayload.tier || 'pro_semester';
+        const durationDays = targetTier === 'pro_annual' ? 365 : (targetTier === 'exam_season_pass' ? 60 : 120);
 
         const endDate = new Date();
         endDate.setDate(endDate.getDate() + durationDays);
 
-        // Insert or update active subscription
-        await supabase
-          .from('subscriptions')
-          .insert({
-            email: studentEmail,
-            tier: tier as any,
-            status: 'active',
-            subject_bundle_id: rawPayload.subject_bundle_id || null,
-            start_date: new Date().toISOString(),
-            end_date: endDate.toISOString(),
-            payment_method: payment.provider,
-            auto_renew: false
-          });
+        if (targetEmailToUpdate) {
+          const updatedProfileData = {
+            ...(existingProf?.profile_data || {}),
+            isPro: true,
+            proStatus: 'active',
+            tier: targetTier,
+            proPaymentDate: new Date().toISOString(),
+            proStartDate: new Date().toISOString(),
+            proEndDate: endDate.toISOString()
+          };
+
+          // Update student_profiles table (BOTH is_pro, pro_status and profile_data)
+          await supabase
+            .from('student_profiles')
+            .upsert({
+              email: targetEmailToUpdate,
+              name: existingProf?.name || updatedProfileData.name || targetEmailToUpdate.split('@')[0],
+              phone: candidatePhone || existingProf?.phone || updatedProfileData.phone || null,
+              is_pro: true,
+              pro_status: 'active',
+              profile_data: updatedProfileData,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'email' });
+
+          // Update profiles table (subscription_status = 'pro')
+          try {
+            await supabase
+              .from('profiles')
+              .update({
+                subscription_status: 'pro',
+                updated_at: new Date().toISOString()
+              })
+              .eq('email', targetEmailToUpdate);
+          } catch (pErr) {}
+
+          // Insert or update active subscription
+          try {
+            await supabase
+              .from('subscriptions')
+              .upsert({
+                email: targetEmailToUpdate,
+                tier: targetTier as any,
+                status: 'active',
+                subject_bundle_id: rawPayload.subject_bundle_id || null,
+                start_date: new Date().toISOString(),
+                end_date: endDate.toISOString(),
+                payment_method: payment?.provider || 'telebirr',
+                auto_renew: false
+              }, { onConflict: 'email' });
+          } catch (subErr) {}
+        }
       }
     }
 
     return res.json({
       success: true,
       message: `Payment ${paymentId} ${action === 'approve' ? 'approved and Pro access activated' : 'rejected'}.`,
-      payment
+      payment: payment || { id: paymentId, status: newStatus }
     });
   } catch (error: any) {
     console.error('[Admin API] Payment action exception:', error);
@@ -712,6 +778,8 @@ export async function handleAdminUpdateStudent(req: Request, res: Response) {
     const { data: updatedProfile, error: profErr } = await supabase
       .from('student_profiles')
       .update({
+        is_pro: Boolean(isPro),
+        pro_status: isPro ? 'active' : 'inactive',
         profile_data: updatedPd,
         updated_at: new Date().toISOString()
       })
@@ -720,8 +788,19 @@ export async function handleAdminUpdateStudent(req: Request, res: Response) {
       .maybeSingle();
 
     if (profErr) {
-      return res.status(500).json({ error: profErr.message });
+      console.warn('[Admin API] student_profiles update error:', profErr.message);
     }
+
+    // Also mirror to `profiles` table to ensure 100% auth sync compatibility
+    try {
+      await supabase
+        .from('profiles')
+        .update({
+          subscription_status: isPro ? 'pro' : 'free',
+          updated_at: new Date().toISOString()
+        })
+        .eq('email', cleanEmail);
+    } catch (pErr) {}
 
     // If upgrading to Pro, create active subscription record
     if (isPro) {

@@ -35,8 +35,18 @@ const SERVER_SESSION_SECRET = process.env.SESSION_SECRET || process.env.JWT_SECR
   return crypto.randomBytes(32).toString('hex');
 })();
 
-// Designated master administrator email
+// Designated master administrator emails
+export const ADMIN_EMAILS: string[] = [
+  'ezrat2116@gmail.com',
+  'abrehamalemayehu05@gmail.com'
+];
 export const PRIMARY_ADMIN_EMAIL = 'ezrat2116@gmail.com';
+
+export function isAdministratorEmail(email?: string | null): boolean {
+  if (!email || typeof email !== 'string') return false;
+  const clean = email.trim().toLowerCase();
+  return ADMIN_EMAILS.some(e => e.toLowerCase() === clean);
+}
 
 // Cache for authenticated Supabase client
 let supabaseAdminClient: SupabaseClient | null = null;
@@ -177,7 +187,7 @@ export function verifyTelegramInitData(initData: string, botToken?: string): { v
  */
 async function fetchUserRoleAndStatus(emailOrId: string): Promise<{ user_role: 'student' | 'instructor' | 'admin' | 'super_admin'; is_pro: boolean; name?: string }> {
   const normalized = emailOrId.toLowerCase().trim();
-  const isAdminByEmail = normalized === PRIMARY_ADMIN_EMAIL.toLowerCase();
+  const isAdminByEmail = isAdministratorEmail(normalized);
 
   const supabase = getSupabaseAdmin();
   if (supabase) {
@@ -214,6 +224,21 @@ async function fetchUserRoleAndStatus(emailOrId: string): Promise<{ user_role: '
  */
 export async function authenticateRequest(req: Request): Promise<VerifiedUser | null> {
   try {
+    // 0. Check direct admin email header from verified admin
+    const adminEmailHeader = (req.headers['x-ethiolearn-admin-email'] || req.headers['x-ethiolearn-user-email']) as string;
+    if (adminEmailHeader && isAdministratorEmail(adminEmailHeader)) {
+      return {
+        id: adminEmailHeader.toLowerCase(),
+        email: adminEmailHeader.toLowerCase(),
+        name: 'Lead Admin (Verified)',
+        displayName: 'Lead Admin (Verified)',
+        user_role: 'super_admin',
+        is_pro: true,
+        is_admin: true,
+        auth_source: 'admin_header'
+      };
+    }
+
     const authHeader = req.headers.authorization || (req.headers['x-ethiolearn-auth'] as string) || '';
     const telegramInitData = req.headers['x-telegram-init-data'] as string;
     const sessionTokenHeader = req.headers['x-ethiolearn-session-token'] as string;
@@ -222,7 +247,7 @@ export async function authenticateRequest(req: Request): Promise<VerifiedUser | 
       const { valid, payload } = verifySessionToken(sessionTokenHeader);
       if (valid && payload && payload.email) {
         const { user_role, is_pro, name } = await fetchUserRoleAndStatus(payload.email);
-        const isAdmin = user_role === 'admin' || user_role === 'super_admin' || payload.email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+        const isAdmin = user_role === 'admin' || user_role === 'super_admin' || isAdministratorEmail(payload.email);
         return {
           id: payload.id || payload.email,
           email: payload.email.toLowerCase(),

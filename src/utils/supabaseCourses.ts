@@ -6,7 +6,8 @@ import { INITIAL_CURRICULUM_COURSES, getCurriculumLessonsForCourse, getCurriculu
 import { 
   fetchAnnouncementsFromFirestore, 
   saveAnnouncementToFirestore, 
-  deleteAnnouncementFromFirestore 
+  deleteAnnouncementFromFirestore,
+  grantProStatusInFirestore
 } from './firebaseStore';
 
 // ============================================================================
@@ -1225,41 +1226,37 @@ export async function fetchAdminPayments(): Promise<any[]> {
   return result;
 }
 
-export async function updatePaymentStatus(paymentId: string, status: 'completed' | 'failed' | 'pending'): Promise<{ success: boolean; error?: string }> {
+export async function updatePaymentStatus(
+  paymentId: string, 
+  status: 'completed' | 'failed' | 'pending',
+  paymentData?: any
+): Promise<{ success: boolean; error?: string }> {
+  const action = status === 'completed' ? 'approve' : (status === 'failed' ? 'reject' : null);
+  const candidateEmail = (paymentData?.user_id || paymentData?.userId || paymentData?.email || '').toLowerCase().trim();
+  const candidatePhone = (paymentData?.sender_phone || paymentData?.senderPhone || paymentData?.phone || '').trim();
+  const candidateTier = paymentData?.tier || 'pro_semester';
+
   // 1. Try server-side verified admin action endpoint
   try {
-    const action = status === 'completed' ? 'approve' : (status === 'failed' ? 'reject' : null);
     if (action) {
-      const res = await fetch('/api/admin/payments/action', {
+      await fetch('/api/admin/payments/action', {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ paymentId, action })
+        body: JSON.stringify({ 
+          paymentId, 
+          action,
+          studentEmail: candidateEmail,
+          studentPhone: candidatePhone,
+          tier: candidateTier
+        })
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.success) {
-          // Update local cache
-          try {
-            const raw = safeStorage.getItem(LOCAL_STORAGE_PAYMENTS_KEY);
-            if (raw) {
-              const list: any[] = JSON.parse(raw);
-              const index = list.findIndex(p => p.id === paymentId || p.providerTxnId === paymentId);
-              if (index !== -1) {
-                list[index].status = status;
-                safeStorage.setItem(LOCAL_STORAGE_PAYMENTS_KEY, JSON.stringify(list));
-              }
-            }
-          } catch {}
-          return { success: true };
-        }
-      }
     }
   } catch (e) {
-    // Fallback to direct supabase / local update
+    console.warn('[Admin API] Server payment action notice:', e);
   }
 
   const supabase = getSupabase();
-  let paymentRecord: any = null;
+  let paymentRecord: any = paymentData || null;
 
   if (supabase) {
     try {
@@ -1271,14 +1268,24 @@ export async function updatePaymentStatus(paymentId: string, status: 'completed'
         .maybeSingle();
 
       if (!error && data) {
-        paymentRecord = data;
+        paymentRecord = { ...paymentRecord, ...data };
+      } else {
+        const { data: byTxn } = await supabase
+          .from('payments')
+          .update({ status, updated_at: new Date().toISOString() })
+          .eq('provider_transaction_id', paymentId)
+          .select()
+          .maybeSingle();
+        if (byTxn) {
+          paymentRecord = { ...paymentRecord, ...byTxn };
+        }
       }
     } catch (e: any) {
       console.warn('Supabase payment status update notice:', e.message);
     }
   }
 
-  // Update local cache
+  // Update local cache across all payment keys
   try {
     const raw = safeStorage.getItem(LOCAL_STORAGE_PAYMENTS_KEY);
     if (raw) {
@@ -1286,17 +1293,31 @@ export async function updatePaymentStatus(paymentId: string, status: 'completed'
       const index = list.findIndex(p => p.id === paymentId || p.providerTxnId === paymentId);
       if (index !== -1) {
         list[index].status = status;
-        paymentRecord = list[index];
+        paymentRecord = { ...paymentRecord, ...list[index] };
         safeStorage.setItem(LOCAL_STORAGE_PAYMENTS_KEY, JSON.stringify(list));
       }
     }
   } catch {}
 
   // If approved, automatically upgrade the corresponding student account to Pro!
-  if (status === 'completed' && paymentRecord) {
-    const targetEmail = (paymentRecord.user_id || paymentRecord.userId || '').toLowerCase().trim();
-    const targetPhone = (paymentRecord.sender_phone || paymentRecord.senderPhone || '').toLowerCase().trim();
-    const targetName = (paymentRecord.sender_name || paymentRecord.senderName || '').toLowerCase().trim();
+  if (status === 'completed') {
+    const targetEmail = (
+      candidateEmail ||
+      paymentRecord?.user_id ||
+      paymentRecord?.userId ||
+      paymentRecord?.sender_name ||
+      paymentRecord?.email ||
+      ''
+    ).toLowerCase().trim();
+
+    const targetPhone = (
+      candidatePhone ||
+      paymentRecord?.sender_phone ||
+      paymentRecord?.senderPhone ||
+      (!targetEmail.includes('@') ? targetEmail : '')
+    ).trim();
+
+    const targetName = (paymentRecord?.sender_name || paymentRecord?.senderName || '').toLowerCase().trim();
     
     // Update local accounts
     try {
@@ -1318,7 +1339,7 @@ export async function updatePaymentStatus(paymentId: string, status: 'completed'
               profile: {
                 ...acc.profile,
                 isPro: true,
-                tier: 'pro_semester',
+                tier: candidateTier,
                 proStatus: 'active',
                 proPaymentDate: new Date().toISOString()
               }
@@ -1345,7 +1366,7 @@ export async function updatePaymentStatus(paymentId: string, status: 'completed'
           const upgraded = {
             ...curProf,
             isPro: true,
-            tier: 'pro_semester',
+            tier: candidateTier,
             proStatus: 'active',
             proPaymentDate: new Date().toISOString()
           };
@@ -1354,14 +1375,14 @@ export async function updatePaymentStatus(paymentId: string, status: 'completed'
       }
     } catch {}
 
-    // Also update Supabase student profile if available
+    // Update Supabase student profile & mirror to profiles table
     if (supabase) {
       try {
-        let query = supabase.from('student_profiles').select('profile_data, email');
-        if (targetEmail) {
+        let query = supabase.from('student_profiles').select('*');
+        if (targetEmail && targetEmail.includes('@')) {
           query = query.eq('email', targetEmail);
         } else if (targetPhone) {
-          query = query.or(`email.eq.${targetPhone},email.eq.${targetPhone}@student.ethiolearn.edu.et`);
+          query = query.or(`phone.eq.${targetPhone},email.eq.${targetPhone},email.eq.${targetPhone}@student.ethiolearn.edu.et`);
         }
 
         let { data: existingRecords } = await query.limit(1);
@@ -1369,7 +1390,7 @@ export async function updatePaymentStatus(paymentId: string, status: 'completed'
         if ((!existingRecords || existingRecords.length === 0) && targetPhone) {
           const { data: phoneRecords } = await supabase
             .from('student_profiles')
-            .select('profile_data, email')
+            .select('*')
             .filter('profile_data->>phone', 'eq', targetPhone)
             .limit(1);
           if (phoneRecords && phoneRecords.length > 0) {
@@ -1378,24 +1399,77 @@ export async function updatePaymentStatus(paymentId: string, status: 'completed'
         }
 
         const existingProf = existingRecords && existingRecords[0];
+        const studentEmailToUpgrade = existingProf?.email || (targetEmail.includes('@') ? targetEmail : '');
 
-        if (existingProf && existingProf.email) {
+        if (studentEmailToUpgrade) {
           const updatedProfileData = {
-            ...(existingProf.profile_data || {}),
+            ...(existingProf?.profile_data || {}),
             isPro: true,
-            proStatus: 'active'
+            tier: candidateTier,
+            proStatus: 'active',
+            proPaymentDate: new Date().toISOString()
           };
 
           await supabase
             .from('student_profiles')
-            .update({ profile_data: updatedProfileData, updated_at: new Date().toISOString() })
-            .eq('email', existingProf.email);
+            .upsert({
+              email: studentEmailToUpgrade,
+              name: existingProf?.name || updatedProfileData.name || studentEmailToUpgrade.split('@')[0],
+              phone: targetPhone || existingProf?.phone || updatedProfileData.phone || null,
+              is_pro: true,
+              pro_status: 'active',
+              profile_data: updatedProfileData,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'email' });
+
+          try {
+            await supabase
+              .from('profiles')
+              .update({
+                subscription_status: 'pro',
+                updated_at: new Date().toISOString()
+              })
+              .eq('email', studentEmailToUpgrade);
+          } catch {}
+
+          try {
+            const endDate = new Date();
+            endDate.setDate(endDate.getDate() + (candidateTier === 'pro_annual' ? 365 : 120));
+            await supabase
+              .from('subscriptions')
+              .upsert({
+                email: studentEmailToUpgrade,
+                tier: candidateTier as any,
+                status: 'active',
+                start_date: new Date().toISOString(),
+                end_date: endDate.toISOString(),
+                payment_method: paymentRecord?.provider || 'telebirr',
+                auto_renew: false
+              }, { onConflict: 'email' });
+          } catch {}
         }
       } catch (dbEx) {
         console.warn('Supabase student pro upgrade notice:', dbEx);
       }
     }
+
+    // Also update Firestore to guarantee cross-system sync
+    if (targetEmail && targetEmail.includes('@')) {
+      try {
+        await grantProStatusInFirestore(targetEmail, true);
+      } catch (fErr) {
+        console.warn('Firestore Pro grant notice:', fErr);
+      }
+    }
   }
+
+  // Broadcast data update event so open views and badge listeners re-render immediately
+  try {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ethiolearn_data_updated', { detail: { type: 'payment', id: paymentId, status } }));
+      window.dispatchEvent(new CustomEvent('ethiolearn_profile_updated'));
+    }
+  } catch {}
 
   return { success: true };
 }
@@ -1525,6 +1599,7 @@ export async function adminUpdateStudentProfile(
   updates: { isPro?: boolean; userRole?: string; durationDays?: number }
 ): Promise<{ success: boolean; error?: string; student?: any }> {
   const cleanEmail = email.toLowerCase().trim();
+  let serverStudent: any = null;
   
   // 1. Try server-side verified admin endpoint first
   try {
@@ -1536,47 +1611,105 @@ export async function adminUpdateStudentProfile(
     if (res.ok) {
       const data = await res.json();
       if (data && data.success) {
-        // Sync local storage state
-        syncLocalProfileAfterAdminUpdate(cleanEmail, updates);
-        return { success: true, student: data.student };
+        serverStudent = data.student;
       }
     }
   } catch (e) {
     console.warn('[Admin API] Server student update error, using fallback:', e);
   }
 
-  // 2. Direct Supabase fallback
+  // 2. Direct Supabase update (student_profiles + profiles + subscriptions)
   const supabase = getSupabase();
   if (supabase) {
     try {
       const { data: existingProf } = await supabase
         .from('student_profiles')
-        .select('profile_data')
+        .select('*')
         .eq('email', cleanEmail)
         .maybeSingle();
 
       const existingPd = existingProf?.profile_data || {};
       const updatedPd = {
         ...existingPd,
-        ...(typeof updates.isPro === 'boolean' ? { isPro: updates.isPro, proStatus: updates.isPro ? 'active' : 'inactive' } : {}),
+        ...(typeof updates.isPro === 'boolean' ? { 
+          isPro: updates.isPro, 
+          proStatus: updates.isPro ? 'active' : 'inactive',
+          tier: updates.isPro ? 'pro_semester' : 'free',
+          proPaymentDate: updates.isPro ? new Date().toISOString() : existingPd.proPaymentDate
+        } : {}),
         ...(updates.userRole ? { userRole: updates.userRole } : {})
       };
 
       await supabase
         .from('student_profiles')
-        .update({
+        .upsert({
+          email: cleanEmail,
+          name: existingProf?.name || updatedPd.name || cleanEmail.split('@')[0],
+          phone: existingProf?.phone || updatedPd.phone || null,
+          ...(typeof updates.isPro === 'boolean' ? {
+            is_pro: updates.isPro,
+            pro_status: updates.isPro ? 'active' : 'inactive'
+          } : {}),
           profile_data: updatedPd,
           updated_at: new Date().toISOString()
-        })
-        .eq('email', cleanEmail);
+        }, { onConflict: 'email' });
+
+      // Mirror to profiles table for auth checks
+      if (typeof updates.isPro === 'boolean') {
+        try {
+          await supabase
+            .from('profiles')
+            .update({
+              subscription_status: updates.isPro ? 'pro' : 'free',
+              updated_at: new Date().toISOString()
+            })
+            .eq('email', cleanEmail);
+        } catch {}
+
+        if (updates.isPro) {
+          try {
+            const endDate = new Date();
+            endDate.setDate(endDate.getDate() + (Number(updates.durationDays) || 30));
+            await supabase
+              .from('subscriptions')
+              .upsert({
+                email: cleanEmail,
+                tier: 'pro_semester',
+                status: 'active',
+                start_date: new Date().toISOString(),
+                end_date: endDate.toISOString(),
+                payment_method: 'admin_manual_grant',
+                auto_renew: false
+              }, { onConflict: 'email' });
+          } catch {}
+        }
+      }
     } catch (e: any) {
       console.warn('Supabase student update error:', e.message);
     }
   }
 
-  // 3. Update local cache
+  // 3. Update Firestore
+  if (typeof updates.isPro === 'boolean') {
+    try {
+      await grantProStatusInFirestore(cleanEmail, updates.isPro);
+    } catch (fErr) {
+      console.warn('Firestore Pro status sync notice:', fErr);
+    }
+  }
+
+  // 4. Update local cache
   syncLocalProfileAfterAdminUpdate(cleanEmail, updates);
-  return { success: true };
+
+  // Broadcast data update event so open views and badge listeners re-render immediately
+  try {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ethiolearn_data_updated', { detail: { type: 'student_update', email: cleanEmail, updates } }));
+      window.dispatchEvent(new CustomEvent('ethiolearn_profile_updated'));
+    }
+  } catch {}
+
+  return { success: true, student: serverStudent };
 }
 
 function syncLocalProfileAfterAdminUpdate(cleanEmail: string, updates: { isPro?: boolean; userRole?: string }) {
@@ -1593,7 +1726,7 @@ function syncLocalProfileAfterAdminUpdate(cleanEmail: string, updates: { isPro?:
               ...(typeof updates.isPro === 'boolean' ? { 
                 isPro: updates.isPro, 
                 tier: updates.isPro ? 'pro_semester' : 'free',
-                proStatus: updates.isPro ? 'active' : 'inactive' 
+                proStatus: updates.isPro ? 'active' : 'none' 
               } : {}),
               ...(updates.userRole ? { userRole: updates.userRole } : {})
             }
@@ -1613,7 +1746,7 @@ function syncLocalProfileAfterAdminUpdate(cleanEmail: string, updates: { isPro?:
           ...(typeof updates.isPro === 'boolean' ? { 
             isPro: updates.isPro, 
             tier: updates.isPro ? 'pro_semester' : 'free',
-            proStatus: updates.isPro ? 'active' : 'inactive' 
+            proStatus: updates.isPro ? 'active' : 'none' 
           } : {}),
           ...(updates.userRole ? { userRole: updates.userRole } : {})
         };
