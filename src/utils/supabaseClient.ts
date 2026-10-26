@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { safeStorage } from './safeStorage';
+import { isAdministratorEmail } from './adminAuth';
 
 let supabaseInstance: SupabaseClient | null = null;
 
@@ -972,23 +973,50 @@ export async function saveProfileToSupabase(profile: {
   profile_photo?: string;
   subscription_status?: string;
 }): Promise<{ success: boolean; data?: any; error?: string }> {
-  const payload = {
-    firebase_uid: profile.firebase_uid,
-    full_name: profile.full_name || profile.email.split('@')[0],
-    email: profile.email.toLowerCase().trim(),
-    phone: profile.phone || '',
-    university: profile.university || 'Wolkite University (WKU)',
-    department: profile.department || 'General',
-    year_level: profile.year_level || 'Freshman (1st Year)',
-    profile_photo: profile.profile_photo || '',
-    subscription_status: profile.subscription_status || 'free',
-    updated_at: new Date().toISOString()
-  };
+  const cleanEmail = profile.email.toLowerCase().trim();
+  const isAdmin = isAdministratorEmail(cleanEmail);
 
   try {
     const supa = getSupabase();
     if (supa) {
-      // 1. Try to persist to `profiles` table
+      // Check existing records first to avoid accidentally downgrading an existing Pro pass
+      let alreadyPro = isAdmin || profile.subscription_status === 'pro' || profile.subscription_status === 'active';
+      if (!alreadyPro) {
+        try {
+          if (profile.firebase_uid) {
+            const { data: pByUid } = await supa.from('profiles').select('subscription_status').eq('firebase_uid', profile.firebase_uid).maybeSingle();
+            if (pByUid?.subscription_status === 'pro' || pByUid?.subscription_status === 'active') alreadyPro = true;
+          }
+          if (!alreadyPro && cleanEmail) {
+            const { data: pByEmail } = await supa.from('profiles').select('subscription_status').eq('email', cleanEmail).maybeSingle();
+            if (pByEmail?.subscription_status === 'pro' || pByEmail?.subscription_status === 'active') alreadyPro = true;
+          }
+          if (!alreadyPro && cleanEmail) {
+            const { data: sByEmail } = await supa.from('student_profiles').select('is_pro, pro_status, profile_data').eq('email', cleanEmail).maybeSingle();
+            if (sByEmail?.is_pro || sByEmail?.pro_status === 'active' || sByEmail?.profile_data?.isPro) alreadyPro = true;
+          }
+          if (!alreadyPro && cleanEmail) {
+            const { data: subData } = await supa.from('subscriptions').select('status').eq('email', cleanEmail).eq('status', 'active').maybeSingle();
+            if (subData) alreadyPro = true;
+          }
+        } catch {}
+      }
+
+      const finalStatus = alreadyPro ? 'pro' : 'free';
+      const payload = {
+        firebase_uid: profile.firebase_uid,
+        full_name: profile.full_name || cleanEmail.split('@')[0],
+        email: cleanEmail,
+        phone: profile.phone || '',
+        university: profile.university || 'Wolkite University (WKU)',
+        department: profile.department || 'General',
+        year_level: profile.year_level || 'Freshman (1st Year)',
+        profile_photo: profile.profile_photo || '',
+        subscription_status: finalStatus,
+        updated_at: new Date().toISOString()
+      };
+
+      // 1. Persist to `profiles` table
       try {
         const { data: existingByUid } = await supa
           .from('profiles')
@@ -1023,8 +1051,15 @@ export async function saveProfileToSupabase(profile: {
         console.warn('[profiles table notice]:', profilesErr);
       }
 
-      // 2. Also mirror and sync to `student_profiles` to maintain 100% database compatibility
+      // 2. Mirror and sync to `student_profiles`
       try {
+        const { data: existingStd } = await supa
+          .from('student_profiles')
+          .select('profile_data')
+          .eq('email', payload.email)
+          .maybeSingle();
+
+        const existingPd = existingStd?.profile_data || {};
         await supa
           .from('student_profiles')
           .upsert({
@@ -1032,19 +1067,21 @@ export async function saveProfileToSupabase(profile: {
             name: payload.full_name,
             university: payload.university,
             year: payload.year_level,
-            is_pro: payload.subscription_status === 'pro' || payload.subscription_status === 'active',
-            pro_status: (payload.subscription_status === 'pro' || payload.subscription_status === 'active') ? 'active' : 'inactive',
+            is_pro: alreadyPro,
+            pro_status: alreadyPro ? 'active' : 'none',
             profile_data: {
+              ...existingPd,
               firebaseUid: payload.firebase_uid,
               name: payload.full_name,
               email: payload.email,
-              password: profile.password || '',
-              phone: payload.phone,
+              phone: payload.phone || existingPd.phone,
               university: payload.university,
               department: payload.department,
               year: payload.year_level,
-              avatar: payload.profile_photo,
-              isPro: payload.subscription_status === 'pro' || payload.subscription_status === 'active'
+              avatar: payload.profile_photo || existingPd.avatar,
+              isPro: alreadyPro,
+              proStatus: alreadyPro ? 'active' : 'none',
+              tier: alreadyPro ? (existingPd.tier || 'pro_semester') : 'free'
             },
             updated_at: new Date().toISOString()
           }, { onConflict: 'email' });
@@ -1063,7 +1100,17 @@ export async function saveProfileToSupabase(profile: {
     const res = await fetch('/api/user/profile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({
+        firebase_uid: profile.firebase_uid,
+        full_name: profile.full_name || cleanEmail.split('@')[0],
+        email: cleanEmail,
+        phone: profile.phone || '',
+        university: profile.university || 'Wolkite University (WKU)',
+        department: profile.department || 'General',
+        year_level: profile.year_level || 'Freshman (1st Year)',
+        profile_photo: profile.profile_photo || '',
+        subscription_status: (isAdmin || profile.subscription_status === 'pro') ? 'pro' : 'free'
+      })
     });
     if (res.ok) {
       const resJson = await res.json();
@@ -1073,77 +1120,143 @@ export async function saveProfileToSupabase(profile: {
     console.warn('[saveProfileToSupabase server proxy notice]:', serverErr);
   }
 
-  return { success: true, data: payload };
+  return { success: true };
 }
 
 /**
- * Fetch a profile from Supabase table `profiles` or `student_profiles` using Firebase UID or email
+ * Fetch a profile from Supabase tables `profiles`, `student_profiles`, and `subscriptions`
  */
 export async function fetchProfileFromSupabase(firebaseUid: string, email?: string): Promise<any | null> {
   const normalizedEmail = (email || '').toLowerCase().trim();
+  const isAdmin = isAdministratorEmail(normalizedEmail);
+
   try {
     const supa = getSupabase();
+    let profRow: any = null;
+    let stdRow: any = null;
+    let subRow: any = null;
+
     if (supa) {
-      // 1. Check `profiles` table first
+      // 1. Fetch from profiles table
       if (firebaseUid) {
         try {
-          const { data, error } = await supa
+          const { data } = await supa
             .from('profiles')
             .select('*')
             .eq('firebase_uid', firebaseUid)
             .maybeSingle();
-          if (data && !error) return data;
+          if (data) profRow = data;
         } catch {}
       }
-      if (normalizedEmail) {
+      if (!profRow && normalizedEmail) {
         try {
-          const { data, error } = await supa
+          const { data } = await supa
             .from('profiles')
             .select('*')
             .eq('email', normalizedEmail)
             .maybeSingle();
-          if (data && !error) return data;
+          if (data) profRow = data;
         } catch {}
       }
 
-      // 2. Check `student_profiles` table
+      // 2. Fetch from student_profiles table (ALWAYS check, even if profRow exists)
       if (normalizedEmail) {
         try {
-          const { data: stdData, error: stdError } = await supa
+          const { data } = await supa
             .from('student_profiles')
             .select('*')
             .eq('email', normalizedEmail)
             .maybeSingle();
-          if (stdData && !stdError) {
-            const prof = stdData.profile_data || {};
-            return {
-              firebase_uid: firebaseUid || prof.firebaseUid || '',
-              full_name: stdData.name || prof.name || normalizedEmail.split('@')[0],
-              email: stdData.email,
-              phone: prof.phone || '',
-              university: stdData.university || prof.university || 'Wolkite University',
-              department: prof.department || 'Freshman Common Courses',
-              year_level: stdData.year || prof.year || 'Freshman (1st Year)',
-              profile_photo: prof.avatar || 'champion',
-              subscription_status: (stdData.is_pro || stdData.pro_status === 'active' || prof.isPro) ? 'pro' : 'free'
-            };
-          }
+          if (data) stdRow = data;
+        } catch {}
+      }
+      if (!stdRow && firebaseUid) {
+        try {
+          const { data } = await supa
+            .from('student_profiles')
+            .select('*')
+            .filter('profile_data->>firebaseUid', 'eq', firebaseUid)
+            .maybeSingle();
+          if (data) stdRow = data;
+        } catch {}
+      }
+
+      // 3. Fetch from subscriptions table for active subscription
+      if (normalizedEmail) {
+        try {
+          const { data } = await supa
+            .from('subscriptions')
+            .select('*')
+            .eq('email', normalizedEmail)
+            .eq('status', 'active')
+            .maybeSingle();
+          if (data) subRow = data;
         } catch {}
       }
     }
 
-    // Call server endpoint as fallback
-    const url = firebaseUid 
-      ? `/api/user/profile/${encodeURIComponent(firebaseUid)}` 
-      : `/api/user/profile?email=${encodeURIComponent(normalizedEmail)}`;
-    const res = await fetch(url);
-    if (res.ok) {
-      const json = await res.json();
-      if (json && json.profile) return json.profile;
+    // Call server endpoint as fallback if neither row found
+    if (!profRow && !stdRow) {
+      try {
+        const url = firebaseUid 
+          ? `/api/user/profile/${encodeURIComponent(firebaseUid)}` 
+          : `/api/user/profile?email=${encodeURIComponent(normalizedEmail)}`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.profile) profRow = json.profile;
+        }
+      } catch {}
     }
+
+    if (!profRow && !stdRow && !subRow) {
+      return null;
+    }
+
+    const pd = stdRow?.profile_data || {};
+    const isPro = Boolean(
+      isAdmin ||
+      profRow?.subscription_status === 'pro' ||
+      profRow?.subscription_status === 'active' ||
+      stdRow?.is_pro === true ||
+      stdRow?.pro_status === 'active' ||
+      pd.isPro === true ||
+      pd.is_pro === true ||
+      subRow?.status === 'active'
+    );
+
+    const targetTier = subRow?.tier || pd.tier || (isPro ? 'pro_semester' : 'free');
+
+    return {
+      id: firebaseUid || profRow?.firebase_uid || pd.firebaseUid || stdRow?.id || '',
+      firebase_uid: firebaseUid || profRow?.firebase_uid || pd.firebaseUid || '',
+      full_name: stdRow?.name || profRow?.full_name || pd.name || (normalizedEmail ? normalizedEmail.split('@')[0] : 'Student'),
+      name: stdRow?.name || profRow?.full_name || pd.name || (normalizedEmail ? normalizedEmail.split('@')[0] : 'Student'),
+      email: normalizedEmail || profRow?.email || stdRow?.email || '',
+      phone: stdRow?.phone || profRow?.phone || pd.phone || '',
+      university: stdRow?.university || profRow?.university || pd.university || 'Wolkite University',
+      department: pd.department || profRow?.department || 'Freshman Common Courses',
+      year_level: stdRow?.year || profRow?.year_level || pd.year || 'Freshman (1st Year)',
+      year: stdRow?.year || profRow?.year_level || pd.year || 'Freshman (1st Year)',
+      profile_photo: pd.avatar || profRow?.profile_photo || 'champion',
+      avatar: pd.avatar || profRow?.profile_photo || 'champion',
+      subscription_status: isPro ? 'pro' : 'free',
+      is_pro: isPro,
+      isPro: isPro,
+      pro_status: isPro ? 'active' : 'none',
+      proStatus: isPro ? 'active' : 'none',
+      tier: targetTier,
+      profile_data: {
+        ...pd,
+        isPro,
+        proStatus: isPro ? 'active' : 'none',
+        tier: targetTier
+      }
+    };
   } catch (err) {
     console.warn('[fetchProfileFromSupabase warning]:', err);
   }
   return null;
-}export { supabase } from './supabase';
+}
+export { supabase } from './supabase';
 

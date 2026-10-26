@@ -616,6 +616,17 @@ export default function App() {
             }
 
             if (supaProfile) {
+              const isUserPro = Boolean(
+                supaProfile.isPro ||
+                supaProfile.is_pro ||
+                supaProfile.subscription_status === 'pro' ||
+                supaProfile.subscription_status === 'active' ||
+                supaProfile.pro_status === 'active' ||
+                supaProfile.proStatus === 'active' ||
+                supaProfile.profile_data?.isPro ||
+                (user.email ? isAdministratorEmail(user.email) : false)
+              );
+
               const fullProfile: StudentProfile = {
                 id: user.uid,
                 firebaseUid: user.uid,
@@ -633,7 +644,10 @@ export default function App() {
                 theme: 'dark',
                 language: language,
                 avatar: (supaProfile.profile_photo as any) || (supaProfile.avatar as any) || 'champion',
-                isPro: supaProfile.subscription_status === 'pro' || supaProfile.subscription_status === 'active' || (user.email ? isAdministratorEmail(user.email) : false),
+                isPro: isUserPro,
+                proStatus: isUserPro ? 'active' : 'none',
+                tier: isUserPro ? (supaProfile.tier || 'pro_semester') : 'free',
+                subscription_status: isUserPro ? 'pro' : 'free',
                 userRole: (user.email && isAdministratorEmail(user.email)) ? 'super_admin' : 'student',
                 isRegistered: true,
                 unregisteredAICredits: 10,
@@ -658,6 +672,12 @@ export default function App() {
               } catch (e) {}
 
               // Priority 3: Fallback composite profile derived from Firebase Auth user
+              const isFallbackPro = Boolean(
+                (user.email && isAdministratorEmail(user.email)) ||
+                localCachedProfile?.isPro ||
+                localCachedProfile?.proStatus === 'active'
+              );
+
               const fallbackProfile: StudentProfile = {
                 id: user.uid,
                 firebaseUid: user.uid,
@@ -675,7 +695,10 @@ export default function App() {
                 theme: 'dark',
                 language: language,
                 avatar: localCachedProfile?.avatar || 'champion',
-                isPro: (user.email && isAdministratorEmail(user.email)) || Boolean(localCachedProfile?.isPro),
+                isPro: isFallbackPro,
+                proStatus: isFallbackPro ? 'active' : 'none',
+                tier: isFallbackPro ? (localCachedProfile?.tier || 'pro_semester') : 'free',
+                subscription_status: isFallbackPro ? 'pro' : 'free',
                 userRole: (user.email && isAdministratorEmail(user.email)) ? 'super_admin' : 'student',
                 isRegistered: true,
                 unregisteredAICredits: 10,
@@ -688,7 +711,7 @@ export default function App() {
                 safeStorage.setItem('ethiolearn_active_email', user.email.toLowerCase().trim());
               }
 
-              // Asynchronously save profile to Supabase in background
+              // Asynchronously save profile to Supabase in background (preserving pro if active)
               saveProfileToSupabase({
                 firebase_uid: user.uid,
                 full_name: fallbackProfile.name,
@@ -698,7 +721,7 @@ export default function App() {
                 department: fallbackProfile.department,
                 year_level: fallbackProfile.year,
                 profile_photo: fallbackProfile.avatar,
-                subscription_status: fallbackProfile.isPro ? 'pro' : 'free'
+                subscription_status: isFallbackPro ? 'pro' : 'free'
               }).catch(() => {});
             }
           } catch (restoreErr) {
@@ -829,8 +852,26 @@ export default function App() {
           if (supaRecord) {
             if (supaRecord.profile_data) {
               console.log('[Supabase Sync] Pulled student profile from Supabase.');
-              setProfile(supaRecord.profile_data);
-              safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(supaRecord.profile_data));
+              const isProRecord = Boolean(
+                supaRecord.is_pro || 
+                supaRecord.pro_status === 'active' || 
+                supaRecord.profile_data?.isPro || 
+                (email ? isAdministratorEmail(email) : false)
+              );
+
+              setProfile(prev => {
+                const keepPro = Boolean(prev?.isPro || isProRecord);
+                const merged: StudentProfile = {
+                  ...supaRecord.profile_data,
+                  ...prev,
+                  isPro: keepPro,
+                  proStatus: keepPro ? 'active' : 'none',
+                  tier: keepPro ? (supaRecord.profile_data?.tier || prev?.tier || 'pro_semester') : 'free',
+                  subscription_status: keepPro ? 'pro' : 'free'
+                };
+                safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(merged));
+                return merged;
+              });
             }
             if (supaRecord.notes_data && supaRecord.notes_data.length > 0) {
               console.log('[Supabase Sync] Pulled custom notes from Supabase.');
@@ -858,6 +899,8 @@ export default function App() {
 
             const payloadRecord = {
               email: email,
+              is_pro: Boolean(profile.isPro),
+              pro_status: profile.isPro ? 'active' : 'none',
               profile_data: {
                 ...profile,
                 name: profile.name || email.split('@')[0],
@@ -865,6 +908,7 @@ export default function App() {
                 year: profile.year || 'Freshman',
                 subjects: Array.isArray(profile.subjects) ? profile.subjects : [],
                 isPro: Boolean(profile.isPro),
+                proStatus: profile.isPro ? 'active' : 'none',
                 userRole: isAdministratorEmail(email) ? 'admin' : 'student'
               },
               study_sessions: studySessions,
@@ -895,8 +939,26 @@ export default function App() {
           const cloudProfile = await fetchProfileFromFirestore(googleUser.uid);
           if (cloudProfile) {
             console.log('[Firestore Sync] Cloud profile pulled. Applying to local study desk.');
-            setProfile(cloudProfile);
-            safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(cloudProfile));
+            setProfile(prev => {
+              const isProCloud = Boolean(
+                prev?.isPro ||
+                prev?.proStatus === 'active' ||
+                cloudProfile.isPro ||
+                cloudProfile.proStatus === 'active' ||
+                (cloudProfile.email ? isAdministratorEmail(cloudProfile.email) : false)
+              );
+
+              const merged: StudentProfile = {
+                ...cloudProfile,
+                ...prev,
+                isPro: isProCloud,
+                proStatus: isProCloud ? 'active' : 'none',
+                tier: isProCloud ? (cloudProfile.tier || prev?.tier || 'pro_semester') : 'free',
+                subscription_status: isProCloud ? 'pro' : 'free'
+              };
+              safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(merged));
+              return merged;
+            });
           } else if (profile) {
             console.log('[Firestore Sync] Creating cloud profile backup.');
             await syncProfileToFirestore(googleUser.uid, profile);
@@ -922,6 +984,74 @@ export default function App() {
       syncCloudState();
     }
   }, [googleUser]);
+
+  // Active subscription & live Pro status synchronizer (polls & listens to events)
+  useEffect(() => {
+    if (!profile?.email || profile.email === DEFAULT_STUDENT_PROFILE.email) return;
+
+    let mounted = true;
+    const recheckProStatus = async () => {
+      try {
+        const studentEmail = profile.email?.toLowerCase().trim();
+        if (!studentEmail) return;
+
+        const liveProfile = await fetchProfileFromSupabase(profile.firebaseUid || profile.id || '', studentEmail);
+        if (liveProfile && mounted) {
+          const isNowPro = Boolean(
+            liveProfile.isPro ||
+            liveProfile.is_pro ||
+            liveProfile.subscription_status === 'pro' ||
+            liveProfile.pro_status === 'active' ||
+            isAdministratorEmail(studentEmail)
+          );
+
+          if (isNowPro && !profile.isPro) {
+            console.log('[Live Pro Sync] Detected newly activated Pro pass! Upgrading student desk immediately.');
+            setProfile(prev => {
+              if (!prev) return prev;
+              const updated: StudentProfile = {
+                ...prev,
+                isPro: true,
+                proStatus: 'active',
+                tier: liveProfile.tier || prev.tier || 'pro_semester',
+                subscription_status: 'pro'
+              };
+              safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(updated));
+              return updated;
+            });
+            playSuccessChime();
+          }
+        }
+      } catch (e) {}
+    };
+
+    recheckProStatus();
+
+    const handleUpdate = () => {
+      recheckProStatus();
+    };
+
+    window.addEventListener('ethiolearn_data_updated', handleUpdate);
+    window.addEventListener('ethiolearn_profile_updated', handleUpdate);
+    window.addEventListener('focus', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+
+    // Poll every 12 seconds when waiting for approval so student sees Pro pass live without refresh
+    const pollInterval = setInterval(() => {
+      if (!profile.isPro) {
+        recheckProStatus();
+      }
+    }, 12000);
+
+    return () => {
+      mounted = false;
+      window.removeEventListener('ethiolearn_data_updated', handleUpdate);
+      window.removeEventListener('ethiolearn_profile_updated', handleUpdate);
+      window.removeEventListener('focus', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+      clearInterval(pollInterval);
+    };
+  }, [profile?.email, profile?.isPro]);
 
   // Load server-side configured Supabase secrets automatically at startup and sync active session token
   useEffect(() => {

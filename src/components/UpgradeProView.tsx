@@ -5,17 +5,18 @@
  * Local payment integration for Telebirr, CBE Birr & HelloCash.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Check, Shield, Clock, Phone, CreditCard, Send, Sparkles, CheckCircle, ExternalLink, Star,
   Zap, Lock, BookOpen, FileText, Smartphone, AlertCircle, ArrowRight, ShieldCheck, Upload, 
-  Trash2, Scale, Ticket, Tag, Copy, CheckCheck, Crown, Gift, Calendar
+  Trash2, Scale, Ticket, Tag, Copy, CheckCheck, Crown, Gift, Calendar, RefreshCw
 } from 'lucide-react';
 import { StudentProfile, SubscriptionTier, PaymentProvider, PaymentRecord } from '../types';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
 import { safeStorage } from '../utils/safeStorage';
 import { addPaymentRecordLocal } from '../utils/monetization';
+import { fetchProfileFromSupabase } from '../utils/supabaseClient';
 import TermsModal from './TermsModal';
 
 interface UpgradeProViewProps {
@@ -52,6 +53,57 @@ export default function UpgradeProView({
   const [showTermsModal, setShowTermsModal] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+
+  // Live status verification check
+  const handleCheckStatus = async (silent = false) => {
+    if (!profile.email) return;
+    if (!silent) {
+      setIsCheckingStatus(true);
+      playClickChime();
+    }
+    try {
+      const res = await fetchProfileFromSupabase(profile.firebaseUid || profile.id || '', profile.email);
+      if (res && (res.isPro || res.is_pro || res.subscription_status === 'pro')) {
+        playSuccessChime();
+        const upgraded: StudentProfile = {
+          ...profile,
+          isPro: true,
+          proStatus: 'active',
+          tier: res.tier || profile.tier || 'pro_semester',
+          subscription_status: 'pro'
+        };
+        safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(upgraded));
+        onUpdateProfile(upgraded);
+      } else {
+        const serverRes = await fetch(`/api/user/profile?email=${encodeURIComponent(profile.email)}`);
+        if (serverRes.ok) {
+          const sJson = await serverRes.json();
+          if (sJson.profile && (sJson.profile.isPro || sJson.profile.is_pro || sJson.profile.subscription_status === 'pro')) {
+            playSuccessChime();
+            const upgraded: StudentProfile = {
+              ...profile,
+              isPro: true,
+              proStatus: 'active',
+              tier: sJson.profile.tier || profile.tier || 'pro_semester',
+              subscription_status: 'pro'
+            };
+            safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(upgraded));
+            onUpdateProfile(upgraded);
+          }
+        }
+      }
+    } catch (e) {
+    } finally {
+      if (!silent) setIsCheckingStatus(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'status' && !profile.isPro) {
+      handleCheckStatus(true);
+    }
+  }, [activeTab]);
 
 
   // Copy to clipboard helper
@@ -914,6 +966,20 @@ export default function UpgradeProView({
                     />
                   </div>
                 )}
+
+                <button
+                  type="button"
+                  disabled={isCheckingStatus}
+                  onClick={() => handleCheckStatus(false)}
+                  className="w-full mt-2 py-2.5 px-4 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition shadow-md active:scale-95"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isCheckingStatus ? 'animate-spin' : ''}`} />
+                  <span>
+                    {isCheckingStatus 
+                      ? (language === 'en' ? 'Checking Ledger...' : 'በመፈተሽ ላይ...') 
+                      : (language === 'en' ? 'Check Live Approval Status' : 'የማረጋገጫ ሁኔታን አሁን ፈትሽ')}
+                  </span>
+                </button>
               </div>
             ) : (
               <div className="space-y-3">

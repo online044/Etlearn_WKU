@@ -325,6 +325,19 @@ export default function AuthPortalView({
         const yearToUse = supaProfile?.year_level || supaProfile?.year || firestoreProfile?.year || "Freshman (1st Year)";
         const phoneToUse = supaProfile?.phone || firestoreProfile?.phone || '';
 
+        const isProStudent = Boolean(
+          supaProfile?.isPro ||
+          supaProfile?.is_pro ||
+          supaProfile?.subscription_status === 'pro' ||
+          supaProfile?.subscription_status === 'active' ||
+          supaProfile?.pro_status === 'active' ||
+          supaProfile?.proStatus === 'active' ||
+          firestoreProfile?.isPro ||
+          firestoreProfile?.subscription_status === 'pro' ||
+          (firestoreProfile as any)?.subscriptionStatus === 'pro' ||
+          isAdministratorEmail(emailTrim)
+        );
+
         // Build composite profile
         let profile: StudentProfile = {
           id: uid,
@@ -343,7 +356,10 @@ export default function AuthPortalView({
           avatar: (supaProfile?.profile_photo as any) || (supaProfile?.avatar as any) || 'champion',
           isRegistered: true,
           unregisteredAICredits: 10,
-          isPro: supaProfile?.subscription_status === 'pro' || supaProfile?.subscription_status === 'active' || isAdministratorEmail(emailTrim),
+          isPro: isProStudent,
+          proStatus: isProStudent ? 'active' : 'none',
+          tier: isProStudent ? (supaProfile?.tier || 'pro_semester') : 'free',
+          subscription_status: isProStudent ? 'pro' : 'free',
           emailVerified: res.user.emailVerified
         };
 
@@ -488,6 +504,20 @@ export default function AuthPortalView({
           const yearToUse = supaProfile?.year_level || supaProfile?.year || firestoreProfile?.year || localExistingAccount?.profile?.year || "Freshman (1st Year)";
           const phoneToUse = supaProfile?.phone || firestoreProfile?.phone || localExistingAccount?.profile?.phone || '';
 
+          const isProStudent = Boolean(
+            supaProfile?.isPro ||
+            supaProfile?.is_pro ||
+            supaProfile?.subscription_status === 'pro' ||
+            supaProfile?.subscription_status === 'active' ||
+            supaProfile?.pro_status === 'active' ||
+            supaProfile?.proStatus === 'active' ||
+            firestoreProfile?.isPro ||
+            firestoreProfile?.subscription_status === 'pro' ||
+            (firestoreProfile as any)?.subscriptionStatus === 'pro' ||
+            localExistingAccount?.profile?.isPro ||
+            isAdministratorEmail(emailTrim)
+          );
+
           const profileToUse: StudentProfile = {
             id: uid,
             firebaseUid: uid,
@@ -504,7 +534,10 @@ export default function AuthPortalView({
             language: lang,
             avatar: (supaProfile?.profile_photo as any) || (supaProfile?.avatar as any) || 'champion',
             isRegistered: true,
-            isPro: supaProfile?.subscription_status === 'pro' || supaProfile?.subscription_status === 'active' || isAdministratorEmail(emailTrim),
+            isPro: isProStudent,
+            proStatus: isProStudent ? 'active' : 'none',
+            tier: isProStudent ? (supaProfile?.tier || localExistingAccount?.profile?.tier || 'pro_semester') : 'free',
+            subscription_status: isProStudent ? 'pro' : 'free',
             emailVerified: userCredential.user.emailVerified,
             unregisteredAICredits: 10
           };

@@ -1984,27 +1984,40 @@ export async function grantProStatusInFirestore(emailOrUid: string, isPro: boole
   const currentDb = getDb();
   if (!currentDb || !emailOrUid) return;
   const target = emailOrUid.toLowerCase().trim();
+  const proPayload = {
+    isPro: Boolean(isPro),
+    proStatus: isPro ? 'active' : 'none',
+    subscriptionStatus: isPro ? 'pro' : 'free',
+    tier: isPro ? 'pro_semester' : 'free',
+    updatedAt: new Date().toISOString()
+  };
+
   try {
-    // 1. Direct doc write if target is UID
+    // 1. Direct doc write to users and profiles if target is UID or identifier
     try {
-      await updateDoc(doc(currentDb, 'users', target), {
-        isPro: Boolean(isPro),
-        subscriptionStatus: isPro ? 'pro' : 'free',
-        updatedAt: new Date().toISOString()
-      });
+      await setDoc(doc(currentDb, 'users', target), proPayload, { merge: true });
+    } catch {}
+    try {
+      await setDoc(doc(currentDb, 'profiles', target), proPayload, { merge: true });
     } catch {}
 
-    // 2. Query by email
+    // 2. Query both collections by email
     if (target.includes('@')) {
-      const q = query(collection(currentDb, 'users'), where('email', '==', target));
-      const snaps = await getDocs(q);
-      for (const d of snaps.docs) {
-        await updateDoc(doc(currentDb, 'users', d.id), {
-          isPro: Boolean(isPro),
-          subscriptionStatus: isPro ? 'pro' : 'free',
-          updatedAt: new Date().toISOString()
-        });
-      }
+      try {
+        const uQuery = query(collection(currentDb, 'users'), where('email', '==', target));
+        const uSnaps = await getDocs(uQuery);
+        for (const d of uSnaps.docs) {
+          await setDoc(doc(currentDb, 'users', d.id), proPayload, { merge: true });
+        }
+      } catch {}
+
+      try {
+        const pQuery = query(collection(currentDb, 'profiles'), where('email', '==', target));
+        const pSnaps = await getDocs(pQuery);
+        for (const d of pSnaps.docs) {
+          await setDoc(doc(currentDb, 'profiles', d.id), proPayload, { merge: true });
+        }
+      } catch {}
     }
   } catch (err) {
     console.warn('[Firestore] grantProStatusInFirestore notice:', err);

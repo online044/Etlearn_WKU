@@ -192,22 +192,50 @@ async function fetchUserRoleAndStatus(emailOrId: string): Promise<{ user_role: '
   const supabase = getSupabaseAdmin();
   if (supabase) {
     try {
-      const { data, error } = await supabase
+      const { data: stdData } = await supabase
         .from('student_profiles')
-        .select('email, profile_data')
+        .select('*')
         .eq('email', normalized)
         .maybeSingle();
 
-      if (!error && data) {
-        const pd = data.profile_data || {};
-        const role = pd.userRole || pd.user_role;
-        const validRole = ['student', 'instructor', 'admin', 'super_admin'].includes(role) ? role : 'student';
-        return {
-          user_role: isAdminByEmail ? 'admin' : validRole,
-          is_pro: Boolean(pd.isPro || pd.is_pro),
-          name: pd.name || normalized.split('@')[0]
-        };
+      const pd = stdData?.profile_data || {};
+      const role = pd.userRole || pd.user_role;
+      const validRole = ['student', 'instructor', 'admin', 'super_admin'].includes(role) ? role : 'student';
+
+      let isPro = Boolean(stdData?.is_pro || stdData?.pro_status === 'active' || pd.isPro || pd.is_pro || isAdminByEmail);
+
+      if (!isPro) {
+        // Also check profiles table
+        const { data: profData } = await supabase
+          .from('profiles')
+          .select('subscription_status')
+          .eq('email', normalized)
+          .maybeSingle();
+
+        if (profData?.subscription_status === 'pro' || profData?.subscription_status === 'active') {
+          isPro = true;
+        }
       }
+
+      if (!isPro) {
+        // Also check subscriptions table
+        const { data: subData } = await supabase
+          .from('subscriptions')
+          .select('status, end_date')
+          .eq('email', normalized)
+          .eq('status', 'active')
+          .maybeSingle();
+
+        if (subData) {
+          isPro = true;
+        }
+      }
+
+      return {
+        user_role: isAdminByEmail ? 'admin' : validRole,
+        is_pro: isPro,
+        name: stdData?.name || pd.name || normalized.split('@')[0]
+      };
     } catch (e) {
       console.warn('[Security] Supabase profile check warning:', e);
     }
@@ -215,7 +243,7 @@ async function fetchUserRoleAndStatus(emailOrId: string): Promise<{ user_role: '
 
   return {
     user_role: isAdminByEmail ? 'admin' : 'student',
-    is_pro: false
+    is_pro: isAdminByEmail
   };
 }
 

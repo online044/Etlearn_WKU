@@ -22,6 +22,7 @@ import {
   generateSessionToken, 
   verifyTelegramInitData, 
   PRIMARY_ADMIN_EMAIL,
+  isAdministratorEmail,
   getSupabaseAdmin,
   setSupabaseAdminCredentials,
   sanitizeInput
@@ -591,50 +592,95 @@ app.get(['/api/user/profile/:firebase_uid', '/api/user/profile'], async (req: Re
       return res.json({ success: true, profile: null });
     }
 
-    let profile = null;
+    let profRow: any = null;
+    let stdRow: any = null;
+    let subRow: any = null;
+
     if (firebase_uid) {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('profiles')
         .select('*')
         .eq('firebase_uid', firebase_uid)
         .maybeSingle();
-      if (!error && data) profile = data;
+      if (data) profRow = data;
     }
 
-    if (!profile && email) {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('email', email)
-        .maybeSingle();
-      if (!error && data) profile = data;
-    }
+    const targetEmail = (email || profRow?.email || '').toLowerCase().trim();
 
-    // Fallback check on student_profiles if not yet migrated
-    if (!profile && email) {
-      const { data: legacyData } = await supabase
+    if (targetEmail) {
+      if (!profRow) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('email', targetEmail)
+          .maybeSingle();
+        if (data) profRow = data;
+      }
+
+      // Check student_profiles
+      const { data: stdData } = await supabase
         .from('student_profiles')
         .select('*')
-        .eq('email', email)
+        .eq('email', targetEmail)
         .maybeSingle();
-      if (legacyData) {
-        profile = {
-          firebase_uid: legacyData.profile_data?.firebaseUid || firebase_uid || '',
-          full_name: legacyData.name || legacyData.profile_data?.name || email.split('@')[0],
-          email: legacyData.email,
-          phone: legacyData.profile_data?.phone || '',
-          university: legacyData.university || 'Wolkite University (WKU)',
-          department: legacyData.profile_data?.department || 'General',
-          year_level: legacyData.year || 'Freshman (1st Year)',
-          profile_photo: legacyData.profile_data?.avatar || '',
-          subscription_status: legacyData.is_pro ? 'active' : 'free'
-        };
-      }
+      if (stdData) stdRow = stdData;
+
+      // Check active subscriptions
+      const { data: subData } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('email', targetEmail)
+        .eq('status', 'active')
+        .maybeSingle();
+      if (subData) subRow = subData;
     }
+
+    if (!profRow && !stdRow) {
+      return res.json({ success: true, profile: null });
+    }
+
+    const pd = stdRow?.profile_data || {};
+    const isAdmin = isAdministratorEmail(targetEmail);
+    const isPro = Boolean(
+      isAdmin ||
+      profRow?.subscription_status === 'pro' ||
+      profRow?.subscription_status === 'active' ||
+      stdRow?.is_pro === true ||
+      stdRow?.pro_status === 'active' ||
+      pd.isPro === true ||
+      pd.is_pro === true ||
+      subRow?.status === 'active'
+    );
+
+    const mergedProfile = {
+      firebase_uid: profRow?.firebase_uid || pd.firebaseUid || firebase_uid || '',
+      full_name: stdRow?.name || profRow?.full_name || pd.name || targetEmail.split('@')[0],
+      name: stdRow?.name || profRow?.full_name || pd.name || targetEmail.split('@')[0],
+      email: targetEmail || profRow?.email || stdRow?.email || '',
+      phone: stdRow?.phone || profRow?.phone || pd.phone || '',
+      university: stdRow?.university || profRow?.university || pd.university || 'Wolkite University (WKU)',
+      department: pd.department || profRow?.department || 'Freshman Common Courses',
+      year_level: stdRow?.year || profRow?.year_level || pd.year || 'Freshman (1st Year)',
+      year: stdRow?.year || profRow?.year_level || pd.year || 'Freshman (1st Year)',
+      profile_photo: pd.avatar || profRow?.profile_photo || 'champion',
+      avatar: pd.avatar || profRow?.profile_photo || 'champion',
+      subscription_status: isPro ? 'pro' : 'free',
+      is_pro: isPro,
+      isPro: isPro,
+      pro_status: isPro ? 'active' : 'none',
+      proStatus: isPro ? 'active' : 'none',
+      tier: subRow?.tier || pd.tier || (isPro ? 'pro_semester' : 'free'),
+      profile_data: {
+        ...pd,
+        isPro,
+        proStatus: isPro ? 'active' : 'none',
+        tier: subRow?.tier || pd.tier || (isPro ? 'pro_semester' : 'free')
+      }
+    };
 
     return res.json({
       success: true,
-      profile
+      profile: mergedProfile
     });
   } catch (error: any) {
     console.error('[Get Profile API Error]:', error);
