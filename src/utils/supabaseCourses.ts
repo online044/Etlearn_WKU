@@ -1201,21 +1201,56 @@ export async function fetchAdminPayments(): Promise<any[]> {
     }
   } catch {}
 
-  // Merge uniquely by payment ID or providerTxnId (Real data only - no starter dummy payments)
   const payMap = new Map<string, any>();
-  cachedPayments.forEach(p => payMap.set(p.id, p));
-  userPayments.forEach(p => payMap.set(p.id || p.providerTxnId, {
-    ...p,
-    id: p.id || `PAY-${Date.now()}`,
-    user_id: p.userId || p.user_id,
-    sender_name: p.senderName || p.sender_name || p.userId,
-    sender_phone: p.senderPhone || p.sender_phone,
-    provider_transaction_id: p.providerTxnId || p.provider_transaction_id,
-    created_at: p.createdAt || p.created_at || new Date().toISOString()
-  }));
-  dbPayments.forEach(p => payMap.set(p.id, p));
 
-  const result = Array.from(payMap.values()).sort((a, b) => {
+  // 1. Fetch server-side verified payments from /api/admin/payments
+  try {
+    const serverRes = await fetch('/api/admin/payments', {
+      headers: getAuthHeaders()
+    });
+    if (serverRes.ok) {
+      const sJson = await serverRes.json();
+      if (sJson.success && Array.isArray(sJson.payments)) {
+        sJson.payments.forEach((p: any) => {
+          const key = p.id || p.provider_transaction_id;
+          if (key) payMap.set(key, p);
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('[Admin API] Server payments fetch notice:', err);
+  }
+
+  // 2. Local storage cached payments
+  cachedPayments.forEach(p => {
+    const key = p.id || p.providerTxnId;
+    if (key) payMap.set(key, { ...p, ...(payMap.get(key) || {}) });
+  });
+
+  // 3. User payment keys in localStorage
+  userPayments.forEach(p => {
+    const key = p.id || p.providerTxnId;
+    if (key) {
+      payMap.set(key, {
+        ...p,
+        id: p.id || `PAY-${Date.now()}`,
+        user_id: p.userId || p.user_id,
+        sender_name: p.senderName || p.sender_name || p.userId,
+        sender_phone: p.senderPhone || p.sender_phone,
+        provider_transaction_id: p.providerTxnId || p.provider_transaction_id,
+        created_at: p.createdAt || p.created_at || new Date().toISOString(),
+        ...(payMap.get(key) || {})
+      });
+    }
+  });
+
+  // 4. Supabase DB payments
+  dbPayments.forEach(p => {
+    const key = p.id || p.provider_transaction_id;
+    if (key) payMap.set(key, { ...p, ...(payMap.get(key) || {}) });
+  });
+
+  const result = Array.from(payMap.values()).sort((a: any, b: any) => {
     return new Date(b.created_at || b.createdAt || 0).getTime() - new Date(a.created_at || a.createdAt || 0).getTime();
   });
 
@@ -1549,29 +1584,70 @@ export async function fetchAdminStudents(searchQuery = ''): Promise<any[]> {
   // Map and unify
   const studentMap = new Map<string, any>();
 
-  // Local registered accounts
+  // 1. Local registered accounts
   localStudents.forEach(st => {
     if (st.email) studentMap.set(st.email.toLowerCase(), st);
   });
 
-  // Supabase profiles overwrite and enrich
+  // 2. Fetch server-side registered students (from disk store + Supabase)
+  try {
+    const serverRes = await fetch('/api/admin/students', {
+      headers: getAuthHeaders()
+    });
+    if (serverRes.ok) {
+      const sJson = await serverRes.json();
+      if (sJson.success && Array.isArray(sJson.students)) {
+        sJson.students.forEach((row: any) => {
+          const email = (row.email || '').toLowerCase().trim();
+          if (email) {
+            const isAdm = isAdministratorEmail(email);
+            const prev = studentMap.get(email) || {};
+            const isPro = isAdm ? true : Boolean(row.is_pro || row.profile_data?.isPro || prev.is_pro);
+            studentMap.set(email, {
+              ...prev,
+              id: row.id || prev.id || `usr_${email}`,
+              name: row.name || prev.name || email.split('@')[0],
+              email: row.email,
+              university: row.university || prev.university || 'Wolkite University',
+              year: row.year || prev.year || 'University',
+              is_pro: isPro,
+              isPro: isPro,
+              user_role: isAdm ? 'Admin' : (row.user_role || prev.user_role || 'Student'),
+              userRole: isAdm ? 'Admin' : (row.user_role || prev.user_role || 'Student'),
+              created_at: row.created_at || prev.created_at || new Date().toISOString(),
+              createdAt: row.created_at || prev.createdAt || new Date().toISOString(),
+              avatar: row.avatar || prev.avatar || '🎓'
+            });
+          }
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('[Admin API] Server students fetch notice:', err);
+  }
+
+  // 3. Supabase profiles overwrite and enrich
   dbStudents.forEach(row => {
     const email = (row.email || '').toLowerCase();
     const profData = row.profile_data || {};
     if (email) {
+      const isAdm = isAdministratorEmail(email);
+      const prev = studentMap.get(email) || {};
+      const isPro = isAdm ? true : Boolean(row.is_pro || profData.isPro || prev.is_pro);
       studentMap.set(email, {
-        id: row.id || `usr_${email}`,
-        name: row.name || profData.name || 'Student',
+        ...prev,
+        id: row.id || prev.id || `usr_${email}`,
+        name: row.name || profData.name || prev.name || 'Student',
         email: row.email,
-        university: row.university || profData.university || 'Wolkite University',
-        year: row.year || profData.year || 'University',
-        is_pro: Boolean(row.is_pro || profData.isPro),
-        isPro: Boolean(row.is_pro || profData.isPro),
-        user_role: isAdministratorEmail(email) ? 'Admin' : (row.user_role || 'Student'),
-        userRole: isAdministratorEmail(email) ? 'Admin' : (row.user_role || 'Student'),
-        created_at: row.created_at || new Date().toISOString(),
-        createdAt: row.created_at || new Date().toISOString(),
-        avatar: profData.avatar || '🎓'
+        university: row.university || profData.university || prev.university || 'Wolkite University',
+        year: row.year || profData.year || prev.year || 'University',
+        is_pro: isPro,
+        isPro: isPro,
+        user_role: isAdm ? 'Admin' : (row.user_role || prev.user_role || 'Student'),
+        userRole: isAdm ? 'Admin' : (row.user_role || prev.user_role || 'Student'),
+        created_at: row.created_at || prev.created_at || new Date().toISOString(),
+        createdAt: row.created_at || prev.createdAt || new Date().toISOString(),
+        avatar: profData.avatar || prev.avatar || '🎓'
       });
     }
   });

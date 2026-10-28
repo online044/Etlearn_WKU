@@ -7,7 +7,7 @@
 import { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
-import { getSupabaseAdmin } from './security';
+import { getSupabaseAdmin, isAdministratorEmail, ADMIN_EMAILS } from './security';
 
 // Resilient in-memory fallback stores
 const memoryAnnouncements = new Map<string, any>();
@@ -15,13 +15,103 @@ const memoryCourses = new Map<string, any>();
 const memoryCoupons = new Map<string, any>();
 
 const DB_DIR = path.join(process.cwd(), 'storage', 'db');
-const ANNOUNCEMENTS_DB_FILE = path.join(DB_DIR, 'announcements.json');
+export const ANNOUNCEMENTS_DB_FILE = path.join(DB_DIR, 'announcements.json');
+export const PAYMENTS_DB_FILE = path.join(DB_DIR, 'payments.json');
+export const STUDENTS_DB_FILE = path.join(DB_DIR, 'students.json');
 
 function ensureDbDirectory() {
   if (!fs.existsSync(DB_DIR)) {
     try {
       fs.mkdirSync(DB_DIR, { recursive: true });
     } catch (e) { /* ignore */ }
+  }
+}
+
+export function loadPaymentsFromDisk(): any[] {
+  try {
+    ensureDbDirectory();
+    if (fs.existsSync(PAYMENTS_DB_FILE)) {
+      const raw = fs.readFileSync(PAYMENTS_DB_FILE, 'utf8');
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) return list;
+    }
+  } catch (e) {
+    console.warn('[Admin Server] Failed to read payments from disk:', e);
+  }
+  return [];
+}
+
+export function savePaymentToDisk(payment: any): any {
+  try {
+    ensureDbDirectory();
+    const list = loadPaymentsFromDisk();
+    const payId = payment.id || payment.provider_transaction_id;
+    const idx = list.findIndex((p: any) => 
+      (payment.id && p.id === payment.id) || 
+      (payment.provider_transaction_id && (p.provider_transaction_id === payment.provider_transaction_id || p.providerTxnId === payment.provider_transaction_id))
+    );
+    const updated = {
+      ...(idx >= 0 ? list[idx] : {}),
+      ...payment,
+      updated_at: new Date().toISOString()
+    };
+    if (idx >= 0) {
+      list[idx] = updated;
+    } else {
+      list.unshift(updated);
+    }
+    fs.writeFileSync(PAYMENTS_DB_FILE, JSON.stringify(list, null, 2), 'utf8');
+    return updated;
+  } catch (e) {
+    console.warn('[Admin Server] Failed to save payment to disk:', e);
+    return payment;
+  }
+}
+
+export function loadStudentsFromDisk(): any[] {
+  try {
+    ensureDbDirectory();
+    if (fs.existsSync(STUDENTS_DB_FILE)) {
+      const raw = fs.readFileSync(STUDENTS_DB_FILE, 'utf8');
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) return list;
+    }
+  } catch (e) {
+    console.warn('[Admin Server] Failed to read students from disk:', e);
+  }
+  return [];
+}
+
+export function saveStudentToDisk(student: any): any {
+  try {
+    ensureDbDirectory();
+    const list = loadStudentsFromDisk();
+    const cleanEmail = (student.email || '').toLowerCase().trim();
+    if (!cleanEmail) return student;
+
+    const idx = list.findIndex((s: any) => (s.email || '').toLowerCase().trim() === cleanEmail);
+    const existing = idx >= 0 ? list[idx] : {};
+    const updated = {
+      ...existing,
+      ...student,
+      email: cleanEmail,
+      profile_data: {
+        ...(existing.profile_data || {}),
+        ...(student.profile_data || {}),
+        email: cleanEmail
+      },
+      updated_at: new Date().toISOString()
+    };
+    if (idx >= 0) {
+      list[idx] = updated;
+    } else {
+      list.unshift(updated);
+    }
+    fs.writeFileSync(STUDENTS_DB_FILE, JSON.stringify(list, null, 2), 'utf8');
+    return updated;
+  } catch (e) {
+    console.warn('[Admin Server] Failed to save student to disk:', e);
+    return student;
   }
 }
 
@@ -104,96 +194,89 @@ function getLocalContentStats() {
 /**
  * Fetch real aggregate statistics from Supabase
  */
+/**
+ * Fetch real aggregate statistics from Supabase & Disk
+ */
 export async function getAdminStats(req: Request, res: Response) {
   try {
     const contentStats = getLocalContentStats();
-    const supabase = getSupabaseAdmin();
-    if (!supabase) {
-      return res.json({
-        success: true,
-        stats: {
-          totalStudents: 0,
-          publishedCourses: 0,
-          draftCourses: 0,
-          totalLessons: 0,
-          publishedBooks: contentStats.publishedBooks,
-          draftBooks: contentStats.draftBooks,
-          publishedExams: contentStats.publishedExams,
-          draftExams: contentStats.draftExams,
-          totalRevenueETB: 0,
-          pendingPaymentsCount: 0,
-          totalPaymentsCount: 0,
-          activeAnnouncementsCount: 0,
-          activeCouponsCount: 0,
-          recentActivity: []
-        }
-      });
-    }
-
-    // 1. Total Students Count
-    const { count: studentCount } = await supabase
-      .from('student_profiles')
-      .select('*', { count: 'exact', head: true });
-
-    // 2. Published & Draft Courses Count
-    const { data: courseStats } = await supabase
-      .from('courses')
-      .select('status');
+    const diskPayments = loadPaymentsFromDisk();
+    const diskStudents = loadStudentsFromDisk();
 
     let publishedCourses = 0;
     let draftCourses = 0;
-    if (courseStats) {
-      publishedCourses = courseStats.filter(c => c.status === 'published').length;
-      draftCourses = courseStats.filter(c => c.status === 'draft').length;
-    }
-
-    // 3. Lessons Count
-    const { count: lessonsCount } = await supabase
-      .from('lessons')
-      .select('*', { count: 'exact', head: true });
-
-    // 4. Payments stats & Total Revenue (Sum of completed payments)
-    const { data: payments } = await supabase
-      .from('payments')
-      .select('id, amount, status, created_at, user_id, provider');
-
+    let studentCount = diskStudents.length;
+    let lessonsCount = 0;
     let totalRevenueETB = 0;
     let pendingPaymentsCount = 0;
-    let totalPaymentsCount = 0;
+    let totalPaymentsCount = diskPayments.length;
+    const recentActivity: any[] = [];
 
-    if (payments) {
-      totalPaymentsCount = payments.length;
-      payments.forEach(p => {
-        if (p.status === 'completed') {
-          totalRevenueETB += Number(p.amount || 0);
-        } else if (p.status === 'pending') {
-          pendingPaymentsCount++;
+    // Calculate revenue & counts from disk first
+    diskPayments.forEach(p => {
+      if (p.status === 'completed') {
+        totalRevenueETB += Number(p.amount || 0);
+      } else if (p.status === 'pending') {
+        pendingPaymentsCount++;
+      }
+    });
+
+    const supabase = getSupabaseAdmin();
+    if (supabase) {
+      try {
+        const { count: sCount } = await supabase
+          .from('student_profiles')
+          .select('*', { count: 'exact', head: true });
+        if (typeof sCount === 'number' && sCount > studentCount) studentCount = sCount;
+
+        const { data: courseStats } = await supabase
+          .from('courses')
+          .select('status');
+
+        if (courseStats) {
+          publishedCourses = courseStats.filter(c => c.status === 'published').length;
+          draftCourses = courseStats.filter(c => c.status === 'draft').length;
         }
-      });
+
+        const { count: lCount } = await supabase
+          .from('lessons')
+          .select('*', { count: 'exact', head: true });
+        if (typeof lCount === 'number') lessonsCount = lCount;
+
+        const { data: supaPayments } = await supabase
+          .from('payments')
+          .select('id, amount, status, created_at, user_id, provider');
+
+        if (supaPayments && supaPayments.length > 0) {
+          const combinedPayMap = new Map<string, any>();
+          diskPayments.forEach(p => combinedPayMap.set(p.id, p));
+          supaPayments.forEach(p => combinedPayMap.set(p.id, p));
+
+          totalRevenueETB = 0;
+          pendingPaymentsCount = 0;
+          totalPaymentsCount = combinedPayMap.size;
+
+          combinedPayMap.forEach(p => {
+            if (p.status === 'completed') {
+              totalRevenueETB += Number(p.amount || 0);
+            } else if (p.status === 'pending') {
+              pendingPaymentsCount++;
+            }
+          });
+        }
+      } catch (sErr) {
+        console.warn('[Admin API] Stats Supabase query notice:', sErr);
+      }
     }
 
-    // 5. Active Announcements Count
-    const { count: announcementsCount } = await supabase
-      .from('announcements')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'published');
-
-    // 6. Active Coupons Count
-    const { count: couponsCount } = await supabase
-      .from('coupons')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_active', true);
-
-    // 7. Real Recent Activities
-    const recentActivity: any[] = [];
-    if (payments && payments.length > 0) {
-      const sorted = [...payments].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 8);
+    if (diskPayments.length > 0) {
+      const sorted = [...diskPayments].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()).slice(0, 8);
       sorted.forEach(p => {
         recentActivity.push({
           id: `act_${p.id}`,
           type: p.status === 'completed' ? 'payment_approved' : 'payment_pending',
           title: p.status === 'completed' ? 'Payment Verified' : 'Payment Submitted',
-          description: `${p.user_id} - ${p.amount} ETB via ${p.provider}`,
+          description: `${p.user_id || p.sender_name} - ${p.amount} ETB via ${p.provider}`,
           timestamp: p.created_at
         });
       });
@@ -213,8 +296,8 @@ export async function getAdminStats(req: Request, res: Response) {
         totalRevenueETB: Math.round(totalRevenueETB),
         pendingPaymentsCount,
         totalPaymentsCount,
-        activeAnnouncementsCount: announcementsCount || 0,
-        activeCouponsCount: couponsCount || 0,
+        activeAnnouncementsCount: memoryAnnouncements.size,
+        activeCouponsCount: memoryCoupons.size,
         recentActivity
       }
     });
@@ -225,25 +308,43 @@ export async function getAdminStats(req: Request, res: Response) {
 }
 
 /**
- * Fetch all payments for Administrator Review
+ * Fetch all payments for Administrator Review (Reads from Disk + Supabase)
  */
 export async function getAdminPayments(req: Request, res: Response) {
   try {
+    const diskPayments = loadPaymentsFromDisk();
+    const payMap = new Map<string, any>();
+
+    diskPayments.forEach(p => {
+      const key = p.id || p.provider_transaction_id;
+      if (key) payMap.set(key, p);
+    });
+
     const supabase = getSupabaseAdmin();
-    if (!supabase) {
-      return res.json({ success: true, payments: [] });
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('payments')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!error && Array.isArray(data)) {
+          data.forEach(p => {
+            const key = p.id || p.provider_transaction_id;
+            const existing = payMap.get(key) || {};
+            payMap.set(key, { ...existing, ...p });
+          });
+        }
+      } catch (sErr) {
+        console.warn('[Admin API] Supabase payments query notice:', sErr);
+      }
     }
 
-    const { data, error } = await supabase
-      .from('payments')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const allPayments = Array.from(payMap.values()).sort((a, b) => {
+      return new Date(b.created_at || b.createdAt || 0).getTime() - new Date(a.created_at || a.createdAt || 0).getTime();
+    });
 
-    if (error) {
-      return res.status(500).json({ error: error.message });
-    }
-
-    return res.json({ success: true, payments: data || [] });
+    return res.json({ success: true, payments: allPayments });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
@@ -259,12 +360,35 @@ export async function handleAdminPaymentAction(req: Request, res: Response) {
       return res.status(400).json({ error: 'Valid paymentId and action (approve/reject) required.' });
     }
 
-    const supabase = getSupabaseAdmin();
     const newStatus = action === 'approve' ? 'completed' : 'failed';
-    let payment: any = null;
 
+    // 1. Update/Save payment on Disk Store first
+    const diskPayments = loadPaymentsFromDisk();
+    let payment = diskPayments.find((p: any) => 
+      p.id === paymentId || 
+      p.provider_transaction_id === paymentId || 
+      p.providerTxnId === paymentId
+    ) || null;
+
+    if (!payment) {
+      payment = {
+        id: paymentId,
+        user_id: inputStudentEmail || 'Student',
+        sender_name: inputStudentEmail ? inputStudentEmail.split('@')[0] : 'Student',
+        sender_phone: inputStudentPhone || null,
+        status: newStatus,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+    } else {
+      payment.status = newStatus;
+      payment.updated_at = new Date().toISOString();
+    }
+    savePaymentToDisk(payment);
+
+    // 2. Sync to Supabase payments table if available
+    const supabase = getSupabaseAdmin();
     if (supabase) {
-      // 1. Update payment status in Supabase if table exists
       try {
         const { data, error: payErr } = await supabase
           .from('payments')
@@ -276,7 +400,6 @@ export async function handleAdminPaymentAction(req: Request, res: Response) {
         if (!payErr && data) {
           payment = data;
         } else {
-          // Try matching by provider_transaction_id
           const { data: byTxn } = await supabase
             .from('payments')
             .update({ status: newStatus, updated_at: new Date().toISOString() })
@@ -288,95 +411,91 @@ export async function handleAdminPaymentAction(req: Request, res: Response) {
       } catch (e) {
         console.warn('[Admin API] Supabase payments table update notice:', e);
       }
+    }
 
-      // 2. If approved, upgrade student profile and grant subscription
-      if (action === 'approve') {
-        const rawPayload = payment?.raw_webhook_payload || {};
-        const candidateEmail = (
-          inputStudentEmail ||
-          payment?.user_id ||
-          payment?.sender_name ||
-          rawPayload.submitted_by ||
-          rawPayload.email ||
-          ''
-        ).toLowerCase().trim();
+    // 3. If approved, upgrade student profile and grant subscription across disk & Supabase
+    if (action === 'approve') {
+      const rawPayload = payment?.raw_webhook_payload || {};
+      const candidateEmail = (
+        inputStudentEmail ||
+        payment?.user_id ||
+        payment?.sender_name ||
+        rawPayload.submitted_by ||
+        rawPayload.email ||
+        ''
+      ).toLowerCase().trim();
 
-        const candidatePhone = (
-          inputStudentPhone ||
-          payment?.sender_phone ||
-          (candidateEmail && !candidateEmail.includes('@') ? candidateEmail : '')
-        ).trim();
+      const candidatePhone = (
+        inputStudentPhone ||
+        payment?.sender_phone ||
+        (candidateEmail && !candidateEmail.includes('@') ? candidateEmail : '')
+      ).trim();
 
-        const resolvedEmail = candidateEmail.includes('@') ? candidateEmail : '';
+      const resolvedEmail = candidateEmail.includes('@') ? candidateEmail : '';
+      const targetTier = inputTier || rawPayload.tier || 'pro_semester';
+      const durationDays = targetTier === 'pro_annual' ? 365 : (targetTier === 'exam_season_pass' ? 60 : 120);
 
-        // Find student in student_profiles
-        let existingProf: any = null;
-        if (resolvedEmail) {
-          const { data } = await supabase
-            .from('student_profiles')
-            .select('*')
-            .eq('email', resolvedEmail)
-            .maybeSingle();
-          if (data) existingProf = data;
-        }
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + durationDays);
 
-        if (!existingProf && candidatePhone) {
-          const { data } = await supabase
-            .from('student_profiles')
-            .select('*')
-            .or(`phone.eq.${candidatePhone},email.eq.${candidatePhone},email.eq.${candidatePhone}@student.ethiolearn.edu.et`)
-            .maybeSingle();
-          if (data) existingProf = data;
-        }
+      if (resolvedEmail) {
+        // Update/Save to disk student store
+        const diskStudents = loadStudentsFromDisk();
+        const existingDiskStudent = diskStudents.find((s: any) => (s.email || '').toLowerCase().trim() === resolvedEmail);
+        const updatedPd = {
+          ...(existingDiskStudent?.profile_data || {}),
+          email: resolvedEmail,
+          isPro: true,
+          proStatus: 'active',
+          tier: targetTier,
+          proPaymentDate: new Date().toISOString(),
+          proStartDate: new Date().toISOString(),
+          proEndDate: endDate.toISOString()
+        };
 
-        const targetEmailToUpdate = existingProf?.email || resolvedEmail;
-        const targetTier = inputTier || rawPayload.tier || 'pro_semester';
-        const durationDays = targetTier === 'pro_annual' ? 365 : (targetTier === 'exam_season_pass' ? 60 : 120);
-
-        const endDate = new Date();
-        endDate.setDate(endDate.getDate() + durationDays);
-
-        if (targetEmailToUpdate) {
-          const updatedProfileData = {
-            ...(existingProf?.profile_data || {}),
-            isPro: true,
-            proStatus: 'active',
+        saveStudentToDisk({
+          email: resolvedEmail,
+          name: existingDiskStudent?.name || updatedPd.name || resolvedEmail.split('@')[0],
+          phone: candidatePhone || existingDiskStudent?.phone || updatedPd.phone || null,
+          is_pro: true,
+          pro_status: 'active',
+          tier: targetTier,
+          profile_data: updatedPd,
+          subscription: {
             tier: targetTier,
-            proPaymentDate: new Date().toISOString(),
-            proStartDate: new Date().toISOString(),
-            proEndDate: endDate.toISOString()
-          };
+            status: 'active',
+            start_date: new Date().toISOString(),
+            end_date: endDate.toISOString()
+          }
+        });
 
-          // Update student_profiles table (BOTH is_pro, pro_status and profile_data)
-          await supabase
-            .from('student_profiles')
-            .upsert({
-              email: targetEmailToUpdate,
-              name: existingProf?.name || updatedProfileData.name || targetEmailToUpdate.split('@')[0],
-              phone: candidatePhone || existingProf?.phone || updatedProfileData.phone || null,
-              is_pro: true,
-              pro_status: 'active',
-              profile_data: updatedProfileData,
-              updated_at: new Date().toISOString()
-            }, { onConflict: 'email' });
-
-          // Update profiles table (subscription_status = 'pro')
+        // Sync to Supabase if available
+        if (supabase) {
           try {
+            await supabase
+              .from('student_profiles')
+              .upsert({
+                email: resolvedEmail,
+                name: existingDiskStudent?.name || updatedPd.name || resolvedEmail.split('@')[0],
+                phone: candidatePhone || existingDiskStudent?.phone || updatedPd.phone || null,
+                is_pro: true,
+                pro_status: 'active',
+                profile_data: updatedPd,
+                updated_at: new Date().toISOString()
+              }, { onConflict: 'email' });
+
             await supabase
               .from('profiles')
               .update({
                 subscription_status: 'pro',
                 updated_at: new Date().toISOString()
               })
-              .eq('email', targetEmailToUpdate);
-          } catch (pErr) {}
+              .eq('email', resolvedEmail);
 
-          // Insert or update active subscription
-          try {
             await supabase
               .from('subscriptions')
               .upsert({
-                email: targetEmailToUpdate,
+                email: resolvedEmail,
                 tier: targetTier as any,
                 status: 'active',
                 subject_bundle_id: rawPayload.subject_bundle_id || null,
@@ -385,7 +504,9 @@ export async function handleAdminPaymentAction(req: Request, res: Response) {
                 payment_method: payment?.provider || 'telebirr',
                 auto_renew: false
               }, { onConflict: 'email' });
-          } catch (subErr) {}
+          } catch (supSyncErr) {
+            console.warn('[Admin API] Supabase student pro sync notice:', supSyncErr);
+          }
         }
       }
     }
@@ -402,40 +523,83 @@ export async function handleAdminPaymentAction(req: Request, res: Response) {
 }
 
 /**
- * Fetch students for Admin user management
+ * Fetch students for Admin user management (Reads from Disk + Supabase)
  */
 export async function getAdminStudents(req: Request, res: Response) {
   try {
-    const supabase = getSupabaseAdmin();
-    if (!supabase) {
-      return res.json({ success: true, students: [] });
-    }
+    const diskStudents = loadStudentsFromDisk();
+    const studentMap = new Map<string, any>();
 
-    const { q, role } = req.query;
-    const { data, error } = await supabase
-      .from('student_profiles')
-      .select('email, profile_data, updated_at')
-      .order('updated_at', { ascending: false });
-
-    if (error) {
-      console.warn('[Admin API] Failed to fetch student profiles:', error.message);
-      return res.status(500).json({ error: error.message });
-    }
-
-    let results = (data || []).map(row => {
-      const pd = row.profile_data || {};
-      return {
-        email: row.email,
-        name: pd.name || row.email.split('@')[0],
-        university: pd.university || 'Wolkite University',
-        year: pd.year || 'Freshman',
-        is_pro: Boolean(pd.isPro || pd.is_pro),
-        user_role: pd.userRole || pd.user_role || (row.email === 'ezrat2116@gmail.com' ? 'super_admin' : 'student'),
-        created_at: pd.createdAt || row.updated_at,
-        updated_at: row.updated_at
-      };
+    // Seed designated admins so they are always visible in students list
+    ADMIN_EMAILS.forEach(adm => {
+      const email = adm.toLowerCase();
+      studentMap.set(email, {
+        email,
+        name: email.startsWith('ezrat') ? 'Ezra (Lead Admin)' : 'Abreham (Admin)',
+        university: 'Wolkite University',
+        year: 'Faculty / Admin',
+        is_pro: true,
+        user_role: 'super_admin',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
     });
 
+    diskStudents.forEach(st => {
+      const email = (st.email || '').toLowerCase().trim();
+      if (!email) return;
+      const pd = st.profile_data || {};
+      const isAdm = isAdministratorEmail(email);
+      studentMap.set(email, {
+        email,
+        name: st.name || pd.name || email.split('@')[0],
+        university: st.university || pd.university || 'Wolkite University',
+        year: st.year || pd.year || 'Freshman',
+        is_pro: isAdm ? true : Boolean(st.is_pro || pd.isPro || pd.is_pro),
+        user_role: isAdm ? 'super_admin' : (st.user_role || pd.userRole || pd.user_role || 'student'),
+        created_at: st.created_at || pd.createdAt || new Date().toISOString(),
+        updated_at: st.updated_at || new Date().toISOString()
+      });
+    });
+
+    const supabase = getSupabaseAdmin();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('student_profiles')
+          .select('email, name, university, year, is_pro, user_role, profile_data, updated_at, created_at')
+          .order('updated_at', { ascending: false });
+
+        if (!error && Array.isArray(data)) {
+          data.forEach(row => {
+            const email = (row.email || '').toLowerCase().trim();
+            if (!email) return;
+            const pd = row.profile_data || {};
+            const isAdm = isAdministratorEmail(email);
+            const prev = studentMap.get(email) || {};
+            studentMap.set(email, {
+              ...prev,
+              email,
+              name: row.name || pd.name || prev.name || email.split('@')[0],
+              university: row.university || pd.university || prev.university || 'Wolkite University',
+              year: row.year || pd.year || prev.year || 'Freshman',
+              is_pro: isAdm ? true : Boolean(row.is_pro || pd.isPro || pd.is_pro || prev.is_pro),
+              user_role: isAdm ? 'super_admin' : (row.user_role || pd.userRole || pd.user_role || prev.user_role || 'student'),
+              created_at: row.created_at || pd.createdAt || prev.created_at || row.updated_at,
+              updated_at: row.updated_at || prev.updated_at
+            });
+          });
+        }
+      } catch (sErr) {
+        console.warn('[Admin API] Supabase student profiles query notice:', sErr);
+      }
+    }
+
+    let results = Array.from(studentMap.values()).sort((a, b) => {
+      return new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime();
+    });
+
+    const { q, role } = req.query;
     if (role && typeof role === 'string' && role !== 'all') {
       results = results.filter(s => s.user_role === role);
     }
@@ -756,78 +920,106 @@ export async function handleAdminUpdateStudent(req: Request, res: Response) {
     }
 
     const cleanEmail = email.toLowerCase().trim();
-    const supabase = getSupabaseAdmin();
-    if (!supabase) {
-      return res.status(500).json({ error: 'Database service unavailable' });
-    }
+    const isAdm = isAdministratorEmail(cleanEmail);
+    const finalIsPro = isAdm ? true : Boolean(isPro);
+    const finalRole = isAdm ? 'super_admin' : (userRole && ['student', 'admin', 'faculty', 'super_admin'].includes(userRole) ? userRole : 'student');
 
-    // Fetch existing profile to update profile_data
-    const { data: existingProf } = await supabase
-      .from('student_profiles')
-      .select('profile_data')
-      .eq('email', cleanEmail)
-      .maybeSingle();
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + (Number(durationDays) || 30));
 
-    const existingPd = existingProf?.profile_data || {};
+    // 1. Always update Disk Student Store first (Guaranteed resilience!)
+    const diskStudents = loadStudentsFromDisk();
+    const existing = diskStudents.find((s: any) => (s.email || '').toLowerCase().trim() === cleanEmail);
+    const existingPd = existing?.profile_data || {};
+
     const updatedPd = {
       ...existingPd,
-      ...(typeof isPro === 'boolean' ? { isPro, proStatus: isPro ? 'active' : 'inactive' } : {}),
-      ...(userRole && ['student', 'admin', 'faculty', 'super_admin'].includes(userRole) ? { userRole } : {})
+      email: cleanEmail,
+      isPro: finalIsPro,
+      proStatus: finalIsPro ? 'active' : 'inactive',
+      tier: finalIsPro ? 'pro_semester' : 'free',
+      userRole: finalRole,
+      proEndDate: finalIsPro ? endDate.toISOString() : undefined,
+      proPaymentDate: finalIsPro ? new Date().toISOString() : existingPd.proPaymentDate
     };
 
-    const { data: updatedProfile, error: profErr } = await supabase
-      .from('student_profiles')
-      .update({
-        is_pro: Boolean(isPro),
-        pro_status: isPro ? 'active' : 'inactive',
-        profile_data: updatedPd,
-        updated_at: new Date().toISOString()
-      })
-      .eq('email', cleanEmail)
-      .select()
-      .maybeSingle();
+    const updatedDiskStudent = saveStudentToDisk({
+      email: cleanEmail,
+      name: existing?.name || updatedPd.name || cleanEmail.split('@')[0],
+      phone: existing?.phone || updatedPd.phone || null,
+      is_pro: finalIsPro,
+      pro_status: finalIsPro ? 'active' : 'inactive',
+      user_role: finalRole,
+      tier: finalIsPro ? 'pro_semester' : 'free',
+      profile_data: updatedPd,
+      subscription: finalIsPro ? {
+        tier: 'pro_semester',
+        status: 'active',
+        start_date: new Date().toISOString(),
+        end_date: endDate.toISOString(),
+        payment_method: 'admin_manual_grant'
+      } : null
+    });
 
-    if (profErr) {
-      console.warn('[Admin API] student_profiles update error:', profErr.message);
-    }
+    // 2. If Supabase is available, sync to Supabase (student_profiles, profiles, subscriptions)
+    const supabase = getSupabaseAdmin();
+    if (supabase) {
+      try {
+        await supabase
+          .from('student_profiles')
+          .upsert({
+            email: cleanEmail,
+            name: updatedDiskStudent.name,
+            phone: updatedDiskStudent.phone,
+            is_pro: finalIsPro,
+            pro_status: finalIsPro ? 'active' : 'inactive',
+            user_role: finalRole,
+            profile_data: updatedPd,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'email' });
 
-    // Also mirror to `profiles` table to ensure 100% auth sync compatibility
-    try {
-      await supabase
-        .from('profiles')
-        .update({
-          subscription_status: isPro ? 'pro' : 'free',
-          updated_at: new Date().toISOString()
-        })
-        .eq('email', cleanEmail);
-    } catch (pErr) {}
+        await supabase
+          .from('profiles')
+          .update({
+            subscription_status: finalIsPro ? 'pro' : 'free',
+            updated_at: new Date().toISOString()
+          })
+          .eq('email', cleanEmail);
 
-    // If upgrading to Pro, create active subscription record
-    if (isPro) {
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + (Number(durationDays) || 30));
-
-      await supabase
-        .from('subscriptions')
-        .upsert({
-          email: cleanEmail,
-          tier: 'pro_semester',
-          status: 'active',
-          start_date: new Date().toISOString(),
-          end_date: endDate.toISOString(),
-          payment_method: 'admin_manual_grant',
-          auto_renew: false
-        }, { onConflict: 'email' });
+        if (finalIsPro) {
+          await supabase
+            .from('subscriptions')
+            .upsert({
+              email: cleanEmail,
+              tier: 'pro_semester',
+              status: 'active',
+              start_date: new Date().toISOString(),
+              end_date: endDate.toISOString(),
+              payment_method: 'admin_manual_grant',
+              auto_renew: false
+            }, { onConflict: 'email' });
+        }
+      } catch (supErr) {
+        console.warn('[Admin API] Supabase student update sync notice:', supErr);
+      }
     }
 
     return res.json({
       success: true,
-      message: `Student ${cleanEmail} updated successfully.`,
-      student: updatedProfile || { email: cleanEmail, profile_data: updatedPd }
+      message: `Student ${cleanEmail} Pro status successfully updated to ${finalIsPro ? 'Active' : 'Inactive'}.`,
+      student: {
+        email: cleanEmail,
+        name: updatedDiskStudent.name,
+        is_pro: finalIsPro,
+        isPro: finalIsPro,
+        user_role: finalRole,
+        profile_data: updatedPd
+      }
     });
   } catch (error: any) {
     console.error('[Admin API] Update student error:', error);
     return res.status(500).json({ error: error.message });
   }
 }
+
 

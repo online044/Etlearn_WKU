@@ -6,6 +6,12 @@
 
 import { Request, Response } from 'express';
 import { getSupabaseAdmin } from './security';
+import { 
+  savePaymentToDisk, 
+  loadPaymentsFromDisk, 
+  saveStudentToDisk, 
+  loadStudentsFromDisk 
+} from './admin';
 
 // Server-side authoritative pricing catalog in ETB
 export const SUBSCRIPTION_PRICING: Record<string, { priceETB: number; durationDays?: number }> = {
@@ -133,6 +139,29 @@ export async function handlePaymentSubmission(req: Request, res: Response) {
       updated_at: now
     };
 
+    // 4. Save payment record and student submission to disk store first (guaranteed persistence)
+    savePaymentToDisk(paymentRecord);
+
+    const userEmail = (user.email || '').toLowerCase().trim();
+    if (userEmail) {
+      saveStudentToDisk({
+        email: userEmail,
+        name: sender_name.trim(),
+        phone: sender_phone ? sender_phone.trim() : user.phone || null,
+        is_pro: Boolean(user.is_pro),
+        pro_status: user.is_pro ? 'active' : 'pending',
+        tier,
+        profile_data: {
+          name: sender_name.trim(),
+          email: userEmail,
+          phone: sender_phone ? sender_phone.trim() : user.phone || null,
+          isPro: Boolean(user.is_pro),
+          proStatus: user.is_pro ? 'active' : 'pending',
+          tier
+        }
+      });
+    }
+
     if (supabase) {
       const { error: insertErr } = await supabase
         .from('payments')
@@ -175,7 +204,7 @@ export async function handlePaymentSubmission(req: Request, res: Response) {
 }
 
 /**
- * Fetch payments belonging strictly to the authenticated student
+ * Fetch payments belonging strictly to the authenticated student (Reads from Disk + Supabase)
  */
 export async function getStudentPayments(req: Request, res: Response) {
   try {
@@ -184,27 +213,54 @@ export async function getStudentPayments(req: Request, res: Response) {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const supabase = getSupabaseAdmin();
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('payments')
-        .select('*')
-        .eq('user_id', user.email)
-        .order('created_at', { ascending: false });
+    const userEmail = (user.email || '').toLowerCase().trim();
+    const userPhone = (user.phone || '').trim();
 
-      if (!error && Array.isArray(data)) {
-        return res.json({ success: true, payments: data });
+    const diskPayments = loadPaymentsFromDisk();
+    const payMap = new Map<string, any>();
+
+    diskPayments.forEach(p => {
+      const uId = (p.user_id || '').toLowerCase().trim();
+      const sPhone = (p.sender_phone || '').trim();
+      if ((userEmail && uId === userEmail) || (userPhone && sPhone && (sPhone.includes(userPhone) || userPhone.includes(sPhone)))) {
+        const key = p.id || p.provider_transaction_id;
+        if (key) payMap.set(key, p);
+      }
+    });
+
+    const supabase = getSupabaseAdmin();
+    if (supabase && userEmail) {
+      try {
+        const { data, error } = await supabase
+          .from('payments')
+          .select('*')
+          .eq('user_id', userEmail)
+          .order('created_at', { ascending: false });
+
+        if (!error && Array.isArray(data)) {
+          data.forEach(p => {
+            const key = p.id || p.provider_transaction_id;
+            const existing = payMap.get(key) || {};
+            payMap.set(key, { ...existing, ...p });
+          });
+        }
+      } catch (sErr) {
+        console.warn('[Payments] Supabase student payments query notice:', sErr);
       }
     }
 
-    return res.json({ success: true, payments: [] });
+    const myPayments = Array.from(payMap.values()).sort((a, b) => {
+      return new Date(b.created_at || b.createdAt || 0).getTime() - new Date(a.created_at || a.createdAt || 0).getTime();
+    });
+
+    return res.json({ success: true, payments: myPayments });
   } catch (e: any) {
     return res.status(500).json({ error: e.message });
   }
 }
 
 /**
- * Fetch verified subscription and Pro status for the authenticated user
+ * Fetch verified subscription and Pro status for the authenticated user (Reads from Disk + Supabase)
  */
 export async function getUserSubscriptionStatus(req: Request, res: Response) {
   try {
@@ -213,36 +269,63 @@ export async function getUserSubscriptionStatus(req: Request, res: Response) {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const supabase = getSupabaseAdmin();
-    let isPro = user.is_pro;
+    const userEmail = (user.email || '').toLowerCase().trim();
+    let isPro = Boolean(user.is_pro);
     let tier = isPro ? 'pro_monthly' : 'free';
     let proStatus = isPro ? 'active' : 'none';
     let expiresAt: string | null = null;
 
-    if (supabase) {
-      // Check active subscription record
-      const { data: subData } = await supabase
-        .from('subscriptions')
-        .select('*')
-        .eq('email', user.email)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+    // 1. Check Disk student store
+    if (userEmail) {
+      const diskStudents = loadStudentsFromDisk();
+      const diskStudent = diskStudents.find((s: any) => (s.email || '').toLowerCase().trim() === userEmail);
+      if (diskStudent) {
+        const pd = diskStudent.profile_data || {};
+        if (diskStudent.is_pro || pd.isPro || diskStudent.pro_status === 'active') {
+          isPro = true;
+          tier = diskStudent.tier || pd.tier || 'pro_semester';
+          proStatus = 'active';
+          if (diskStudent.subscription?.end_date) {
+            expiresAt = diskStudent.subscription.end_date;
+          } else if (pd.proEndDate) {
+            expiresAt = pd.proEndDate;
+          }
+        } else if (diskStudent.pro_status === 'pending' || pd.proStatus === 'pending') {
+          proStatus = 'pending';
+          tier = diskStudent.tier || pd.tier || 'pro_semester';
+        }
+      }
+    }
 
-      if (subData) {
-        if (subData.end_date) {
-          const isExpired = new Date(subData.end_date).getTime() < Date.now();
-          if (!isExpired && subData.status === 'active') {
+    // 2. Check Supabase active subscription record if connected
+    const supabase = getSupabaseAdmin();
+    if (supabase && userEmail) {
+      try {
+        const { data: subData } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('email', userEmail)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (subData) {
+          if (subData.end_date) {
+            const isExpired = new Date(subData.end_date).getTime() < Date.now();
+            if (!isExpired && subData.status === 'active') {
+              isPro = true;
+              tier = subData.tier;
+              proStatus = 'active';
+              expiresAt = subData.end_date;
+            }
+          } else if (subData.status === 'active') {
             isPro = true;
             tier = subData.tier;
             proStatus = 'active';
-            expiresAt = subData.end_date;
           }
-        } else if (subData.status === 'active') {
-          isPro = true;
-          tier = subData.tier;
-          proStatus = 'active';
         }
+      } catch (sErr) {
+        console.warn('[Payments] Supabase subscription query notice:', sErr);
       }
     }
 

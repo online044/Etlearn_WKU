@@ -151,17 +151,30 @@ export function addPaymentRecordLocal(record: PaymentRecord): void {
   const key = `ethiolearn_payments_${record.userId || 'guest'}`;
   safeStorage.setItem(key, JSON.stringify(updated));
 
+  // Also cache in global payments cache so admin immediately sees it
+  try {
+    const rawGlobal = safeStorage.getItem('ethiolearn_payments_cache');
+    const globalList: any[] = rawGlobal ? JSON.parse(rawGlobal) : [];
+    const updatedGlobal = [record, ...globalList.filter((r: any) => (r.providerTxnId || r.provider_transaction_id) !== record.providerTxnId)];
+    safeStorage.setItem('ethiolearn_payments_cache', JSON.stringify(updatedGlobal));
+  } catch {}
+
   // Dispatch securely to hardened server payments API
   fetch('/api/payments/submit', {
     method: 'POST',
     headers: getAuthHeaders(),
     body: JSON.stringify({
       provider: record.provider,
+      provider_transaction_id: record.providerTxnId,
       providerTxnId: record.providerTxnId,
+      sender_name: record.senderName,
       senderName: record.senderName,
+      sender_phone: record.senderPhone,
       senderPhone: record.senderPhone,
       amount: record.amount,
-      plan: record.amount >= 200 ? 'pro_monthly' : record.amount >= 100 ? 'exam_season_pass' : 'subject_bundle',
+      tier: record.amount >= 200 ? 'pro_semester' : record.amount >= 100 ? 'exam_season_pass' : 'subject_bundle',
+      plan: record.amount >= 200 ? 'pro_semester' : record.amount >= 100 ? 'exam_season_pass' : 'subject_bundle',
+      receipt_url: record.receiptImage,
       receiptImage: record.receiptImage
     })
   }).catch((err) => {

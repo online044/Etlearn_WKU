@@ -46,7 +46,8 @@ import {
   handleAdminDeleteCoupon, 
   handleAdminSaveAnnouncement, 
   handleAdminDeleteAnnouncement,
-  handleGetAnnouncements
+  handleGetAnnouncements,
+  loadStudentsFromDisk
 } from './server/admin';
 
 import { 
@@ -587,62 +588,68 @@ app.get(['/api/user/profile/:firebase_uid', '/api/user/profile'], async (req: Re
       return res.status(400).json({ error: 'firebase_uid or email query param required.' });
     }
 
-    const supabase = getSupabaseAdmin();
-    if (!supabase) {
-      return res.json({ success: true, profile: null });
-    }
+    const targetEmail = (email || '').toLowerCase().trim();
+    const diskStudents = loadStudentsFromDisk();
+    const diskStudent = targetEmail ? diskStudents.find((s: any) => (s.email || '').toLowerCase().trim() === targetEmail) : null;
 
+    const supabase = getSupabaseAdmin();
     let profRow: any = null;
     let stdRow: any = null;
     let subRow: any = null;
 
-    if (firebase_uid) {
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('firebase_uid', firebase_uid)
-        .maybeSingle();
-      if (data) profRow = data;
-    }
-
-    const targetEmail = (email || profRow?.email || '').toLowerCase().trim();
-
-    if (targetEmail) {
-      if (!profRow) {
+    if (supabase) {
+      if (firebase_uid) {
         const { data } = await supabase
           .from('profiles')
           .select('*')
-          .eq('email', targetEmail)
+          .eq('firebase_uid', firebase_uid)
           .maybeSingle();
         if (data) profRow = data;
       }
 
-      // Check student_profiles
-      const { data: stdData } = await supabase
-        .from('student_profiles')
-        .select('*')
-        .eq('email', targetEmail)
-        .maybeSingle();
-      if (stdData) stdRow = stdData;
+      const queryEmail = (targetEmail || profRow?.email || '').toLowerCase().trim();
 
-      // Check active subscriptions
-      const { data: subData } = await supabase
-        .from('subscriptions')
-        .select('*')
-        .eq('email', targetEmail)
-        .eq('status', 'active')
-        .maybeSingle();
-      if (subData) subRow = subData;
+      if (queryEmail) {
+        if (!profRow) {
+          const { data } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('email', queryEmail)
+            .maybeSingle();
+          if (data) profRow = data;
+        }
+
+        // Check student_profiles
+        const { data: stdData } = await supabase
+          .from('student_profiles')
+          .select('*')
+          .eq('email', queryEmail)
+          .maybeSingle();
+        if (stdData) stdRow = stdData;
+
+        // Check active subscriptions
+        const { data: subData } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('email', queryEmail)
+          .eq('status', 'active')
+          .maybeSingle();
+        if (subData) subRow = subData;
+      }
     }
 
-    if (!profRow && !stdRow) {
+    if (!profRow && !stdRow && !diskStudent) {
       return res.json({ success: true, profile: null });
     }
 
-    const pd = stdRow?.profile_data || {};
-    const isAdmin = isAdministratorEmail(targetEmail);
+    const pd = stdRow?.profile_data || diskStudent?.profile_data || {};
+    const finalEmail = targetEmail || profRow?.email || stdRow?.email || diskStudent?.email || '';
+    const isAdmin = isAdministratorEmail(finalEmail);
     const isPro = Boolean(
       isAdmin ||
+      diskStudent?.is_pro === true ||
+      diskStudent?.pro_status === 'active' ||
+      diskStudent?.profile_data?.isPro === true ||
       profRow?.subscription_status === 'pro' ||
       profRow?.subscription_status === 'active' ||
       stdRow?.is_pro === true ||
@@ -654,14 +661,14 @@ app.get(['/api/user/profile/:firebase_uid', '/api/user/profile'], async (req: Re
 
     const mergedProfile = {
       firebase_uid: profRow?.firebase_uid || pd.firebaseUid || firebase_uid || '',
-      full_name: stdRow?.name || profRow?.full_name || pd.name || targetEmail.split('@')[0],
-      name: stdRow?.name || profRow?.full_name || pd.name || targetEmail.split('@')[0],
-      email: targetEmail || profRow?.email || stdRow?.email || '',
-      phone: stdRow?.phone || profRow?.phone || pd.phone || '',
-      university: stdRow?.university || profRow?.university || pd.university || 'Wolkite University (WKU)',
+      full_name: stdRow?.name || diskStudent?.name || profRow?.full_name || pd.name || finalEmail.split('@')[0],
+      name: stdRow?.name || diskStudent?.name || profRow?.full_name || pd.name || finalEmail.split('@')[0],
+      email: finalEmail,
+      phone: stdRow?.phone || diskStudent?.phone || profRow?.phone || pd.phone || '',
+      university: stdRow?.university || diskStudent?.university || profRow?.university || pd.university || 'Wolkite University (WKU)',
       department: pd.department || profRow?.department || 'Freshman Common Courses',
-      year_level: stdRow?.year || profRow?.year_level || pd.year || 'Freshman (1st Year)',
-      year: stdRow?.year || profRow?.year_level || pd.year || 'Freshman (1st Year)',
+      year_level: stdRow?.year || diskStudent?.year || profRow?.year_level || pd.year || 'Freshman (1st Year)',
+      year: stdRow?.year || diskStudent?.year || profRow?.year_level || pd.year || 'Freshman (1st Year)',
       profile_photo: pd.avatar || profRow?.profile_photo || 'champion',
       avatar: pd.avatar || profRow?.profile_photo || 'champion',
       subscription_status: isPro ? 'pro' : 'free',
@@ -669,12 +676,12 @@ app.get(['/api/user/profile/:firebase_uid', '/api/user/profile'], async (req: Re
       isPro: isPro,
       pro_status: isPro ? 'active' : 'none',
       proStatus: isPro ? 'active' : 'none',
-      tier: subRow?.tier || pd.tier || (isPro ? 'pro_semester' : 'free'),
+      tier: subRow?.tier || diskStudent?.tier || pd.tier || (isPro ? 'pro_semester' : 'free'),
       profile_data: {
         ...pd,
         isPro,
         proStatus: isPro ? 'active' : 'none',
-        tier: subRow?.tier || pd.tier || (isPro ? 'pro_semester' : 'free')
+        tier: subRow?.tier || diskStudent?.tier || pd.tier || (isPro ? 'pro_semester' : 'free')
       }
     };
 

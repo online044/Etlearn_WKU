@@ -912,7 +912,16 @@ export function clearSessionToken(): void {
  */
 export function getAuthHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
   const token = getSessionToken();
-  const activeEmail = safeStorage.getItem('ethiolearn_active_email') || '';
+  let activeEmail = safeStorage.getItem('ethiolearn_active_email') || '';
+  if (!activeEmail) {
+    try {
+      const cur = safeStorage.getItem('ethiolearn_current_profile');
+      if (cur) {
+        const p = JSON.parse(cur);
+        if (p?.email) activeEmail = p.email;
+      }
+    } catch {}
+  }
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...extraHeaders

@@ -1986,8 +1986,11 @@ export async function grantProStatusInFirestore(emailOrUid: string, isPro: boole
   const target = emailOrUid.toLowerCase().trim();
   const proPayload = {
     isPro: Boolean(isPro),
+    is_pro: Boolean(isPro),
     proStatus: isPro ? 'active' : 'none',
+    pro_status: isPro ? 'active' : 'none',
     subscriptionStatus: isPro ? 'pro' : 'free',
+    subscription_status: isPro ? 'pro' : 'free',
     tier: isPro ? 'pro_semester' : 'free',
     updatedAt: new Date().toISOString()
   };

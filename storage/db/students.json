@@ -1,0 +1,29 @@
+[
+  {
+    "email": "bontubekele144@gmail.com",
+    "name": "Bontu Bekele",
+    "phone": null,
+    "is_pro": true,
+    "pro_status": "active",
+    "user_role": "student",
+    "tier": "pro_semester",
+    "profile_data": {
+      "name": "Bontu Bekele",
+      "email": "bontubekele144@gmail.com",
+      "isPro": true,
+      "proStatus": "active",
+      "tier": "pro_semester",
+      "userRole": "student",
+      "proEndDate": "2026-11-27T18:10:43.884Z",
+      "proPaymentDate": "2026-10-28T18:10:43.885Z"
+    },
+    "subscription": {
+      "tier": "pro_semester",
+      "status": "active",
+      "start_date": "2026-10-28T18:10:43.885Z",
+      "end_date": "2026-11-27T18:10:43.884Z",
+      "payment_method": "admin_manual_grant"
+    },
+    "updated_at": "2026-10-28T18:10:43.885Z"
+  }
+]

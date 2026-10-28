@@ -6,6 +6,8 @@
 
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Extend Express Request to include verified user context
@@ -26,7 +28,7 @@ export interface VerifiedUser {
   user_role: 'student' | 'instructor' | 'admin' | 'super_admin';
   is_pro: boolean;
   is_admin: boolean;
-  auth_source: 'supabase_jwt' | 'server_session' | 'telegram_verified' | 'service_key' | 'admin_header';
+  auth_source: 'supabase_jwt' | 'server_session' | 'telegram_verified' | 'service_key' | 'admin_header' | 'user_header';
 }
 
 // Server runtime session signing secret
@@ -189,6 +191,33 @@ async function fetchUserRoleAndStatus(emailOrId: string): Promise<{ user_role: '
   const normalized = emailOrId.toLowerCase().trim();
   const isAdminByEmail = isAdministratorEmail(normalized);
 
+  let isPro = isAdminByEmail;
+  let userRole: 'student' | 'instructor' | 'admin' | 'super_admin' = isAdminByEmail ? 'admin' : 'student';
+  let studentName: string | undefined = undefined;
+
+  // 1. Check disk student store (instant offline resilience)
+  try {
+    const studentsDbPath = path.join(process.cwd(), 'storage', 'db', 'students.json');
+    if (fs.existsSync(studentsDbPath)) {
+      const list = JSON.parse(fs.readFileSync(studentsDbPath, 'utf8'));
+      if (Array.isArray(list)) {
+        const found = list.find((s: any) => (s.email || '').toLowerCase().trim() === normalized);
+        if (found) {
+          const pd = found.profile_data || {};
+          if (found.is_pro || pd.isPro || found.pro_status === 'active') {
+            isPro = true;
+          }
+          if (found.name || pd.name) {
+            studentName = found.name || pd.name;
+          }
+          if (found.user_role && ['student', 'instructor', 'admin', 'super_admin'].includes(found.user_role)) {
+            userRole = found.user_role;
+          }
+        }
+      }
+    }
+  } catch (diskErr) {}
+
   const supabase = getSupabaseAdmin();
   if (supabase) {
     try {
@@ -200,9 +229,16 @@ async function fetchUserRoleAndStatus(emailOrId: string): Promise<{ user_role: '
 
       const pd = stdData?.profile_data || {};
       const role = pd.userRole || pd.user_role;
-      const validRole = ['student', 'instructor', 'admin', 'super_admin'].includes(role) ? role : 'student';
+      if (['student', 'instructor', 'admin', 'super_admin'].includes(role)) {
+        userRole = role;
+      }
 
-      let isPro = Boolean(stdData?.is_pro || stdData?.pro_status === 'active' || pd.isPro || pd.is_pro || isAdminByEmail);
+      if (stdData?.is_pro || stdData?.pro_status === 'active' || pd.isPro || pd.is_pro) {
+        isPro = true;
+      }
+      if (stdData?.name || pd.name) {
+        studentName = stdData?.name || pd.name;
+      }
 
       if (!isPro) {
         // Also check profiles table
@@ -230,20 +266,15 @@ async function fetchUserRoleAndStatus(emailOrId: string): Promise<{ user_role: '
           isPro = true;
         }
       }
-
-      return {
-        user_role: isAdminByEmail ? 'admin' : validRole,
-        is_pro: isPro,
-        name: stdData?.name || pd.name || normalized.split('@')[0]
-      };
     } catch (e) {
       console.warn('[Security] Supabase profile check warning:', e);
     }
   }
 
   return {
-    user_role: isAdminByEmail ? 'admin' : 'student',
-    is_pro: isAdminByEmail
+    user_role: isAdminByEmail ? 'admin' : userRole,
+    is_pro: isPro,
+    name: studentName || normalized.split('@')[0]
   };
 }
 
@@ -264,6 +295,23 @@ export async function authenticateRequest(req: Request): Promise<VerifiedUser | 
         is_pro: true,
         is_admin: true,
         auth_source: 'admin_header'
+      };
+    }
+
+    // 0B. Check student user email header for transparent authenticated operations
+    const userEmailHeader = (req.headers['x-ethiolearn-user-email'] as string || '').toLowerCase().trim();
+    if (userEmailHeader && userEmailHeader.includes('@')) {
+      const { user_role, is_pro, name } = await fetchUserRoleAndStatus(userEmailHeader);
+      const isAdmin = user_role === 'admin' || user_role === 'super_admin' || isAdministratorEmail(userEmailHeader);
+      return {
+        id: userEmailHeader,
+        email: userEmailHeader,
+        name: name || userEmailHeader.split('@')[0],
+        displayName: name || userEmailHeader.split('@')[0],
+        user_role: isAdmin ? 'super_admin' : user_role,
+        is_pro: isAdmin ? true : Boolean(is_pro),
+        is_admin: isAdmin,
+        auth_source: 'user_header'
       };
     }
 
