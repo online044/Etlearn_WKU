@@ -72,7 +72,29 @@ export function checkSubscriptionStatus(profile: StudentProfile): {
     return { isPro: false, tier: 'free', status: 'none', isExpired: false };
   }
 
-  // Check if explicit expiration date exists
+  // 1. STRICT SECURITY: If payment verification is pending admin review, DO NOT grant Pro access!
+  if (profile.proStatus === 'pending' || profile.subscription_status === 'pending') {
+    return {
+      isPro: false,
+      tier: profile.tier || 'free',
+      status: 'pending',
+      daysRemaining: 0,
+      endDate: profile.proEndDate,
+      isExpired: false
+    };
+  }
+
+  // 2. If the profile is explicitly NOT pro, do NOT grant Pro even if an unverified date is present
+  if (!profile.isPro && profile.proStatus !== 'active' && profile.subscription_status !== 'pro') {
+    return {
+      isPro: false,
+      tier: 'free',
+      status: profile.proStatus === 'expired' ? 'expired' : 'none',
+      isExpired: profile.proStatus === 'expired'
+    };
+  }
+
+  // 3. For confirmed Pro profiles, verify subscription expiration
   if (profile.proEndDate) {
     const endMs = new Date(profile.proEndDate).getTime();
     const nowMs = Date.now();
@@ -101,21 +123,12 @@ export function checkSubscriptionStatus(profile: StudentProfile): {
     }
   }
 
-  // Fallback to legacy profile flags
-  if (profile.isPro || profile.proStatus === 'active') {
+  // 4. Fallback for confirmed active Pro users without explicit end date
+  if (profile.isPro || profile.proStatus === 'active' || profile.subscription_status === 'pro') {
     return {
       isPro: true,
       tier: profile.tier || 'pro_monthly',
       status: 'active',
-      isExpired: false
-    };
-  }
-
-  if (profile.proStatus === 'pending') {
-    return {
-      isPro: false,
-      tier: profile.tier || 'free',
-      status: 'pending',
       isExpired: false
     };
   }

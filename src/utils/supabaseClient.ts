@@ -1223,18 +1223,28 @@ export async function fetchProfileFromSupabase(firebaseUid: string, email?: stri
     }
 
     const pd = stdRow?.profile_data || {};
-    const isPro = Boolean(
-      isAdmin ||
-      profRow?.subscription_status === 'pro' ||
-      profRow?.subscription_status === 'active' ||
-      stdRow?.is_pro === true ||
-      stdRow?.pro_status === 'active' ||
-      pd.isPro === true ||
-      pd.is_pro === true ||
-      subRow?.status === 'active'
+    const isPending = Boolean(
+      stdRow?.pro_status === 'pending' ||
+      pd.proStatus === 'pending' ||
+      profRow?.subscription_status === 'pending'
     );
 
-    const targetTier = subRow?.tier || pd.tier || (isPro ? 'pro_semester' : 'free');
+    const isPro = Boolean(
+      isAdmin ||
+      (!isPending && (
+        profRow?.subscription_status === 'pro' ||
+        profRow?.subscription_status === 'active' ||
+        stdRow?.is_pro === true ||
+        stdRow?.pro_status === 'active' ||
+        pd.isPro === true ||
+        pd.is_pro === true ||
+        subRow?.status === 'active'
+      ))
+    );
+
+    const targetTier = isPending ? 'free' : (subRow?.tier || pd.tier || (isPro ? 'pro_semester' : 'free'));
+    const resolvedProStatus = isAdmin ? 'active' : isPending ? 'pending' : (isPro ? 'active' : 'none');
+    const resolvedSubStatus = isAdmin ? 'pro' : isPending ? 'pending' : (isPro ? 'pro' : 'free');
 
     return {
       id: firebaseUid || profRow?.firebase_uid || pd.firebaseUid || stdRow?.id || '',
@@ -1249,16 +1259,16 @@ export async function fetchProfileFromSupabase(firebaseUid: string, email?: stri
       year: stdRow?.year || profRow?.year_level || pd.year || 'Freshman (1st Year)',
       profile_photo: pd.avatar || profRow?.profile_photo || 'champion',
       avatar: pd.avatar || profRow?.profile_photo || 'champion',
-      subscription_status: isPro ? 'pro' : 'free',
+      subscription_status: resolvedSubStatus,
       is_pro: isPro,
       isPro: isPro,
-      pro_status: isPro ? 'active' : 'none',
-      proStatus: isPro ? 'active' : 'none',
+      pro_status: resolvedProStatus,
+      proStatus: resolvedProStatus,
       tier: targetTier,
       profile_data: {
         ...pd,
         isPro,
-        proStatus: isPro ? 'active' : 'none',
+        proStatus: resolvedProStatus,
         tier: targetTier
       }
     };

@@ -201,15 +201,20 @@ export const NoteReaderView: React.FC<NoteReaderViewProps> = ({
     [noteId, userId, bookmarked]
   );
 
-  // Debounced scroll listener
+  // RAF throttled scroll listener for buttery smooth 60-120fps scrolling
+  const scrollRafRef = useRef<number | null>(null);
   const handleScroll = useCallback(() => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
+    if (scrollRafRef.current !== null) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      const el = scrollContainerRef.current;
+      if (!el) return;
 
-    const scrollTop = el.scrollTop;
-    const scrollHeight = el.scrollHeight - el.clientHeight;
-    const pct = scrollHeight > 0 ? Math.min(100, Math.max(0, (scrollTop / scrollHeight) * 100)) : 0;
-    setProgress(pct);
+      const scrollTop = el.scrollTop;
+      const scrollHeight = el.scrollHeight - el.clientHeight;
+      const pct = scrollHeight > 0 ? Math.min(100, Math.max(0, (scrollTop / scrollHeight) * 100)) : 0;
+      setProgress((prev) => (Math.abs(prev - pct) >= 0.8 ? pct : prev));
+    });
   }, []);
 
   // Sync state to storage every 2.5 seconds if changed
@@ -570,6 +575,11 @@ export const NoteReaderView: React.FC<NoteReaderViewProps> = ({
     flushNormalContent(`chunk_end`);
     return blocks;
   };
+
+  // Memoize rendered note blocks so scrolling never re-runs markdown/KaTeX parsing
+  const renderedNoteBlocks = useMemo(() => {
+    return renderNoteBlocks();
+  }, [note?.id, note?.content, settings.theme, settings.font_family, settings.font_size, language, copiedCodeId]);
 
   /**
    * Render paragraphs, headings, math equations, tables, and images
@@ -999,8 +1009,8 @@ export const NoteReaderView: React.FC<NoteReaderViewProps> = ({
             lineHeight: settings.line_height
           }}
         >
-          {/* Note content rendered cleanly */}
-          {renderNoteBlocks()}
+          {/* Note content rendered cleanly (memoized for maximum performance) */}
+          {renderedNoteBlocks}
 
           {/* ─── CHAPTER PREV / NEXT NAVIGATION PILLS ────────────────────── */}
           <div className="mt-12 pt-8 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">

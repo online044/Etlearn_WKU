@@ -6,7 +6,7 @@
  * Zero flashcards • 100% offline-ready & cloud-synced • Pro & Premium UI
  */
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   BookOpen, Edit3, FileText, Download, Plus, Trash2, Check, 
@@ -68,6 +68,7 @@ export default function StudyNotesView({
     (INITIAL_NOTES[0] && INITIAL_NOTES[0].id) ? INITIAL_NOTES[0].id : 'note_freshman_emte_1012'
   );
   const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState('All');
   const [isLoadingNotes, setIsLoadingNotes] = useState(false);
 
@@ -91,6 +92,7 @@ export default function StudyNotesView({
   const [isSavedToast, setIsSavedToast] = useState(false);
   const [activeSubjectFilter, setActiveSubjectFilter] = useState<string>('All');
   const [noteSearchTerm, setNoteSearchTerm] = useState<string>('');
+  const deferredNoteSearchTerm = useDeferredValue(noteSearchTerm);
 
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -157,15 +159,16 @@ export default function StudyNotesView({
     return () => { isMounted = false; };
   }, []);
 
-  // Filtered published notes
+  // Filtered published notes (Instant debounced filtering)
   const filteredPublishedNotes = useMemo(() => {
+    const q = deferredSearchQuery.trim().toLowerCase();
     return publishedNotes.filter(n => {
-      const matchesSearch = !searchQuery.trim() || 
-        n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (n.description && n.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (n.subject && n.subject.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (n.unit && n.unit.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (n.university && n.university.toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchesSearch = !q || 
+        n.title.toLowerCase().includes(q) ||
+        (n.description && n.description.toLowerCase().includes(q)) ||
+        (n.subject && n.subject.toLowerCase().includes(q)) ||
+        (n.unit && n.unit.toLowerCase().includes(q)) ||
+        (n.university && n.university.toLowerCase().includes(q));
 
       const matchesSubject = selectedSubjectFilter === 'All' || 
         (n.subject && n.subject.toLowerCase() === selectedSubjectFilter.toLowerCase()) ||
@@ -173,15 +176,16 @@ export default function StudyNotesView({
 
       return matchesSearch && matchesSubject;
     });
-  }, [publishedNotes, searchQuery, selectedSubjectFilter]);
+  }, [publishedNotes, deferredSearchQuery, selectedSubjectFilter]);
 
   // Active selected note
   const activeSelectedNote = useMemo(() => {
     return filteredPublishedNotes.find(n => n.id === selectedNoteId) || filteredPublishedNotes[0] || null;
   }, [filteredPublishedNotes, selectedNoteId]);
 
-  // Filtered personal notes
+  // Filtered personal notes (Instant debounced filtering)
   const filteredPersonalNotes = useMemo(() => {
+    const q = deferredNoteSearchTerm.trim().toLowerCase();
     return customNotes.filter(n => {
       const nSub = (n.subject || '').toLowerCase();
       const aSub = activeSubjectFilter.toLowerCase();
@@ -189,13 +193,13 @@ export default function StudyNotesView({
         n.subject === activeSubjectFilter ||
         nSub.includes(aSub) ||
         aSub.includes(nSub);
-      const matchesSearch = !noteSearchTerm.trim() || 
-        n.title.toLowerCase().includes(noteSearchTerm.toLowerCase()) ||
-        n.content.toLowerCase().includes(noteSearchTerm.toLowerCase()) ||
-        nSub.includes(noteSearchTerm.toLowerCase());
+      const matchesSearch = !q || 
+        n.title.toLowerCase().includes(q) ||
+        n.content.toLowerCase().includes(q) ||
+        nSub.includes(q);
       return matchesSubject && matchesSearch;
     });
-  }, [customNotes, activeSubjectFilter, noteSearchTerm]);
+  }, [customNotes, activeSubjectFilter, deferredNoteSearchTerm]);
 
   // Total images across all custom notes
   const totalAttachedImages = useMemo(() => {
@@ -495,49 +499,49 @@ export default function StudyNotesView({
     <div className="w-full max-w-7xl mx-auto px-4 py-6 text-slate-100 min-h-screen space-y-6">
       
       {/* ========================================================================= */}
-      {/* 1. HERO STUDIO HEADER (DEEP NAVY & WARM AMBER LUXURY)                    */}
+      {/* 1. HERO STUDIO HEADER (MINIMIZED PRO STUDIO)                             */}
       {/* ========================================================================= */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#0F172A] via-[#111C35] to-[#0A1128] border border-amber-500/25 p-6 sm:p-7 shadow-2xl">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#0F172A] via-[#111C35] to-[#0A1128] border border-amber-500/25 p-4 sm:p-5 shadow-xl">
         {/* Subtle Ambient Radial Glow */}
-        <div className="absolute -top-20 -right-20 w-80 h-80 rounded-full bg-amber-500/10 blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-20 -left-20 w-80 h-80 rounded-full bg-blue-500/10 blur-3xl pointer-events-none" />
+        <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-amber-500/10 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-16 -left-16 w-64 h-64 rounded-full bg-blue-500/10 blur-3xl pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1.5 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-gradient-to-r from-amber-500/20 to-amber-500/10 text-amber-400 border border-amber-500/30 shadow-xs">
-                <Sparkles className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-black bg-gradient-to-r from-amber-500/25 via-amber-400/20 to-amber-600/10 text-amber-300 border border-amber-400/40 shadow-xs shadow-amber-500/10">
+                <Sparkles className="w-3 h-3 fill-amber-300 text-amber-300" />
                 <span>PRO STUDY NOTEBOOK</span>
                 <span className="text-slate-400 font-normal">|</span>
                 <span className="font-sans">የጥናት ማስታወሻ ስቱዲዮ</span>
               </span>
 
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                 Rich Text & Diagram Studio
               </span>
             </div>
 
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-white tracking-tight leading-tight">
+            <h1 className="text-lg sm:text-xl lg:text-2xl font-black text-white tracking-tight leading-snug">
               Visual Notes & Lecture Journal
             </h1>
-            <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
+            <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
               Capture formulas, attach whiteboard screenshots and textbook diagrams, format chapter takeaways, and export clean PDF documents ready for exam revision.
             </p>
 
             {/* Quick Stat Highlights */}
-            <div className="flex flex-wrap items-center gap-4 pt-2 text-xs text-slate-300">
-              <div className="flex items-center gap-1.5 bg-slate-900/80 px-3 py-1 rounded-xl border border-slate-800">
-                <Edit3 className="w-3.5 h-3.5 text-amber-400" />
+            <div className="flex flex-wrap items-center gap-2.5 pt-1 text-[11px] text-slate-300">
+              <div className="flex items-center gap-1.5 bg-slate-900/80 px-2.5 py-0.5 rounded-lg border border-slate-800">
+                <Edit3 className="w-3 h-3 text-amber-400" />
                 <span className="font-bold text-white">{customNotes.length}</span>
                 <span className="text-slate-400">Personal Notes</span>
               </div>
-              <div className="flex items-center gap-1.5 bg-slate-900/80 px-3 py-1 rounded-xl border border-slate-800">
-                <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
+              <div className="flex items-center gap-1.5 bg-slate-900/80 px-2.5 py-0.5 rounded-lg border border-slate-800">
+                <ImageIcon className="w-3 h-3 text-emerald-400" />
                 <span className="font-bold text-white">{totalAttachedImages}</span>
                 <span className="text-slate-400">Attached Diagrams</span>
               </div>
-              <div className="flex items-center gap-1.5 bg-slate-900/80 px-3 py-1 rounded-xl border border-slate-800">
-                <GraduationCap className="w-3.5 h-3.5 text-sky-400" />
+              <div className="flex items-center gap-1.5 bg-slate-900/80 px-2.5 py-0.5 rounded-lg border border-slate-800">
+                <GraduationCap className="w-3 h-3 text-sky-400" />
                 <span className="font-bold text-white">{subjectsPool.length}</span>
                 <span className="text-slate-400">Active Subjects</span>
               </div>

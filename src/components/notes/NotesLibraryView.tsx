@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useDeferredValue } from 'react';
 import {
   Search,
   BookOpen,
@@ -49,6 +49,7 @@ export const NotesLibraryView: React.FC<NotesLibraryViewProps> = ({
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearch = useDeferredValue(searchQuery);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
@@ -89,9 +90,9 @@ export const NotesLibraryView: React.FC<NotesLibraryViewProps> = ({
     loadLibraryData();
   }, [userId]);
 
-  // Handle Debounced Search using search_notes RPC
+  // Handle Ultra-Fast Debounced Search using instant local lookup + search_notes RPC
   useEffect(() => {
-    const trimmed = searchQuery.trim();
+    const trimmed = deferredSearch.trim();
     if (!trimmed) {
       setSearchResults([]);
       setIsSearching(false);
@@ -108,10 +109,10 @@ export const NotesLibraryView: React.FC<NotesLibraryViewProps> = ({
       } finally {
         setIsSearching(false);
       }
-    }, 300);
+    }, 100);
 
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [deferredSearch]);
 
   // Flush offline sync queue
   const handleManualSync = async () => {
@@ -400,21 +401,24 @@ export const NotesLibraryView: React.FC<NotesLibraryViewProps> = ({
   return (
     <div className="w-full min-h-screen bg-[#0A1128] text-slate-100 flex flex-col pb-20 select-none">
       {/* ─── HERO HEADER ────────────────────────────────────────────────── */}
-      <div className="bg-gradient-to-b from-[#0F172A] to-[#0A1128] border-b border-white/10 px-4 sm:px-6 pt-6 pb-6">
-        <div className="max-w-7xl mx-auto flex flex-col gap-4">
+      <div className="bg-gradient-to-b from-[#0F172A] to-[#0A1128] border-b border-white/10 px-3 min-[360px]:px-4 sm:px-6 py-2.5 sm:py-3.5">
+        <div className="max-w-7xl mx-auto flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                <BookOpen className="w-5 h-5" />
+            <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 shadow-xs">
+                <BookOpen className="w-4 h-4" />
               </div>
-              <div>
-                <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center gap-2">
-                  <span>{isAm ? 'የትምህርት ማስታወሻዎች' : 'Academic Notes'}</span>
-                  <span className="text-xs font-semibold py-0.5 px-2 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                    Pro
+              <div className="flex flex-col justify-center leading-none shrink-0">
+                <div className="flex items-center gap-1.5 sm:gap-2 whitespace-nowrap">
+                  <span className="text-sm sm:text-base font-black tracking-tight text-white whitespace-nowrap shrink-0">
+                    {isAm ? 'የትምህርት ማስታወሻዎች' : 'Academic Notes'}
                   </span>
-                </h1>
-                <p className="text-xs text-slate-400">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500/25 via-amber-400/20 to-amber-600/10 text-amber-300 border border-amber-400/40 text-[9px] sm:text-[9.5px] font-black uppercase tracking-wider shadow-xs shadow-amber-500/10 shrink-0">
+                    <Sparkles className="w-2.5 h-2.5 fill-amber-300 text-amber-300" />
+                    <span>Pro</span>
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 whitespace-nowrap truncate max-w-[200px] sm:max-w-md mt-1 leading-tight">
                   {isAm
                     ? 'ከሱፓቤዝ ዳታቤዝ ጋር የተገናኘ የተሟላ የንባብ ማዕከል'
                     : 'Supabase-backed distraction-free reader for university students'}
@@ -423,7 +427,7 @@ export const NotesLibraryView: React.FC<NotesLibraryViewProps> = ({
             </div>
 
             {/* Offline & Sync Status */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               {!isOnline ? (
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-medium">
                   <WifiOff className="w-3.5 h-3.5" />

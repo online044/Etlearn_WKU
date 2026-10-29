@@ -1,4 +1,5 @@
 import { getSupabase } from '../utils/supabaseClient';
+import { safeStorage } from '../utils/safeStorage';
 import {
   Subject,
   Chapter,
@@ -825,47 +826,42 @@ export class NotesRepository {
   }
 
   /**
-   * Fetches all published subjects
+   * Background revalidation for subjects without blocking UI
+   */
+  private async backgroundRevalidateSubjects() {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    const supabase = getSupabase();
+    if (!supabase) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('subjects')
+        .select('*')
+        .order('sort_order', { ascending: true });
+
+      if (!error && data && data.length > 0) {
+        const formattedMap = new Map<string, Subject>();
+        data.forEach((s: any, idx: number) => {
+          const id = canonicalSubjectId(s.id);
+          if (!formattedMap.has(id)) {
+            formattedMap.set(id, {
+              id,
+              name: s.name || s.title || 'Untitled Subject',
+              color: s.color || '#D97706',
+              sort_order: typeof s.sort_order === 'number' ? s.sort_order : idx + 1
+            });
+          }
+        });
+        cacheSubjectsLocally(Array.from(formattedMap.values()));
+      }
+    } catch {}
+  }
+
+  /**
+   * Fetches all published subjects (Instant Cache-First: 0ms load, then background sync)
    */
   async fetchSubjects(): Promise<Subject[]> {
-    const supabase = getSupabase();
-    if (supabase) {
-      try {
-        let { data, error } = await supabase
-          .from('subjects')
-          .select('*')
-          .order('sort_order', { ascending: true });
-
-        if (error) {
-          // Retry without order in case sort_order column does not exist
-          const fallback = await supabase.from('subjects').select('*');
-          data = fallback.data;
-          error = fallback.error;
-        }
-
-        if (!error && data && data.length > 0) {
-          const formattedMap = new Map<string, Subject>();
-          data.forEach((s: any, idx: number) => {
-            const id = canonicalSubjectId(s.id);
-            if (!formattedMap.has(id)) {
-              formattedMap.set(id, {
-                id,
-                name: s.name || s.title || 'Untitled Subject',
-                color: s.color || '#D97706',
-                sort_order: typeof s.sort_order === 'number' ? s.sort_order : idx + 1
-              });
-            }
-          });
-          const formatted = Array.from(formattedMap.values());
-          cacheSubjectsLocally(formatted);
-          return formatted;
-        }
-      } catch (err) {
-        console.warn('[notesRepository] Supabase fetchSubjects error:', err);
-      }
-    }
-
-    // Check offline local cache (deduplicated)
+    // 1. Instant Cache-First Check: return cached subjects immediately
     const cached = getCachedSubjectsLocally();
     if (cached && cached.length > 0) {
       const cachedMap = new Map<string, Subject>();
@@ -875,196 +871,131 @@ export class NotesRepository {
           cachedMap.set(id, { ...s, id });
         }
       });
+      this.backgroundRevalidateSubjects();
       return Array.from(cachedMap.values());
     }
 
-    // Fall back to seed subjects
+    // 2. Instant Seed Fallback
     cacheSubjectsLocally(SEED_SUBJECTS);
+    this.backgroundRevalidateSubjects();
     return SEED_SUBJECTS;
   }
 
   /**
-   * Fetches chapters, optionally filtered by subjectId
+   * Background revalidation for chapters without blocking UI
+   */
+  private async backgroundRevalidateChapters(subjectId?: string) {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    const supabase = getSupabase();
+    if (!supabase) return;
+
+    try {
+      const canonicalTargetId = subjectId ? canonicalSubjectId(subjectId) : undefined;
+      let query = supabase.from('chapters').select('*');
+      if (subjectId) {
+        query = query.or(`subject_id.eq.${subjectId},subject_id.eq.${canonicalTargetId}`);
+      }
+
+      const { data, error } = await query.order('sort_order', { ascending: true });
+      if (!error && data && data.length > 0) {
+        const formatted: Chapter[] = data.map((c: any, idx: number) => ({
+          id: String(c.id),
+          subject_id: canonicalSubjectId(c.subject_id),
+          title: c.title || 'Untitled Chapter',
+          sort_order: typeof c.sort_order === 'number' ? c.sort_order : idx + 1
+        }));
+        cacheChaptersLocally(formatted);
+      }
+    } catch {}
+  }
+
+  /**
+   * Fetches chapters, optionally filtered by subjectId (Instant 0ms Cache-First)
    */
   async fetchChapters(subjectId?: string): Promise<Chapter[]> {
     const canonicalTargetId = subjectId ? canonicalSubjectId(subjectId) : undefined;
-    const supabase = getSupabase();
-    if (supabase) {
-      try {
-        let query = supabase
-          .from('chapters')
-          .select('*');
-
-        if (subjectId) {
-          query = query.or(`subject_id.eq.${subjectId},subject_id.eq.${canonicalTargetId}`);
-        }
-
-        let { data, error } = await query.order('sort_order', { ascending: true });
-        if (error) {
-          let retry = supabase.from('chapters').select('*');
-          const fallback = await retry;
-          data = fallback.data;
-          error = fallback.error;
-        }
-
-        if (!error && data && data.length > 0) {
-          const formatted: Chapter[] = data.map((c: any, idx: number) => ({
-            id: String(c.id),
-            subject_id: canonicalSubjectId(c.subject_id),
-            title: c.title || 'Untitled Chapter',
-            sort_order: typeof c.sort_order === 'number' ? c.sort_order : idx + 1
-          }));
-          cacheChaptersLocally(formatted);
-          return canonicalTargetId ? formatted.filter(c => c.subject_id === canonicalTargetId) : formatted;
-        }
-      } catch (err) {
-        console.warn('[notesRepository] Supabase fetchChapters error:', err);
-      }
-    }
-
     const cached = getCachedChaptersLocally();
     if (cached && cached.length > 0) {
+      this.backgroundRevalidateChapters(subjectId);
       return canonicalTargetId ? cached.filter((c) => c.subject_id === canonicalTargetId) : cached;
     }
 
+    cacheChaptersLocally(SEED_CHAPTERS);
+    this.backgroundRevalidateChapters(subjectId);
     return canonicalTargetId ? SEED_CHAPTERS.filter((c) => c.subject_id === canonicalTargetId) : SEED_CHAPTERS;
   }
 
   /**
-   * Fetches notes list without heavy `content` column for high-speed card rendering
+   * Background revalidation for notes list without blocking UI
    */
-  async fetchNotesList(chapterId?: string, includeUnpublished = false): Promise<NoteListItem[]> {
+  private backgroundRevalidateNotesList(chapterId?: string) {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
     const supabase = getSupabase();
-    if (supabase) {
-      try {
-        // Query both `notes_list` and `notes` tables simultaneously for complete Supabase schema integration
-        const [listRes, notesRes] = await Promise.allSettled([
-          supabase.from('notes_list').select('*'),
-          supabase.from('notes').select('*')
-        ]);
+    if (!supabase) return;
 
-        let rawList: any[] = [];
-        let rawNotes: any[] = [];
+    Promise.allSettled([
+      supabase.from('notes_list').select('*'),
+      supabase.from('notes').select('*')
+    ]).then(([listRes, notesRes]) => {
+      let rawList: any[] = [];
+      let rawNotes: any[] = [];
+      if (listRes.status === 'fulfilled' && !listRes.value.error && listRes.value.data) {
+        rawList = listRes.value.data;
+      }
+      if (notesRes.status === 'fulfilled' && !notesRes.value.error && notesRes.value.data) {
+        rawNotes = notesRes.value.data;
+      }
 
-        if (listRes.status === 'fulfilled' && !listRes.value.error && listRes.value.data) {
-          rawList = listRes.value.data;
-        }
-        if (notesRes.status === 'fulfilled' && !notesRes.value.error && notesRes.value.data) {
-          rawNotes = notesRes.value.data;
-        }
-
-        const combinedMap = new Map<string, any>();
-
-        // 1. Process items from `notes_list`
-        for (const item of rawList) {
-          const id = String(item.id || item.note_id || item.uuid || '');
-          if (!id) continue;
-          combinedMap.set(id, { ...item, id });
-        }
-
-        // 2. Merge items from `notes` table
-        for (const item of rawNotes) {
-          const id = String(item.id || item.note_id || item.uuid || '');
-          if (!id) continue;
+      const combinedMap = new Map<string, any>();
+      for (const item of rawList) {
+        const id = String(item.id || item.note_id || item.uuid || '');
+        if (id) combinedMap.set(id, { ...item, id });
+      }
+      for (const item of rawNotes) {
+        const id = String(item.id || item.note_id || item.uuid || '');
+        if (id) {
           const existing = combinedMap.get(id) || {};
           combinedMap.set(id, { ...existing, ...item, id });
         }
-
-        const mergedData = Array.from(combinedMap.values());
-
-        if (mergedData.length > 0) {
-          let visibleData = includeUnpublished
-            ? mergedData
-            : mergedData.filter((n: any) => n.is_published !== false);
-
-          if (chapterId) {
-            visibleData = visibleData.filter((n: any) => String(n.chapter_id) === String(chapterId));
-          }
-
-          const formatted: NoteListItem[] = visibleData.map((n: any, idx: number) => {
-            const contentStr = n.content || n.body || n.text || '';
-            const rawReadTime = typeof n.read_time_min === 'number'
-              ? n.read_time_min
-              : (contentStr ? Math.max(1, Math.round(contentStr.split(/\s+/).length / 180)) : 5);
-
-            const item: NoteListItem = {
-              id: String(n.id),
-              chapter_id: n.chapter_id ? String(n.chapter_id) : `virtual_${n.subject_id || n.subject || 'general'}`,
-              title: n.title || n.name || 'Untitled Note',
-              read_time_min: rawReadTime,
-              sort_order: typeof n.sort_order === 'number' ? n.sort_order : (idx + 1),
-              is_published: n.is_published !== false,
-              created_at: n.created_at || new Date().toISOString(),
-              updated_at: n.updated_at || new Date().toISOString(),
-              subject_id: n.subject_id ? String(n.subject_id) : undefined,
-              subject: n.subject ? String(n.subject) : undefined,
-              course: n.course ? String(n.course) : undefined
-            };
-
-            // Pre-cache full note locally if content is available
-            if (contentStr) {
-              cacheFullNoteLocally({
-                id: item.id,
-                chapter_id: item.chapter_id,
-                title: item.title,
-                content: String(contentStr),
-                read_time_min: item.read_time_min,
-                sort_order: item.sort_order,
-                is_published: item.is_published,
-                created_at: item.created_at,
-                updated_at: item.updated_at,
-                subject_id: item.subject_id,
-                subject: item.subject,
-                course: item.course
-              } as Note);
-            }
-
-            return item;
-          });
-
-          // Sort formatted list by sort_order ascending
-          formatted.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || (a.title || '').localeCompare(b.title || '', undefined, { numeric: true, sensitivity: 'base' }));
-
-          if (!chapterId) {
-            cacheNotesListLocally(formatted);
-          }
-          return formatted;
-        } else if (listRes.status === 'fulfilled' || notesRes.status === 'fulfilled') {
-          // Supabase connected and returned 0 records -> fall back to seed notes
-          const cached = getCachedNotesListLocally();
-          if (cached && cached.length > 0) {
-            return chapterId ? cached.filter((n) => n.chapter_id === chapterId) : cached;
-          }
-          const seedItems: NoteListItem[] = SEED_NOTES.map((n, idx) => ({
-            id: n.id,
-            chapter_id: n.chapter_id,
-            title: n.title,
-            read_time_min: n.read_time_min,
-            sort_order: typeof n.sort_order === 'number' ? n.sort_order : idx + 1,
-            is_published: true,
-            created_at: n.created_at,
-            updated_at: n.updated_at,
-            subject_id: n.subject_id,
-            subject: n.subject,
-            course: n.course
-          }));
-          if (!chapterId) {
-            cacheNotesListLocally(seedItems);
-          }
-          return chapterId ? seedItems.filter((n) => n.chapter_id === chapterId) : seedItems;
-        }
-      } catch (err) {
-        console.warn('[notesRepository] Supabase fetchNotesList integration error:', err);
       }
-    }
 
-    // Check offline cached notes list
+      const mergedData = Array.from(combinedMap.values());
+      if (mergedData.length > 0) {
+        const formatted: NoteListItem[] = mergedData.map((n: any, idx: number) => {
+          const contentStr = n.content || n.body || n.text || '';
+          const rawReadTime = typeof n.read_time_min === 'number'
+            ? n.read_time_min
+            : (contentStr ? Math.max(1, Math.round(contentStr.split(/\s+/).length / 180)) : 5);
+          return {
+            id: String(n.id),
+            chapter_id: n.chapter_id ? String(n.chapter_id) : `virtual_${n.subject_id || n.subject || 'general'}`,
+            title: n.title || n.name || 'Untitled Note',
+            read_time_min: rawReadTime,
+            sort_order: typeof n.sort_order === 'number' ? n.sort_order : (idx + 1),
+            is_published: n.is_published !== false,
+            created_at: n.created_at || new Date().toISOString(),
+            updated_at: n.updated_at || new Date().toISOString(),
+            subject_id: n.subject_id ? String(n.subject_id) : undefined,
+            subject: n.subject ? String(n.subject) : undefined,
+            course: n.course ? String(n.course) : undefined
+          };
+        });
+        formatted.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || (a.title || '').localeCompare(b.title || '', undefined, { numeric: true, sensitivity: 'base' }));
+        cacheNotesListLocally(formatted);
+      }
+    }).catch(() => {});
+  }
+
+  /**
+   * Fetches notes list without heavy `content` column (Instant 0ms Cache-First)
+   */
+  async fetchNotesList(chapterId?: string, includeUnpublished = false): Promise<NoteListItem[]> {
     const cached = getCachedNotesListLocally();
     if (cached && cached.length > 0) {
+      this.backgroundRevalidateNotesList(chapterId);
       return chapterId ? cached.filter((n) => n.chapter_id === chapterId) : cached;
     }
 
-    // Fallback to seed notes if nothing in cache
     const seedFallback: NoteListItem[] = SEED_NOTES.map((n, idx) => ({
       id: n.id,
       chapter_id: n.chapter_id,
@@ -1080,6 +1011,7 @@ export class NotesRepository {
     }));
     cacheNotesListLocally(seedFallback);
     SEED_NOTES.forEach((note) => cacheFullNoteLocally(note));
+    this.backgroundRevalidateNotesList(chapterId);
     return chapterId ? seedFallback.filter((n) => n.chapter_id === chapterId) : seedFallback;
   }
 
@@ -1089,29 +1021,6 @@ export class NotesRepository {
   async fetchNotesBySubjectId(
     subjectId: string
   ): Promise<{ id: string; title: string; read_time_min: number; chapter_id: string }[]> {
-    const supabase = getSupabase();
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('notes')
-          .select('id, title, read_time_min, chapter_id, chapters!inner(subject_id)')
-          .eq('chapters.subject_id', subjectId)
-          .order('sort_order', { ascending: true });
-
-        if (!error && data) {
-          return data.map((item: any) => ({
-            id: item.id,
-            title: item.title,
-            read_time_min: item.read_time_min,
-            chapter_id: item.chapter_id
-          }));
-        }
-      } catch (err) {
-        console.warn('[notesRepository] fetchNotesBySubjectId error, trying fallback:', err);
-      }
-    }
-
-    // Local fallback for offline / seed data
     const chapters = await this.fetchChapters(subjectId);
     const chapterIds = new Set(chapters.map((c) => c.id));
     const allNotes = await this.fetchNotesList();
@@ -1126,9 +1035,71 @@ export class NotesRepository {
   }
 
   /**
-   * Fetches a full single note by ID (including markdown content) from both notes and notes_list tables
+   * Background revalidation for a single note
+   */
+  private backgroundRevalidateNote(noteId: string) {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    const supabase = getSupabase();
+    if (!supabase) return;
+
+    Promise.allSettled([
+      supabase.from('notes').select('*').or(`id.eq.${noteId},note_id.eq.${noteId}`),
+      supabase.from('notes_list').select('*').or(`id.eq.${noteId},note_id.eq.${noteId}`)
+    ]).then(([notesRes, listRes]) => {
+      let noteObj: any = {};
+      if (notesRes.status === 'fulfilled' && !notesRes.value.error && notesRes.value.data?.[0]) {
+        noteObj = { ...notesRes.value.data[0] };
+      }
+      if (listRes.status === 'fulfilled' && !listRes.value.error && listRes.value.data?.[0]) {
+        noteObj = { ...listRes.value.data[0], ...noteObj };
+      }
+
+      if (noteObj && (noteObj.id || noteObj.note_id)) {
+        const id = String(noteObj.id || noteObj.note_id || noteId);
+        const content = String(noteObj.content || noteObj.body || noteObj.text || '');
+        if (content) {
+          const formattedNote: Note = {
+            id,
+            chapter_id: noteObj.chapter_id ? String(noteObj.chapter_id) : `virtual_${noteObj.subject_id || noteObj.subject || 'general'}`,
+            title: noteObj.title || noteObj.name || 'Untitled Note',
+            content,
+            read_time_min: typeof noteObj.read_time_min === 'number'
+              ? noteObj.read_time_min
+              : Math.max(1, Math.round(content.split(/\s+/).length / 180)),
+            sort_order: typeof noteObj.sort_order === 'number' ? noteObj.sort_order : 1,
+            is_published: noteObj.is_published !== false,
+            created_at: noteObj.created_at || new Date().toISOString(),
+            updated_at: noteObj.updated_at || new Date().toISOString(),
+            subject_id: noteObj.subject_id ? String(noteObj.subject_id) : undefined,
+            subject: noteObj.subject ? String(noteObj.subject) : undefined,
+            course: noteObj.course ? String(noteObj.course) : undefined
+          };
+          cacheFullNoteLocally(formattedNote);
+        }
+      }
+    }).catch(() => {});
+  }
+
+  /**
+   * Fetches a full single note by ID (Instant 0ms Cache-First Check: 0ms load)
    */
   async fetchNoteById(noteId: string): Promise<Note | null> {
+    // 1. Instant Cache-First: return from local storage immediately if available
+    const cached = getCachedNoteLocally(noteId);
+    if (cached && cached.content) {
+      this.backgroundRevalidateNote(noteId);
+      return cached;
+    }
+
+    // 2. Instant Seed Fallback: check preloaded seed notes
+    const seed = SEED_NOTES.find((n) => n.id === noteId);
+    if (seed && seed.content) {
+      cacheFullNoteLocally(seed);
+      this.backgroundRevalidateNote(noteId);
+      return seed;
+    }
+
+    // 3. Fallback: Network fetch if missing from cache
     const supabase = getSupabase();
     if (supabase) {
       try {
@@ -1171,17 +1142,6 @@ export class NotesRepository {
       } catch (err) {
         console.warn('[notesRepository] Supabase fetchNoteById error:', err);
       }
-    }
-
-    // Check offline local cache
-    const cached = getCachedNoteLocally(noteId);
-    if (cached) return cached;
-
-    // Check seed notes
-    const seed = SEED_NOTES.find((n) => n.id === noteId);
-    if (seed) {
-      cacheFullNoteLocally(seed);
-      return seed;
     }
 
     return null;
@@ -1440,34 +1400,34 @@ export class NotesRepository {
   }
 
   /**
-   * Performs full-text search with highlighted snippets via Supabase `search_notes` RPC
-   * or client-side fallback
+   * Performs full-text search with highlighted snippets (Instant offline search with online RPC fallback)
    */
   async searchNotes(query: string): Promise<SearchResult[]> {
     const cleanQ = query.trim();
     if (!cleanQ) return [];
 
-    const supabase = getSupabase();
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.rpc('search_notes', { q: cleanQ });
-        if (!error && data && data.length > 0) {
-          return data as SearchResult[];
-        }
-      } catch (err) {
-        console.warn('[notesRepository] RPC search_notes fallback to client regex:', err);
-      }
-    }
-
-    // Fallback: search through local seed notes and cached notes
-    const results: SearchResult[] = [];
     const lowerQ = cleanQ.toLowerCase();
+    const results: SearchResult[] = [];
+    const seenIds = new Set<string>();
 
-    for (const note of SEED_NOTES) {
-      const titleMatch = note.title.toLowerCase().includes(lowerQ);
-      const contentIndex = note.content.toLowerCase().indexOf(lowerQ);
+    // 1. Instant local search across cached & seed notes
+    const allSearchableNotes: Note[] = [...SEED_NOTES];
+    try {
+      const cachedNotesMap = JSON.parse(safeStorage.getItem('ethiolearn_cached_notes') || '{}');
+      Object.values(cachedNotesMap).forEach((n: any) => {
+        if (n && n.id && !allSearchableNotes.some(s => s.id === n.id)) {
+          allSearchableNotes.push(n);
+        }
+      });
+    } catch {}
+
+    for (const note of allSearchableNotes) {
+      if (seenIds.has(note.id)) continue;
+      const titleMatch = (note.title || '').toLowerCase().includes(lowerQ);
+      const contentIndex = (note.content || '').toLowerCase().indexOf(lowerQ);
 
       if (titleMatch || contentIndex !== -1) {
+        seenIds.add(note.id);
         let snippet = '';
         if (contentIndex !== -1) {
           const start = Math.max(0, contentIndex - 40);
@@ -1476,7 +1436,7 @@ export class NotesRepository {
           const regex = new RegExp(`(${cleanQ.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
           snippet = (start > 0 ? '...' : '') + rawSnip.replace(regex, '<mark>$1</mark>') + (end < note.content.length ? '...' : '');
         } else {
-          snippet = note.content.substring(0, 100).replace(/\n/g, ' ') + '...';
+          snippet = (note.content || '').substring(0, 100).replace(/\n/g, ' ') + '...';
         }
 
         results.push({
@@ -1485,6 +1445,24 @@ export class NotesRepository {
           snippet,
           rank: titleMatch ? 1.0 : 0.5
         });
+      }
+    }
+
+    // 2. If online and Supabase is configured, augment with RPC results
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      const supabase = getSupabase();
+      if (supabase) {
+        try {
+          const { data, error } = await supabase.rpc('search_notes', { q: cleanQ });
+          if (!error && data && data.length > 0) {
+            for (const r of data as SearchResult[]) {
+              if (!seenIds.has(r.id)) {
+                results.push(r);
+                seenIds.add(r.id);
+              }
+            }
+          }
+        } catch {}
       }
     }
 

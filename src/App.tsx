@@ -997,30 +997,51 @@ export default function App() {
 
         const liveProfile = await fetchProfileFromSupabase(profile.firebaseUid || profile.id || '', studentEmail);
         if (liveProfile && mounted) {
-          const isNowPro = Boolean(
+        const isPending = Boolean(
+          liveProfile.pro_status === 'pending' ||
+          liveProfile.proStatus === 'pending' ||
+          liveProfile.subscription_status === 'pending'
+        );
+
+        const isNowPro = Boolean(
+          isAdministratorEmail(studentEmail) ||
+          (!isPending && (
             liveProfile.isPro ||
             liveProfile.is_pro ||
             liveProfile.subscription_status === 'pro' ||
-            liveProfile.pro_status === 'active' ||
-            isAdministratorEmail(studentEmail)
-          );
+            liveProfile.pro_status === 'active'
+          ))
+        );
 
-          if (isNowPro && !profile.isPro) {
-            console.log('[Live Pro Sync] Detected newly activated Pro pass! Upgrading student desk immediately.');
-            setProfile(prev => {
-              if (!prev) return prev;
-              const updated: StudentProfile = {
-                ...prev,
-                isPro: true,
-                proStatus: 'active',
-                tier: liveProfile.tier || prev.tier || 'pro_semester',
-                subscription_status: 'pro'
-              };
-              safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(updated));
-              return updated;
-            });
-            playSuccessChime();
-          }
+        if (isNowPro && !profile.isPro) {
+          console.log('[Live Pro Sync] Detected newly activated Pro pass! Upgrading student desk immediately.');
+          setProfile(prev => {
+            if (!prev) return prev;
+            const updated: StudentProfile = {
+              ...prev,
+              isPro: true,
+              proStatus: 'active',
+              tier: liveProfile.tier || prev.tier || 'pro_semester',
+              subscription_status: 'pro'
+            };
+            safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(updated));
+            return updated;
+          });
+          playSuccessChime();
+        } else if (!isNowPro && isPending && profile.isPro && !isAdministratorEmail(studentEmail)) {
+          // If payment is pending admin verification, strictly revoke Pro until admin approves
+          setProfile(prev => {
+            if (!prev) return prev;
+            const updated: StudentProfile = {
+              ...prev,
+              isPro: false,
+              proStatus: 'pending',
+              subscription_status: 'pending'
+            };
+            safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(updated));
+            return updated;
+          });
+        }
         }
       } catch (e) {}
     };
@@ -1542,7 +1563,7 @@ export default function App() {
       >
         <div className="w-full max-w-7xl mx-auto px-2 min-[360px]:px-3 sm:px-4 h-14 sm:h-16 flex justify-between items-center gap-1.5 sm:gap-4 relative">
           
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0 min-w-0">
             {/* 📱 App Sidebar & Info Menu Toggle Button */}
             <button
               type="button"
@@ -1550,7 +1571,7 @@ export default function App() {
                 playClickChime();
                 setIsSidebarOpen(true);
               }}
-              className="p-1.5 sm:p-2 rounded-xl text-slate-600 dark:text-zinc-300 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-zinc-900 border border-transparent hover:border-slate-200 dark:hover:border-zinc-800 transition-all cursor-pointer flex items-center justify-center shrink-0 min-h-[44px] min-w-[44px]"
+              className="p-1.5 sm:p-2 rounded-xl text-slate-600 dark:text-zinc-300 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-zinc-900 border border-transparent hover:border-slate-200 dark:hover:border-zinc-800 transition-all cursor-pointer flex items-center justify-center shrink-0 min-h-[40px] min-w-[40px] sm:min-h-[44px] sm:min-w-[44px]"
               title={language === 'en' ? 'Open App Menu & Info' : 'የአፕሊኬሽን ሜኑ እና መረጃ'}
               aria-label="Toggle App Sidebar"
             >
@@ -1559,23 +1580,21 @@ export default function App() {
 
             {/* 🎓 App Logo & Brand Title */}
             <div 
-              className="flex items-center gap-2 sm:gap-2.5 min-w-0 cursor-pointer group"
+              className="flex items-center gap-2 sm:gap-2.5 shrink-0 cursor-pointer group py-0.5 select-none"
               onClick={() => { playClickChime(); setIsSidebarOpen(true); }}
               title="EthioLearn Pro"
             >
-              <div className="shrink-0 flex items-center justify-center">
-                <span className="hidden sm:inline-flex items-center justify-center w-8 h-8">
-                  <EthioLearnLogo size={32} showCardBackground={false} iconOnly={true} className="w-full h-full group-hover:scale-105 duration-200 transition-transform" />
-                </span>
-                <span className="sm:hidden inline-flex items-center justify-center w-7 h-7">
-                  <EthioLearnLogo size={28} showCardBackground={false} iconOnly={true} className="w-full h-full group-hover:scale-105 duration-200 transition-transform" />
-                </span>
+              <div className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 flex items-center justify-center">
+                <EthioLearnLogo size={32} showCardBackground={false} iconOnly={true} className="w-full h-full group-hover:scale-105 duration-200 transition-transform" />
               </div>
-              <div className="leading-tight text-left min-w-0">
-                <div className="flex items-center gap-1">
-                  <span className="font-serif font-black text-slate-900 dark:text-white text-base sm:text-lg tracking-tight">EthioLearn</span>
+              <div className="flex flex-col justify-center leading-none text-left shrink-0">
+                <div className="flex items-center gap-1.5 whitespace-nowrap">
+                  <span className="font-serif font-black text-slate-900 dark:text-white text-sm sm:text-base tracking-tight whitespace-nowrap shrink-0">EthioLearn</span>
                   {profile.isPro ? (
-                    <span className="text-[#F59E0B] text-[9px] sm:text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-500 font-sans tracking-wide">PRO</span>
+                    <span className="inline-flex items-center gap-0.5 text-amber-400 text-[8.5px] sm:text-[9px] font-black px-1.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500/25 via-amber-400/20 to-amber-600/10 border border-amber-400/40 font-sans tracking-wider uppercase shadow-xs shadow-amber-500/10 shrink-0">
+                      <Sparkles className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                      <span>PRO</span>
+                    </span>
                   ) : (!profile.isRegistered || profile.id?.startsWith('guest')) ? (
                     <span 
                       onClick={(e) => {
@@ -1583,16 +1602,16 @@ export default function App() {
                         playClickChime();
                         setCurrentPage('upgrade');
                       }}
-                      className="text-emerald-400 text-[9px] sm:text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 font-sans tracking-wide cursor-pointer hover:bg-emerald-500/25"
+                      className="text-emerald-400 text-[8.5px] sm:text-[9px] font-extrabold px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 font-sans tracking-wide cursor-pointer hover:bg-emerald-500/25 shrink-0"
                       title={language === 'am' ? 'የእንግዳ መለያ (ማየት ብቻ) - ለመመዝገብ ወይም ፕሮ ለማድረግ ይጫኑ' : 'Guest mode (Preview only) - Tap to register or upgrade'}
                     >
                       {language === 'am' ? 'እንግዳ' : 'GUEST'}
                     </span>
                   ) : (
-                    <span className="text-slate-400 dark:text-zinc-400 text-[9px] sm:text-[10px] font-bold px-1 py-0.2 rounded bg-slate-200 dark:bg-zinc-800 font-sans">CAMPUS</span>
+                    <span className="text-slate-400 dark:text-zinc-400 text-[8.5px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-200 dark:bg-zinc-800 font-sans shrink-0">CAMPUS</span>
                   )}
                 </div>
-                <span className="text-[9.5px] sm:text-[10px] text-slate-500 dark:text-zinc-400 font-semibold truncate max-w-[95px] min-[360px]:max-w-[130px] sm:max-w-none block">
+                <span className="text-[9.5px] sm:text-[10px] text-slate-500 dark:text-zinc-400 font-medium truncate max-w-[110px] min-[360px]:max-w-[140px] sm:max-w-none block mt-0.5 leading-tight">
                   {profile.university || 'Wolkite University'}
                 </span>
               </div>
@@ -1670,7 +1689,7 @@ export default function App() {
                 const nextSize = textSize === 'moderate' ? 'large' : textSize === 'large' ? 'xlarge' : textSize === 'xlarge' ? 'normal' : 'moderate';
                 setTextSize(nextSize);
               }}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg sm:rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-100 dark:bg-zinc-900/90 text-slate-700 dark:text-zinc-200 hover:text-amber-500 transition-colors cursor-pointer"
+              className="hidden min-[480px]:flex items-center gap-1.5 px-2.5 py-1 rounded-lg sm:rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-100 dark:bg-zinc-900/90 text-slate-700 dark:text-zinc-200 hover:text-amber-500 transition-colors cursor-pointer"
               title={`Reading Text Size: ${textSize.toUpperCase()} (Click to toggle)`}
             >
               <Type className="w-3.5 h-3.5 text-amber-500" />

@@ -1496,6 +1496,23 @@ export async function updatePaymentStatus(
         console.warn('Firestore Pro grant notice:', fErr);
       }
     }
+  } else if (status === 'failed') {
+    // If admin explicitly declined the payment, revoke Pro access immediately
+    const targetEmail = (
+      candidateEmail ||
+      paymentRecord?.user_id ||
+      paymentRecord?.userId ||
+      paymentRecord?.email ||
+      ''
+    ).toLowerCase().trim();
+
+    if (targetEmail && targetEmail.includes('@')) {
+      try {
+        await adminUpdateStudentProfile(targetEmail, { isPro: false });
+      } catch (err) {
+        console.warn('Revoke Pro on failed payment notice:', err);
+      }
+    }
   }
 
   // Broadcast data update event so open views and badge listeners re-render immediately

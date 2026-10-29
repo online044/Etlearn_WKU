@@ -281,7 +281,12 @@ export async function getUserSubscriptionStatus(req: Request, res: Response) {
       const diskStudent = diskStudents.find((s: any) => (s.email || '').toLowerCase().trim() === userEmail);
       if (diskStudent) {
         const pd = diskStudent.profile_data || {};
-        if (diskStudent.is_pro || pd.isPro || diskStudent.pro_status === 'active') {
+        if (diskStudent.pro_status === 'pending' || pd.proStatus === 'pending') {
+          isPro = false;
+          proStatus = 'pending';
+          tier = 'free';
+          expiresAt = null;
+        } else if (diskStudent.is_pro || pd.isPro || diskStudent.pro_status === 'active') {
           isPro = true;
           tier = diskStudent.tier || pd.tier || 'pro_semester';
           proStatus = 'active';
@@ -290,9 +295,6 @@ export async function getUserSubscriptionStatus(req: Request, res: Response) {
           } else if (pd.proEndDate) {
             expiresAt = pd.proEndDate;
           }
-        } else if (diskStudent.pro_status === 'pending' || pd.proStatus === 'pending') {
-          proStatus = 'pending';
-          tier = diskStudent.tier || pd.tier || 'pro_semester';
         }
       }
     }

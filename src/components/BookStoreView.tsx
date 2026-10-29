@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -1130,6 +1130,7 @@ export default function BookStoreView({
   // Search & Stream Filter States (including prominent 'exams' tab)
   const isOnline = useOnlineStatus();
   const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [selectedStream, setSelectedStream] = useState<'all' | 'exams' | 'Common' | 'Natural Science' | 'Social Science' | 'favorites' | 'videos' | 'downloaded'>('all');
   const [selectedCourseForDetail, setSelectedCourseForDetail] = useState<UnifiedBookItem | null>(null);
   const [monthlyExamSubscriptionModalOpen, setMonthlyExamSubscriptionModalOpen] = useState<UnifiedBookItem | null>(null);
@@ -1412,9 +1413,9 @@ export default function BookStoreView({
         return false;
       }
 
-      // Search Query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
+      // Search Query (Instant debounced filtering)
+      if (deferredSearchQuery.trim()) {
+        const q = deferredSearchQuery.toLowerCase().trim();
         const matchTitle = book.title.toLowerCase().includes(q);
         const matchCode = book.code.toLowerCase().includes(q);
         const matchSubject = book.subject.toLowerCase().includes(q);
@@ -1432,7 +1433,7 @@ export default function BookStoreView({
       if (sortBy === 'pages') return b.pages - a.pages;
       return b.rating - a.rating;
     });
-  }, [unifiedBooks, selectedStream, searchQuery, favoriteIds, sortBy, offlineBookIds]);
+  }, [unifiedBooks, selectedStream, deferredSearchQuery, favoriteIds, sortBy, offlineBookIds]);
 
   // ---------------------------------------------------------------------------
   // 📖 PURE IN-APP PDF READER MODAL STATE

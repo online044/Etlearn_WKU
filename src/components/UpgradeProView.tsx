@@ -64,7 +64,15 @@ export default function UpgradeProView({
     }
     try {
       const res = await fetchProfileFromSupabase(profile.firebaseUid || profile.id || '', profile.email);
-      if (res && (res.isPro || res.is_pro || res.subscription_status === 'pro')) {
+      const isApprovedByAdmin = Boolean(
+        res &&
+        (res.isPro || res.is_pro || res.subscription_status === 'pro') &&
+        res.pro_status !== 'pending' &&
+        res.proStatus !== 'pending' &&
+        res.subscription_status !== 'pending'
+      );
+
+      if (isApprovedByAdmin) {
         playSuccessChime();
         const upgraded: StudentProfile = {
           ...profile,
@@ -79,7 +87,14 @@ export default function UpgradeProView({
         const serverRes = await fetch(`/api/user/profile?email=${encodeURIComponent(profile.email)}`);
         if (serverRes.ok) {
           const sJson = await serverRes.json();
-          if (sJson.profile && (sJson.profile.isPro || sJson.profile.is_pro || sJson.profile.subscription_status === 'pro')) {
+          const sIsApproved = Boolean(
+            sJson.profile &&
+            (sJson.profile.isPro || sJson.profile.is_pro || sJson.profile.subscription_status === 'pro') &&
+            sJson.profile.pro_status !== 'pending' &&
+            sJson.profile.proStatus !== 'pending' &&
+            sJson.profile.subscription_status !== 'pending'
+          );
+          if (sIsApproved) {
             playSuccessChime();
             const upgraded: StudentProfile = {
               ...profile,
@@ -236,28 +251,27 @@ export default function UpgradeProView({
     
     addPaymentRecordLocal(paymentRecord);
     
-    // Save payment submission details inside student profile
+    // Save payment submission details inside student profile (STRICT: Pro is not granted until admin verifies)
     const updatedProfile: StudentProfile = {
       ...profile,
       tier: selectedTier,
-      isPro: profile.isPro,
-      proStatus: 'pending',
-      subscription_status: profile.subscription_status || 'free',
+      isPro: false, // STRICT: Never grant Pro until admin verifies the payment!
+      proStatus: 'pending', // Awaiting administrator manual review and approval
+      subscription_status: 'pending',
       proPaymentTxn: effectiveTxn,
       proPaymentDate: startDate,
-      proStartDate: startDate,
-      proEndDate: endDate,
+      proStartDate: undefined, // Cleared until admin approves
+      proEndDate: undefined,   // Cleared until admin approves
       senderName: senderName.trim(),
       proPaymentPhone: phoneInput.trim(),
       paymentMethod: paymentMethod,
       proReceiptImage: receiptImage,
       agreedToTerms: true,
       agreedToTermsDate: startDate,
-      purchasedBundles: selectedTier === 'subject_bundle' 
-        ? Array.from(new Set([...(profile.purchasedBundles || []), selectedSubjectBundle]))
-        : profile.purchasedBundles
+      purchasedBundles: profile.purchasedBundles
     };
     
+    safeStorage.setItem('ethiolearn_current_profile', JSON.stringify(updatedProfile));
     onUpdateProfile(updatedProfile);
     setIsSubmitting(false);
     setActiveTab('status');
