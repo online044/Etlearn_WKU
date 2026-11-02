@@ -11,29 +11,44 @@ import {
 } from 'lucide-react';
 
 import { StudentProfile, CustomNote, Flashcard, AITeacherContext, ExamAttemptRecord } from './types';
-import SplashOnboarding from './components/SplashOnboarding';
-import PWADownloadAssistant from './components/PWADownloadAssistant';
-import ExamPrep from './components/ExamPrep';
-import StudyNotesView from './components/StudyNotesView';
 import HomeDashboard from './components/HomeDashboard';
-import StudentProfileView from './components/StudentProfileView';
 import StudentAvatar from './components/StudentAvatar';
-import BookStoreView from './components/BookStoreView';
-import UniversityExamsView from './components/UniversityExamsView';
-import UpgradeProView from './components/UpgradeProView';
 import EthioLearnLogo from './components/EthioLearnLogo';
-import ExamNotesHubView from './components/ExamNotesHubView';
-import InAppViewerModal from './components/InAppViewerModal';
-import AdminDashboardView from './components/AdminDashboardView';
-import ExamEngineView from './components/ExamEngineView';
 import EthioLearnAppPromoBanner from './components/EthioLearnAppPromoBanner';
 import AppSidebar from './components/AppSidebar';
-import LegalPrivacyTermsModal from './components/LegalPrivacyTermsModal';
-import AnnouncementsModal from './components/AnnouncementsModal';
+import PWADownloadAssistant from './components/PWADownloadAssistant';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { TelegramMiniAppHeader } from './components/TelegramMiniAppHeader';
 import AppDrawer from './components/native/AppDrawer';
 import { PWAInstallButton } from './components/PWAInstallButton';
+
+// ⚡ PERFORMANCE OPTIMIZATION: Code-split and lazy-load heavy view components
+const SplashOnboarding = React.lazy(() => import('./components/SplashOnboarding'));
+const ExamPrep = React.lazy(() => import('./components/ExamPrep'));
+const StudyNotesView = React.lazy(() => import('./components/StudyNotesView'));
+const StudentProfileView = React.lazy(() => import('./components/StudentProfileView'));
+const BookStoreView = React.lazy(() => import('./components/BookStoreView'));
+const UniversityExamsView = React.lazy(() => import('./components/UniversityExamsView'));
+const UpgradeProView = React.lazy(() => import('./components/UpgradeProView'));
+const ExamNotesHubView = React.lazy(() => import('./components/ExamNotesHubView'));
+const InAppViewerModal = React.lazy(() => import('./components/InAppViewerModal'));
+const AdminDashboardView = React.lazy(() => import('./components/AdminDashboardView'));
+const ExamEngineView = React.lazy(() => import('./components/ExamEngineView'));
+const LegalPrivacyTermsModal = React.lazy(() => import('./components/LegalPrivacyTermsModal'));
+const AnnouncementsModal = React.lazy(() => import('./components/AnnouncementsModal'));
+
+function PageLoadingSkeleton() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[380px] p-6 space-y-4 animate-pulse select-none">
+      <div className="w-12 h-12 rounded-2xl bg-amber-400/15 border border-amber-400/30 flex items-center justify-center shadow-lg">
+        <div className="w-5 h-5 rounded-full border-2 border-amber-400 border-t-transparent animate-spin" />
+      </div>
+      <p className="text-xs font-bold text-slate-400 font-serif tracking-wider">
+        Loading EthioLearn Study Desk...
+      </p>
+    </div>
+  );
+}
 
 import { 
   testFirestoreConnection, 
@@ -1153,15 +1168,16 @@ export default function App() {
     playClickChime();
   };
 
-  // Fetch curriculum books list from 'books' table in Supabase
+  // Fetch curriculum books list from 'books' table in Supabase (Non-blocking, deduplicated)
   useEffect(() => {
+    let mounted = true;
     async function fetchBooks() {
       // 1. Fetch from server endpoint /api/books (which queries Supabase)
       try {
         const res = await fetch('/api/books');
         if (res.ok) {
           const json = await res.json();
-          if (json.books && Array.isArray(json.books) && json.books.length > 0) {
+          if (json.books && Array.isArray(json.books) && json.books.length > 0 && mounted) {
             setSupabaseBooks(json.books.map((b: any) => ({
               id: b.id,
               title: b.title,
@@ -1172,50 +1188,55 @@ export default function App() {
               pdf_url: b.pdfUrl || b.pdf_url,
               created_at: b.createdAt || b.created_at
             })));
+            return; // Successful fetch: avoid duplicate query
           }
         }
       } catch (err) {
         console.warn('Could not fetch books from /api/books:', err);
       }
 
-      // 2. Also ensure direct client Supabase sync
+      // 2. Direct client Supabase fallback only if /api/books didn't return data
       try {
         await initSupabaseConfig();
         const supaClient = getSupabase();
-        if (supaClient) {
+        if (supaClient && mounted) {
           const { data, error } = await supaClient
             .from('books')
             .select('*')
             .order('title', { ascending: true });
 
-          if (error) {
-            console.warn('Error fetching books list from "books" table in App.tsx:', error);
-          } else if (data && data.length > 0) {
+          if (!error && data && data.length > 0 && mounted) {
             setSupabaseBooks(data);
           }
         }
       } catch (err) {
-        console.error('Failed to coordinate Supabase request in App.tsx:', err);
+        console.warn('Failed to coordinate Supabase fallback in App.tsx:', err);
       }
     }
     fetchBooks();
+    return () => { mounted = false; };
   }, []);
 
-  // Fetch central questions repository from 'questions' table in Supabase
+  // Defer central questions loading until student opens an exam or drill page
   useEffect(() => {
-    async function loadQuestionsFromSupabase() {
+    const isExamPage = ['quiz', 'tutor', 'university', 'examengine', 'examprep'].includes(currentPage);
+    if (!isExamPage) return;
+
+    let mounted = true;
+    async function loadQuestionsOnDemand() {
       try {
         await initSupabaseConfig();
-        const questions = await fetchAllSupabaseQuestions(true);
-        if (questions && questions.length > 0) {
-          console.log(`[App.tsx] Loaded ${questions.length} questions from Supabase questions table`);
+        const questions = await fetchAllSupabaseQuestions(false);
+        if (questions && questions.length > 0 && mounted) {
+          console.log(`[App.tsx] On-demand loaded ${questions.length} questions from Supabase`);
         }
       } catch (err) {
-        console.warn('Could not load questions from Supabase in App.tsx:', err);
+        console.warn('Could not load questions on demand:', err);
       }
     }
-    loadQuestionsFromSupabase();
-  }, []);
+    loadQuestionsOnDemand();
+    return () => { mounted = false; };
+  }, [currentPage]);
 
   const triggerPWAInstall = async () => {
     window.open('https://apkpure.com/p/com.etlearn.app', '_blank', 'noopener,noreferrer');
@@ -1567,10 +1588,12 @@ export default function App() {
 
   if (!profile) {
     return (
-      <SplashOnboarding 
-        onComplete={handleOnboardingComplete} 
-        initialProfile={null} 
-      />
+      <React.Suspense fallback={<PageLoadingSkeleton />}>
+        <SplashOnboarding 
+          onComplete={handleOnboardingComplete} 
+          initialProfile={null} 
+        />
+      </React.Suspense>
     );
   }
 
@@ -1939,138 +1962,140 @@ export default function App() {
         )}
 
         <AnimatePresence mode="wait">
-          <motion.div
-            key={currentPage}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.12 }}
-          >
-            {currentPage === 'home' && (
-              <HomeDashboard 
-                profile={profile}
-                language={language}
-                onNavigate={(page, context) => {
-                  if (context) setAiContext(context);
-                  setCurrentPage(page as any);
-                }}
-                onUpdateGrade={handleUpdateGrade}
-                streakCount={streak}
-                studyHoursCount={studyHours}
-                onOpenSidebar={() => setIsSidebarOpen(true)}
-                onOpenAnnouncements={() => setShowAnnouncementsModal(true)}
-              />
-            )}
+          <React.Suspense fallback={<PageLoadingSkeleton />}>
+            <motion.div
+              key={currentPage}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.12 }}
+            >
+              {currentPage === 'home' && (
+                <HomeDashboard 
+                  profile={profile}
+                  language={language}
+                  onNavigate={(page, context) => {
+                    if (context) setAiContext(context);
+                    setCurrentPage(page as any);
+                  }}
+                  onUpdateGrade={handleUpdateGrade}
+                  streakCount={streak}
+                  studyHoursCount={studyHours}
+                  onOpenSidebar={() => setIsSidebarOpen(true)}
+                  onOpenAnnouncements={() => setShowAnnouncementsModal(true)}
+                />
+              )}
 
-            {currentPage === 'examengine' && (
-              <ExamEngineView 
-                profile={profile}
-                apiKey={profile.claudeApiKey || ""}
-                language={language}
-                onNavigate={(page) => setCurrentPage(page as any)}
-                onOpenAITutorWithContext={(_ctx) => {
-                  playClickChime();
-                  setCurrentPage('quiz');
-                }}
-                onStudyAction={handleRecordStudyAction}
-              />
-            )}
+              {currentPage === 'examengine' && (
+                <ExamEngineView 
+                  profile={profile}
+                  apiKey={profile.claudeApiKey || ""}
+                  language={language}
+                  onNavigate={(page) => setCurrentPage(page as any)}
+                  onOpenAITutorWithContext={(_ctx) => {
+                    playClickChime();
+                    setCurrentPage('quiz');
+                  }}
+                  onStudyAction={handleRecordStudyAction}
+                />
+              )}
 
-            {(currentPage === 'quiz' || currentPage === 'tutor') && (
-              <ExamPrep 
-                apiKey={profile.claudeApiKey || ""}
-                enrolledSubjects={profile.subjects}
-                onStudyAction={handleRecordStudyAction}
-                onNavigateBack={() => setCurrentPage('home')}
-                isPro={Boolean(profile.isPro)}
-                onNavigateToUpgrade={() => setCurrentPage('upgrade')}
-              />
-            )}
+              {(currentPage === 'quiz' || currentPage === 'tutor') && (
+                <ExamPrep 
+                  apiKey={profile.claudeApiKey || ""}
+                  enrolledSubjects={profile.subjects}
+                  onStudyAction={handleRecordStudyAction}
+                  onNavigateBack={() => setCurrentPage('home')}
+                  isPro={Boolean(profile.isPro)}
+                  onNavigateToUpgrade={() => setCurrentPage('upgrade')}
+                />
+              )}
 
-            {currentPage === 'profile' && (
-              <StudentProfileView 
-                profile={profile}
-                language={language}
-                onUpdateProfile={handleUpdateProfile}
-                streakCount={streak}
-                studyHoursCount={studyHours}
-                googleUser={googleUser}
-                onGoogleSignIn={handleGoogleSignIn}
-                onGoogleSignOut={handleGoogleSignOut}
-                isInstallable={isInstallable}
-                triggerPWAInstall={triggerPWAInstall}
-                onSignOut={handleSignOut}
-                onNavigateToUpgrade={() => setCurrentPage('upgrade')}
-                onOpenAdmin={isUserAdmin ? () => setIsAdminOpen(true) : undefined}
-                textSize={textSize}
-                onUpdateTextSize={setTextSize}
-              />
-            )}
+              {currentPage === 'profile' && (
+                <StudentProfileView 
+                  profile={profile}
+                  language={language}
+                  onUpdateProfile={handleUpdateProfile}
+                  streakCount={streak}
+                  studyHoursCount={studyHours}
+                  googleUser={googleUser}
+                  onGoogleSignIn={handleGoogleSignIn}
+                  onGoogleSignOut={handleGoogleSignOut}
+                  isInstallable={isInstallable}
+                  triggerPWAInstall={triggerPWAInstall}
+                  onSignOut={handleSignOut}
+                  onNavigateToUpgrade={() => setCurrentPage('upgrade')}
+                  onOpenAdmin={isUserAdmin ? () => setIsAdminOpen(true) : undefined}
+                  textSize={textSize}
+                  onUpdateTextSize={setTextSize}
+                />
+              )}
 
-            {currentPage === 'notes' && (
-              <StudyNotesView 
-                apiKey={profile.claudeApiKey || ""}
-                customNotes={customNotes}
-                onSaveCustomNotes={handleSaveCustomNotes}
-                enrolledSubjects={profile.subjects}
-                googleUser={googleUser}
-                googleToken={googleToken}
-                onGoogleSignIn={handleGoogleSignIn}
-                onGoogleSignOut={handleGoogleSignOut}
-                decksState={decksState}
-                onSaveDecksState={handleSaveDecksState}
-                onOpenInAppViewer={(url, title) => { setInAppViewerUrl(url); setInAppViewerTitle(title); }}
-                language={language}
-                userId={profile.firebaseUid || profile.email || 'student_wku'}
-              />
-            )}
+              {currentPage === 'notes' && (
+                <StudyNotesView 
+                  apiKey={profile.claudeApiKey || ""}
+                  customNotes={customNotes}
+                  onSaveCustomNotes={handleSaveCustomNotes}
+                  enrolledSubjects={profile.subjects}
+                  googleUser={googleUser}
+                  googleToken={googleToken}
+                  onGoogleSignIn={handleGoogleSignIn}
+                  onGoogleSignOut={handleGoogleSignOut}
+                  decksState={decksState}
+                  onSaveDecksState={handleSaveDecksState}
+                  onOpenInAppViewer={(url, title) => { setInAppViewerUrl(url); setInAppViewerTitle(title); }}
+                  language={language}
+                  userId={profile.firebaseUid || profile.email || 'student_wku'}
+                />
+              )}
 
-            {currentPage === 'bookstore' && (
-              <BookStoreView 
-                profile={profile}
-                apiKey={profile.claudeApiKey || ""}
-                language={language}
-                onNavigate={(p) => setCurrentPage(p as any)}
-                onStudyAction={handleRecordStudyAction}
-                supabaseBooks={supabaseBooks}
-                onOpenInAppViewer={(url, title) => { setInAppViewerUrl(url); setInAppViewerTitle(title); }}
-              />
-            )}
+              {currentPage === 'bookstore' && (
+                <BookStoreView 
+                  profile={profile}
+                  apiKey={profile.claudeApiKey || ""}
+                  language={language}
+                  onNavigate={(p) => setCurrentPage(p as any)}
+                  onStudyAction={handleRecordStudyAction}
+                  supabaseBooks={supabaseBooks}
+                  onOpenInAppViewer={(url, title) => { setInAppViewerUrl(url); setInAppViewerTitle(title); }}
+                />
+              )}
 
-            {currentPage === 'university' && (
-              <UniversityExamsView 
-                profile={profile}
-                apiKey={profile.claudeApiKey || ""}
-                language={language}
-                onNavigate={(p) => setCurrentPage(p as any)}
-                onStudyAction={handleRecordStudyAction}
-                onOpenInAppViewer={(url, title) => { setInAppViewerUrl(url); setInAppViewerTitle(title); }}
-              />
-            )}
+              {currentPage === 'university' && (
+                <UniversityExamsView 
+                  profile={profile}
+                  apiKey={profile.claudeApiKey || ""}
+                  language={language}
+                  onNavigate={(p) => setCurrentPage(p as any)}
+                  onStudyAction={handleRecordStudyAction}
+                  onOpenInAppViewer={(url, title) => { setInAppViewerUrl(url); setInAppViewerTitle(title); }}
+                />
+              )}
 
-            {currentPage === 'upgrade' && (
-              <UpgradeProView 
-                profile={profile}
-                language={language}
-                onUpdateProfile={handleUpdateProfile}
-                onClose={() => setCurrentPage('home')}
-                onRequireAuth={() => {
-                  playClickChime();
-                  safeStorage.removeItem('ethiolearn_current_profile');
-                  safeStorage.removeItem('ethiolearn_active_email');
-                  setProfile(null);
-                }}
-                onGoogleSignIn={handleDirectGoogleSignIn}
-              />
-            )}
+              {currentPage === 'upgrade' && (
+                <UpgradeProView 
+                  profile={profile}
+                  language={language}
+                  onUpdateProfile={handleUpdateProfile}
+                  onClose={() => setCurrentPage('home')}
+                  onRequireAuth={() => {
+                    playClickChime();
+                    safeStorage.removeItem('ethiolearn_current_profile');
+                    safeStorage.removeItem('ethiolearn_active_email');
+                    setProfile(null);
+                  }}
+                  onGoogleSignIn={handleDirectGoogleSignIn}
+                />
+              )}
 
-            {currentPage === 'examprep' && (
-              <ExamNotesHubView 
-                language={language}
-                onClose={() => setCurrentPage('home')}
-              />
-            )}
-          </motion.div>
+              {currentPage === 'examprep' && (
+                <ExamNotesHubView 
+                  language={language}
+                  onClose={() => setCurrentPage('home')}
+                />
+              )}
+            </motion.div>
+          </React.Suspense>
         </AnimatePresence>
       </main>
 
@@ -2262,24 +2287,28 @@ export default function App() {
 
       {/* Global In-App Document & Web Viewer Modal Overlay */}
       {inAppViewerUrl && (
-        <InAppViewerModal
-          url={inAppViewerUrl}
-          title={inAppViewerTitle}
-          onClose={() => {
-            setInAppViewerUrl(null);
-            setInAppViewerTitle('');
-          }}
-        />
+        <React.Suspense fallback={null}>
+          <InAppViewerModal
+            url={inAppViewerUrl}
+            title={inAppViewerTitle}
+            onClose={() => {
+              setInAppViewerUrl(null);
+              setInAppViewerTitle('');
+            }}
+          />
+        </React.Suspense>
       )}
 
       {/* Admin Control Dashboard Modal Overlay - Strictly restricted to verified admin */}
       {isUserAdmin && isAdminOpen && (
-        <AdminDashboardView
-          currentProfile={profile}
-          language={language}
-          onClose={() => setIsAdminOpen(false)}
-          onUpdateProfile={handleUpdateProfile}
-        />
+        <React.Suspense fallback={null}>
+          <AdminDashboardView
+            currentProfile={profile}
+            language={language}
+            onClose={() => setIsAdminOpen(false)}
+            onUpdateProfile={handleUpdateProfile}
+          />
+        </React.Suspense>
       )}
 
       {/* 📱 Slide-over App Sidebar with Phone, Email, Telegram & App Details */}
@@ -2310,25 +2339,33 @@ export default function App() {
       />
 
       {/* 📜 Legal, Privacy & About EthioLearn Modal */}
-      <LegalPrivacyTermsModal
-        isOpen={showLegalModal}
-        onClose={() => setShowLegalModal(false)}
-        language={language}
-        initialTab={legalModalTab}
-        onAcceptAndClose={() => setShowLegalModal(false)}
-      />
+      {showLegalModal && (
+        <React.Suspense fallback={null}>
+          <LegalPrivacyTermsModal
+            isOpen={showLegalModal}
+            onClose={() => setShowLegalModal(false)}
+            language={language}
+            initialTab={legalModalTab}
+            onAcceptAndClose={() => setShowLegalModal(false)}
+          />
+        </React.Suspense>
+      )}
 
       {/* 📢 Official Campus Announcements & Bulletin Board Modal */}
-      <AnnouncementsModal
-        isOpen={showAnnouncementsModal}
-        onClose={() => setShowAnnouncementsModal(false)}
-        language={language}
-        onNavigate={(page) => setCurrentPage(page as any)}
-        isAdmin={isUserAdmin}
-        onOpenAdminAnnouncements={isUserAdmin ? () => {
-          setIsAdminOpen(true);
-        } : undefined}
-      />
+      {showAnnouncementsModal && (
+        <React.Suspense fallback={null}>
+          <AnnouncementsModal
+            isOpen={showAnnouncementsModal}
+            onClose={() => setShowAnnouncementsModal(false)}
+            language={language}
+            onNavigate={(page) => setCurrentPage(page as any)}
+            isAdmin={isUserAdmin}
+            onOpenAdminAnnouncements={isUserAdmin ? () => {
+              setIsAdminOpen(true);
+            } : undefined}
+          />
+        </React.Suspense>
+      )}
 
       {/* 📶 PWA Offline Indicator Pill with Download Manager */}
       <OfflineIndicator 

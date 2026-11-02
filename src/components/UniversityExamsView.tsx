@@ -25,6 +25,7 @@ import { getBuiltinAuthenticExamSheets } from '../data/authenticExamSheets';
 import ExamBrowserView from './ExamBrowserView';
 import FocusedQuestionView from './FocusedQuestionView';
 import ExamDetailView from './ExamDetailView';
+import { enqueueOfflineProgress, getOfflineStorageOverview } from '../utils/offlineManager';
 
 export interface ExamQuestion {
   id: number;
@@ -182,6 +183,35 @@ export default function UniversityExamsView({
     } catch {}
     return merged;
   });
+
+  // Sync with IndexedDB offline store so downloaded exams appear instantly even when offline
+  useEffect(() => {
+    let mounted = true;
+    getOfflineStorageOverview().then(ov => {
+      if (mounted && ov.exams && ov.exams.length > 0) {
+        setExamSheets(prev => {
+          const map = new Map<string, ExamPaperSheet>();
+          prev.forEach(s => map.set(s.id, s));
+          ov.exams.forEach(e => {
+            if (!map.has(e.id)) {
+              map.set(e.id, {
+                id: e.id,
+                title: e.title,
+                university: e.university || 'Ethiopian Universities',
+                year: e.examYear || '2016 E.C.',
+                subject: e.subject || 'General Studies',
+                durationMinutes: 45,
+                questions: e.questions || []
+              });
+            }
+          });
+          return Array.from(map.values());
+        });
+      }
+    }).catch(() => {});
+    return () => { mounted = false; };
+  }, []);
+
   const [selectedSheetId, setSelectedSheetId] = useState<string>(() => {
     return UNIVERSITY_SHEETS[0]?.id || 'wku_math_1011';
   });
@@ -1030,6 +1060,22 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
       timeTakenSeconds: Math.max(10, timeTaken)
     });
     setSimulationActive(false);
+
+    // Safely record offline exam attempt in IndexedDB queue for automatic Supabase sync
+    if (profile?.email) {
+      enqueueOfflineProgress(profile.email, 'exam_attempt', {
+        id: `sim_${Date.now()}_${activeSheet.id}`,
+        sheetId: activeSheet.id,
+        sheetTitle: activeSheet.title,
+        subject: activeSheet.subject,
+        score: pct,
+        correctCount: correct,
+        totalCount: total,
+        durationSeconds: Math.max(10, timeTaken),
+        timestamp: new Date().toISOString()
+      }).catch(err => console.warn('[Offline Progress Queue]:', err));
+    }
+
     onStudyAction();
   };
 

@@ -763,13 +763,22 @@ export async function syncOfflineProgressWithSupabase(
       });
 
       // 2. Perform safe non-destructive upsert
-      const updatePayload = {
+      const updatePayload: Record<string, any> = {
         email,
         study_sessions: newSessions,
         notes_data: newNotes,
         performance_data: newPerf,
         updated_at: new Date().toISOString()
       };
+
+      if (existingRow) {
+        if (existingRow.name) updatePayload.name = existingRow.name;
+        if (existingRow.university) updatePayload.university = existingRow.university;
+        if (existingRow.year) updatePayload.year = existingRow.year;
+        if (existingRow.profile_data) updatePayload.profile_data = existingRow.profile_data;
+        if (existingRow.is_pro !== undefined) updatePayload.is_pro = existingRow.is_pro;
+        if (existingRow.pro_status) updatePayload.pro_status = existingRow.pro_status;
+      }
 
       const { error: upsertErr } = await supa
         .from('student_profiles')

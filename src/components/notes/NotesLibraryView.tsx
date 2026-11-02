@@ -88,6 +88,24 @@ export const NotesLibraryView: React.FC<NotesLibraryViewProps> = ({
 
   useEffect(() => {
     loadLibraryData();
+
+    const handleLibraryUpdated = () => {
+      // Reload updated notes and chapters silently in background
+      Promise.all([
+        notesRepository.fetchSubjects(),
+        notesRepository.fetchChapters(),
+        notesRepository.fetchNotesList()
+      ]).then(([s, c, n]) => {
+        setSubjects(s);
+        setChapters(c);
+        setNotes(n);
+      }).catch(() => {});
+    };
+
+    window.addEventListener('ethiolearn:notes-library-updated', handleLibraryUpdated);
+    return () => {
+      window.removeEventListener('ethiolearn:notes-library-updated', handleLibraryUpdated);
+    };
   }, [userId]);
 
   // Handle Ultra-Fast Debounced Search using instant local lookup + search_notes RPC
@@ -161,91 +179,108 @@ export const NotesLibraryView: React.FC<NotesLibraryViewProps> = ({
     return map;
   }, [chapters]);
 
-  // Helper to accurately resolve which subject a note belongs to
+  // Helper to accurately resolve which subject a note belongs to with strict isolation
   const resolveNoteSubject = useMemo(() => {
     return (note: NoteListItem): Subject | undefined => {
-      // 0. Direct match from note's subject_id, subject, or course field from Supabase
       const noteObj = note as any;
       const directKey = note.subject_id || noteObj.subject || noteObj.course;
-      if (directKey) {
-        const canonicalKey = canonicalSubjectId(directKey);
-        const sub = subjectMap.get(directKey) || subjectMap.get(canonicalKey);
-        if (sub) return sub;
+      const noteTitle = (note.title || '').toLowerCase();
+      const ch = chapterMap.get(note.chapter_id);
+      const chTitle = (ch?.title || '').toLowerCase();
+      const contentSnippet = (noteObj.content || '').slice(0, 500).toLowerCase();
+      const combinedText = `${noteTitle} ${chTitle} ${directKey || ''} ${contentSnippet}`;
+
+      // 1. ANTHROPOLOGY ISOLATION: Check Anthropology FIRST to prevent any misattribution to Biology
+      if (
+        combinedText.includes('anthro') ||
+        combinedText.includes('ethnograph') ||
+        combinedText.includes('kinship') ||
+        combinedText.includes('marriage rules') ||
+        combinedText.includes('customary system') ||
+        canonicalSubjectId(ch?.subject_id) === 'subj_social_anthropology' ||
+        canonicalSubjectId(directKey) === 'subj_social_anthropology'
+      ) {
+        const anthroSub = subjects.find(s => canonicalSubjectId(s.id) === 'subj_social_anthropology' || s.name.toLowerCase().includes('anthro'));
+        if (anthroSub) return anthroSub;
       }
 
-      // 1. Direct match through chapter
-      const ch = chapterMap.get(note.chapter_id);
+      // 2. CHEMISTRY ISOLATION: Chemistry must only match Chemistry
+      if (
+        combinedText.includes('chem 1011') ||
+        combinedText.includes('atomic structure') ||
+        combinedText.includes('chemical bonding') ||
+        combinedText.includes('periodic table') ||
+        combinedText.includes('electronegativ') ||
+        canonicalSubjectId(ch?.subject_id) === 'subj_general_chemistry' ||
+        canonicalSubjectId(directKey) === 'subj_general_chemistry'
+      ) {
+        const chemSub = subjects.find(s => canonicalSubjectId(s.id) === 'subj_general_chemistry' || s.name.toLowerCase().includes('chem'));
+        if (chemSub) return chemSub;
+      }
+
+      // 3. PHYSICS ISOLATION: Physics must only match Physics
+      if (
+        combinedText.includes('phys 1011') ||
+        combinedText.includes('general physics') ||
+        combinedText.includes('kinematic') ||
+        combinedText.includes("newton's") ||
+        combinedText.includes('vector') ||
+        canonicalSubjectId(ch?.subject_id) === 'subj_general_physics' ||
+        canonicalSubjectId(directKey) === 'subj_general_physics'
+      ) {
+        const physSub = subjects.find(s => canonicalSubjectId(s.id) === 'subj_general_physics' || s.name.toLowerCase().includes('phys'));
+        if (physSub) return physSub;
+      }
+
+      // 4. CRITICAL THINKING / LOGIC
+      if (
+        combinedText.includes('phil 1011') ||
+        combinedText.includes('critical thinking') ||
+        combinedText.includes('syllogism') ||
+        combinedText.includes('fallac') ||
+        combinedText.includes('logic and argument') ||
+        canonicalSubjectId(ch?.subject_id) === 'subj_critical_thinking' ||
+        canonicalSubjectId(directKey) === 'subj_critical_thinking'
+      ) {
+        const sampleSub = subjects.find(s => canonicalSubjectId(s.id) === 'subj_critical_thinking' || s.name.toLowerCase().includes('logic') || s.name.toLowerCase().includes('critical'));
+        if (sampleSub) return sampleSub;
+      }
+
+      // 5. BIOLOGY ISOLATION: Biology must strictly contain biology concepts and NEVER anthropology/chemistry/physics
+      if (
+        (combinedText.includes('biol 1011') ||
+         combinedText.includes('general biology') ||
+         combinedText.includes('cellular basis of life') ||
+         combinedText.includes('cellular respiration') ||
+         combinedText.includes('photosynthesis') ||
+         combinedText.includes('biomolecule') ||
+         combinedText.includes('mitosis') ||
+         combinedText.includes('genetics') ||
+         canonicalSubjectId(ch?.subject_id) === 'subj_general_biology' ||
+         canonicalSubjectId(directKey) === 'subj_general_biology') &&
+        !combinedText.includes('anthro') &&
+        !combinedText.includes('ethnograph') &&
+        !combinedText.includes('chem') &&
+        !combinedText.includes('phys')
+      ) {
+        const bioSub = subjects.find(s => canonicalSubjectId(s.id) === 'subj_general_biology' || s.name.toLowerCase().includes('bio'));
+        if (bioSub) return bioSub;
+      }
+
+      // 6. Direct chapter match (fallback for any other subjects)
       if (ch?.subject_id) {
         const canonicalKey = canonicalSubjectId(ch.subject_id);
         const sub = subjectMap.get(ch.subject_id) || subjectMap.get(canonicalKey);
         if (sub) return sub;
       }
 
-      // 2. Comprehensive keyword matching across note title, chapter_id, subject, and content snippet
-      const noteText = `${note.title || ''} ${note.chapter_id || ''} ${noteObj.subject || ''} ${noteObj.course || ''} ${(noteObj.content || '').slice(0, 400)}`.toLowerCase();
-
-      // Check Anthropology FIRST to prevent phrases like 'biological anthropology' or 'cultural life' from matching Biology
-      if (
-        noteText.includes('anthro') ||
-        noteText.includes('ethnograph') ||
-        noteText.includes('kinship') ||
-        noteText.includes('ethnicity') ||
-        noteText.includes('marriage rules')
-      ) {
-        const anthroSub = subjects.find(s => canonicalSubjectId(s.id) === 'subj_social_anthropology' || s.name.toLowerCase().includes('anthro'));
-        if (anthroSub) return anthroSub;
+      // 7. Direct key match (fallback)
+      if (directKey) {
+        const canonicalKey = canonicalSubjectId(directKey);
+        const sub = subjectMap.get(directKey) || subjectMap.get(canonicalKey);
+        if (sub) return sub;
       }
 
-      for (const sub of subjects) {
-        const sCanon = canonicalSubjectId(sub.id);
-        const sName = sub.name.toLowerCase();
-
-        if (
-          (sCanon === 'subj_general_biology' || sName.includes('biology')) &&
-          !noteText.includes('anthro') &&
-          !noteText.includes('ethnograph') &&
-          (noteText.includes('biology') || noteText.includes('cell') || noteText.includes('genet') || noteText.includes('biomolecule') || noteText.includes('photosynth') || noteText.includes('enzyme') || noteText.includes('mitosis') || noteText.includes('meiosis') || noteText.includes('dna'))
-        ) return sub;
-
-        if (
-          (sCanon === 'subj_general_chemistry' || sName.includes('chem')) &&
-          (noteText.includes('chem') || noteText.includes('atom') || noteText.includes('orbital') || noteText.includes('period') || noteText.includes('bond') || noteText.includes('electronegativ'))
-        ) return sub;
-
-        if (
-          (sCanon === 'subj_critical_thinking' || sName.includes('logic') || sName.includes('critical') || sName.includes('phil')) &&
-          (noteText.includes('logic') || noteText.includes('argument') || noteText.includes('fallac') || noteText.includes('phil') || noteText.includes('premise') || noteText.includes('syllogism') || noteText.includes('soundness'))
-        ) return sub;
-
-        if (
-          (sCanon === 'subj_general_physics' || sName.includes('phys') || sName.includes('physics')) &&
-          (noteText.includes('phys') || noteText.includes('vector') || noteText.includes('kinematic') || noteText.includes('newton') || noteText.includes('mechanic') || noteText.includes('motion'))
-        ) return sub;
-
-        if (
-          (sCanon === 'subj_emerging_technologies' || sName.includes('tech') || sName.includes('emerging') || sName.includes('emte')) &&
-          (noteText.includes('tech') || noteText.includes('emte') || noteText.includes('ai') || noteText.includes('iot') || noteText.includes('4ir') || noteText.includes('cyber') || noteText.includes('data'))
-        ) return sub;
-
-        if (
-          (sCanon === 'subj_math_natural' || sName.includes('math')) &&
-          (noteText.includes('math') || noteText.includes('proposition') || noteText.includes('quantifier') || noteText.includes('truth table') || noteText.includes('precalculus'))
-        ) return sub;
-
-        if (
-          (sCanon === 'subj_economics' || sName.includes('econ')) &&
-          (noteText.includes('econ') || noteText.includes('market') || noteText.includes('scarcity') || noteText.includes('opportunity') || noteText.includes('elasticity') || noteText.includes('supply'))
-        ) return sub;
-      }
-
-      // 3. Fallback: match by chapter's or direct key's canonical subject
-      const fallbackKey = directKey || ch?.subject_id;
-      if (fallbackKey) {
-        const fallback = subjects.find(s => canonicalSubjectId(s.id) === canonicalSubjectId(fallbackKey));
-        if (fallback) return fallback;
-      }
-
-      // 4. Return undefined when no subject matches, ensuring Biology only shows Biology notes
       return undefined;
     };
   }, [chapterMap, subjectMap, subjects]);

@@ -3166,14 +3166,14 @@ export default function BookStoreView({
                       /* 2. Professional PDF.js Full-bleed Vector Reader */
                       <div className="flex-1 w-full h-full min-h-0 relative flex flex-col">
                         <MobilePdfReader
-                          fileUrl={`/api/books/download-pdf?id=${encodeURIComponent(activePdfBook.id)}&url=${encodeURIComponent(activePdfBook.pdfUrl || activePdfBook.downloadUrl || '')}`}
+                          fileUrl={activePdfBook.pdfUrl || activePdfBook.downloadUrl || `/api/books/download-pdf?id=${encodeURIComponent(activePdfBook.id)}&url=${encodeURIComponent(activePdfBook.pdfUrl || activePdfBook.downloadUrl || '')}`}
                           title={activePdfBook.title}
                           courseCode={activePdfBook.code}
                           initialTotalPages={activePdfBook.pages}
                           theme={readerTheme}
                           language={language}
                           isOffline={false}
-                          externalUrl={activePdfBook.pdfUrl}
+                          externalUrl={activePdfBook.pdfUrl || activePdfBook.downloadUrl}
                           onClose={handleCloseBook}
                         />
 

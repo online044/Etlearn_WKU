@@ -3,14 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Search, Sliders, Zap, Bookmark, CheckCircle2,
   Clock, FileText, X, PlusCircle,
-  Building2, ArrowRight
+  Building2, ArrowRight, Download, Check
 } from 'lucide-react';
 import { ExamPaperSheet } from '../types';
-import { playClickChime } from '../utils/audio';
+import { playClickChime, playSuccessChime } from '../utils/audio';
+import { saveExamOffline, isExamDownloaded } from '../utils/offlineManager';
 
 export interface ExamBrowserViewProps {
   filteredSheets: ExamPaperSheet[];
@@ -78,9 +79,25 @@ export default function ExamBrowserView({
   language,
 }: ExamBrowserViewProps) {
   const [showFilters, setShowFilters] = useState(false);
+  const [downloadedExamIds, setDownloadedExamIds] = useState<Set<string>>(new Set());
+  const [downloadingExamId, setDownloadingExamId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    Promise.all(filteredSheets.map(s => isExamDownloaded(s.id))).then(results => {
+      if (mounted) {
+        const set = new Set<string>();
+        results.forEach((isDl, idx) => {
+          if (isDl && filteredSheets[idx]) set.add(filteredSheets[idx].id);
+        });
+        setDownloadedExamIds(set);
+      }
+    });
+    return () => { mounted = false; };
+  }, [filteredSheets]);
 
   const hasActiveFilters = 
-    searchQuery || 
+    Boolean(searchQuery) || 
     selectedUniversity !== 'all' || 
     selectedSubject !== 'all' || 
     selectedYear !== 'all' || 
@@ -360,16 +377,52 @@ export default function ExamBrowserView({
                     </span>
                   </div>
 
-                  <button
-                    onClick={() => {
-                      playClickChime();
-                      onOpenExam(sheet.id);
-                    }}
-                    className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs sm:text-sm uppercase tracking-wider rounded-xl transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
-                  >
-                    <span>{language === 'am' ? 'ፈተናውን ክፈትና አጥና' : 'Open Exam & Study'}</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={downloadingExamId === sheet.id}
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        playClickChime();
+                        setDownloadingExamId(sheet.id);
+                        await saveExamOffline({
+                          id: sheet.id,
+                          title: sheet.title,
+                          subject: sheet.subject,
+                          university: sheet.university,
+                          course: sheet.department || sheet.subject,
+                          examYear: sheet.year,
+                          questions: sheet.questions
+                        });
+                        setDownloadedExamIds(prev => new Set([...prev, sheet.id]));
+                        setDownloadingExamId(null);
+                        playSuccessChime();
+                      }}
+                      className={`p-2.5 rounded-xl border transition flex items-center justify-center cursor-pointer shrink-0 ${
+                        downloadedExamIds.has(sheet.id)
+                          ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                          : 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-white'
+                      }`}
+                      title={downloadedExamIds.has(sheet.id) ? (language === 'am' ? 'ወርዷል (ያለ ዳታ ይሰራል)' : 'Downloaded (Offline Ready)') : (language === 'am' ? 'ያለ ዳታ ለማጥናት አውርድ' : 'Download for Offline Study')}
+                    >
+                      {downloadedExamIds.has(sheet.id) ? (
+                        <Check className="w-4 h-4 text-emerald-400 stroke-[2.5]" />
+                      ) : (
+                        <Download className={`w-4 h-4 ${downloadingExamId === sheet.id ? 'animate-bounce text-amber-400' : 'text-slate-300 hover:text-amber-400'}`} />
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        playClickChime();
+                        onOpenExam(sheet.id);
+                      }}
+                      className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs sm:text-sm uppercase tracking-wider rounded-xl transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                    >
+                      <span>{language === 'am' ? 'ፈተናውን ክፈትና አጥና' : 'Open Exam & Study'}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             );

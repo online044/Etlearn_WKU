@@ -173,11 +173,11 @@ export default defineConfig(() => {
               },
             },
             {
-              // General non-sensitive read APIs (excludes auth, admin, and payment APIs)
-              urlPattern: /^\/api\/(?!admin|auth|verify-payment|sync-master-key).*/i,
+              // Public content read APIs ONLY (never caches student profiles, auth tokens, payments, or private endpoints)
+              urlPattern: /^\/api\/(?:books|exams|announcements|health).*/i,
               handler: 'NetworkFirst',
               options: {
-                cacheName: 'api-read-cache',
+                cacheName: 'api-public-content-cache',
                 networkTimeoutSeconds: 3,
                 expiration: {
                   maxEntries: 50,
@@ -201,6 +201,25 @@ export default defineConfig(() => {
         '@': path.resolve(__dirname, './src'),
       },
       dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
+    },
+    build: {
+      target: 'esnext',
+      sourcemap: false,
+      chunkSizeWarningLimit: 1200,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('pdfjs-dist')) return 'vendor-pdf';
+              if (id.includes('firebase')) return 'vendor-firebase';
+              if (id.includes('@supabase')) return 'vendor-supabase';
+              if (id.includes('motion')) return 'vendor-motion';
+              if (id.includes('lucide-react')) return 'vendor-icons';
+              if (id.includes('react') || id.includes('scheduler')) return 'vendor-react';
+            }
+          }
+        }
+      }
     },
     server: {
       hmr: false,

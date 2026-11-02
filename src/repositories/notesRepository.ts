@@ -80,25 +80,29 @@ export const LEGACY_SUBJECT_ID_MAP: Record<string, string> = {
 };
 
 export function canonicalSubjectId(idOrName?: string | null): string {
-  if (!idOrName) return BIO_SUBJECT_ID;
+  if (!idOrName || !idOrName.trim()) return '';
   if (LEGACY_SUBJECT_ID_MAP[idOrName]) return LEGACY_SUBJECT_ID_MAP[idOrName];
   const s = idOrName.toLowerCase().trim();
 
   // Check Anthropology explicitly first so 'biological anthropology' or 'cultural' doesn't misroute to Biology
-  if (s.includes('anthro') || s.includes('anthropology') || s.includes('anth 1012') || s === 'anthro' || s === 'anth') {
+  if (s.includes('anthro') || s.includes('anthropology') || s.includes('anth 1012') || s === 'anthro' || s === 'anth' || s.includes('social anthropology')) {
     return ANTHRO_SUBJECT_ID;
   }
-  if (s.includes('bio') || s.includes('biol')) {
-    return BIO_SUBJECT_ID;
-  }
-  if (s.includes('chem')) {
+  // Chemistry
+  if (s.includes('chem') || s.includes('chemistry') || s.includes('chem 1011')) {
     return CHEM_SUBJECT_ID;
   }
-  if (s.includes('logic') || s.includes('critical') || s.includes('phil') || s.includes('philosophy')) {
+  // Physics
+  if (s.includes('phys') || s.includes('physics') || s.includes('phys 1011')) {
+    return PHYS_SUBJECT_ID;
+  }
+  // Logic & Critical Thinking
+  if (s.includes('logic') || s.includes('critical') || s.includes('phil') || s.includes('philosophy') || s.includes('phil 1011')) {
     return SAMPLE_SUBJECT_ID;
   }
-  if (s.includes('phys')) {
-    return PHYS_SUBJECT_ID;
+  // Biology strictly requires biology tokens and must NOT contain anthropology
+  if ((s.includes('bio') || s.includes('biol') || s.includes('biology') || s.includes('biol 1011')) && !s.includes('anthro')) {
+    return BIO_SUBJECT_ID;
   }
   if (s.includes('tech') || s.includes('emerging') || s.includes('emte')) {
     return TECH_SUBJECT_ID;
@@ -898,13 +902,31 @@ export class NotesRepository {
 
       const { data, error } = await query.order('sort_order', { ascending: true });
       if (!error && data && data.length > 0) {
-        const formatted: Chapter[] = data.map((c: any, idx: number) => ({
-          id: String(c.id),
-          subject_id: canonicalSubjectId(c.subject_id),
-          title: c.title || 'Untitled Chapter',
-          sort_order: typeof c.sort_order === 'number' ? c.sort_order : idx + 1
-        }));
+        const formatted: Chapter[] = data.map((c: any, idx: number) => {
+          let resolvedSubId = canonicalSubjectId(c.subject_id);
+          const titleLower = (c.title || '').toLowerCase();
+          if (titleLower.includes('anthro') || titleLower.includes('ethnograph') || titleLower.includes('kinship') || titleLower.includes('marriage rules')) {
+            resolvedSubId = ANTHRO_SUBJECT_ID;
+          } else if (titleLower.includes('chem') || titleLower.includes('periodic') || titleLower.includes('bonding')) {
+            resolvedSubId = CHEM_SUBJECT_ID;
+          } else if (titleLower.includes('phys') || titleLower.includes('kinematic') || titleLower.includes('newton') || titleLower.includes('vector')) {
+            resolvedSubId = PHYS_SUBJECT_ID;
+          } else if ((titleLower.includes('bio') || titleLower.includes('cell') || titleLower.includes('genetics')) && !titleLower.includes('anthro')) {
+            resolvedSubId = BIO_SUBJECT_ID;
+          } else if (titleLower.includes('logic') || titleLower.includes('argument') || titleLower.includes('fallac') || titleLower.includes('syllogism')) {
+            resolvedSubId = SAMPLE_SUBJECT_ID;
+          }
+          return {
+            id: String(c.id),
+            subject_id: resolvedSubId || c.subject_id || '',
+            title: c.title || 'Untitled Chapter',
+            sort_order: typeof c.sort_order === 'number' ? c.sort_order : idx + 1
+          };
+        });
         cacheChaptersLocally(formatted);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('ethiolearn:notes-library-updated'));
+        }
       }
     } catch {}
   }
@@ -928,40 +950,19 @@ export class NotesRepository {
   /**
    * Background revalidation for notes list without blocking UI
    */
-  private backgroundRevalidateNotesList(chapterId?: string) {
+  private async backgroundRevalidateNotesList(chapterId?: string) {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
     const supabase = getSupabase();
     if (!supabase) return;
 
-    Promise.allSettled([
-      supabase.from('notes_list').select('*'),
-      supabase.from('notes').select('*')
-    ]).then(([listRes, notesRes]) => {
-      let rawList: any[] = [];
-      let rawNotes: any[] = [];
-      if (listRes.status === 'fulfilled' && !listRes.value.error && listRes.value.data) {
-        rawList = listRes.value.data;
-      }
-      if (notesRes.status === 'fulfilled' && !notesRes.value.error && notesRes.value.data) {
-        rawNotes = notesRes.value.data;
-      }
+    try {
+      const notesRes = await supabase
+        .from('notes')
+        .select('*')
+        .order('sort_order', { ascending: true });
 
-      const combinedMap = new Map<string, any>();
-      for (const item of rawList) {
-        const id = String(item.id || item.note_id || item.uuid || '');
-        if (id) combinedMap.set(id, { ...item, id });
-      }
-      for (const item of rawNotes) {
-        const id = String(item.id || item.note_id || item.uuid || '');
-        if (id) {
-          const existing = combinedMap.get(id) || {};
-          combinedMap.set(id, { ...existing, ...item, id });
-        }
-      }
-
-      const mergedData = Array.from(combinedMap.values());
-      if (mergedData.length > 0) {
-        const formatted: NoteListItem[] = mergedData.map((n: any, idx: number) => {
+      if (!notesRes.error && notesRes.data && notesRes.data.length > 0) {
+        const formatted: NoteListItem[] = notesRes.data.map((n: any, idx: number) => {
           const contentStr = n.content || n.body || n.text || '';
           const rawReadTime = typeof n.read_time_min === 'number'
             ? n.read_time_min
@@ -982,8 +983,11 @@ export class NotesRepository {
         });
         formatted.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || (a.title || '').localeCompare(b.title || '', undefined, { numeric: true, sensitivity: 'base' }));
         cacheNotesListLocally(formatted);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('ethiolearn:notes-library-updated'));
+        }
       }
-    }).catch(() => {});
+    } catch {}
   }
 
   /**
@@ -1037,25 +1041,23 @@ export class NotesRepository {
   /**
    * Background revalidation for a single note
    */
-  private backgroundRevalidateNote(noteId: string) {
+  private async backgroundRevalidateNote(noteId: string) {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(noteId);
+    if (!isUUID) return;
+
     const supabase = getSupabase();
     if (!supabase) return;
 
-    Promise.allSettled([
-      supabase.from('notes').select('*').or(`id.eq.${noteId},note_id.eq.${noteId}`),
-      supabase.from('notes_list').select('*').or(`id.eq.${noteId},note_id.eq.${noteId}`)
-    ]).then(([notesRes, listRes]) => {
-      let noteObj: any = {};
-      if (notesRes.status === 'fulfilled' && !notesRes.value.error && notesRes.value.data?.[0]) {
-        noteObj = { ...notesRes.value.data[0] };
-      }
-      if (listRes.status === 'fulfilled' && !listRes.value.error && listRes.value.data?.[0]) {
-        noteObj = { ...listRes.value.data[0], ...noteObj };
-      }
+    try {
+      const { data: noteObj, error } = await supabase
+        .from('notes')
+        .select('*')
+        .eq('id', noteId)
+        .maybeSingle();
 
-      if (noteObj && (noteObj.id || noteObj.note_id)) {
-        const id = String(noteObj.id || noteObj.note_id || noteId);
+      if (!error && noteObj && noteObj.id) {
+        const id = String(noteObj.id);
         const content = String(noteObj.content || noteObj.body || noteObj.text || '');
         if (content) {
           const formattedNote: Note = {
@@ -1077,7 +1079,7 @@ export class NotesRepository {
           cacheFullNoteLocally(formattedNote);
         }
       }
-    }).catch(() => {});
+    } catch {}
   }
 
   /**
@@ -1099,25 +1101,23 @@ export class NotesRepository {
       return seed;
     }
 
-    // 3. Fallback: Network fetch if missing from cache
+    // 3. Fallback: Network fetch if missing from cache and valid UUID
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(noteId);
+    if (!isUUID) {
+      return null;
+    }
+
     const supabase = getSupabase();
     if (supabase) {
       try {
-        const [notesRes, listRes] = await Promise.allSettled([
-          supabase.from('notes').select('*').or(`id.eq.${noteId},note_id.eq.${noteId}`),
-          supabase.from('notes_list').select('*').or(`id.eq.${noteId},note_id.eq.${noteId}`)
-        ]);
+        const { data: noteObj, error } = await supabase
+          .from('notes')
+          .select('*')
+          .eq('id', noteId)
+          .maybeSingle();
 
-        let noteObj: any = {};
-        if (notesRes.status === 'fulfilled' && !notesRes.value.error && notesRes.value.data?.[0]) {
-          noteObj = { ...notesRes.value.data[0] };
-        }
-        if (listRes.status === 'fulfilled' && !listRes.value.error && listRes.value.data?.[0]) {
-          noteObj = { ...listRes.value.data[0], ...noteObj };
-        }
-
-        if (noteObj && (noteObj.id || noteObj.note_id)) {
-          const id = String(noteObj.id || noteObj.note_id || noteId);
+        if (!error && noteObj && noteObj.id) {
+          const id = String(noteObj.id);
           const content = String(noteObj.content || noteObj.body || noteObj.text || '');
           const formattedNote: Note = {
             id,

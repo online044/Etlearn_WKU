@@ -29,6 +29,7 @@ import DOMPurify from 'dompurify';
 import { NotesLibraryView } from './notes/NotesLibraryView';
 import { NoteReaderView } from './notes/NoteReaderView';
 import { canonicalSubjectId } from '../repositories/notesRepository';
+import { saveNoteOffline, deleteDownloadedNote } from '../utils/offlineManager';
 
 interface StudyNotesViewProps {
   apiKey?: string;
@@ -360,6 +361,14 @@ export default function StudyNotesView({
       onSaveCustomNotes([newNote, ...customNotes]);
     }
 
+    // Persist note into IndexedDB offline store for instant offline access
+    saveNoteOffline({
+      id: newNote.id,
+      title: newNote.title,
+      subject: newNote.subject,
+      content: newNote.content
+    }).catch(err => console.warn('[Offline Notes Save]:', err));
+
     setIsSavedToast(true);
     setTimeout(() => setIsSavedToast(false), 2500);
     playSuccessChime();
@@ -372,6 +381,7 @@ export default function StudyNotesView({
       playClickChime();
       const updated = customNotes.filter(n => n.id !== id);
       onSaveCustomNotes(updated);
+      deleteDownloadedNote(id).catch(() => {});
       if (editingNoteId === id) {
         startNewNote();
       }

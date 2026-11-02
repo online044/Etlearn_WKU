@@ -610,10 +610,11 @@ export function getSupabase(): SupabaseClient | null {
     }
   }
 
-  // 2. Fall back to environment variables
-  const metaEnv = (import.meta as any).env || {};
-  const envUrl = metaEnv.VITE_SUPABASE_URL || '';
-  const envKey = metaEnv.VITE_SUPABASE_ANON_KEY || '';
+  // 2. Fall back to environment variables (Browser & Node.js runtimes)
+  const metaEnv = (typeof import.meta !== 'undefined' && (import.meta as any).env) || {};
+  const procEnv = (typeof process !== 'undefined' && process.env) || {};
+  const envUrl = metaEnv.VITE_SUPABASE_URL || procEnv.VITE_SUPABASE_URL || procEnv.SUPABASE_URL || '';
+  const envKey = metaEnv.VITE_SUPABASE_ANON_KEY || procEnv.VITE_SUPABASE_ANON_KEY || procEnv.SUPABASE_ANON_KEY || '';
   const envClean = sanitizeCredentials(envUrl, envKey);
 
   if (envClean.isValid && isValidHeaderCredential(envClean.url, envClean.key)) {

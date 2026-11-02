@@ -251,3 +251,30 @@ export function resolveBookSupabasePdfUrl(
     fileName: targetFileName
   };
 }
+
+/**
+ * Downloads a PDF directly from Supabase Storage using the anon client.
+ * Handles CORS and returns a native Blob for MobilePdfReader.
+ */
+export async function downloadSupabasePdfBlob(
+  filenameOrPath: string,
+  preferredBucket: string = SUPABASE_BOOKS_BUCKET
+): Promise<Blob | null> {
+  const supa = getSupabase();
+  if (!supa || !filenameOrPath) return null;
+
+  const cleanPath = filenameOrPath.trim().replace(/^['"]+|['"]+$/g, '');
+  const bucketsToTry = Array.from(new Set([preferredBucket, 'course-books', 'books', 'pdfs', 'textbooks']));
+
+  for (const bucket of bucketsToTry) {
+    try {
+      const { data, error } = await supa.storage.from(bucket).download(cleanPath);
+      if (!error && data && data.size > 200) {
+        return data;
+      }
+    } catch {}
+  }
+
+  return null;
+}
+

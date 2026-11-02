@@ -14,14 +14,11 @@ import {
 } from 'lucide-react';
 import { playClickChime, playSuccessChime } from '../utils/audio';
 import { getOfflineBook, saveBookOffline } from '../utils/offlineBooksDB';
+import { downloadSupabasePdfBlob } from '../utils/supabaseStorage';
 
-// Set up pdf.js worker URL with CDN fallback matching the installed version
+// Set up pdf.js worker URL pointing to local public asset for 100% offline reliability
 if (typeof window !== 'undefined') {
-  try {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs`;
-  } catch {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
-  }
+  pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
 }
 
 export interface MobilePdfReaderProps {
@@ -272,62 +269,112 @@ export default function MobilePdfReader({
         console.warn('[MobilePdfReader] Offline check notice:', offErr);
       }
 
-      // 1. If not in offline cache, fetch from network
+      // 1. If not in offline cache, fetch from network or Supabase Storage
       if (!docData) {
-        if (fileUrl.startsWith('blob:') || fileUrl.startsWith('data:') || fileUrl.startsWith('/api/') || fileUrl.startsWith('/books/')) {
-        let resp: Response | null = null;
-        const isBlobOrData = fileUrl.startsWith('blob:') || fileUrl.startsWith('data:');
-        try {
-          resp = await fetch(fileUrl, isBlobOrData ? undefined : { credentials: 'same-origin' });
-        } catch {
-          const fullUrl = fileUrl.startsWith('/') ? `${window.location.origin}${fileUrl}` : fileUrl;
-          try {
-            resp = await fetch(fullUrl);
-          } catch {}
-        }
+        const targetDirectUrl = (fileUrl.startsWith('http://') || fileUrl.startsWith('https://'))
+          ? fileUrl
+          : (externalUrl && (externalUrl.startsWith('http://') || externalUrl.startsWith('https://')) && !externalUrl.includes('/api/'))
+          ? externalUrl
+          : null;
 
-        // Automatic retry with fallback alias if primary failed
-        if ((!resp || !resp.ok) && fileUrl.includes('/api/books/download-pdf')) {
-          const fallbackUrl = fileUrl.replace('/api/books/download-pdf', '/api/pdf/proxy');
+        // A. If direct HTTP/HTTPS URL available, fetch directly (Supabase Storage supports CORS)
+        if (targetDirectUrl) {
           try {
-            const fbResp = await fetch(fallbackUrl);
-            if (fbResp.ok) {
-              resp = fbResp;
+            const resp = await fetch(targetDirectUrl, { mode: 'cors' });
+            if (resp.ok) {
+              const ab = await resp.arrayBuffer();
+              if (ab.byteLength > 4) {
+                const firstBytes = new Uint8Array(ab.slice(0, 5));
+                const magic = String.fromCharCode(...firstBytes);
+                if (magic.startsWith('%PDF')) {
+                  docData = new Uint8Array(ab);
+                  setLoadingProgress(60);
+                }
+              }
             }
-          } catch {}
-        }
-
-        if (resp && resp.ok) {
-          const ab = await resp.arrayBuffer();
-          if (ab.byteLength > 4) {
-            const firstBytes = new Uint8Array(ab.slice(0, 5));
-            const magic = String.fromCharCode(...firstBytes);
-            if (magic.startsWith('%PDF')) {
-              docData = new Uint8Array(ab);
-              setLoadingProgress(60);
-            }
+          } catch (e) {
+            console.warn('[MobilePdfReader] Direct URL fetch notice, falling back:', e);
           }
         }
-      } else {
-        // Route external URLs through local server proxy to bypass browser CORS restrictions
-        try {
-          const proxyResp = await fetch(`/api/books/download-pdf?url=${encodeURIComponent(fileUrl)}`);
-          if (proxyResp.ok) {
-            const ab = await proxyResp.arrayBuffer();
-            if (ab.byteLength > 4) {
-              const firstBytes = new Uint8Array(ab.slice(0, 5));
-              const magic = String.fromCharCode(...firstBytes);
-              if (magic.startsWith('%PDF')) {
-                docData = new Uint8Array(ab);
-                setLoadingProgress(60);
+
+        // B. If direct URL didn't return PDF data, attempt direct Supabase Storage SDK download
+        if (!docData) {
+          try {
+            const candidateName = courseCode || title || fileUrl.split('/').pop()?.split('?')[0] || '';
+            if (candidateName) {
+              const sbBlob = await downloadSupabasePdfBlob(candidateName);
+              if (sbBlob && sbBlob.size > 200) {
+                const ab = await sbBlob.arrayBuffer();
+                if (ab.byteLength > 4) {
+                  const firstBytes = new Uint8Array(ab.slice(0, 5));
+                  const magic = String.fromCharCode(...firstBytes);
+                  if (magic.startsWith('%PDF')) {
+                    docData = new Uint8Array(ab);
+                    setLoadingProgress(70);
+                  }
+                }
+              }
+            }
+          } catch (sbErr) {
+            console.warn('[MobilePdfReader] Supabase SDK download notice:', sbErr);
+          }
+        }
+
+        // C. If still not loaded and fileUrl is blob:, data:, or /api/ route:
+        if (!docData) {
+          if (fileUrl.startsWith('blob:') || fileUrl.startsWith('data:') || fileUrl.startsWith('/api/') || fileUrl.startsWith('/books/')) {
+            let resp: Response | null = null;
+            const isBlobOrData = fileUrl.startsWith('blob:') || fileUrl.startsWith('data:');
+            try {
+              resp = await fetch(fileUrl, isBlobOrData ? undefined : { credentials: 'same-origin' });
+            } catch {
+              const fullUrl = fileUrl.startsWith('/') ? `${window.location.origin}${fileUrl}` : fileUrl;
+              try {
+                resp = await fetch(fullUrl);
+              } catch {}
+            }
+
+            // Automatic retry with fallback alias if primary failed
+            if ((!resp || !resp.ok) && fileUrl.includes('/api/books/download-pdf')) {
+              const fallbackUrl = fileUrl.replace('/api/books/download-pdf', '/api/pdf/proxy');
+              try {
+                const fbResp = await fetch(fallbackUrl);
+                if (fbResp.ok) resp = fbResp;
+              } catch {}
+            }
+
+            if (resp && resp.ok) {
+              const ab = await resp.arrayBuffer();
+              if (ab.byteLength > 4) {
+                const firstBytes = new Uint8Array(ab.slice(0, 5));
+                const magic = String.fromCharCode(...firstBytes);
+                if (magic.startsWith('%PDF')) {
+                  docData = new Uint8Array(ab);
+                  setLoadingProgress(60);
+                }
               }
             }
           }
-        } catch {
-          // fallback to direct URL
+        }
+
+        // D. Last network attempt: try externalUrl directly
+        if (!docData && externalUrl && externalUrl !== fileUrl && (externalUrl.startsWith('http://') || externalUrl.startsWith('https://'))) {
+          try {
+            const extResp = await fetch(externalUrl, { mode: 'cors' });
+            if (extResp.ok) {
+              const ab = await extResp.arrayBuffer();
+              if (ab.byteLength > 4) {
+                const firstBytes = new Uint8Array(ab.slice(0, 5));
+                const magic = String.fromCharCode(...firstBytes);
+                if (magic.startsWith('%PDF')) {
+                  docData = new Uint8Array(ab);
+                  setLoadingProgress(75);
+                }
+              }
+            }
+          } catch {}
         }
       }
-    }
 
       if (docData) {
         // Auto-cache to IndexedDB for offline access
@@ -353,7 +400,7 @@ export default function MobilePdfReader({
           }).catch(() => {});
         } catch {}
       } else {
-        // Last fallback: check IndexedDB again
+        // Fallback: check IndexedDB again in case offline record was stored under another key
         try {
           const fallbackOffline = await getOfflineBook(offlineKey);
           if (fallbackOffline?.pdfBlob && fallbackOffline.pdfBlob.size > 200) {
@@ -375,7 +422,10 @@ export default function MobilePdfReader({
       if (docData) {
         getDocConfig.data = docData;
       } else {
-        getDocConfig.url = fileUrl;
+        const streamUrl = (externalUrl && (externalUrl.startsWith('http://') || externalUrl.startsWith('https://')) && !externalUrl.includes('/api/'))
+          ? externalUrl
+          : fileUrl;
+        getDocConfig.url = streamUrl;
         getDocConfig.withCredentials = false;
       }
 
