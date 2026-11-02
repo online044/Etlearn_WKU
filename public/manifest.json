@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "EthioLearn Pro",
-  "short_name": "EthioLearn",
-  "description": "Premium AI digital learning platform with university courses, national exams prep, and student progress analytics.",
+  "name": "EthioLearn",
+  "short_name": "ET_Learn",
+  "description": "Bilingual (Amharic/English) AI-powered study platform for Ethiopian university students with past exams, AI flashcards, and university notes.",
   "lang": "en",
   "dir": "ltr",
   "categories": [
@@ -24,6 +24,12 @@
   "orientation": "portrait-primary",
   "icons": [
     {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
@@ -36,16 +42,34 @@
       "purpose": "maskable"
     },
     {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
       "src": "/icons/icon-512-maskable.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "/icons/apple-touch-icon.png",
@@ -60,14 +84,14 @@
       "sizes": "1280x720",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "EthioLearn Pro Portal - Study Desktop Dashboard"
+      "label": "EthioLearn Portal - Study Desktop Dashboard"
     },
     {
       "src": "/icons/screenshot-mobile.png",
       "sizes": "720x1280",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "EthioLearn Pro Mobile Suite"
+      "label": "EthioLearn Mobile Suite"
     }
   ],
   "shortcuts": [
@@ -78,7 +102,7 @@
       "url": "/?shortcut=dashboard",
       "icons": [
         {
-          "src": "/icons/icon-192.png",
+          "src": "/pwa-192x192.png",
           "sizes": "192x192",
           "type": "image/png"
         }
@@ -91,7 +115,7 @@
       "url": "/?shortcut=exams",
       "icons": [
         {
-          "src": "/icons/icon-192.png",
+          "src": "/pwa-192x192.png",
           "sizes": "192x192",
           "type": "image/png"
         }
@@ -104,7 +128,7 @@
       "url": "/?shortcut=books",
       "icons": [
         {
-          "src": "/icons/icon-192.png",
+          "src": "/pwa-192x192.png",
           "sizes": "192x192",
           "type": "image/png"
         }

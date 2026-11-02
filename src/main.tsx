@@ -6,15 +6,19 @@ import { registerSW } from 'virtual:pwa-register';
 
 // Register PWA service worker with automatic background cache update
 try {
-  const updateSW = registerSW({
-    onNeedRefresh() {
-      console.log('[PWA] New version ready, reloading smoothly...');
-      updateSW(true);
-    },
-    onOfflineReady() {
-      console.log('[PWA] EthioLearn Pro is offline ready.');
-    },
-  });
+  const isIframe = typeof window !== 'undefined' && window.self !== window.top;
+  if (!isIframe) {
+    const updateSW = registerSW({
+      immediate: true,
+      onNeedRefresh() {
+        console.log('[PWA] New version ready, reloading smoothly...');
+        updateSW(true);
+      },
+      onOfflineReady() {
+        console.log('[PWA] EthioLearn is offline ready.');
+      },
+    });
+  }
 } catch (e) {
   console.warn('[PWA] Service worker registration note:', e);
 }

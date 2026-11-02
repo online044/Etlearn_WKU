@@ -5,19 +5,21 @@ import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(() => {
-  const isHmrDisabled = process.env.DISABLE_HMR === 'true';
   return {
     plugins: [
       react(),
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        injectRegister: 'auto',
+        injectRegister: null, // SW registration explicitly handled via virtual:pwa-register in main.tsx
         includeAssets: [
           'favicon.ico',
           'favicon.png',
           'favicon.svg',
           'apple-touch-icon.png',
+          'pwa-192x192.png',
+          'pwa-512x512.png',
+          'pwa-maskable-512x512.png',
           'ethiolearn_icon.jpg',
           'icons/icon-192.png',
           'icons/icon-512.png',
@@ -28,8 +30,8 @@ export default defineConfig(() => {
         ],
         manifest: {
           id: '/',
-          name: 'EthioLearn Pro',
-          short_name: 'EthioLearn',
+          name: 'EthioLearn',
+          short_name: 'ET_Learn',
           description: 'Bilingual (Amharic/English) AI-powered study platform for Ethiopian university students with past exams, AI flashcards, and university notes.',
           lang: 'en',
           dir: 'ltr',
@@ -43,6 +45,12 @@ export default defineConfig(() => {
           categories: ['education', 'productivity', 'utilities', 'books'],
           icons: [
             {
+              src: '/pwa-192x192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'any',
+            },
+            {
               src: '/icons/icon-192.png',
               sizes: '192x192',
               type: 'image/png',
@@ -55,16 +63,34 @@ export default defineConfig(() => {
               purpose: 'maskable',
             },
             {
+              src: '/pwa-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'any',
+            },
+            {
               src: '/icons/icon-512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any',
             },
             {
+              src: '/pwa-maskable-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable',
+            },
+            {
               src: '/icons/icon-512-maskable.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',
+            },
+            {
+              src: '/apple-touch-icon.png',
+              sizes: '180x180',
+              type: 'image/png',
+              purpose: 'any',
             },
             {
               src: '/icons/apple-touch-icon.png',
@@ -78,19 +104,19 @@ export default defineConfig(() => {
               name: 'Study Dashboard',
               short_name: 'Dashboard',
               url: '/?shortcut=dashboard',
-              icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }],
+              icons: [{ src: '/pwa-192x192.png', sizes: '192x192' }],
             },
             {
               name: 'Exams & Prep',
               short_name: 'Exams',
               url: '/?shortcut=exams',
-              icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }],
+              icons: [{ src: '/pwa-192x192.png', sizes: '192x192' }],
             },
             {
               name: 'Digital Bookstore',
               short_name: 'Books',
               url: '/?shortcut=books',
-              icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }],
+              icons: [{ src: '/pwa-192x192.png', sizes: '192x192' }],
             },
           ],
         },
@@ -98,8 +124,11 @@ export default defineConfig(() => {
           maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg,webp,woff,woff2}'],
           cleanupOutdatedCaches: true,
+          navigateFallback: '/index.html',
+          navigateFallbackDenylist: [/^\/api\//, /^\/auth\//],
           runtimeCaching: [
             {
+              // Google Fonts stylesheets
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
               handler: 'CacheFirst',
               options: {
@@ -114,12 +143,13 @@ export default defineConfig(() => {
               },
             },
             {
+              // Google Fonts webfont files
               urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
               handler: 'CacheFirst',
               options: {
                 cacheName: 'gstatic-fonts-cache',
                 expiration: {
-                  maxEntries: 10,
+                  maxEntries: 20,
                   maxAgeSeconds: 60 * 60 * 24 * 365,
                 },
                 cacheableResponse: {
@@ -128,32 +158,33 @@ export default defineConfig(() => {
               },
             },
             {
-              urlPattern: /\/api\/.*/i,
-              handler: 'NetworkFirst',
+              // Public static images and PDFs from Supabase Storage only (never private rest/auth endpoints)
+              urlPattern: /.*supabase\.co\/storage\/v1\/object\/public\/.*/i,
+              handler: 'StaleWhileRevalidate',
               options: {
-                cacheName: 'api-runtime-cache',
-                networkTimeoutSeconds: 3,
+                cacheName: 'supabase-public-storage-cache',
                 expiration: {
-                  maxEntries: 100,
-                  maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
+                  maxEntries: 60,
+                  maxAgeSeconds: 60 * 60 * 24 * 14, // 14 days
                 },
                 cacheableResponse: {
-                  statuses: [0, 200],
+                  statuses: [200], // Strictly 200 only, never error responses
                 },
               },
             },
             {
-              urlPattern: /.*supabase\.co\/rest\/v1\/.*/i,
+              // General non-sensitive read APIs (excludes auth, admin, and payment APIs)
+              urlPattern: /^\/api\/(?!admin|auth|verify-payment|sync-master-key).*/i,
               handler: 'NetworkFirst',
               options: {
-                cacheName: 'supabase-cache',
+                cacheName: 'api-read-cache',
                 networkTimeoutSeconds: 3,
                 expiration: {
-                  maxEntries: 100,
-                  maxAgeSeconds: 60 * 60 * 24 * 7,
+                  maxEntries: 50,
+                  maxAgeSeconds: 60 * 60 * 24 * 3, // 3 days
                 },
                 cacheableResponse: {
-                  statuses: [0, 200],
+                  statuses: [200], // Only cache successful 200 responses to avoid caching error pages
                 },
               },
             },
@@ -172,7 +203,6 @@ export default defineConfig(() => {
       dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
     },
     server: {
-      // HMR is disabled in AI Studio container environment.
       hmr: false,
       watch: null,
     },

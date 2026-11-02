@@ -508,17 +508,40 @@ export default function App() {
 
   // Browser History & Android/iOS hardware back button synchronization
   useEffect(() => {
-    if (currentPage !== 'home') {
-      window.history.pushState({ page: currentPage }, '');
-      const handleBrowserBack = () => {
+    const handleBrowserBack = () => {
+      // 1. If in-app document viewer is open, close it first
+      if (inAppViewerUrl) {
+        setInAppViewerUrl(null);
+        return;
+      }
+      // 2. If sidebar drawer is open, close it
+      if (isSidebarOpen) {
+        setIsSidebarOpen(false);
+        return;
+      }
+      // 3. If modal is open, close it
+      if (showLegalModal) {
+        setShowLegalModal(false);
+        return;
+      }
+      if (showAnnouncementsModal) {
+        setShowAnnouncementsModal(false);
+        return;
+      }
+      // 4. Otherwise navigate back to home dashboard
+      if (currentPage !== 'home') {
         setCurrentPage('home');
-      };
+      }
+    };
+
+    if (currentPage !== 'home' || inAppViewerUrl || isSidebarOpen || showLegalModal || showAnnouncementsModal) {
+      window.history.pushState({ page: currentPage }, '');
       window.addEventListener('popstate', handleBrowserBack);
       return () => {
         window.removeEventListener('popstate', handleBrowserBack);
       };
     }
-  }, [currentPage]);
+  }, [currentPage, inAppViewerUrl, isSidebarOpen, showLegalModal, showAnnouncementsModal]);
 
   // Telegram Mini App BackButton & MainButton state synchronization
   useEffect(() => {
@@ -2307,8 +2330,20 @@ export default function App() {
         } : undefined}
       />
 
-      {/* 📶 PWA Offline Indicator Pill */}
-      <OfflineIndicator language={language} />
+      {/* 📶 PWA Offline Indicator Pill with Download Manager */}
+      <OfflineIndicator 
+        language={language}
+        onOpenItem={(type, id, title) => {
+          if (type === 'note') {
+            setCurrentPage('notes');
+          } else if (type === 'exam') {
+            setCurrentPage('examprep');
+          } else if (type === 'book') {
+            setInAppViewerUrl(`/reader/book/${id}`);
+            setInAppViewerTitle(title);
+          }
+        }}
+      />
     </div>
   );
 }

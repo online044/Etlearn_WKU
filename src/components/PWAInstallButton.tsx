@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Download, Smartphone, X, CheckCircle2, Share2, PlusSquare } from 'lucide-react';
+import { Download, Smartphone, X, CheckCircle2, Share2, PlusSquare, ExternalLink } from 'lucide-react';
 import { usePWAInstall } from '../utils/usePWAInstall';
 import { triggerHaptic } from '../utils/telegram';
 
@@ -21,12 +21,13 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
     isTMA, 
     isInstallVisible, 
     hasDownloaded, 
+    install,
     downloadAndInstall 
   } = usePWAInstall();
   const [showIOSGuide, setShowIOSGuide] = useState(false);
   const [installSuccess, setInstallSuccess] = useState(false);
 
-  // Strictly accessible only on web version. After downloading or installing, button disappears!
+  // Hidden when already installed or inside Telegram Mini App
   if (!isInstallVisible || hasDownloaded || isInstalled || isTMA) {
     return null;
   }
@@ -36,10 +37,22 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
   const handleInstallClick = async (e?: React.MouseEvent) => {
     if (e) e.preventDefault();
     triggerHaptic('medium');
-    
-    // Call download and install which opens APKPure, registers download, and hides button
+
+    if (isIOS) {
+      setShowIOSGuide(true);
+      return;
+    }
+
+    if (isInstallable) {
+      const outcome = await install();
+      if (outcome === 'accepted') {
+        setInstallSuccess(true);
+        return;
+      }
+    }
+
+    // Fallback
     await downloadAndInstall();
-    setInstallSuccess(true);
   };
 
   if (installSuccess) {
@@ -49,33 +62,29 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
   return (
     <>
       {variant === 'header' && (
-        <a
-          href={APK_PURE_URL}
-          target="_blank"
-          rel="noopener noreferrer"
+        <button
+          type="button"
           id="pwa-install-header-btn"
           onClick={handleInstallClick}
           className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-[11px] flex items-center gap-1.5 shadow-md shadow-amber-500/20 transition-all cursor-pointer shrink-0"
-          title={isAm ? 'አፑን በስልክዎ ላይ ይጫኑ (APKPure)' : 'Install EthioLearn App on APKPure'}
+          title={isAm ? 'አፑን በስልክዎ ላይ ይጫኑ' : 'Install EthioLearn App'}
         >
           <Download className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">{isAm ? 'አፕ ጫን (APKPure)' : 'Install App'}</span>
+          <span className="hidden sm:inline">{isAm ? 'አፕ ጫን' : 'Install App'}</span>
           <span className="sm:hidden">{isAm ? 'ጫን' : 'Install'}</span>
-        </a>
+        </button>
       )}
 
       {variant === 'compact' && (
-        <a
-          href={APK_PURE_URL}
-          target="_blank"
-          rel="noopener noreferrer"
+        <button
+          type="button"
           id="pwa-install-compact-btn"
           onClick={handleInstallClick}
           className="w-full sm:w-auto px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
         >
           <Download className="w-3.5 h-3.5" />
-          <span>{isAm ? 'አፑን በነፃ ጫን (APKPure)' : 'Install Free App (APKPure)'}</span>
-        </a>
+          <span>{isAm ? 'አፑን በነፃ ጫን (PWA)' : 'Install Free App'}</span>
+        </button>
       )}
 
       {variant === 'banner' && (
@@ -89,25 +98,35 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
             </div>
             <div>
               <h4 className="font-bold text-white text-xs sm:text-sm">
-                {isAm ? 'የኢትዮለርን አፕሊኬሽን (APKPure) በስልክዎ ላይ ይጫኑ' : 'Install EthioLearn on Android (APKPure)'}
+                {isAm ? 'የኢትዮለርን አፕሊኬሽን በስልክዎ ላይ ይጫኑ' : 'Install EthioLearn on Android'}
               </h4>
               <p className="text-[11px] text-slate-300">
                 {isAm 
                   ? 'ከአሳሽ ይልቅ እንደ ተፈጥሯዊ አፕ በስልክዎ ላይ ያለ ዳታ ኖቶችን እና ፈተናዎችን ይጠቀሙ' 
-                  : 'Fast, lightweight Android APK from APKPure with offline exams, flashcards, and 0-MB access'}
+                  : 'Fast, lightweight standalone app with offline exams, flashcards, and 0-MB access'}
               </p>
             </div>
           </div>
-          <a
-            href={APK_PURE_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={handleInstallClick}
-            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 cursor-pointer shrink-0"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>{isAm ? 'አሁን ጫን' : 'Install Now'}</span>
-          </a>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={handleInstallClick}
+              className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 cursor-pointer shrink-0 transition"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>{isAm ? 'አሁን ጫን' : 'Install App'}</span>
+            </button>
+            <a
+              href={APK_PURE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold text-xs flex items-center justify-center gap-1 transition cursor-pointer shrink-0 border border-white/5"
+              title="Download APK on APKPure"
+            >
+              <span>APK</span>
+              <ExternalLink className="w-3 h-3 text-slate-400" />
+            </a>
+          </div>
         </div>
       )}
 

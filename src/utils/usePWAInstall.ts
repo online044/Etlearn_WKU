@@ -79,48 +79,49 @@ export function usePWAInstall() {
     };
   }, []);
 
-  const downloadAndInstall = useCallback(async () => {
-    // 1. Mark as downloaded so install button disappears immediately
-    recordAppDownload();
-    setHasDownloaded(true);
-
-    // 2. Open APKPure download link
-    window.open(APK_PURE_URL, '_blank', 'noopener,noreferrer');
-
-    // 3. Trigger native PWA install prompt if available on browser
-    if (deferredPrompt) {
-      try {
-        await deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        if (outcome === 'accepted') {
-          setIsInstalled(true);
-          setDeferredPrompt(null);
-        }
-      } catch (e) {
-        console.warn('[PWA Install Prompt error]:', e);
-      }
+  /**
+   * Primary Native PWA Installation trigger (Chrome / Android / Desktop)
+   */
+  const install = useCallback(async (): Promise<'accepted' | 'dismissed' | 'unsupported'> => {
+    if (!deferredPrompt) {
+      return 'unsupported';
     }
-  }, [deferredPrompt]);
-
-  const install = async (): Promise<boolean> => {
-    if (!deferredPrompt) return false;
     try {
       await deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
+      const choice = await deferredPrompt.userChoice;
+      if (choice.outcome === 'accepted') {
         setIsInstalled(true);
         setDeferredPrompt(null);
         recordAppDownload();
         setHasDownloaded(true);
-        return true;
+        return 'accepted';
       }
+      return 'dismissed';
     } catch (e) {
       console.warn('[PWA Install Prompt error]:', e);
+      return 'unsupported';
     }
-    return false;
-  };
+  }, [deferredPrompt]);
 
-  // Accessible strictly on web version and hidden once downloaded or installed
+  /**
+   * Combined handler: Triggers native PWA install prompt if available;
+   * otherwise opens official package download link
+   */
+  const downloadAndInstall = useCallback(async () => {
+    if (deferredPrompt) {
+      const outcome = await install();
+      if (outcome === 'accepted') {
+        return;
+      }
+    }
+
+    // Fallback if browser doesn't support native prompt or user dismissed
+    recordAppDownload();
+    setHasDownloaded(true);
+    window.open(APK_PURE_URL, '_blank', 'noopener,noreferrer');
+  }, [deferredPrompt, install]);
+
+  // Accessible strictly on web version and hidden once running standalone
   const isWebVersion = !isInstalled && !isTMA;
   const isInstallVisible = isWebVersion && !hasDownloaded;
 

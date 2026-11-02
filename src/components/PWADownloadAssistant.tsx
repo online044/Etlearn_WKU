@@ -106,7 +106,7 @@ export default function PWADownloadAssistant({
             }}
             className="w-full sm:w-auto py-2.5 px-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md shadow-amber-500/20 shrink-0"
           >
-            <Download className="w-4 h-4 animate-bounce" /> Install App (APKPure)
+            <Download className="w-4 h-4 animate-bounce" /> Install EthioLearn
           </a>
           
           <button

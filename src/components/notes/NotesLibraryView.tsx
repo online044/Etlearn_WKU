@@ -427,17 +427,18 @@ export const NotesLibraryView: React.FC<NotesLibraryViewProps> = ({
             </div>
 
             {/* Offline & Sync Status */}
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
               {!isOnline ? (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-medium">
+                <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-medium">
                   <WifiOff className="w-3.5 h-3.5" />
                   <span>Offline</span>
                 </div>
               ) : pendingSyncCount > 0 ? (
                 <button
+                  type="button"
                   onClick={handleManualSync}
                   disabled={isSyncing}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 text-slate-950 text-xs font-bold shadow-md hover:bg-amber-400 active:scale-95 transition-all"
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer"
                   title="Sync pending notes state to Supabase"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
@@ -445,11 +446,13 @@ export const NotesLibraryView: React.FC<NotesLibraryViewProps> = ({
                 </button>
               ) : (
                 <button
+                  type="button"
                   onClick={handleManualSync}
-                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                  className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 text-slate-300 hover:text-amber-400 transition-colors shadow-xs cursor-pointer"
                   title="Refresh library"
+                  aria-label="Refresh library"
                 >
-                  <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
                 </button>
               )}
             </div>
