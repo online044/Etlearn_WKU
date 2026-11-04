@@ -184,101 +184,110 @@ export const NotesLibraryView: React.FC<NotesLibraryViewProps> = ({
     return (note: NoteListItem): Subject | undefined => {
       const noteObj = note as any;
       const directKey = note.subject_id || noteObj.subject || noteObj.course;
-      const noteTitle = (note.title || '').toLowerCase();
       const ch = chapterMap.get(note.chapter_id);
-      const chTitle = (ch?.title || '').toLowerCase();
-      const contentSnippet = (noteObj.content || '').slice(0, 500).toLowerCase();
-      const combinedText = `${noteTitle} ${chTitle} ${directKey || ''} ${contentSnippet}`;
 
-      // 1. ANTHROPOLOGY ISOLATION: Check Anthropology FIRST to prevent any misattribution to Biology
-      if (
-        combinedText.includes('anthro') ||
-        combinedText.includes('ethnograph') ||
-        combinedText.includes('kinship') ||
-        combinedText.includes('marriage rules') ||
-        combinedText.includes('customary system') ||
-        canonicalSubjectId(ch?.subject_id) === 'subj_social_anthropology' ||
-        canonicalSubjectId(directKey) === 'subj_social_anthropology'
-      ) {
-        const anthroSub = subjects.find(s => canonicalSubjectId(s.id) === 'subj_social_anthropology' || s.name.toLowerCase().includes('anthro'));
-        if (anthroSub) return anthroSub;
+      // 1. Direct database foreign key on the note itself
+      if (directKey) {
+        const canonicalKey = canonicalSubjectId(directKey);
+        const sub = subjectMap.get(directKey) || subjectMap.get(canonicalKey);
+        if (sub) return sub;
       }
 
-      // 2. CHEMISTRY ISOLATION: Chemistry must only match Chemistry
-      if (
-        combinedText.includes('chem 1011') ||
-        combinedText.includes('atomic structure') ||
-        combinedText.includes('chemical bonding') ||
-        combinedText.includes('periodic table') ||
-        combinedText.includes('electronegativ') ||
-        canonicalSubjectId(ch?.subject_id) === 'subj_general_chemistry' ||
-        canonicalSubjectId(directKey) === 'subj_general_chemistry'
-      ) {
-        const chemSub = subjects.find(s => canonicalSubjectId(s.id) === 'subj_general_chemistry' || s.name.toLowerCase().includes('chem'));
-        if (chemSub) return chemSub;
-      }
-
-      // 3. PHYSICS ISOLATION: Physics must only match Physics
-      if (
-        combinedText.includes('phys 1011') ||
-        combinedText.includes('general physics') ||
-        combinedText.includes('kinematic') ||
-        combinedText.includes("newton's") ||
-        combinedText.includes('vector') ||
-        canonicalSubjectId(ch?.subject_id) === 'subj_general_physics' ||
-        canonicalSubjectId(directKey) === 'subj_general_physics'
-      ) {
-        const physSub = subjects.find(s => canonicalSubjectId(s.id) === 'subj_general_physics' || s.name.toLowerCase().includes('phys'));
-        if (physSub) return physSub;
-      }
-
-      // 4. CRITICAL THINKING / LOGIC
-      if (
-        combinedText.includes('phil 1011') ||
-        combinedText.includes('critical thinking') ||
-        combinedText.includes('syllogism') ||
-        combinedText.includes('fallac') ||
-        combinedText.includes('logic and argument') ||
-        canonicalSubjectId(ch?.subject_id) === 'subj_critical_thinking' ||
-        canonicalSubjectId(directKey) === 'subj_critical_thinking'
-      ) {
-        const sampleSub = subjects.find(s => canonicalSubjectId(s.id) === 'subj_critical_thinking' || s.name.toLowerCase().includes('logic') || s.name.toLowerCase().includes('critical'));
-        if (sampleSub) return sampleSub;
-      }
-
-      // 5. BIOLOGY ISOLATION: Biology must strictly contain biology concepts and NEVER anthropology/chemistry/physics
-      if (
-        (combinedText.includes('biol 1011') ||
-         combinedText.includes('general biology') ||
-         combinedText.includes('cellular basis of life') ||
-         combinedText.includes('cellular respiration') ||
-         combinedText.includes('photosynthesis') ||
-         combinedText.includes('biomolecule') ||
-         combinedText.includes('mitosis') ||
-         combinedText.includes('genetics') ||
-         canonicalSubjectId(ch?.subject_id) === 'subj_general_biology' ||
-         canonicalSubjectId(directKey) === 'subj_general_biology') &&
-        !combinedText.includes('anthro') &&
-        !combinedText.includes('ethnograph') &&
-        !combinedText.includes('chem') &&
-        !combinedText.includes('phys')
-      ) {
-        const bioSub = subjects.find(s => canonicalSubjectId(s.id) === 'subj_general_biology' || s.name.toLowerCase().includes('bio'));
-        if (bioSub) return bioSub;
-      }
-
-      // 6. Direct chapter match (fallback for any other subjects)
+      // 2. Direct database foreign key on the chapter
       if (ch?.subject_id) {
         const canonicalKey = canonicalSubjectId(ch.subject_id);
         const sub = subjectMap.get(ch.subject_id) || subjectMap.get(canonicalKey);
         if (sub) return sub;
       }
 
-      // 7. Direct key match (fallback)
-      if (directKey) {
-        const canonicalKey = canonicalSubjectId(directKey);
-        const sub = subjectMap.get(directKey) || subjectMap.get(canonicalKey);
-        if (sub) return sub;
+      // 3. Heuristic matching based on note title and chapter title (fallback for legacy or unlinked notes)
+      const noteTitle = (note.title || '').toLowerCase();
+      const chTitle = (ch?.title || '').toLowerCase();
+      const combinedText = `${noteTitle} ${chTitle}`;
+
+      // ANTHROPOLOGY
+      if (
+        combinedText.includes('anthro') ||
+        combinedText.includes('ethnograph') ||
+        combinedText.includes('kinship') ||
+        combinedText.includes('marriage rules') ||
+        combinedText.includes('customary system')
+      ) {
+        const anthroSub = subjects.find(s => canonicalSubjectId(s.id) === 'subj_social_anthropology');
+        if (anthroSub) return anthroSub;
+      }
+
+      // BIOLOGY (Strictly isolated from Anthropology)
+      if (
+        (combinedText.includes('biol') ||
+         combinedText.includes('cellular basis of life') ||
+         combinedText.includes('cellular respiration') ||
+         combinedText.includes('photosynthesis') ||
+         combinedText.includes('biomolecule') ||
+         combinedText.includes('mitosis') ||
+         combinedText.includes('genetics')) &&
+        !combinedText.includes('anthro')
+      ) {
+        const bioSub = subjects.find(s => canonicalSubjectId(s.id) === 'subj_general_biology');
+        if (bioSub) return bioSub;
+      }
+
+      // CHEMISTRY
+      if (
+        combinedText.includes('chem') ||
+        combinedText.includes('atomic structure') ||
+        combinedText.includes('chemical bonding') ||
+        combinedText.includes('periodic table')
+      ) {
+        const chemSub = subjects.find(s => canonicalSubjectId(s.id) === 'subj_general_chemistry');
+        if (chemSub) return chemSub;
+      }
+
+      // PHYSICS
+      if (
+        combinedText.includes('phys') ||
+        combinedText.includes('kinematic') ||
+        combinedText.includes("newton's") ||
+        combinedText.includes('vector')
+      ) {
+        const physSub = subjects.find(s => canonicalSubjectId(s.id) === 'subj_general_physics');
+        if (physSub) return physSub;
+      }
+
+      // CRITICAL THINKING / LOGIC
+      if (
+        combinedText.includes('critical thinking') ||
+        combinedText.includes('syllogism') ||
+        combinedText.includes('fallac') ||
+        combinedText.includes('logic and argument') ||
+        combinedText.includes('propositional logic')
+      ) {
+        const sampleSub = subjects.find(s => canonicalSubjectId(s.id) === 'subj_critical_thinking');
+        if (sampleSub) return sampleSub;
+      }
+
+      // EMERGING TECHNOLOGIES
+      if (combinedText.includes('industry 4.0') || combinedText.includes('artificial intelligence') || combinedText.includes('iot')) {
+        const techSub = subjects.find(s => canonicalSubjectId(s.id) === 'subj_emerging_technologies');
+        if (techSub) return techSub;
+      }
+
+      // ECONOMICS
+      if (combinedText.includes('economics') || combinedText.includes('microeconomics') || combinedText.includes('market dynamics')) {
+        const econSub = subjects.find(s => canonicalSubjectId(s.id) === 'subj_economics');
+        if (econSub) return econSub;
+      }
+
+      // MATHEMATICS
+      if (combinedText.includes('math') || combinedText.includes('precalculus')) {
+        const mathSub = subjects.find(s => canonicalSubjectId(s.id) === 'subj_math_natural');
+        if (mathSub) return mathSub;
+      }
+
+      // ENGLISH
+      if (combinedText.includes('english') || combinedText.includes('reading comprehension') || combinedText.includes('discourse markers')) {
+        const engSub = subjects.find(s => canonicalSubjectId(s.id) === 'subj_english_1');
+        if (engSub) return engSub;
       }
 
       return undefined;
@@ -355,9 +364,19 @@ export const NotesLibraryView: React.FC<NotesLibraryViewProps> = ({
       completedCount: number;
     }[] = [];
 
+    // Deduplicate subjects by canonicalSubjectId so that multiple DB alias IDs merge into one unified column
+    const dedupedSubjectsMap = new Map<string, Subject>();
+    for (const s of subjects) {
+      const canon = canonicalSubjectId(s.id);
+      if (!dedupedSubjectsMap.has(canon)) {
+        dedupedSubjectsMap.set(canon, s);
+      }
+    }
+    const dedupedSubjects = Array.from(dedupedSubjectsMap.values());
+
     const displaySubjects = selectedSubjectId
-      ? subjects.filter(s => s.id === selectedSubjectId || canonicalSubjectId(s.id) === canonicalSubjectId(selectedSubjectId))
-      : subjects;
+      ? dedupedSubjects.filter(s => s.id === selectedSubjectId || canonicalSubjectId(s.id) === canonicalSubjectId(selectedSubjectId))
+      : dedupedSubjects;
 
     for (const sub of displaySubjects) {
       const subCanonical = canonicalSubjectId(sub.id);

@@ -159,15 +159,25 @@ export default function UniversityExamsView({
 }: UniversityExamsProps) {
   // Master papers repository state - authentic exams from Supabase, local cache, and user custom files
   const [examSheets, setExamSheets] = useState<ExamPaperSheet[]>(() => {
-    const builtins = getBuiltinAuthenticExamSheets();
-    const custom = loadCustomExamSheets();
+    const isAuthentic14Plus = (s: ExamPaperSheet) => {
+      if (!s || !Array.isArray(s.questions) || s.questions.length < 14) return false;
+      if (s.id.startsWith('g12')) return false;
+      const t = (s.title || '').toLowerCase();
+      const sub = (s.subject || '').toLowerCase();
+      if (t.includes('grade 12') || t.includes('euee') || t.includes('matric')) return false;
+      if (sub.includes('grade 12') || sub.includes('euee') || sub.includes('matric')) return false;
+      return true;
+    };
+
+    const builtins = getBuiltinAuthenticExamSheets().filter(isAuthentic14Plus);
+    const custom = loadCustomExamSheets().filter(isAuthentic14Plus);
     let cached: ExamPaperSheet[] = [];
     try {
       const raw = safeStorage.getItem('ethiolearn_cached_exam_sheets');
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          cached = parsed;
+          cached = parsed.filter(isAuthentic14Plus);
         }
       }
     } catch {}
@@ -193,7 +203,9 @@ export default function UniversityExamsView({
           const map = new Map<string, ExamPaperSheet>();
           prev.forEach(s => map.set(s.id, s));
           ov.exams.forEach(e => {
-            if (!map.has(e.id)) {
+            const qList = e.questions || [];
+            const isG12 = (e.id || '').startsWith('g12') || (e.title || '').toLowerCase().includes('grade 12');
+            if (!map.has(e.id) && qList.length >= 14 && !isG12) {
               map.set(e.id, {
                 id: e.id,
                 title: e.title,
@@ -201,7 +213,7 @@ export default function UniversityExamsView({
                 year: e.examYear || '2016 E.C.',
                 subject: e.subject || 'General Studies',
                 durationMinutes: 45,
-                questions: e.questions || []
+                questions: qList
               });
             }
           });
@@ -258,7 +270,7 @@ export default function UniversityExamsView({
 
   // Search, Level & Subject Filters
   const [searchQuery, setSearchQuery] = useState('');
-  const [levelFilter, setLevelFilter] = useState<'all' | 'uni' | 'matric' | 'exit' | 'bookmarked'>('all');
+  const [levelFilter, setLevelFilter] = useState<'all' | 'uni' | 'exit' | 'bookmarked'>('all');
   const [selectedSubject, setSelectedSubject] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'year_desc' | 'questions' | 'uni'>('year_desc');
 
@@ -302,43 +314,38 @@ export default function UniversityExamsView({
 
   // Fetch any newly published server exams and pre-generated questions from database
   useEffect(() => {
-    // 1. Fetch published exams
+    // 1. Fetch published exams (only authentic papers with at least 14 questions)
     fetchPublishedExams().then(published => {
       if (published && published.length > 0) {
-        const mapped: ExamPaperSheet[] = published.map(p => ({
-          id: p.id,
-          title: p.title,
-          university: p.university || 'Wolkite University',
-          year: p.examYear || '2016 E.C.',
-          subject: p.subject || 'Curriculum',
-          department: p.department || 'Academic Department',
-          durationMinutes: 45,
-          questions: [
-            {
-              id: 1,
-              qText: `Past Paper Examination: ${p.title} (${p.subject || 'Core Topic'}). Verified academic paper for ${p.university || 'Wolkite University'}.`,
-              choices: [
-                'A) Official Midterm / Final Examination Question',
-                'B) Department Standard Evaluation Exercise',
-                'C) Authentic Exam Room Problem Statement',
-                'D) Verified Academic Problem Solving Task'
-              ],
-              correctIndex: 0,
-              subjectTopic: p.subject || 'General Assessment',
-              explanation: p.description || `Official past examination sheet for ${p.university || 'Wolkite University'}.`
-            }
-          ]
-        }));
-        setExamSheets(prev => {
-          const ids = new Set(prev.map(s => s.id));
-          const newItems = mapped.filter(m => !ids.has(m.id));
-          const merged = [...newItems, ...prev];
-          try {
-            safeStorage.setItem('ethiolearn_cached_exam_sheets', JSON.stringify(merged));
-          } catch {}
-          return merged;
-        });
-        setSelectedSheetId(prev => prev || mapped[0]?.id || '');
+        const mapped: ExamPaperSheet[] = published
+          .filter(p => {
+            const qList = (p as any).questions;
+            const isG12 = (p.id || '').startsWith('g12') || (p.title || '').toLowerCase().includes('grade 12');
+            return Array.isArray(qList) && qList.length >= 14 && !isG12;
+          })
+          .map(p => ({
+            id: p.id,
+            title: p.title,
+            university: p.university || 'Wolkite University',
+            year: p.examYear || '2016 E.C.',
+            subject: p.subject || 'Curriculum',
+            department: p.department || 'Academic Department',
+            durationMinutes: 60,
+            questions: (p as any).questions
+          }));
+
+        if (mapped.length > 0) {
+          setExamSheets(prev => {
+            const ids = new Set(prev.map(s => s.id));
+            const newItems = mapped.filter(m => !ids.has(m.id));
+            const merged = [...newItems, ...prev];
+            try {
+              safeStorage.setItem('ethiolearn_cached_exam_sheets', JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
+          setSelectedSheetId(prev => prev || mapped[0]?.id || '');
+        }
       }
     }).catch(err => console.warn('Could not fetch remote exams:', err));
 
@@ -359,6 +366,12 @@ export default function UniversityExamsView({
           const crs = q.course || q.subject || 'Academic';
           const yr = q.academic_year || '2016 E.C.';
           const key = `supa_exam_${crs}_${yr}`.replace(/[^a-zA-Z0-9_]/g, '_');
+
+          // Exclude Grade 12 / Matric from Supabase question bank grouping
+          const crsLower = crs.toLowerCase();
+          if (crsLower.includes('grade 12') || crsLower.includes('euee') || crsLower.includes('matric')) {
+            return;
+          }
 
           if (!groupMap[key]) {
             groupMap[key] = {
@@ -390,16 +403,19 @@ export default function UniversityExamsView({
           });
         });
 
-        const newSheets: ExamPaperSheet[] = Object.entries(groupMap).map(([id, g]) => ({
-          id,
-          title: g.title,
-          university: g.university,
-          year: g.year,
-          subject: g.subject,
-          department: g.department,
-          durationMinutes: Math.min(90, Math.max(20, g.questions.length * 2)),
-          questions: g.questions
-        }));
+        // Enforce: only include papers with at least 14 questions
+        const newSheets: ExamPaperSheet[] = Object.entries(groupMap)
+          .filter(([, g]) => g.questions.length >= 14)
+          .map(([id, g]) => ({
+            id,
+            title: g.title,
+            university: g.university,
+            year: g.year,
+            subject: g.subject,
+            department: g.department,
+            durationMinutes: Math.min(90, Math.max(20, g.questions.length * 2)),
+            questions: g.questions
+          }));
 
         if (newSheets.length > 0) {
           setExamSheets(prev => {
@@ -420,6 +436,15 @@ export default function UniversityExamsView({
   // Filtered Exam Sheets
   const filteredSheets = useMemo(() => {
     return examSheets.filter(sheet => {
+      // 1. Strict filter: Exclude Grade 12 mock exams and ensure at least 14 questions
+      if (!sheet || !Array.isArray(sheet.questions) || sheet.questions.length < 14) return false;
+      if (sheet.id.startsWith('g12')) return false;
+      const t = (sheet.title || '').toLowerCase();
+      const s = (sheet.subject || '').toLowerCase();
+      if (t.includes('grade 12') || t.includes('euee') || t.includes('matric')) return false;
+      if (s.includes('grade 12') || s.includes('euee') || s.includes('matric')) return false;
+      if ((sheet as any).level === 'Grade 12') return false;
+
       // Paper Tab filter
       if (paperTab === 'saved') {
         if (!bookmarkedPapers.includes(sheet.id)) return false;
@@ -435,9 +460,7 @@ export default function UniversityExamsView({
 
       // Level filter
       if (levelFilter === 'uni') {
-        if (sheet.id.startsWith('g12') || sheet.id.startsWith('exit')) return false;
-      } else if (levelFilter === 'matric') {
-        if (!sheet.id.startsWith('g12')) return false;
+        if (sheet.id.startsWith('exit')) return false;
       } else if (levelFilter === 'exit') {
         if (!sheet.id.startsWith('exit') && !(sheet as any).examCategory?.includes('exit')) return false;
       } else if (levelFilter === 'bookmarked') {

@@ -84,7 +84,24 @@ export function canonicalSubjectId(idOrName?: string | null): string {
   if (LEGACY_SUBJECT_ID_MAP[idOrName]) return LEGACY_SUBJECT_ID_MAP[idOrName];
   const s = idOrName.toLowerCase().trim();
 
-  // Check Anthropology explicitly first so 'biological anthropology' or 'cultural' doesn't misroute to Biology
+  // 1. Direct Subject ID exact mappings
+  if (s === 'anth_1012' || s === 'subj_social_anthropology') return ANTHRO_SUBJECT_ID;
+  if (s === 'phil_1011' || s === 'subj_critical_thinking') return SAMPLE_SUBJECT_ID;
+  if (s === 'comm_english' || s === 'subj_english_1') return ENGLISH_SUBJECT_ID;
+  if (s === 'subj_general_biology') return BIO_SUBJECT_ID;
+  if (s === 'subj_general_chemistry') return CHEM_SUBJECT_ID;
+  if (s === 'subj_general_physics') return PHYS_SUBJECT_ID;
+  if (s === 'subj_math_natural') return MATH_SUBJECT_ID;
+  if (s === 'subj_economics') return ECON_SUBJECT_ID;
+  if (s === 'subj_emerging_technologies') return TECH_SUBJECT_ID;
+  if (s === 'subj_geography') return GEOG_SUBJECT_ID;
+  if (s === 'subj_general_psychology') return PSYCH_SUBJECT_ID;
+  if (s === 'subj_moral_and_civic') return CIVICS_SUBJECT_ID;
+  if (s === 'subj_inclusiveness') return INCLUSIVENESS_SUBJECT_ID;
+  if (s === 'subj_history') return HISTORY_SUBJECT_ID;
+
+  // 2. Token-based matching (ordered carefully to avoid cross-subject overlap)
+  // Check Anthropology explicitly first so 'biological anthropology' does not route to Biology
   if (s.includes('anthro') || s.includes('anthropology') || s.includes('anth 1012') || s === 'anthro' || s === 'anth' || s.includes('social anthropology')) {
     return ANTHRO_SUBJECT_ID;
   }
@@ -894,13 +911,12 @@ export class NotesRepository {
     if (!supabase) return;
 
     try {
-      const canonicalTargetId = subjectId ? canonicalSubjectId(subjectId) : undefined;
-      let query = supabase.from('chapters').select('*');
-      if (subjectId) {
-        query = query.or(`subject_id.eq.${subjectId},subject_id.eq.${canonicalTargetId}`);
-      }
+      // Fetch all chapters to ensure chapterMap always has full curriculum context
+      const { data, error } = await supabase
+        .from('chapters')
+        .select('*')
+        .order('sort_order', { ascending: true });
 
-      const { data, error } = await query.order('sort_order', { ascending: true });
       if (!error && data && data.length > 0) {
         const formatted: Chapter[] = data.map((c: any, idx: number) => {
           let resolvedSubId = canonicalSubjectId(c.subject_id);
@@ -923,12 +939,21 @@ export class NotesRepository {
             sort_order: typeof c.sort_order === 'number' ? c.sort_order : idx + 1
           };
         });
-        cacheChaptersLocally(formatted);
+
+        // Merge with existing cached chapters to prevent wiping out data
+        const existing = getCachedChaptersLocally() || [];
+        const map = new Map<string, Chapter>();
+        existing.forEach(ch => map.set(ch.id, ch));
+        formatted.forEach(ch => map.set(ch.id, ch));
+
+        cacheChaptersLocally(Array.from(map.values()));
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('ethiolearn:notes-library-updated'));
         }
       }
-    } catch {}
+    } catch (e) {
+      console.warn('[notesRepository] backgroundRevalidateChapters error:', e);
+    }
   }
 
   /**
@@ -939,16 +964,17 @@ export class NotesRepository {
     const cached = getCachedChaptersLocally();
     if (cached && cached.length > 0) {
       this.backgroundRevalidateChapters(subjectId);
-      return canonicalTargetId ? cached.filter((c) => c.subject_id === canonicalTargetId) : cached;
+      return canonicalTargetId ? cached.filter((c) => c.subject_id === canonicalTargetId || canonicalSubjectId(c.subject_id) === canonicalTargetId) : cached;
     }
 
     cacheChaptersLocally(SEED_CHAPTERS);
     this.backgroundRevalidateChapters(subjectId);
-    return canonicalTargetId ? SEED_CHAPTERS.filter((c) => c.subject_id === canonicalTargetId) : SEED_CHAPTERS;
+    return canonicalTargetId ? SEED_CHAPTERS.filter((c) => c.subject_id === canonicalTargetId || canonicalSubjectId(c.subject_id) === canonicalTargetId) : SEED_CHAPTERS;
   }
 
   /**
    * Background revalidation for notes list without blocking UI
+   * Also proactively caches full notes into IndexedDB/safeStorage so clicking any note opens instantly (0ms)
    */
   private async backgroundRevalidateNotesList(chapterId?: string) {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
@@ -962,6 +988,32 @@ export class NotesRepository {
         .order('sort_order', { ascending: true });
 
       if (!notesRes.error && notesRes.data && notesRes.data.length > 0) {
+        // 1. Proactively cache all full notes so clicking opens in 0ms offline and online
+        notesRes.data.forEach((n: any, idx: number) => {
+          const content = String(n.content || n.body || n.text || '');
+          if (content) {
+            const rawReadTime = typeof n.read_time_min === 'number'
+              ? n.read_time_min
+              : Math.max(1, Math.round(content.split(/\s+/).length / 180));
+            const fullNote: Note = {
+              id: String(n.id),
+              chapter_id: n.chapter_id ? String(n.chapter_id) : `virtual_${n.subject_id || n.subject || 'general'}`,
+              title: n.title || n.name || 'Untitled Note',
+              content,
+              read_time_min: rawReadTime,
+              sort_order: typeof n.sort_order === 'number' ? n.sort_order : (idx + 1),
+              is_published: n.is_published !== false,
+              created_at: n.created_at || new Date().toISOString(),
+              updated_at: n.updated_at || new Date().toISOString(),
+              subject_id: n.subject_id ? String(n.subject_id) : undefined,
+              subject: n.subject ? String(n.subject) : undefined,
+              course: n.course ? String(n.course) : undefined
+            };
+            cacheFullNoteLocally(fullNote);
+          }
+        });
+
+        // 2. Cache lightweight NoteListItem list for instant directory display
         const formatted: NoteListItem[] = notesRes.data.map((n: any, idx: number) => {
           const contentStr = n.content || n.body || n.text || '';
           const rawReadTime = typeof n.read_time_min === 'number'
@@ -987,7 +1039,9 @@ export class NotesRepository {
           window.dispatchEvent(new CustomEvent('ethiolearn:notes-library-updated'));
         }
       }
-    } catch {}
+    } catch (e) {
+      console.warn('[notesRepository] backgroundRevalidateNotesList error:', e);
+    }
   }
 
   /**
@@ -1043,11 +1097,8 @@ export class NotesRepository {
    */
   private async backgroundRevalidateNote(noteId: string) {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(noteId);
-    if (!isUUID) return;
-
     const supabase = getSupabase();
-    if (!supabase) return;
+    if (!supabase || !noteId) return;
 
     try {
       const { data: noteObj, error } = await supabase
@@ -1086,6 +1137,8 @@ export class NotesRepository {
    * Fetches a full single note by ID (Instant 0ms Cache-First Check: 0ms load)
    */
   async fetchNoteById(noteId: string): Promise<Note | null> {
+    if (!noteId) return null;
+
     // 1. Instant Cache-First: return from local storage immediately if available
     const cached = getCachedNoteLocally(noteId);
     if (cached && cached.content) {
@@ -1093,20 +1146,7 @@ export class NotesRepository {
       return cached;
     }
 
-    // 2. Instant Seed Fallback: check preloaded seed notes
-    const seed = SEED_NOTES.find((n) => n.id === noteId);
-    if (seed && seed.content) {
-      cacheFullNoteLocally(seed);
-      this.backgroundRevalidateNote(noteId);
-      return seed;
-    }
-
-    // 3. Fallback: Network fetch if missing from cache and valid UUID
-    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(noteId);
-    if (!isUUID) {
-      return null;
-    }
-
+    // 2. Query Supabase directly (handles all ID formats and returns real content)
     const supabase = getSupabase();
     if (supabase) {
       try {
@@ -1144,6 +1184,15 @@ export class NotesRepository {
       }
     }
 
+    // 3. Instant Seed Fallback: check preloaded seed notes ONLY matching the specific noteId or chapterId
+    const seed = SEED_NOTES.find((n) => n.id === noteId) || 
+      SEED_NOTES.find((n) => n.chapter_id === noteId);
+    if (seed && seed.content) {
+      cacheFullNoteLocally(seed);
+      return seed;
+    }
+
+    // 4. If not found by ID, return null so UI displays "Note not found" rather than displaying an irrelevant subject note
     return null;
   }
 

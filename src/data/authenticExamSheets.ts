@@ -272,73 +272,23 @@ const SHEET_METADATA_REGISTRY: Record<string, SheetMeta> = {
     department: 'National Higher Education Exit Exam',
     durationMinutes: 90,
     level: 'University'
-  },
-
-  // MoE Grade 12 National University Entrance Exam (EUEE / Matric)
-  g12_math_euee_2016: {
-    title: 'EUEE National University Entrance: Mathematics',
-    university: 'Educational Assessment and Examinations Service (EAES)',
-    year: '2016 E.C.',
-    subject: 'Mathematics',
-    department: 'Grade 12 National University Entrance Examination',
-    durationMinutes: 90,
-    level: 'Grade 12'
-  },
-  g12_physics_euee_2016: {
-    title: 'EUEE National University Entrance: Physics',
-    university: 'Educational Assessment and Examinations Service (EAES)',
-    year: '2016 E.C.',
-    subject: 'Physics',
-    department: 'Grade 12 National University Entrance Examination',
-    durationMinutes: 90,
-    level: 'Grade 12'
-  },
-  g12_aptitude_euee_2016: {
-    title: 'EUEE Scholastic Aptitude & Reasoning Test',
-    university: 'Educational Assessment and Examinations Service (EAES)',
-    year: '2016 E.C.',
-    subject: 'Aptitude',
-    department: 'Grade 12 National University Entrance Examination',
-    durationMinutes: 80,
-    level: 'Grade 12'
-  },
-  g12_english_euee_2016: {
-    title: 'EUEE National University Entrance: English Language',
-    university: 'Educational Assessment and Examinations Service (EAES)',
-    year: '2016 E.C.',
-    subject: 'English',
-    department: 'Grade 12 National University Entrance Examination',
-    durationMinutes: 90,
-    level: 'Grade 12'
-  },
-  g12_chem_euee_2016: {
-    title: 'EUEE National University Entrance: Chemistry',
-    university: 'Educational Assessment and Examinations Service (EAES)',
-    year: '2016 E.C.',
-    subject: 'Chemistry',
-    department: 'Grade 12 National University Entrance Examination',
-    durationMinutes: 90,
-    level: 'Grade 12'
-  },
-  g12_bio_euee_2016: {
-    title: 'EUEE National University Entrance: Biology',
-    university: 'Educational Assessment and Examinations Service (EAES)',
-    year: '2016 E.C.',
-    subject: 'Biology',
-    department: 'Grade 12 National University Entrance Examination',
-    durationMinutes: 90,
-    level: 'Grade 12'
   }
 };
 
 /**
  * Generates full ExamPaperSheet list from authentic questions map.
  * Available 100% offline with zero network dependency.
+ * Enforces removal of Grade 12 mock exams and strict minimum of 14 questions.
  */
 export function getBuiltinAuthenticExamSheets(): ExamPaperSheet[] {
   const sheets: ExamPaperSheet[] = [];
 
   for (const [sheetId, rawQuestions] of Object.entries(AUTHENTIC_EXAM_SHEET_MAP)) {
+    // 1. Strict filter: exclude Grade 12 mock exams and sheets with less than 14 questions
+    if (sheetId.startsWith('g12') || rawQuestions.length < 14) {
+      continue;
+    }
+
     const meta = SHEET_METADATA_REGISTRY[sheetId] || {
       title: `${sheetId.replace(/_/g, ' ').toUpperCase()} Exam Paper`,
       university: 'Ethiopian University',
@@ -348,6 +298,15 @@ export function getBuiltinAuthenticExamSheets(): ExamPaperSheet[] {
       durationMinutes: 60,
       level: 'University'
     };
+
+    if (
+      meta.level === 'Grade 12' ||
+      meta.title.toLowerCase().includes('grade 12') ||
+      meta.title.toLowerCase().includes('euee') ||
+      meta.title.toLowerCase().includes('matric')
+    ) {
+      continue;
+    }
 
     const formattedQuestions: ExamQuestion[] = rawQuestions.map((q, idx) => {
       const choices = q.options.map((opt, oIdx) => `${String.fromCharCode(65 + oIdx)}) ${opt}`);

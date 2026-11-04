@@ -183,5 +183,70 @@ export const AUTHENTIC_LOGIC_QUESTIONS_AAU_1011: AuthenticCurriculumQuestion[] =
     difficulty: "medium",
     explanation: "The types of the premises are E, A, and the conclusion is E (Mood: EAE). The middle term 'birds' is the subject of the major premise and predicate of the minor premise, which defines Figure 1. This valid form is known classically as Celarent.",
     amharicExplanation: "የመግለጫዎቹ አይነት E, A, E ሲሆን መካከለኛው ቃል 'birds' በፊገር 1 አቀማመጥ ላይ ይገኛል (EAE-1 ወይም Celarent)።"
+  },
+  {
+    questionText: "Which valid rule of inference is instantiated by the following propositional argument?\n1. If inflation accelerates, the National Bank increases interest rates.\n2. The National Bank did not increase interest rates.\nTherefore, inflation did not accelerate.",
+    options: [
+      "Modus Tollens (Denying the Consequent)",
+      "Modus Ponens (Affirming the Antecedent)",
+      "Disjunctive Syllogism",
+      "Hypothetical Syllogism"
+    ],
+    correctIndex: 0,
+    topic: "Propositional Logic & Rules of Inference",
+    unit: "Unit 5",
+    chapter: "Chapter 1: Propositional Logic",
+    difficulty: "easy",
+    explanation: "Modus Tollens follows the logical form: (p → q), ¬q, therefore ¬p. Denying the consequent correctly guarantees the negation of the antecedent in classical deductive logic.",
+    amharicExplanation: "ሞደስ ቶለንስ (Modus Tollens)፦ p → q, ~q, ስለዚህ ~p የሚለውን ቀመር የሚከተል ትክክለኛ የዲዳክቲቭ ክርክር ዓይነት ነው።"
+  },
+  {
+    questionText: "An arguer reasons: 'Every single brick in this newly constructed Wolkite University library is lightweight. Therefore, the entire library building itself is lightweight.' Which informal fallacy is committed?",
+    options: [
+      "Fallacy of Composition",
+      "Fallacy of Division",
+      "Fallacy of Accident",
+      "Hasty Generalization"
+    ],
+    correctIndex: 0,
+    topic: "Fallacies of Grammatical Analogy: Composition",
+    unit: "Unit 2",
+    chapter: "Chapter 2: Fallacies of Analogy",
+    difficulty: "medium",
+    explanation: "The fallacy of composition occurs when an attribute of the individual parts is mistakenly transferred to the whole entity. Lightweight bricks together produce a heavy building.",
+    amharicExplanation: "የአንድ ነገር ክፍሎች (Parts) ያላቸውን ባህሪ ለሙሉ አካሉ (Whole) መስጠት የኮምፖዚሽን (Fallacy of Composition) ስህተት ይባላል።"
+  },
+  {
+    questionText: "What distinguishes an inductive argument from a deductive argument according to Ethiopian university critical thinking curricula?",
+    options: [
+      "Inductive arguments claim probability rather than strict logical necessity for their conclusions",
+      "Inductive arguments are always invalid under all circumstances",
+      "Deductive arguments can never have false premises",
+      "Inductive reasoning only proceeds from general laws to specific instances"
+    ],
+    correctIndex: 0,
+    topic: "Deductive vs Inductive Logic",
+    unit: "Unit 1",
+    chapter: "Chapter 1: Nature of Logic & Arguments",
+    difficulty: "easy",
+    explanation: "Deductive arguments claim that if the premises are true, it is impossible for the conclusion to be false (strict necessity). Inductive arguments claim only that if premises are true, the conclusion is probable (strength/cogency).",
+    amharicExplanation: "የኢንዳክቲቭ ክርክር ዋና መለያው ድምዳሜው የመሆን እድል (Probability) እንጂ የግድ መሆን (Strict necessity) የሌለው መሆኑ ነው።"
+  },
+  {
+    questionText: "In testing categorical syllogisms via Venn diagrams, when shading an E-proposition ('No S are P'), which region of the two overlapping circles is shaded?",
+    options: [
+      "The lens-shaped overlap (intersection) between circle S and circle P",
+      "The crescent region of circle S outside circle P",
+      "The crescent region of circle P outside circle S",
+      "The entire universe of discourse outside both circles"
+    ],
+    correctIndex: 0,
+    topic: "Venn Diagram Techniques for Syllogisms",
+    unit: "Unit 4",
+    chapter: "Chapter 2: Venn Diagrams for Syllogisms",
+    difficulty: "medium",
+    explanation: "An E-proposition asserts that the intersection S ∩ P is completely empty. In standard Venn diagramming, empty regions are indicated by shading, so the overlapping intersection is shaded.",
+    amharicExplanation: "በቬን ዲያግራም E-proposition (No S are P) ሲገለጽ በሁለቱ ክበቦች መገናኛ (Intersection) ላይ ጥላ በማድረግ ክፍት መሆኑ ይገለጻል።"
   }
 ];
+

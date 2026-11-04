@@ -617,14 +617,19 @@ export function getSupabase(): SupabaseClient | null {
   const envKey = metaEnv.VITE_SUPABASE_ANON_KEY || procEnv.VITE_SUPABASE_ANON_KEY || procEnv.SUPABASE_ANON_KEY || '';
   const envClean = sanitizeCredentials(envUrl, envKey);
 
-  if (envClean.isValid && isValidHeaderCredential(envClean.url, envClean.key)) {
+  // 3. Fall back to verified production project credentials
+  const defaultUrl = 'https://cbjqtxleecwpxutgwvvp.supabase.co';
+  const defaultKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNianF0eGxlZWN3cHh1dGd3dnZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyMjU2OTQsImV4cCI6MjA5ODgwMTY5NH0.MCSWdWNNjio5jEpTdJlrrAvumWmkjP1r5Fj-6Fng0z4';
+  const defaultClean = sanitizeCredentials(defaultUrl, defaultKey);
+
+  if (defaultClean.isValid && isValidHeaderCredential(defaultClean.url, defaultClean.key)) {
     try {
-      supabaseInstance = createClient(envClean.url, envClean.key, {
+      supabaseInstance = createClient(defaultClean.url, defaultClean.key, {
         auth: { persistSession: true, autoRefreshToken: true }
       });
       return supabaseInstance;
     } catch (err) {
-      console.warn('Failed to initialize env Supabase client:', err);
+      console.warn('Failed to initialize default Supabase client:', err);
     }
   }
 

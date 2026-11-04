@@ -43,9 +43,18 @@ export async function ensureBooksBucketExists(bucket: string = SUPABASE_BOOKS_BU
 /**
  * Derives a full public URL for a file in Supabase Storage
  */
-export function getSupabaseStoragePublicUrl(bucket: string = SUPABASE_BOOKS_BUCKET, pathOrFilename: string): string {
-  if (!pathOrFilename || typeof pathOrFilename !== 'string') return '';
-  const clean = pathOrFilename.trim().replace(/^['"]+|['"]+$/g, '');
+export function getSupabaseStoragePublicUrl(bucketOrPath: string = SUPABASE_BOOKS_BUCKET, pathOrFilename?: string): string {
+  let bucket = SUPABASE_BOOKS_BUCKET;
+  let rawPath = pathOrFilename;
+  if (!rawPath) {
+    rawPath = bucketOrPath;
+    bucket = SUPABASE_BOOKS_BUCKET;
+  } else {
+    bucket = bucketOrPath || SUPABASE_BOOKS_BUCKET;
+  }
+
+  if (!rawPath || typeof rawPath !== 'string') return '';
+  const clean = rawPath.trim().replace(/^['"]+|['"]+$/g, '');
   if (!clean) return '';
 
   // If already an absolute HTTP URL, return as-is
@@ -78,10 +87,11 @@ export function getSupabaseStoragePublicUrl(bucket: string = SUPABASE_BOOKS_BUCK
     console.warn('[supabaseStorage] getPublicUrl error:', err);
   }
 
-  // 2. Fallback using configured Supabase URL
+  // 2. Fallback using configured Supabase URL or project default
+  const DEFAULT_SUPABASE_URL = 'https://cbjqtxleecwpxutgwvvp.supabase.co';
   const storedUrl = safeStorage.getItem('ethiolearn_supabase_url');
-  const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || '';
-  const baseUrl = (storedUrl || envUrl || '').trim().replace(/\/+$/, '');
+  const envUrl = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SUPABASE_URL) || '';
+  const baseUrl = (storedUrl || envUrl || DEFAULT_SUPABASE_URL).trim().replace(/\/+$/, '');
 
   if (baseUrl) {
     return `${baseUrl}/storage/v1/object/public/${targetBucket}/${encodeURIComponent(cleanPath)}`;

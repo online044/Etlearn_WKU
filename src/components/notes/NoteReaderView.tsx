@@ -112,6 +112,8 @@ export const NoteReaderView: React.FC<NoteReaderViewProps> = ({
   useEffect(() => {
     let mounted = true;
     setLoading(true);
+    setError(null);
+    setNote(null);
     hasResumedScrollRef.current = false;
 
     async function loadData() {
@@ -462,7 +464,7 @@ export const NoteReaderView: React.FC<NoteReaderViewProps> = ({
 
     // Split markdown by custom callout tags: :::type ... :::
     const blocks: React.ReactNode[] = [];
-    const lines = note.content.split(/\r?\n/);
+    const lines = (note?.content || '').split(/\r?\n/);
 
     let currentNormalLines: string[] = [];
     let insideCallout = false;
@@ -819,19 +821,35 @@ export const NoteReaderView: React.FC<NoteReaderViewProps> = ({
   }
 
   // 13. Error State
-  if (error || !note) {
+  if (error || (!loading && !note)) {
     return (
       <div className={`min-h-screen ${themeContainerClasses} flex flex-col items-center justify-center p-6 text-center`}>
         <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 mb-4 max-w-md">
           <h3 className="font-bold text-lg mb-1">{isAm ? 'ማስታወሻውን መክፈት አልተቻለም' : 'Unable to Open Note'}</h3>
-          <p className="text-sm opacity-90">{error}</p>
+          <p className="text-sm opacity-90">{error || (isAm ? 'የተጠየቀው ማስታወሻ አልተገኘም።' : 'The requested study note could not be found.')}</p>
         </div>
-        <button
-          onClick={onBack}
-          className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-md transition-colors"
-        >
-          {isAm ? 'ወደ ማስታወሻዎች ዝርዝር ተመለስ' : 'Return to Notes Library'}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              setError(null);
+              setLoading(true);
+              notesRepository.fetchNoteById(noteId).then((n) => {
+                if (n) setNote(n);
+                else setError(isAm ? 'ማስታወሻው አልተገኘም' : 'Note not found');
+                setLoading(false);
+              });
+            }}
+            className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-sm border border-slate-700 transition-colors cursor-pointer"
+          >
+            {isAm ? 'እንደገና ሞክር' : 'Retry'}
+          </button>
+          <button
+            onClick={onBack}
+            className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-md transition-colors cursor-pointer"
+          >
+            {isAm ? 'ወደ ማስታወሻዎች ዝርዝር ተመለስ' : 'Return to Notes Library'}
+          </button>
+        </div>
       </div>
     );
   }

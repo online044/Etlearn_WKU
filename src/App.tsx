@@ -2033,10 +2033,10 @@ export default function App() {
 
               {currentPage === 'notes' && (
                 <StudyNotesView 
-                  apiKey={profile.claudeApiKey || ""}
+                  apiKey={profile?.claudeApiKey || ""}
                   customNotes={customNotes}
                   onSaveCustomNotes={handleSaveCustomNotes}
-                  enrolledSubjects={profile.subjects}
+                  enrolledSubjects={profile?.subjects || []}
                   googleUser={googleUser}
                   googleToken={googleToken}
                   onGoogleSignIn={handleGoogleSignIn}
@@ -2045,7 +2045,7 @@ export default function App() {
                   onSaveDecksState={handleSaveDecksState}
                   onOpenInAppViewer={(url, title) => { setInAppViewerUrl(url); setInAppViewerTitle(title); }}
                   language={language}
-                  userId={profile.firebaseUid || profile.email || 'student_wku'}
+                  userId={profile?.firebaseUid || profile?.email || 'student_wku'}
                 />
               )}
 

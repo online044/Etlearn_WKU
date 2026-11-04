@@ -1166,11 +1166,11 @@ app.post(['/api/db/sync-aws', '/api/db/sync-aws/'], requireAuthenticatedUser, as
 // Safe public Supabase config endpoint (Exposes ONLY safe public Anon Key)
 app.get(['/api/supabase-config', '/api/supabase-config/'], (req: Request, res: Response) => {
   try {
-    const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+    const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://cbjqtxleecwpxutgwvvp.supabase.co').trim();
     const anonKey = (
       process.env.SUPABASE_ANON_KEY || 
       process.env.VITE_SUPABASE_ANON_KEY || 
-      ''
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNianF0eGxlZWN3cHh1dGd3dnZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyMjU2OTQsImV4cCI6MjA5ODgwMTY5NH0.MCSWdWNNjio5jEpTdJlrrAvumWmkjP1r5Fj-6Fng0z4'
     ).trim();
     return res.json({ url, anonKey });
   } catch (e: any) {

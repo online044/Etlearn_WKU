@@ -215,5 +215,54 @@ export const AUTHENTIC_BIOLOGY_QUESTIONS_HU_1011: AuthenticCurriculumQuestion[] 
     difficulty: "easy",
     explanation: "AUG serves as the initiation codon for translation in virtually all organisms, signaling the ribosome to begin protein synthesis and placing N-formylmethionine (prokaryotes) or methionine (eukaryotes).",
     amharicExplanation: "AUG የፕሮቲን ምርት መጀመሪያ ኮዶን (Start codon) ሲሆን ሚቲዮኒን (Methionine) የተባለውን አሚኖ አሲድ ይወክላል።"
+  },
+  {
+    questionText: "During the light-independent reactions of photosynthesis (Calvin Cycle) in C3 plants, which enzyme catalyzes the initial carbon dioxide fixation onto ribulose-1,5-bisphosphate (RuBP)?",
+    options: [
+      "Ribulose-1,5-bisphosphate carboxylase-oxygenase (Rubisco)",
+      "Phosphoenolpyruvate (PEP) carboxylase",
+      "ATP Synthase",
+      "Glyceraldehyde-3-phosphate dehydrogenase"
+    ],
+    correctIndex: 0,
+    topic: "Photosynthesis & Carbon Fixation in Plants",
+    unit: "Unit 2",
+    chapter: "Chapter 2: Photosynthesis & Chloroplasts",
+    difficulty: "medium",
+    explanation: "Rubisco is the primary enzyme in the stroma of chloroplasts that catalyzes the fixation of atmospheric CO2 onto the 5-carbon sugar RuBP, forming 3-phosphoglycerate (3-PGA).",
+    amharicExplanation: "ሩቢስኮ (Rubisco) በፎቶሲንተሲስ ካልቪን ሳይክል ወቅት ካርቦን ዳይኦክሳይድን ከRuBP ጋር በማጣመር ካርቦን ፊክሴሽን የሚያከናውን ወሳኝ ኢንዛይም ነው።"
+  },
+  {
+    questionText: "During DNA replication on the lagging strand, which enzyme is responsible for catalyzing the formation of phosphodiester bonds between discontinuous Okazaki fragments?",
+    options: [
+      "DNA Ligase",
+      "DNA Helicase",
+      "RNA Primase",
+      "Topoisomerase (Gyrase)"
+    ],
+    correctIndex: 0,
+    topic: "Molecular Genetics & DNA Replication",
+    unit: "Unit 4",
+    chapter: "Chapter 1: DNA Structure & Replication",
+    difficulty: "easy",
+    explanation: "DNA polymerase replaces RNA primers with DNA nucleotides, leaving single-strand nicks. DNA ligase subsequently catalyzes covalent phosphodiester bonds to join the Okazaki fragments into a continuous strand.",
+    amharicExplanation: "ዲኤንኤ ላይጌዝ (DNA Ligase) በላጊንግ ስትራንድ ላይ የተፈጠሩትን ኦካዛኪ ፍራግመንቶች (Okazaki fragments) በማገናኘት አንድ ወጥ የሆነ ሰንሰለት የሚሰራ ኢንዛይም ነው።"
+  },
+  {
+    questionText: "In classical Mendelian genetics, what is the expected phenotypic ratio among offspring from a monohybrid cross between two heterozygous individuals (Aa × Aa) demonstrating complete dominance?",
+    options: [
+      "3 : 1 (Dominant to Recessive)",
+      "1 : 2 : 1",
+      "9 : 3 : 3 : 1",
+      "1 : 1"
+    ],
+    correctIndex: 0,
+    topic: "Mendelian Genetics & Inheritance Patterns",
+    unit: "Unit 4",
+    chapter: "Chapter 2: Mendelian Principles",
+    difficulty: "easy",
+    explanation: "A cross of Aa × Aa yields genotypes 1 AA : 2 Aa : 1 aa. Because both AA and Aa exhibit the dominant phenotype, the resulting phenotypic ratio is 3 dominant : 1 recessive.",
+    amharicExplanation: "ሁለት ሄትሮዛይገስ (Aa × Aa) ወላጆች ሲራቡ የሚገኘው የፊኖታይፕ ምጣኔ 3 ገዥ (Dominant) ለ 1 ተገዥ (Recessive) ወይም 3:1 ነው።"
   }
 ];
+

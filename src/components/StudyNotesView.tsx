@@ -6,7 +6,7 @@
  * Zero flashcards • 100% offline-ready & cloud-synced • Pro & Premium UI
  */
 
-import React, { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react';
+import React, { Component, useState, useEffect, useRef, useMemo, useDeferredValue } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   BookOpen, Edit3, FileText, Download, Plus, Trash2, Check, 
@@ -33,13 +33,13 @@ import { saveNoteOffline, deleteDownloadedNote } from '../utils/offlineManager';
 
 interface StudyNotesViewProps {
   apiKey?: string;
-  customNotes: CustomNote[];
-  onSaveCustomNotes: (notes: CustomNote[]) => void;
-  enrolledSubjects: string[];
-  googleUser: User | null;
-  googleToken: string | null;
-  onGoogleSignIn: () => Promise<void>;
-  onGoogleSignOut: () => Promise<void>;
+  customNotes?: CustomNote[];
+  onSaveCustomNotes?: (notes: CustomNote[]) => void;
+  enrolledSubjects?: string[];
+  googleUser?: User | null;
+  googleToken?: string | null;
+  onGoogleSignIn?: () => Promise<void>;
+  onGoogleSignOut?: () => Promise<void>;
   decksState?: any;
   onSaveDecksState?: any;
   onOpenInAppViewer?: (url: string, title: string) => void;
@@ -48,17 +48,18 @@ interface StudyNotesViewProps {
 }
 
 export default function StudyNotesView({ 
-  customNotes, 
-  onSaveCustomNotes, 
+  customNotes = [], 
+  onSaveCustomNotes = () => {}, 
   enrolledSubjects = [],
   googleUser,
   googleToken,
-  onGoogleSignIn,
-  onGoogleSignOut,
+  onGoogleSignIn = async () => {},
+  onGoogleSignOut = async () => {},
   onOpenInAppViewer,
   language = 'en',
   userId
 }: StudyNotesViewProps) {
+  const [renderError, setRenderError] = useState<string | null>(null);
   // Main view tab: default directly to Curriculum Notes
   const [activeTab, setActiveTab] = useState<'curriculum' | 'notebook'>('curriculum');
   const [readerNoteId, setReaderNoteId] = useState<string | null>(null);
@@ -166,17 +167,23 @@ export default function StudyNotesView({
   // Filtered published notes (Instant debounced filtering)
   const filteredPublishedNotes = useMemo(() => {
     const q = deferredSearchQuery.trim().toLowerCase();
-    return publishedNotes.filter(n => {
+    return (publishedNotes || []).filter(n => {
+      const title = (n?.title || '').toLowerCase();
+      const desc = (n?.description || '').toLowerCase();
+      const subj = (n?.subject || '').toLowerCase();
+      const unit = (n?.unit || '').toLowerCase();
+      const univ = (n?.university || '').toLowerCase();
+
       const matchesSearch = !q || 
-        n.title.toLowerCase().includes(q) ||
-        (n.description && n.description.toLowerCase().includes(q)) ||
-        (n.subject && n.subject.toLowerCase().includes(q)) ||
-        (n.unit && n.unit.toLowerCase().includes(q)) ||
-        (n.university && n.university.toLowerCase().includes(q));
+        title.includes(q) ||
+        desc.includes(q) ||
+        subj.includes(q) ||
+        unit.includes(q) ||
+        univ.includes(q);
 
       const matchesSubject = selectedSubjectFilter === 'All' || 
-        (n.subject && n.subject.toLowerCase() === selectedSubjectFilter.toLowerCase()) ||
-        (n.subject && canonicalSubjectId(n.subject) === canonicalSubjectId(selectedSubjectFilter));
+        subj === selectedSubjectFilter.toLowerCase() ||
+        canonicalSubjectId(n?.subject) === canonicalSubjectId(selectedSubjectFilter);
 
       return matchesSearch && matchesSubject;
     });
@@ -190,16 +197,17 @@ export default function StudyNotesView({
   // Filtered personal notes (Instant debounced filtering)
   const filteredPersonalNotes = useMemo(() => {
     const q = deferredNoteSearchTerm.trim().toLowerCase();
-    return customNotes.filter(n => {
-      const nSub = (n.subject || '').toLowerCase();
+    const safeNotes = Array.isArray(customNotes) ? customNotes : [];
+    return safeNotes.filter(n => {
+      const nSub = (n?.subject || '').toLowerCase();
       const aSub = activeSubjectFilter.toLowerCase();
       const matchesSubject = activeSubjectFilter === 'All' || 
-        n.subject === activeSubjectFilter ||
+        n?.subject === activeSubjectFilter ||
         nSub.includes(aSub) ||
         aSub.includes(nSub);
       const matchesSearch = !q || 
-        n.title.toLowerCase().includes(q) ||
-        n.content.toLowerCase().includes(q) ||
+        ((n?.title || '').toLowerCase().includes(q)) ||
+        ((n?.content || '').toLowerCase().includes(q)) ||
         nSub.includes(q);
       return matchesSubject && matchesSearch;
     });
@@ -207,8 +215,9 @@ export default function StudyNotesView({
 
   // Total images across all custom notes
   const totalAttachedImages = useMemo(() => {
-    return customNotes.reduce((acc, curr) => {
-      const count = curr.images?.length || (curr.imageUrl ? 1 : 0);
+    const safeNotes = Array.isArray(customNotes) ? customNotes : [];
+    return safeNotes.reduce((acc, curr) => {
+      const count = curr?.images?.length || (curr?.imageUrl ? 1 : 0);
       return acc + count;
     }, 0);
   }, [customNotes]);
@@ -495,6 +504,33 @@ export default function StudyNotesView({
     if (!plain) return 0;
     return plain.split(/\s+/).length;
   }, [noteContent]);
+
+  if (renderError) {
+    const isAm = language === 'am';
+    return (
+      <div className="w-full min-h-[400px] flex flex-col items-center justify-center p-8 bg-[#0B1228] border border-amber-500/20 rounded-2xl text-center my-6">
+        <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mb-4 text-amber-400">
+          <AlertCircle className="w-6 h-6" />
+        </div>
+        <h3 className="text-lg font-black text-white mb-2">
+          {isAm ? 'ማስታወሻዎችን በማሳየት ላይ ችግር አጋጥሟል' : 'Notes Studio Temporarily Unavailable'}
+        </h3>
+        <p className="text-xs text-slate-400 max-w-md mb-5 leading-relaxed">
+          {renderError}
+        </p>
+        <button
+          onClick={() => {
+            setRenderError(null);
+            setReaderNoteId(null);
+          }}
+          className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider transition cursor-pointer shadow-md flex items-center gap-2 active:scale-95"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          <span>{isAm ? 'እንደገና ጫን' : 'Reload Notes Studio'}</span>
+        </button>
+      </div>
+    );
+  }
 
   if (readerNoteId) {
     return (

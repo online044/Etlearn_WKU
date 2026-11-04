@@ -19,8 +19,8 @@ export interface ExamBrowserViewProps {
   totalPapersCount: number;
   searchQuery: string;
   onSearchChange: (q: string) => void;
-  levelFilter: 'all' | 'uni' | 'matric' | 'exit' | 'bookmarked';
-  onLevelFilterChange: (lvl: 'all' | 'uni' | 'matric' | 'exit' | 'bookmarked') => void;
+  levelFilter: 'all' | 'uni' | 'exit' | 'bookmarked';
+  onLevelFilterChange: (lvl: 'all' | 'uni' | 'exit' | 'bookmarked') => void;
   selectedUniversity: string;
   onSelectUniversity: (uni: string) => void;
   selectedSubject: string;

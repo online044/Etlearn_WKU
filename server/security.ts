@@ -72,7 +72,7 @@ export function setSupabaseAdminCredentials(url: string, key: string): boolean {
 
 export function getSupabaseAdmin(): SupabaseClient | null {
   if (supabaseAdminClient) return supabaseAdminClient;
-  const url = (customSupabaseUrl || process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+  const url = (customSupabaseUrl || process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://cbjqtxleecwpxutgwvvp.supabase.co').trim();
   const serviceKey = (
     customSupabaseKey ||
     process.env.SUPABASE_SERVICE_ROLE_KEY || 
@@ -80,7 +80,7 @@ export function getSupabaseAdmin(): SupabaseClient | null {
     process.env.SUPABASE_KEY || 
     process.env.SUPABASE_ANON_KEY || 
     process.env.VITE_SUPABASE_ANON_KEY || 
-    ''
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNianF0eGxlZWN3cHh1dGd3dnZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyMjU2OTQsImV4cCI6MjA5ODgwMTY5NH0.MCSWdWNNjio5jEpTdJlrrAvumWmkjP1r5Fj-6Fng0z4'
   ).trim();
 
   if (url && serviceKey) {
