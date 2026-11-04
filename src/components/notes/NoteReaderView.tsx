@@ -458,131 +458,6 @@ export const NoteReaderView: React.FC<NoteReaderViewProps> = ({
     }
   }, [settings.font_family]);
 
-  // 11. Parse & Render Note Content (Headings, KaTeX, Callouts, Images, Tables, Code)
-  const renderNoteBlocks = () => {
-    if (!note) return null;
-
-    // Split markdown by custom callout tags: :::type ... :::
-    const blocks: React.ReactNode[] = [];
-    const lines = (note?.content || '').split(/\r?\n/);
-
-    let currentNormalLines: string[] = [];
-    let insideCallout = false;
-    let calloutType: CalloutType = 'key-point';
-    let calloutLines: string[] = [];
-    let insideCode = false;
-    let codeLanguage = '';
-    let codeLines: string[] = [];
-
-    const flushNormalContent = (keyPrefix: string) => {
-      if (currentNormalLines.length === 0) return;
-      const textChunk = currentNormalLines.join('\n');
-      blocks.push(renderNormalMarkdownChunk(textChunk, `${keyPrefix}_${blocks.length}`));
-      currentNormalLines = [];
-    };
-
-    lines.forEach((line, index) => {
-      const trimmed = line.trim();
-
-      // Check code block
-      if (trimmed.startsWith('```')) {
-        if (!insideCode) {
-          flushNormalContent(`chunk_${index}`);
-          insideCode = true;
-          codeLanguage = trimmed.replace('```', '').trim() || 'code';
-          codeLines = [];
-          return;
-        } else {
-          // Finish code block
-          insideCode = false;
-          const codeSnippet = codeLines.join('\n');
-          const codeBlockId = `code_${index}`;
-          blocks.push(
-            <div
-              key={codeBlockId}
-              className="my-5 rounded-2xl overflow-hidden border border-white/10 bg-[#090D1A] shadow-md"
-            >
-              <div className="flex items-center justify-between px-4 py-2 bg-white/5 border-b border-white/10 text-xs text-slate-400 font-mono">
-                <span className="uppercase font-bold tracking-wider text-[11px] text-amber-400">
-                  {codeLanguage}
-                </span>
-                <button
-                  onClick={() => handleCopyCode(codeSnippet, codeBlockId)}
-                  className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-white/10 text-slate-300 hover:text-white transition-colors"
-                >
-                  {copiedCodeId === codeBlockId ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                      <span className="text-emerald-400 text-[11px]">Copied</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5" />
-                      <span className="text-[11px]">Copy</span>
-                    </>
-                  )}
-                </button>
-              </div>
-              <pre className="p-4 overflow-x-auto text-xs sm:text-sm font-mono text-slate-200 leading-relaxed">
-                <code>{codeSnippet}</code>
-              </pre>
-            </div>
-          );
-          codeLines = [];
-          return;
-        }
-      }
-
-      if (insideCode) {
-        codeLines.push(line);
-        return;
-      }
-
-      // Check callout block start: :::type
-      if (trimmed.startsWith(':::') && !insideCallout) {
-        flushNormalContent(`chunk_${index}`);
-        insideCallout = true;
-        const tag = trimmed.replace(':::', '').trim().toLowerCase() as CalloutType;
-        calloutType = ['key-point', 'definition', 'example', 'warning', 'formula'].includes(tag)
-          ? tag
-          : 'key-point';
-        calloutLines = [];
-        return;
-      }
-
-      // Check callout block end: :::
-      if (trimmed === ':::' && insideCallout) {
-        insideCallout = false;
-        blocks.push(
-          <CalloutBlock
-            key={`callout_${index}`}
-            type={calloutType}
-            content={calloutLines.join('\n')}
-            theme={settings.theme}
-            language={language}
-          />
-        );
-        calloutLines = [];
-        return;
-      }
-
-      if (insideCallout) {
-        calloutLines.push(line);
-        return;
-      }
-
-      currentNormalLines.push(line);
-    });
-
-    flushNormalContent(`chunk_end`);
-    return blocks;
-  };
-
-  // Memoize rendered note blocks so scrolling never re-runs markdown/KaTeX parsing
-  const renderedNoteBlocks = useMemo(() => {
-    return renderNoteBlocks();
-  }, [note?.id, note?.content, settings.theme, settings.font_family, settings.font_size, language, copiedCodeId]);
-
   /**
    * Render paragraphs, headings, math equations, tables, and images
    */
@@ -794,6 +669,131 @@ export const NoteReaderView: React.FC<NoteReaderViewProps> = ({
       </div>
     );
   };
+
+  // 11. Parse & Render Note Content (Headings, KaTeX, Callouts, Images, Tables, Code)
+  const renderNoteBlocks = () => {
+    if (!note) return null;
+
+    // Split markdown by custom callout tags: :::type ... :::
+    const blocks: React.ReactNode[] = [];
+    const lines = (note?.content || '').split(/\r?\n/);
+
+    let currentNormalLines: string[] = [];
+    let insideCallout = false;
+    let calloutType: CalloutType = 'key-point';
+    let calloutLines: string[] = [];
+    let insideCode = false;
+    let codeLanguage = '';
+    let codeLines: string[] = [];
+
+    const flushNormalContent = (keyPrefix: string) => {
+      if (currentNormalLines.length === 0) return;
+      const textChunk = currentNormalLines.join('\n');
+      blocks.push(renderNormalMarkdownChunk(textChunk, `${keyPrefix}_${blocks.length}`));
+      currentNormalLines = [];
+    };
+
+    lines.forEach((line, index) => {
+      const trimmed = line.trim();
+
+      // Check code block
+      if (trimmed.startsWith('```')) {
+        if (!insideCode) {
+          flushNormalContent(`chunk_${index}`);
+          insideCode = true;
+          codeLanguage = trimmed.replace('```', '').trim() || 'code';
+          codeLines = [];
+          return;
+        } else {
+          // Finish code block
+          insideCode = false;
+          const codeSnippet = codeLines.join('\n');
+          const codeBlockId = `code_${index}`;
+          blocks.push(
+            <div
+              key={codeBlockId}
+              className="my-5 rounded-2xl overflow-hidden border border-white/10 bg-[#090D1A] shadow-md"
+            >
+              <div className="flex items-center justify-between px-4 py-2 bg-white/5 border-b border-white/10 text-xs text-slate-400 font-mono">
+                <span className="uppercase font-bold tracking-wider text-[11px] text-amber-400">
+                  {codeLanguage}
+                </span>
+                <button
+                  onClick={() => handleCopyCode(codeSnippet, codeBlockId)}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-white/10 text-slate-300 hover:text-white transition-colors"
+                >
+                  {copiedCodeId === codeBlockId ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="text-emerald-400 text-[11px]">Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span className="text-[11px]">Copy</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <pre className="p-4 overflow-x-auto text-xs sm:text-sm font-mono text-slate-200 leading-relaxed">
+                <code>{codeSnippet}</code>
+              </pre>
+            </div>
+          );
+          codeLines = [];
+          return;
+        }
+      }
+
+      if (insideCode) {
+        codeLines.push(line);
+        return;
+      }
+
+      // Check callout block start: :::type
+      if (trimmed.startsWith(':::') && !insideCallout) {
+        flushNormalContent(`chunk_${index}`);
+        insideCallout = true;
+        const tag = trimmed.replace(':::', '').trim().toLowerCase() as CalloutType;
+        calloutType = ['key-point', 'definition', 'example', 'warning', 'formula'].includes(tag)
+          ? tag
+          : 'key-point';
+        calloutLines = [];
+        return;
+      }
+
+      // Check callout block end: :::
+      if (trimmed === ':::' && insideCallout) {
+        insideCallout = false;
+        blocks.push(
+          <CalloutBlock
+            key={`callout_${index}`}
+            type={calloutType}
+            content={calloutLines.join('\n')}
+            theme={settings.theme}
+            language={language}
+          />
+        );
+        calloutLines = [];
+        return;
+      }
+
+      if (insideCallout) {
+        calloutLines.push(line);
+        return;
+      }
+
+      currentNormalLines.push(line);
+    });
+
+    flushNormalContent(`chunk_end`);
+    return blocks;
+  };
+
+  // Memoize rendered note blocks so scrolling never re-runs markdown/KaTeX parsing
+  const renderedNoteBlocks = useMemo(() => {
+    return renderNoteBlocks();
+  }, [note?.id, note?.content, settings.theme, settings.font_family, settings.font_size, language, copiedCodeId]);
 
   // 12. Skeleton Loading State
   if (loading) {
