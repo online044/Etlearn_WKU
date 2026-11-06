@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Home as HomeIcon, Bot, Trophy, Award, Sparkles, Calendar, Sun, Moon, User as UserIcon, BookOpen, CheckCircle,
+  Home as HomeIcon, Bot, Trophy, Award, Sparkles, Calendar, User as UserIcon, BookOpen, CheckCircle,
   Share, X, ShieldCheck, Download, WifiOff, GraduationCap, FileText, Menu, MoreVertical, Type, Megaphone, Bell
 } from 'lucide-react';
 
@@ -1749,23 +1749,6 @@ export default function App() {
               {/* Mobile App Install Button (APKPure - Visible only on web version, disappears after download) */}
               <PWAInstallButton language={language} variant="header" />
 
-              {/* Interactive Theme Mode Toggle */}
-              <button
-                onClick={() => {
-                  const newTheme = themeMode === 'dark' ? 'light' : 'dark';
-                  setThemeMode(newTheme);
-                  playClickChime();
-                }}
-                className="p-2 sm:p-2.5 border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-500 dark:text-zinc-400 cursor-pointer transition-colors"
-                title={themeMode === 'dark' ? "Switch to Light Mode" : "Switch to Dark Mode"}
-              >
-                {themeMode === 'dark' ? (
-                  <Sun className="w-4 h-4 text-amber-500" />
-                ) : (
-                  <Moon className="w-4 h-4 text-slate-500" />
-                )}
-              </button>
-
               {/* Official Campus Announcements Place Button */}
               <button
                 type="button"
@@ -1832,29 +1815,6 @@ export default function App() {
                     onClick={() => setIsHeaderOverflowOpen(false)}
                   />
                   <div className="absolute right-0 top-full mt-2 w-52 bg-white dark:bg-[#0c0d12] border border-slate-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-2 z-50 space-y-1 text-slate-800 dark:text-zinc-200 text-xs">
-                    {/* Theme Toggle */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const newTheme = themeMode === 'dark' ? 'light' : 'dark';
-                        setThemeMode(newTheme);
-                        playClickChime();
-                        setIsHeaderOverflowOpen(false);
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800/80 cursor-pointer font-medium"
-                    >
-                      {themeMode === 'dark' ? (
-                        <>
-                          <Sun className="w-4 h-4 text-amber-500" />
-                          <span>{language === 'am' ? 'ወደ ብሩህ ገጽታ ቀይር' : 'Light Mode'}</span>
-                        </>
-                      ) : (
-                        <>
-                          <Moon className="w-4 h-4 text-slate-500" />
-                          <span>{language === 'am' ? 'ወደ ጨለማ ገጽታ ቀይር' : 'Dark Mode'}</span>
-                        </>
-                      )}
-                    </button>
 
                     {/* APKPure App Install */}
                     <div onClick={() => setIsHeaderOverflowOpen(false)} className="w-full">

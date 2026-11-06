@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, Phone, Mail, Send, Copy, Check, Info, ShieldCheck, 
   FileText, BookOpen, GraduationCap, Trophy, User, Sparkles, 
-  ExternalLink, Sun, Moon, Globe, Calendar, Award, ChevronRight,
+  ExternalLink, Globe, Calendar, Award, ChevronRight,
   HelpCircle, Scale, Lock, HeartHandshake, Layers, Megaphone, LogOut
 } from 'lucide-react';
 import EthioLearnLogo from './EthioLearnLogo';
