@@ -40,6 +40,9 @@ export interface ExamQuestion {
   unit?: string;
   chapter?: string;
   difficulty?: string;
+  questionType?: string;
+  correctAnswer?: string;
+  optionsRaw?: Array<{ id: string; text: string }>;
 }
 
 export interface ExamPaperSheet {
@@ -48,6 +51,10 @@ export interface ExamPaperSheet {
   university: string;
   year: string;
   subject: string;
+  course?: string;
+  semester?: string;
+  examType?: string;
+  isVerifiedOfficial?: boolean;
   department?: string;
   durationMinutes: number;
   questions: ExamQuestion[];
@@ -357,50 +364,130 @@ export default function UniversityExamsView({
           university: string;
           year: string;
           subject: string;
+          course: string;
           department?: string;
+          semester?: string;
+          isVerifiedOfficial?: boolean;
           questions: ExamQuestion[];
         }> = {};
 
-        questions.forEach(q => {
-          const uni = q.university || (profile?.university ? profile.university : 'Wolkite University (WKU)');
-          const crs = q.course || q.subject || 'Academic';
-          const yr = q.academic_year || '2016 E.C.';
-          const key = `supa_exam_${crs}_${yr}`.replace(/[^a-zA-Z0-9_]/g, '_');
+        // Helper to normalize university name
+        const cleanUni = (raw?: string | null) => {
+          if (!raw || !raw.trim()) return 'General Practice Questions';
+          const lower = raw.trim().toLowerCase();
+          if (lower === 'jimma' || lower.includes('jimma')) return 'Jimma University';
+          if (lower.includes('addis ababa') || lower === 'aau') return 'Addis Ababa University';
+          if (lower.includes('wolkite') || lower.includes('wku')) return 'Wolkite University';
+          if (lower.includes('hawassa')) return 'Hawassa University';
+          if (lower.includes('bahir dar')) return 'Bahir Dar University';
+          if (lower.includes('haramaya')) return 'Haramaya University';
+          if (lower.includes('arba minch')) return 'Arba Minch University';
+          if (lower.includes('gondar')) return 'University of Gondar';
+          if (lower.includes('mekelle')) return 'Mekelle University';
+          return raw.trim();
+        };
 
-          // Exclude Grade 12 / Matric from Supabase question bank grouping
+        // Group by course and university
+        const groupedByCourseUni: Record<string, typeof questions> = {};
+        questions.forEach(q => {
+          const crs = (q.course || q.subject || 'Academic').trim();
           const crsLower = crs.toLowerCase();
           if (crsLower.includes('grade 12') || crsLower.includes('euee') || crsLower.includes('matric')) {
             return;
           }
+          const uni = cleanUni(q.university);
+          const k = `${crs}::${uni}`;
+          if (!groupedByCourseUni[k]) groupedByCourseUni[k] = [];
+          groupedByCourseUni[k].push(q);
+        });
 
-          if (!groupMap[key]) {
+        // Convert into papers ensuring at least 14 questions per paper
+        Object.entries(groupedByCourseUni).forEach(([courseUniKey, qList]) => {
+          const [crs, uni] = courseUniKey.split('::');
+          const isGeneral = uni === 'General Practice Questions';
+          const CHUNK = isGeneral ? 30 : Math.max(14, qList.length);
+
+          for (let i = 0; i < qList.length; i += CHUNK) {
+            const slice = qList.slice(i, i + CHUNK);
+            // If remainder slice is below 14 and we have a previous chunk, merge it into previous chunk
+            if (slice.length < 14 && i > 0) {
+              const prevChunkIdx = Math.floor((i - 1) / CHUNK) + 1;
+              const prevKey = `supa_${crs}_${uni}_p${prevChunkIdx}`.replace(/[^a-zA-Z0-9_]/g, '_');
+              if (groupMap[prevKey]) {
+                slice.forEach(q => {
+                  const opts = q.options && q.options.length > 0 ? q.options : ['True', 'False'];
+                  const choices = opts.map((opt, oIdx) => `${String.fromCharCode(65 + oIdx)}) ${opt}`);
+                  let correctIdx = opts.findIndex(o => o.trim().toLowerCase() === q.correct_answer.trim().toLowerCase());
+                  if (correctIdx === -1 && /^[A-E]$/i.test(q.correct_answer)) {
+                    correctIdx = q.correct_answer.toUpperCase().charCodeAt(0) - 65;
+                  }
+                  if (correctIdx === -1) correctIdx = 0;
+
+                  groupMap[prevKey].questions.push({
+                    id: groupMap[prevKey].questions.length + 1,
+                    qText: q.question_text || q.question,
+                    choices,
+                    correctIndex: correctIdx,
+                    subjectTopic: `${q.subject} • ${crs}${q.unit ? ` (${q.unit})` : ''}`,
+                    explanation: q.explanation || `Question from ${uni} for ${crs}.`,
+                    amharicExplanation: `ከ${uni} የፈተና ጥያቄዎች ባንክ የተወሰደ።`,
+                    sourceType: q.is_verified_official ? 'official_past_exam' : 'ai_generated',
+                    questionType: q.question_type || 'multiple_choice',
+                    correctAnswer: q.correct_answer,
+                    optionsRaw: q.options_raw || opts.map((o, idx) => ({ id: String.fromCharCode(65 + idx), text: o }))
+                  });
+                });
+                break;
+              }
+            }
+
+            const chunkIndex = Math.floor(i / CHUNK) + 1;
+            const key = `supa_${crs}_${uni}_p${chunkIndex}`.replace(/[^a-zA-Z0-9_]/g, '_');
+            const sampleQ = slice[0];
+            const yr = sampleQ?.academic_year || '2016 E.C.';
+            const sem = sampleQ?.semester ? (sampleQ.semester === '1' ? 'Semester I' : sampleQ.semester === '2' ? 'Semester II' : sampleQ.semester) : 'Semester I';
+            const isOfficial = slice.some(q => q.is_verified_official);
+
+            const paperTitle = isGeneral
+              ? `${crs} General Practice Paper ${chunkIndex}`
+              : `${uni} – ${crs} ${isOfficial ? 'Official Exam' : 'Practice Paper'} (${yr})`;
+
             groupMap[key] = {
-              title: `${crs} (${yr}) Exam Paper`,
+              title: paperTitle,
               university: uni,
               year: yr,
-              subject: q.subject || crs,
-              department: q.department || `${q.subject || 'University'} Academic Faculty`,
+              subject: sampleQ?.subject || crs,
+              course: crs,
+              semester: sem,
+              isVerifiedOfficial: isOfficial,
+              department: sampleQ?.department || `${sampleQ?.subject || crs} Faculty`,
               questions: []
             };
-          }
 
-          const opts = q.options && q.options.length > 0 ? q.options : ['True', 'False'];
-          const choices = opts.map((opt, oIdx) => `${String.fromCharCode(65 + oIdx)}) ${opt}`);
-          let correctIdx = opts.findIndex(o => o.trim().toLowerCase() === q.correct_answer.trim().toLowerCase());
-          if (correctIdx === -1 && /^[A-E]$/i.test(q.correct_answer)) {
-            correctIdx = q.correct_answer.toUpperCase().charCodeAt(0) - 65;
-          }
-          if (correctIdx === -1) correctIdx = 0;
+            slice.forEach(q => {
+              const opts = q.options && q.options.length > 0 ? q.options : ['True', 'False'];
+              const choices = opts.map((opt, oIdx) => `${String.fromCharCode(65 + oIdx)}) ${opt}`);
+              let correctIdx = opts.findIndex(o => o.trim().toLowerCase() === q.correct_answer.trim().toLowerCase());
+              if (correctIdx === -1 && /^[A-E]$/i.test(q.correct_answer)) {
+                correctIdx = q.correct_answer.toUpperCase().charCodeAt(0) - 65;
+              }
+              if (correctIdx === -1) correctIdx = 0;
 
-          groupMap[key].questions.push({
-            id: groupMap[key].questions.length + 1,
-            qText: q.question_text || q.question,
-            choices,
-            correctIndex: correctIdx,
-            subjectTopic: `${q.subject} • ${q.course}${q.unit ? ` (${q.unit})` : ''}`,
-            explanation: q.explanation || `Official question from ${uni} question bank for ${crs}.`,
-            amharicExplanation: `ከ${uni} የፈተና ጥያቄዎች ባንክ የተወሰደ።`
-          });
+              groupMap[key].questions.push({
+                id: groupMap[key].questions.length + 1,
+                qText: q.question_text || q.question,
+                choices,
+                correctIndex: correctIdx,
+                subjectTopic: `${q.subject} • ${crs}${q.unit ? ` (${q.unit})` : ''}`,
+                explanation: q.explanation || `Question from ${uni} for ${crs}.`,
+                amharicExplanation: `ከ${uni} የፈተና ጥያቄዎች ባንክ የተወሰደ።`,
+                sourceType: q.is_verified_official ? 'official_past_exam' : 'ai_generated',
+                questionType: q.question_type || 'multiple_choice',
+                correctAnswer: q.correct_answer,
+                optionsRaw: q.options_raw || opts.map((o, idx) => ({ id: String.fromCharCode(65 + idx), text: o }))
+              });
+            });
+          }
         });
 
         // Enforce: only include papers with at least 14 questions
@@ -412,8 +499,12 @@ export default function UniversityExamsView({
             university: g.university,
             year: g.year,
             subject: g.subject,
+            course: g.course,
+            semester: g.semester,
+            examType: g.isVerifiedOfficial ? 'Official University Exam' : 'Curriculum Practice Exam',
+            isVerifiedOfficial: g.isVerifiedOfficial,
             department: g.department,
-            durationMinutes: Math.min(90, Math.max(20, g.questions.length * 2)),
+            durationMinutes: Math.min(120, Math.max(30, g.questions.length * 2)),
             questions: g.questions
           }));
 
@@ -489,12 +580,17 @@ export default function UniversityExamsView({
         }
       }
 
-      // Subject filter
+      // Subject / Course filter
       if (selectedSubject !== 'all') {
         const sel = selectedSubject.toLowerCase();
-        const sht = sheet.subject.toLowerCase();
-        const isCppMatch = (sel.includes('computer') || sel.includes('c++')) && (sht.includes('computer') || sht.includes('c++'));
-        if (sht !== sel && !isCppMatch) {
+        const shtSub = (sheet.subject || '').toLowerCase();
+        const shtCrs = ((sheet as any).course || '').toLowerCase();
+        const shtTitle = (sheet.title || '').toLowerCase();
+        const isCppMatch = (sel.includes('computer') || sel.includes('c++')) && (shtSub.includes('computer') || shtSub.includes('c++'));
+        const isMatch = shtSub.includes(sel) || sel.includes(shtSub) || 
+                        shtCrs.includes(sel) || sel.includes(shtCrs) ||
+                        shtTitle.includes(sel) || isCppMatch;
+        if (!isMatch) {
           return false;
         }
       }

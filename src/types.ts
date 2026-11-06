@@ -687,7 +687,7 @@ export interface AppState {
 // QUESTION BANK SYSTEM TYPES (Supabase Pre-Generated & Central Question Storage)
 // ============================================================================
 
-export type BankQuestionType = 'multiple_choice' | 'true_false' | 'short_answer' | 'fill_in_the_blank';
+export type BankQuestionType = 'multiple_choice' | 'true_false' | 'short_answer' | 'fill_in_the_blank' | 'multiple_select';
 export type BankDifficulty = 'easy' | 'medium' | 'hard';
 export type BankExamCategory = 'practice_exam' | 'university_exam' | 'mock_exam' | 'quiz' | 'exit_exam';
 export type BankQuestionSource = 'imported' | 'verified_past_paper' | 'faculty_authored' | 'sample_test';
@@ -775,6 +775,7 @@ export interface QuestionBankStats {
     true_false: number;
     short_answer: number;
     fill_in_the_blank: number;
+    multiple_select?: number;
   };
   byExamCategory: {
     practice_exam: number;
@@ -814,6 +815,9 @@ export interface UniversityQuestionItem {
   unit?: string;
   chapter?: string;
   difficulty?: string;
+  questionType?: BankQuestionType;
+  correctAnswer?: string;
+  optionsRaw?: Array<{ id: string; text: string }>;
 }
 
 export interface ExamPaperSheet {
@@ -822,7 +826,11 @@ export interface ExamPaperSheet {
   university: string;
   year: string;
   subject: string;
+  course?: string;
   department?: string;
+  semester?: string;
+  examType?: string;
+  isVerifiedOfficial?: boolean;
   durationMinutes: number;
   questions: any[];
 }

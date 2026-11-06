@@ -695,10 +695,7 @@ export async function importQuestionsBatch(
               unit: q.unit || 'Unit 1',
               topic: q.topic || q.unit || 'General Topic',
               chapter: q.chapter || q.unit || 'Unit 1',
-              module_id: (q as any).module_id || 5,
-              module_name: (q as any).module_name || q.subject,
               difficulty: q.difficulty || 'medium',
-              exam_category: q.exam_category || 'practice_exam',
               source: q.source || 'imported',
               source_unit: q.source_unit || q.unit,
               source_file: q.source_file || null,
@@ -706,7 +703,7 @@ export async function importQuestionsBatch(
               department: q.department || null,
               academic_year: q.academic_year || null,
               semester: q.semester || null,
-              is_verified_official: q.is_verified_official || false,
+              is_verified_official: Boolean(q.is_verified_official),
               batch_id: q.batch_id || 'manual',
               fingerprint: q.fingerprint,
               is_published: q.is_published !== undefined ? q.is_published : true,
@@ -961,12 +958,24 @@ export async function updateQuestion(id: string, updates: Partial<QuestionBankRe
   const supabase = getSupabase();
   if (supabase) {
     try {
+      const ALLOWED_DB_COLUMNS = new Set([
+        'id', 'subject_id', 'subject', 'course', 'unit', 'topic', 'chapter',
+        'question', 'question_text', 'question_type', 'difficulty', 'options',
+        'correct_answer', 'explanation', 'source', 'source_unit', 'source_file',
+        'university', 'department', 'academic_year', 'semester', 'is_verified_official',
+        'batch_id', 'fingerprint', 'is_published', 'is_pro', 'created_at', 'updated_at'
+      ]);
+      const sanitizedUpdates: Record<string, any> = {
+        updated_at: new Date().toISOString()
+      };
+      Object.entries(updates).forEach(([k, v]) => {
+        if (ALLOWED_DB_COLUMNS.has(k) && v !== undefined) {
+          sanitizedUpdates[k] = v;
+        }
+      });
       const { error } = await supabase
         .from('questions')
-        .update({
-          ...updates,
-          updated_at: new Date().toISOString()
-        })
+        .update(sanitizedUpdates)
         .eq('id', id);
       if (error) console.warn('[updateQuestion error]:', error.message);
     } catch (e) {

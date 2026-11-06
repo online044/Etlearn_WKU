@@ -2123,6 +2123,7 @@ export const AdminQuestionBankSection: React.FC<AdminQuestionBankSectionProps> =
                     >
                       <option value="multiple_choice">Multiple Choice</option>
                       <option value="true_false">True / False</option>
+                      <option value="multiple_select">Multiple Select</option>
                       <option value="short_answer">Short Answer</option>
                       <option value="fill_in_the_blank">Fill in Blank</option>
                     </select>
@@ -2148,7 +2149,7 @@ export const AdminQuestionBankSection: React.FC<AdminQuestionBankSectionProps> =
                       value={editingQuestion.course}
                       onChange={e => setEditingQuestion({ ...editingQuestion, course: e.target.value })}
                       className="w-full px-2 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-amber-400"
-                      placeholder="e.g. Freshman Physics"
+                      placeholder="e.g. BIOL1012, PHYS1011"
                       required
                     />
                   </div>
@@ -2166,8 +2167,64 @@ export const AdminQuestionBankSection: React.FC<AdminQuestionBankSectionProps> =
                   </div>
                 </div>
 
-                {/* Multiple choice options editor */}
-                {editingQuestion.question_type === 'multiple_choice' && (
+                {/* University, Academic Year & Semester metadata */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-3 rounded-xl bg-slate-950/70 border border-slate-800">
+                  <div>
+                    <label className="font-bold text-slate-300 block mb-1">University</label>
+                    <input
+                      type="text"
+                      list="admin-uni-datalist"
+                      value={editingQuestion.university || ''}
+                      onChange={e => setEditingQuestion({ ...editingQuestion, university: e.target.value || undefined })}
+                      className="w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-amber-400 placeholder-slate-500"
+                      placeholder="e.g. Addis Ababa University (or blank for General)"
+                    />
+                    <datalist id="admin-uni-datalist">
+                      <option value="Addis Ababa University" />
+                      <option value="Arba Minch University" />
+                      <option value="Bahir Dar University" />
+                      <option value="Debre Birhan University" />
+                      <option value="Debre Markos University" />
+                      <option value="Dilla University" />
+                      <option value="Dire Dawa University" />
+                      <option value="Haramaya University" />
+                      <option value="Hawassa University" />
+                      <option value="Jimma University" />
+                      <option value="Mekelle University" />
+                      <option value="University of Gondar" />
+                      <option value="Wolkite University" />
+                    </datalist>
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-300 block mb-1">Academic Year</label>
+                    <input
+                      type="text"
+                      value={editingQuestion.academic_year || ''}
+                      onChange={e => setEditingQuestion({ ...editingQuestion, academic_year: e.target.value || undefined })}
+                      className="w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-amber-400 placeholder-slate-500"
+                      placeholder="e.g. 2016 E.C., 2015 E.C."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-300 block mb-1">Semester</label>
+                    <select
+                      value={editingQuestion.semester || ''}
+                      onChange={e => setEditingQuestion({ ...editingQuestion, semester: e.target.value || undefined })}
+                      className="w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-amber-400"
+                    >
+                      <option value="">General / Not Specified</option>
+                      <option value="Semester I">Semester I</option>
+                      <option value="Semester II">Semester II</option>
+                      <option value="1">Semester 1</option>
+                      <option value="2">Semester 2</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Multiple choice / Multiple select options editor */}
+                {(editingQuestion.question_type === 'multiple_choice' || editingQuestion.question_type === 'multiple_select') && (
                   <div className="space-y-2">
                     <label className="font-bold text-slate-300 block">Choices / Options</label>
                     {editingQuestion.options.map((opt, i) => (
@@ -2199,6 +2256,35 @@ export const AdminQuestionBankSection: React.FC<AdminQuestionBankSectionProps> =
                         </button>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {/* True/False option helper */}
+                {editingQuestion.question_type === 'true_false' && (
+                  <div className="flex items-center gap-3 p-3 bg-slate-950/60 rounded-xl border border-slate-800">
+                    <span className="text-slate-300 font-bold">Select Correct State:</span>
+                    <button
+                      type="button"
+                      onClick={() => setEditingQuestion({ ...editingQuestion, correct_answer: 'True', options: ['True', 'False'] })}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold border ${
+                        editingQuestion.correct_answer.toLowerCase() === 'true'
+                          ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                          : 'bg-slate-900 border-slate-700 text-slate-400'
+                      }`}
+                    >
+                      True
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingQuestion({ ...editingQuestion, correct_answer: 'False', options: ['True', 'False'] })}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold border ${
+                        editingQuestion.correct_answer.toLowerCase() === 'false'
+                          ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                          : 'bg-slate-900 border-slate-700 text-slate-400'
+                      }`}
+                    >
+                      False
+                    </button>
                   </div>
                 )}
 

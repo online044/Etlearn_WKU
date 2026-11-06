@@ -62,9 +62,46 @@ export default function FocusedQuestionView({
   const [showStepSolution, setShowStepSolution] = useState(false);
   const [showAmharicExplanation, setShowAmharicExplanation] = useState(false);
   const [showPaletteDrawer, setShowPaletteDrawer] = useState(false);
+  const [multiSelectIndices, setMultiSelectIndices] = useState<number[]>([]);
+  const [userTextInput, setUserTextInput] = useState<string>('');
 
-  const isCorrect = selectedChoiceIndex !== null && selectedChoiceIndex === question.correctIndex;
-  const isAnswered = selectedChoiceIndex !== null;
+  const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+  const qType = question.questionType || 
+    (question.choices && question.choices.length === 2 && 
+     question.choices.some(c => c.toLowerCase().includes('true')) && 
+     question.choices.some(c => c.toLowerCase().includes('false')) 
+      ? 'true_false' 
+      : 'multiple_choice');
+
+  React.useEffect(() => {
+    setMultiSelectIndices([]);
+    setUserTextInput('');
+  }, [questionIndex]);
+
+  let isAnswered = false;
+  let isCorrect = false;
+
+  if (qType === 'multiple_select') {
+    isAnswered = multiSelectIndices.length > 0;
+    const rawCorr = (question.correctAnswer || '').toUpperCase();
+    const correctLetters = letters.filter(l => rawCorr.includes(l));
+    const selectedLetters = multiSelectIndices.map(i => letters[i]);
+    isCorrect = correctLetters.length > 0 &&
+      correctLetters.every(l => selectedLetters.includes(l)) &&
+      selectedLetters.length === correctLetters.length;
+    if (!isCorrect && multiSelectIndices.length === 1 && multiSelectIndices[0] === question.correctIndex) {
+      isCorrect = true;
+    }
+  } else if (qType === 'short_answer' || qType === 'fill_in_the_blank') {
+    isAnswered = userTextInput.trim().length > 0;
+    const cleanUser = userTextInput.trim().toLowerCase();
+    const cleanTarget = (question.correctAnswer || '').trim().toLowerCase();
+    isCorrect = cleanUser.length > 0 && (cleanUser === cleanTarget || (question.choices.length > 0 && question.choices.some(c => c.trim().toLowerCase() === cleanUser)));
+  } else {
+    isAnswered = selectedChoiceIndex !== null;
+    isCorrect = selectedChoiceIndex !== null && selectedChoiceIndex === question.correctIndex;
+  }
 
   // Format seconds to mm:ss
   const formatTimer = (secs?: number) => {
@@ -74,7 +111,16 @@ export default function FocusedQuestionView({
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
+  const toggleMultiChoice = (idx: number) => {
+    playClickChime();
+    setMultiSelectIndices(prev => {
+      const next = prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx];
+      if (next.length > 0) {
+        onSelectChoice(next[0]);
+      }
+      return next;
+    });
+  };
 
   return (
     <div className="max-w-3xl mx-auto space-y-5 pb-12">
@@ -163,11 +209,20 @@ export default function FocusedQuestionView({
       {/* 📝 QUESTION ARENA: STATEMENT & CHOICES                                    */}
       {/* ========================================================================= */}
       <div className="bg-[#101A33] border border-white/10 rounded-2xl p-6 md:p-8 shadow-xl space-y-6">
-        {/* Topic Tag & Source Indicator */}
-        <div className="flex items-center justify-between gap-2 border-b border-white/5 pb-3">
+        {/* Topic Tag, Type & Source Indicator */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-3">
           <div className="flex items-center gap-2.5">
             <span className="text-xs sm:text-sm font-bold text-amber-400 uppercase tracking-wider">
               {question.subjectTopic || subject}
+            </span>
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/30">
+              {qType === 'multiple_select'
+                ? (language === 'am' ? 'ብዙ ምርጫ' : 'Multiple Select')
+                : qType === 'true_false'
+                ? (language === 'am' ? 'እውነት/ሐሰት' : 'True/False')
+                : qType === 'short_answer' || qType === 'fill_in_the_blank'
+                ? (language === 'am' ? 'ክፍት ቦታ ሙላ' : 'Fill Blank / Short Answer')
+                : (language === 'am' ? 'አንድ ምርጫ' : 'Single Choice')}
             </span>
             {question.year && (
               <span className="text-xs text-slate-300 px-2.5 py-0.5 rounded bg-white/5 font-semibold">
@@ -186,67 +241,163 @@ export default function FocusedQuestionView({
           {question.qText}
         </div>
 
-        {/* Answer Choices List */}
-        <div className="space-y-3.5 pt-2">
-          {question.choices.map((choice, idx) => {
-            const isSelected = selectedChoiceIndex === idx;
-            const isChoiceCorrect = idx === question.correctIndex;
-            const letter = letters[idx] || `${idx + 1}`;
+        {/* ===================================================================== */}
+        {/* TYPE 1 & 2: MULTIPLE CHOICE OR TRUE/FALSE                             */}
+        {/* ===================================================================== */}
+        {(qType === 'multiple_choice' || qType === 'true_false') && (
+          <div className="space-y-3.5 pt-2">
+            {question.choices.map((choice, idx) => {
+              const isSelected = selectedChoiceIndex === idx;
+              const isChoiceCorrect = idx === question.correctIndex;
+              const letter = letters[idx] || `${idx + 1}`;
 
-            let choiceStyle = 'bg-[#0A1128] border-white/10 hover:border-amber-500/40 text-slate-200 hover:bg-[#0E1736]';
+              let choiceStyle = 'bg-[#0A1128] border-white/10 hover:border-amber-500/40 text-slate-200 hover:bg-[#0E1736]';
 
-            if (showFeedback) {
-              if (isChoiceCorrect) {
-                choiceStyle = 'bg-emerald-500/15 border-emerald-500 text-emerald-100 ring-1 ring-emerald-500 font-semibold';
-              } else if (isSelected && !isChoiceCorrect) {
-                choiceStyle = 'bg-red-500/15 border-red-500 text-red-100 ring-1 ring-red-500 font-semibold';
-              } else {
-                choiceStyle = 'bg-[#0A1128] border-white/5 text-slate-400 opacity-60';
+              if (showFeedback) {
+                if (isChoiceCorrect) {
+                  choiceStyle = 'bg-emerald-500/15 border-emerald-500 text-emerald-100 ring-1 ring-emerald-500 font-semibold';
+                } else if (isSelected && !isChoiceCorrect) {
+                  choiceStyle = 'bg-red-500/15 border-red-500 text-red-100 ring-1 ring-red-500 font-semibold';
+                } else {
+                  choiceStyle = 'bg-[#0A1128] border-white/5 text-slate-400 opacity-60';
+                }
+              } else if (isSelected) {
+                choiceStyle = 'bg-amber-500/15 border-amber-500 text-amber-100 ring-1 ring-amber-500 font-semibold';
               }
-            } else if (isSelected) {
-              choiceStyle = 'bg-amber-500/15 border-amber-500 text-amber-100 ring-1 ring-amber-500 font-semibold';
-            }
 
-            return (
-              <button
-                key={`choice_${idx}`}
-                disabled={showFeedback}
-                onClick={() => {
-                  playClickChime();
-                  onSelectChoice(idx);
-                }}
-                className={`w-full min-h-[58px] p-4 sm:p-5 rounded-xl text-left text-sm sm:text-base md:text-[17px] leading-relaxed transition-all flex items-start gap-4 border cursor-pointer select-none ${choiceStyle}`}
-              >
-                <div
-                  className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center font-bold text-sm sm:text-base font-mono transition-colors ${
-                    showFeedback
-                      ? isChoiceCorrect
-                        ? 'bg-emerald-500 text-slate-950 font-black'
-                        : isSelected
-                        ? 'bg-red-500 text-white font-black'
-                        : 'bg-white/5 text-slate-400'
-                      : isSelected
-                      ? 'bg-amber-500 text-slate-950 font-black'
-                      : 'bg-white/5 text-slate-300 border border-white/10'
-                  }`}
+              return (
+                <button
+                  key={`choice_${idx}`}
+                  disabled={showFeedback}
+                  onClick={() => {
+                    playClickChime();
+                    onSelectChoice(idx);
+                  }}
+                  className={`w-full min-h-[58px] p-4 sm:p-5 rounded-xl text-left text-sm sm:text-base md:text-[17px] leading-relaxed transition-all flex items-start gap-4 border cursor-pointer select-none ${choiceStyle}`}
                 >
-                  {letter}
-                </div>
+                  <div
+                    className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center font-bold text-sm sm:text-base font-mono transition-colors ${
+                      showFeedback
+                        ? isChoiceCorrect
+                          ? 'bg-emerald-500 text-slate-950 font-black'
+                          : isSelected
+                          ? 'bg-red-500 text-white font-black'
+                          : 'bg-white/5 text-slate-400'
+                        : isSelected
+                        ? 'bg-amber-500 text-slate-950 font-black'
+                        : 'bg-white/5 text-slate-300 border border-white/10'
+                    }`}
+                  >
+                    {letter}
+                  </div>
 
-                <div className="flex-1 pt-0.5">
-                  <span className="font-normal">{choice}</span>
-                </div>
+                  <div className="flex-1 pt-0.5">
+                    <span className="font-normal">{choice}</span>
+                  </div>
 
-                {showFeedback && isChoiceCorrect && (
-                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-1" />
-                )}
-                {showFeedback && isSelected && !isChoiceCorrect && (
-                  <XCircle className="w-5 h-5 text-red-400 shrink-0 mt-1" />
-                )}
-              </button>
-            );
-          })}
-        </div>
+                  {showFeedback && isChoiceCorrect && (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-1" />
+                  )}
+                  {showFeedback && isSelected && !isChoiceCorrect && (
+                    <XCircle className="w-5 h-5 text-red-400 shrink-0 mt-1" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ===================================================================== */}
+        {/* TYPE 3: MULTIPLE SELECT (CHECKBOXES)                                  */}
+        {/* ===================================================================== */}
+        {qType === 'multiple_select' && (
+          <div className="space-y-3.5 pt-2">
+            <p className="text-xs text-amber-300/90 font-medium">
+              {language === 'am' ? 'የሚመለከቷቸውን ትክክለኛ መልሶች በሙሉ ይምረጡ (Select all that apply):' : 'Select all options that apply:'}
+            </p>
+            {question.choices.map((choice, idx) => {
+              const isSelected = multiSelectIndices.includes(idx);
+              const letter = letters[idx] || `${idx + 1}`;
+              const isChoiceTarget = (question.correctAnswer || '').toUpperCase().includes(letter) || idx === question.correctIndex;
+
+              let choiceStyle = 'bg-[#0A1128] border-white/10 hover:border-amber-500/40 text-slate-200 hover:bg-[#0E1736]';
+              if (showFeedback) {
+                if (isChoiceTarget) {
+                  choiceStyle = 'bg-emerald-500/15 border-emerald-500 text-emerald-100 ring-1 ring-emerald-500 font-semibold';
+                } else if (isSelected && !isChoiceTarget) {
+                  choiceStyle = 'bg-red-500/15 border-red-500 text-red-100 ring-1 ring-red-500 font-semibold';
+                } else {
+                  choiceStyle = 'bg-[#0A1128] border-white/5 text-slate-400 opacity-60';
+                }
+              } else if (isSelected) {
+                choiceStyle = 'bg-amber-500/15 border-amber-500 text-amber-100 ring-1 ring-amber-500 font-semibold';
+              }
+
+              return (
+                <button
+                  key={`multi_${idx}`}
+                  disabled={showFeedback}
+                  onClick={() => toggleMultiChoice(idx)}
+                  className={`w-full min-h-[58px] p-4 sm:p-5 rounded-xl text-left text-sm sm:text-base md:text-[17px] leading-relaxed transition-all flex items-start gap-4 border cursor-pointer select-none ${choiceStyle}`}
+                >
+                  <div
+                    className={`w-7 h-7 rounded-lg shrink-0 flex items-center justify-center font-bold text-sm transition-colors border ${
+                      isSelected
+                        ? 'bg-amber-500 border-amber-400 text-slate-950'
+                        : 'bg-white/5 border-white/20 text-slate-400'
+                    }`}
+                  >
+                    {isSelected ? <Check className="w-4 h-4 stroke-[3]" /> : letter}
+                  </div>
+
+                  <div className="flex-1 pt-0.5">
+                    <span className="font-normal">{choice}</span>
+                  </div>
+
+                  {showFeedback && isChoiceTarget && (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-1" />
+                  )}
+                  {showFeedback && isSelected && !isChoiceTarget && (
+                    <XCircle className="w-5 h-5 text-red-400 shrink-0 mt-1" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ===================================================================== */}
+        {/* TYPE 4 & 5: SHORT ANSWER & FILL IN THE BLANK                          */}
+        {/* ===================================================================== */}
+        {(qType === 'short_answer' || qType === 'fill_in_the_blank') && (
+          <div className="space-y-4 pt-2">
+            <div>
+              <label className="text-xs font-bold text-slate-300 block mb-2">
+                {language === 'am' ? 'መልስዎን እዚህ ያስገቡ:' : 'Enter your answer:'}
+              </label>
+              <input
+                type="text"
+                disabled={showFeedback}
+                value={userTextInput}
+                onChange={e => {
+                  setUserTextInput(e.target.value);
+                  if (e.target.value.trim().length > 0) {
+                    onSelectChoice(0);
+                  }
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !showFeedback && isAnswered) {
+                    if (isCorrect) playSuccessChime();
+                    else playFailureChime();
+                    onCheckAnswer();
+                  }
+                }}
+                placeholder={language === 'am' ? 'መልስዎን እዚህ ይጻፉ...' : 'Type your answer here...'}
+                className="w-full px-4 py-3.5 bg-[#0A1128] border border-white/20 rounded-xl text-white text-base focus:outline-none focus:border-amber-400 placeholder-slate-500"
+              />
+            </div>
+          </div>
+        )}
 
         {/* Check Answer Button (When not yet revealed) */}
         {!showFeedback && (
@@ -290,13 +441,16 @@ export default function FocusedQuestionView({
                   <span className="font-bold text-sm sm:text-base block">
                     {isCorrect
                       ? (language === 'am' ? '🎉 ትክክለኛ መልስ! ድንቅ ግንዛቤ።' : '🎉 Excellent! Correct Answer.')
-                      : (language === 'am' ? '❌ ትክክል አልነበረም። ትክክለኛው መልስ ' + letters[question.correctIndex] + ' ነው።' : '❌ Incorrect. The correct option is ' + letters[question.correctIndex] + '.')}
+                      : (language === 'am' 
+                          ? `❌ ትክክል አልነበረም። ትክክለኛው መልስ ${question.correctAnswer || letters[question.correctIndex] || ''} ነው።`
+                          : `❌ Incorrect. The correct answer is ${question.correctAnswer || letters[question.correctIndex] || ''}.`)}
                   </span>
                   <span className="text-xs sm:text-sm opacity-85 block">
                     {language === 'am' ? 'ከስር ያሉትን ማብራሪያዎች በመመልከት ጽንሰ-ሀሳቡን ይረዱ።' : 'Examine the detailed step solution below to solidify the concept.'}
                   </span>
                 </div>
               </div>
+
 
               {/* Solution Toggles */}
               <div className="flex items-center gap-2 shrink-0">
