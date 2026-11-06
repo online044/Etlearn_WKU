@@ -22,7 +22,7 @@ import { INITIAL_QUESTIONS } from '../data/initialFirestoreContent';
 import { generateRandomExamQuestions, fetchQuestionsPaginated, fetchAllSupabaseQuestions } from '../utils/supabaseQuestions';
 import { generateUniqueQuestions } from '../utils/examQuestionGenerator';
 import { getBuiltinAuthenticExamSheets } from '../data/authenticExamSheets';
-import ExamBrowserView from './ExamBrowserView';
+import ExamBrowserView, { isUniversityFree } from './ExamBrowserView';
 import FocusedQuestionView from './FocusedQuestionView';
 import ExamDetailView from './ExamDetailView';
 import { enqueueOfflineProgress, getOfflineStorageOverview } from '../utils/offlineManager';
@@ -378,6 +378,7 @@ export default function UniversityExamsView({
           if (lower === 'jimma' || lower.includes('jimma')) return 'Jimma University';
           if (lower.includes('addis ababa') || lower === 'aau') return 'Addis Ababa University';
           if (lower.includes('wolkite') || lower.includes('wku')) return 'Wolkite University';
+          if (lower.includes('adama') || lower.includes('astu')) return 'Adama Science and Technology University (ASTU)';
           if (lower.includes('hawassa')) return 'Hawassa University';
           if (lower.includes('bahir dar')) return 'Bahir Dar University';
           if (lower.includes('haramaya')) return 'Haramaya University';
@@ -1029,22 +1030,11 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
   // Handle Practice Choice Selection
   const handleSelectChoice = (choiceIdx: number) => {
     if (showAnswerFeedback) return;
-    const isSheetFree = Boolean(
-      activeSheet && (
-        (activeSheet.subject || '').toLowerCase().includes('bio') ||
-        (activeSheet.subject || '').toLowerCase().includes('chem') ||
-        (activeSheet.title || '').toLowerCase().includes('bio') ||
-        (activeSheet.title || '').toLowerCase().includes('chem')
-      )
-    );
-    if (currentQuestion && activeSheet && !isSheetFree) {
-      const qKey = `${activeSheet.id}_q_${currentQuestion.id || activeQuestionIndex}`;
-      const alreadyTried = triedQuestionKeys.includes(qKey);
-      if (!isProUser && !alreadyTried && questionsTriedCount >= FREE_TRIAL_LIMIT) {
-        playFailureChime();
-        setShowTrialLimitModal(true);
-        return;
-      }
+    const isSheetFree = isUniversityFree(activeSheet?.university);
+    if (currentQuestion && activeSheet && !isSheetFree && !isProUser) {
+      playFailureChime();
+      setShowTrialLimitModal(true);
+      return;
     }
     playClickChime();
     setSelectedChoiceIndex(choiceIdx);
@@ -1053,36 +1043,23 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
   const handleCheckAnswer = () => {
     if (selectedChoiceIndex === null || !currentQuestion || !activeSheet) return;
 
-    const isSheetFree = Boolean(
-      activeSheet && (
-        (activeSheet.subject || '').toLowerCase().includes('bio') ||
-        (activeSheet.subject || '').toLowerCase().includes('chem') ||
-        (activeSheet.title || '').toLowerCase().includes('bio') ||
-        (activeSheet.title || '').toLowerCase().includes('chem')
-      )
-    );
+    const isSheetFree = isUniversityFree(activeSheet?.university);
 
-    // 20-Question Free Practice Quota Check (Biology & Chemistry are 100% Free!)
-    const qKey = `${activeSheet.id}_q_${currentQuestion.id || activeQuestionIndex}`;
-    const alreadyTried = triedQuestionKeys.includes(qKey);
-
-    if (!isProUser && !isSheetFree && !alreadyTried && questionsTriedCount >= FREE_TRIAL_LIMIT) {
+    // Free access check: Only ASTU & Wolkite (and Pro scholars) have full access
+    if (!isProUser && !isSheetFree) {
       playFailureChime();
       setShowTrialLimitModal(true);
       return;
     }
+
+    const qKey = `${activeSheet.id}_q_${currentQuestion.id || activeQuestionIndex}`;
+    const alreadyTried = triedQuestionKeys.includes(qKey);
 
     if (!alreadyTried && !isSheetFree) {
       const updatedKeys = [...triedQuestionKeys, qKey];
       setTriedQuestionKeys(updatedKeys);
       safeStorage.setItem('ethiolearn_tried_question_keys', JSON.stringify(updatedKeys));
       safeStorage.setItem('ethiolearn_questions_tried_count', String(updatedKeys.length));
-
-      if (!isProUser && updatedKeys.length >= FREE_TRIAL_LIMIT) {
-        setTimeout(() => {
-          setShowTrialLimitModal(true);
-        }, 1200);
-      }
     }
 
     setShowAnswerFeedback(true);
@@ -1118,13 +1095,8 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
 
   const startTimedSimulation = () => {
     if (!activeSheet) return;
-    const isSheetFree = Boolean(
-      (activeSheet.subject || '').toLowerCase().includes('bio') ||
-      (activeSheet.subject || '').toLowerCase().includes('chem') ||
-      (activeSheet.title || '').toLowerCase().includes('bio') ||
-      (activeSheet.title || '').toLowerCase().includes('chem')
-    );
-    if (!isProUser && !isSheetFree && questionsTriedCount >= FREE_TRIAL_LIMIT) {
+    const isSheetFree = isUniversityFree(activeSheet.university);
+    if (!isProUser && !isSheetFree) {
       playFailureChime();
       setShowTrialLimitModal(true);
       return;
@@ -1481,6 +1453,12 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
           bookmarkedPapers={bookmarkedPapers}
           onToggleBookmark={toggleBookmark}
           onOpenExam={(sheetId) => {
+            const sheet = examSheets.find(s => s.id === sheetId);
+            if (sheet && !isProUser && !isUniversityFree(sheet.university)) {
+              playFailureChime();
+              setShowTrialLimitModal(true);
+              return;
+            }
             setSelectedSheetId(sheetId);
             setActiveQuestionIndex(0);
             setSelectedChoiceIndex(null);
@@ -1497,6 +1475,11 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
           departmentList={departmentList}
           subjectList={subjectList}
           language={language}
+          isProUser={isProUser}
+          onUpgrade={() => {
+            playClickChime();
+            onNavigate('upgrade');
+          }}
         />
       )}
 
@@ -2170,15 +2153,15 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
                 </div>
                 <div className="space-y-1">
                   <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-amber-400 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20 inline-block">
-                    {language === 'am' ? 'የነጻ ሙከራ ገደብ ደርሷል (20/20)' : 'Trial Limit Reached (20/20)'}
+                    {language === 'am' ? 'የተቆለፈ የዩኒቨርሲቲ ፈተና (Pro)' : 'University Locked for Purchase'}
                   </span>
                   <h3 className="text-xl font-black text-white font-serif pt-1">
-                    {language === 'am' ? 'የ20 ጥያቄዎች ነጻ ሙከራዎ ተጠናቋል' : '20 Free Questions Solved!'}
+                    {language === 'am' ? 'ይህ ዩኒቨርሲቲ በፕሮ ብቻ ይከፈታል' : 'Unlock All Universities with Pro'}
                   </h3>
                   <p className="text-xs text-slate-300 leading-relaxed max-w-md mx-auto pt-1">
                     {language === 'am'
-                      ? 'የ20 ጥያቄዎች የነጻ ሙከራዎን በተሳካ ሁኔታ አጠናቀዋል። ሙሉ የዩኒቨርሲቲ ፈተናዎችን፣ ያልተገደቡ የልምምድ ጥያቄዎችን እና የፋኩልቲ ሙሉ የመፍትሔ ቅደም ተከተል ለመጠቀም ወደ EthioLearn Pro ያሳድጉ።'
-                      : 'You have solved all 20 complimentary trial questions. Upgrade to EthioLearn Pro to unlock all 10,000+ authentic university past exam questions, step-by-step faculty proofs, and timed simulation mock rankings.'}
+                      ? 'በነጻ ክፍት የሆኑት የASTU (አዳማ ሳይንስና ቴክኖሎጂ) እና የወልቂጤ ዩኒቨርሲቲ ፈተናዎች ብቻ ናቸው። አዲስ አበባ ዩኒቨርሲቲ፣ ጅማ፣ ሀዋሳ፣ ባህር ዳር እና ሁሉንም የኢትዮጵያ ዩኒቨርሲቲዎች ለመክፈት ወደ EthioLearn Pro ያሳድጉ።'
+                      : 'Only ASTU and Wolkite University past exams are open for free access. All other universities are locked for purchase. Upgrade to EthioLearn Pro to unlock all 10,000+ authentic university past exams, full faculty proofs, and mock simulations.'}
                   </p>
                 </div>
               </div>

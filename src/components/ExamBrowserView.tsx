@@ -10,7 +10,7 @@ import {
   Building2, ArrowRight, Download, Check,
   ChevronDown, ChevronRight, Layers, GraduationCap,
   ShieldCheck, Calendar, BookOpen, Sparkles, Folder,
-  LayoutGrid, ListFilter, Star
+  LayoutGrid, ListFilter, Star, Lock, Award
 } from 'lucide-react';
 import { ExamPaperSheet } from '../types';
 import { playClickChime, playSuccessChime } from '../utils/audio';
@@ -18,6 +18,7 @@ import { saveExamOffline, isExamDownloaded } from '../utils/offlineManager';
 import { safeStorage } from '../utils/safeStorage';
 
 export const ETHIOPIAN_UNIVERSITIES = [
+  'Adama Science and Technology University (ASTU)',
   'Addis Ababa University',
   'Arba Minch University',
   'Bahir Dar University',
@@ -32,6 +33,19 @@ export const ETHIOPIAN_UNIVERSITIES = [
   'University of Gondar',
   'Wolkite University'
 ];
+
+/**
+ * Check if a university past exam is free/open for non-Pro students.
+ * Only ASTU and Wolkite University (and General Practice) are open; all other universities require Pro.
+ */
+export function isUniversityFree(uniName?: string | null): boolean {
+  if (!uniName) return true;
+  const lower = uniName.trim().toLowerCase();
+  if (lower.includes('general practice')) return true;
+  if (lower.includes('wolkite') || lower.includes('wku')) return true;
+  if (lower.includes('adama') || lower.includes('astu')) return true;
+  return false;
+}
 
 export const ETHIOPIAN_FRESHMAN_COURSES = [
   { code: 'all', title: 'All Courses', nameAm: 'ሁሉም ኮርሶች' },
@@ -84,6 +98,8 @@ export interface ExamBrowserViewProps {
   departmentList: string[];
   subjectList: string[];
   language: 'en' | 'am';
+  isProUser?: boolean;
+  onUpgrade?: () => void;
 }
 
 export default function ExamBrowserView({
@@ -117,6 +133,8 @@ export default function ExamBrowserView({
   departmentList,
   subjectList,
   language,
+  isProUser = false,
+  onUpgrade,
 }: ExamBrowserViewProps) {
   const [showFilters, setShowFilters] = useState(false);
   const [downloadedExamIds, setDownloadedExamIds] = useState<Set<string>>(new Set());
@@ -279,16 +297,19 @@ export default function ExamBrowserView({
   const renderExamCard = (sheet: ExamPaperSheet) => {
     const isBookmarked = bookmarkedPapers.includes(sheet.id);
     const isOfficial = sheet.isVerifiedOfficial || sheet.questions.some(q => (q.sourceType || 'official_past_exam') === 'official_past_exam');
+    const isLocked = !isProUser && !isUniversityFree(sheet.university);
 
     return (
       <div
         key={sheet.id}
-        className="bg-[#111C35] border border-slate-800 hover:border-slate-700 rounded-2xl p-4 transition flex flex-col justify-between gap-3 text-left group"
+        className={`bg-[#111C35] border rounded-2xl p-4 transition flex flex-col justify-between gap-3 text-left group ${
+          isLocked ? 'border-amber-500/25 bg-[#101932]' : 'border-slate-800 hover:border-slate-700'
+        }`}
       >
-        {/* Top Row: Year / Official & Subtle Bookmark */}
+        {/* Top Row: Year / Official / Lock status & Bookmark */}
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-xs font-semibold">
+            <div className="flex items-center gap-2 text-xs font-semibold flex-wrap">
               <span className="text-amber-400 font-bold">
                 {sheet.year || '2025/2026'}
               </span>
@@ -302,6 +323,17 @@ export default function ExamBrowserView({
                   <span className="text-slate-500">·</span>
                   <span className="text-slate-400">{sheet.semester}</span>
                 </>
+              )}
+              {isLocked ? (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/35 flex items-center gap-1">
+                  <Lock className="w-2.5 h-2.5 text-amber-400" />
+                  <span>{language === 'am' ? 'ፕሮ (Locked)' : 'Locked'}</span>
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/35 flex items-center gap-1">
+                  <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
+                  <span>{language === 'am' ? 'ነፃ ክፍት' : 'Free Open'}</span>
+                </span>
               )}
             </div>
 
@@ -351,6 +383,11 @@ export default function ExamBrowserView({
               disabled={downloadingExamId === sheet.id}
               onClick={async (e) => {
                 e.stopPropagation();
+                if (isLocked) {
+                  playClickChime();
+                  onUpgrade?.();
+                  return;
+                }
                 playClickChime();
                 setDownloadingExamId(sheet.id);
                 await saveExamOffline({
@@ -369,27 +406,52 @@ export default function ExamBrowserView({
               className={`p-2.5 rounded-xl border transition flex items-center justify-center cursor-pointer shrink-0 ${
                 downloadedExamIds.has(sheet.id)
                   ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                  : isLocked
+                  ? 'bg-amber-500/10 border-amber-500/25 text-amber-400/80 hover:bg-amber-500/20'
                   : 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-white'
               }`}
-              title={downloadedExamIds.has(sheet.id) ? (language === 'am' ? 'ወርዷል (ያለ ዳታ ይሰራል)' : 'Downloaded (Offline Ready)') : (language === 'am' ? 'ያለ ዳታ ለማጥናት አውርድ' : 'Download for Offline Study')}
+              title={
+                isLocked 
+                  ? (language === 'am' ? 'የተቆለፈ - ለማውረድ ወደ ፕሮ ያሳድጉ' : 'Locked - Upgrade to Pro to download')
+                  : downloadedExamIds.has(sheet.id) 
+                  ? (language === 'am' ? 'ወርዷል (ያለ ዳታ ይሰራል)' : 'Downloaded (Offline Ready)') 
+                  : (language === 'am' ? 'ያለ ዳታ ለማጥናት አውርድ' : 'Download for Offline Study')
+              }
             >
-              {downloadedExamIds.has(sheet.id) ? (
+              {isLocked ? (
+                <Lock className="w-4 h-4 text-amber-400" />
+              ) : downloadedExamIds.has(sheet.id) ? (
                 <Check className="w-4 h-4 text-emerald-400 stroke-[2.5]" />
               ) : (
                 <Download className={`w-4 h-4 ${downloadingExamId === sheet.id ? 'animate-bounce text-amber-400' : 'text-slate-300 hover:text-amber-400'}`} />
               )}
             </button>
 
-            <button
-              onClick={() => {
-                playClickChime();
-                onOpenExam(sheet.id);
-              }}
-              className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs sm:text-sm uppercase tracking-wider rounded-xl transition flex items-center justify-center gap-2 cursor-pointer active:scale-98 shadow-md"
-            >
-              <span>{language === 'am' ? 'ፈተናውን ክፈትና አጥና' : 'Open Exam & Study'}</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+            {isLocked ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  playClickChime();
+                  onUpgrade?.();
+                }}
+                className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs sm:text-sm uppercase tracking-wider rounded-xl transition flex items-center justify-center gap-2 cursor-pointer active:scale-98 shadow-md"
+              >
+                <Lock className="w-4 h-4" />
+                <span>{language === 'am' ? 'በፕሮ ክፈት (Locked)' : 'Unlock with Pro'}</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  playClickChime();
+                  onOpenExam(sheet.id);
+                }}
+                className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs sm:text-sm uppercase tracking-wider rounded-xl transition flex items-center justify-center gap-2 cursor-pointer active:scale-98 shadow-md"
+              >
+                <span>{language === 'am' ? 'ፈተናውን ክፈትና አጥና' : 'Open Exam & Study'}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -808,12 +870,17 @@ export default function ExamBrowserView({
             const totalQ = uniSheets.reduce((sum, s) => sum + s.questions.length, 0);
             const hasOfficial = uniSheets.some(s => s.isVerifiedOfficial);
             const isFavorite = favoriteUnis.includes(uniName);
+            const isUniLocked = !isProUser && !isUniversityFree(uniName);
 
             return (
               <div
                 key={uniName}
                 className={`bg-[#111C35] border rounded-2xl overflow-hidden transition ${
-                  isFavorite ? 'border-amber-500/40 shadow-sm shadow-amber-500/10' : 'border-slate-800 hover:border-slate-700'
+                  isFavorite 
+                    ? 'border-amber-500/40 shadow-sm shadow-amber-500/10' 
+                    : isUniLocked
+                    ? 'border-slate-800/80 hover:border-amber-500/30'
+                    : 'border-slate-800 hover:border-slate-700'
                 }`}
               >
                 <div
@@ -832,11 +899,19 @@ export default function ExamBrowserView({
                     <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
                       isFavorite
                         ? 'bg-amber-500/20 border-amber-500/40 text-amber-400'
+                        : isUniLocked
+                        ? 'bg-amber-500/10 border-amber-500/25 text-amber-400/90'
                         : uniSheets.length > 0
-                        ? 'bg-blue-500/20 border-blue-500/40 text-blue-300'
+                        ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
                         : 'bg-slate-800/60 border-slate-700 text-slate-500'
                     }`}>
-                      {isFavorite ? <Star className="w-5 h-5 fill-amber-400" /> : <Building2 className="w-5 h-5" />}
+                      {isFavorite ? (
+                        <Star className="w-5 h-5 fill-amber-400" />
+                      ) : isUniLocked ? (
+                        <Lock className="w-4 h-4 text-amber-400" />
+                      ) : (
+                        <Building2 className="w-5 h-5" />
+                      )}
                     </div>
 
                     <div className="min-w-0">
@@ -850,8 +925,19 @@ export default function ExamBrowserView({
                             <span>Favorite</span>
                           </span>
                         )}
+                        {isUniLocked ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/35 flex items-center gap-1">
+                            <Lock className="w-2.5 h-2.5 text-amber-400" />
+                            <span>{language === 'am' ? 'የተቆለፈ · ፕሮ' : 'Locked · Pro'}</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/35 flex items-center gap-1">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
+                            <span>{language === 'am' ? 'ክፍት · ነፃ' : 'Open · Free'}</span>
+                          </span>
+                        )}
                         {hasOfficial && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30 flex items-center gap-1">
                             <ShieldCheck className="w-3 h-3" />
                             <span>Official</span>
                           </span>
@@ -862,6 +948,11 @@ export default function ExamBrowserView({
                         {uniSheets.length > 0 ? (
                           <span>
                             {uniSheets.length} {uniSheets.length === 1 ? 'paper' : 'papers'} · {totalQ} {totalQ === 1 ? 'question' : 'questions'}
+                            {isUniLocked && (
+                              <span className="text-amber-400/90 ml-1.5 font-medium">
+                                · {language === 'am' ? '(ለመክፈት ፕሮ ያስፈልጋል)' : '(Requires Pro to unlock)'}
+                              </span>
+                            )}
                           </span>
                         ) : (
                           <span className="text-slate-500 italic">
@@ -887,7 +978,9 @@ export default function ExamBrowserView({
                     </button>
 
                     <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${
-                      uniSheets.length > 0
+                      isUniLocked
+                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                        : uniSheets.length > 0
                         ? 'bg-blue-500/10 border-blue-500/30 text-blue-300'
                         : 'bg-slate-800/40 border-slate-800 text-slate-500'
                     }`}>
@@ -899,6 +992,39 @@ export default function ExamBrowserView({
 
                 {isExpanded && (
                   <div className="p-4 pt-1 border-t border-slate-800/80 bg-[#0C1428]/60 space-y-4">
+                    {/* Locked for Purchase Banner (Only ASTU & Wolkite are open) */}
+                    {isUniLocked && (
+                      <div className="p-3.5 rounded-xl bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-transparent border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/35 flex items-center justify-center text-amber-400 shrink-0">
+                            <Lock className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-bold text-white flex items-center gap-2">
+                              <span>{language === 'am' ? `${uniName} ለግዢ ተቆልፏል` : `${uniName} is Locked for Purchase`}</span>
+                              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">PRO ONLY</span>
+                            </h4>
+                            <p className="text-[11px] text-slate-300 mt-0.5">
+                              {language === 'am'
+                                ? 'በነጻ ክፍት የሆኑት የASTU (አዳማ) እና የወልቂጤ ዩኒቨርሲቲ ፈተናዎች ብቻ ናቸው። ይህን ዩኒቨርሲቲ እና ሁሉንም የፈተና ጥያቄዎች ለመክፈት ወደ ፕሮ ያሳድጉ።'
+                                : 'Only ASTU and Wolkite University past exams are open for free access. Upgrade to EthioLearn Pro to unlock this university and all authentic Ethiopian exams.'}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            playClickChime();
+                            onUpgrade?.();
+                          }}
+                          className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition shrink-0 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shadow"
+                        >
+                          <Award className="w-3.5 h-3.5 text-slate-950" />
+                          <span>{language === 'am' ? 'በፕሮ ክፈት' : 'Unlock with Pro'}</span>
+                        </button>
+                      </div>
+                    )}
                     {uniSheets.length === 0 ? (
                       <div className="p-5 text-center rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
                         <Folder className="w-6 h-6 text-slate-600 mx-auto" />
