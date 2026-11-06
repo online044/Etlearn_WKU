@@ -82,7 +82,7 @@ import { generateAcademicQuiz } from './server/quizGenerator';
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 // ============================================================================
 // 1. SECURITY HEADERS & GLOBAL MIDDLEWARE
@@ -2546,7 +2546,13 @@ async function startServer() {
     const distPath = path.join(process.cwd(), 'dist');
     const distIndex = path.join(distPath, 'index.html');
     if (fs.existsSync(distPath)) {
-      app.use(express.static(distPath));
+      app.use(express.static(distPath, {
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith('.mjs') || filePath.endsWith('.js')) {
+            res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+          }
+        }
+      }));
     }
     app.get('*', (req, res) => {
       if (req.path.startsWith('/api')) {

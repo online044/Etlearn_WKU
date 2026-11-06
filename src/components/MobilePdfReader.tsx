@@ -5,6 +5,8 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
+// Import worker directly from installed pdfjs-dist via Vite URL bundling
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { 
   ChevronLeft, ChevronRight, ZoomIn, ZoomOut, 
   Maximize2, Minimize2, RotateCw, RefreshCw, 
@@ -16,9 +18,9 @@ import { playClickChime, playSuccessChime } from '../utils/audio';
 import { getOfflineBook, saveBookOffline } from '../utils/offlineBooksDB';
 import { downloadSupabasePdfBlob } from '../utils/supabaseStorage';
 
-// Set up pdf.js worker URL pointing to local public asset for 100% offline reliability
+// Configure PDF.js worker using the version-matched worker bundled by Vite
 if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 }
 
 export interface MobilePdfReaderProps {
@@ -412,6 +414,10 @@ export default function MobilePdfReader({
       }
 
       // 2. Load into PDF.js engine
+      if (typeof window !== 'undefined' && (!pdfjsLib.GlobalWorkerOptions.workerSrc || pdfjsLib.GlobalWorkerOptions.workerSrc !== pdfjsWorker)) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+      }
+
       const getDocConfig: any = {
         cMapUrl: '/pdfjs/cmaps/',
         cMapPacked: true,
