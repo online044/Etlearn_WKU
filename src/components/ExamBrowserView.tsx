@@ -36,14 +36,12 @@ export const ETHIOPIAN_UNIVERSITIES = [
 
 /**
  * Check if a university past exam is free/open for non-Pro students.
- * Only ASTU and Wolkite University (and General Practice) are open; all other universities require Pro.
+ * Only Wolkite University is open for complimentary access; all other universities (ASTU, AAU, Jimma, etc.) are locked for purchase.
  */
 export function isUniversityFree(uniName?: string | null): boolean {
-  if (!uniName) return true;
+  if (!uniName) return false;
   const lower = uniName.trim().toLowerCase();
-  if (lower.includes('general practice')) return true;
   if (lower.includes('wolkite') || lower.includes('wku')) return true;
-  if (lower.includes('adama') || lower.includes('astu')) return true;
   return false;
 }
 
@@ -772,10 +770,11 @@ export default function ExamBrowserView({
             const isExpanded = expandedUnis.has('General Practice Questions');
             const totalQ = generalSheets.reduce((sum, s) => sum + s.questions.length, 0);
             const isGenFav = favoriteUnis.includes('General Practice Questions');
+            const isGenLocked = !isProUser && !isUniversityFree('General Practice Questions');
 
             return (
               <div className={`bg-[#101A33] border rounded-2xl overflow-hidden shadow-lg transition ${
-                isGenFav ? 'border-amber-400/60 shadow-amber-500/10' : 'border-amber-500/30'
+                isGenFav ? 'border-amber-400/60 shadow-amber-500/10' : isGenLocked ? 'border-amber-500/30' : 'border-slate-800'
               }`}>
                 <div
                   role="button"
@@ -791,7 +790,7 @@ export default function ExamBrowserView({
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
-                      <Sparkles className="w-5 h-5" />
+                      {isGenLocked ? <Lock className="w-4 h-4 text-amber-400" /> : <Sparkles className="w-5 h-5" />}
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -804,12 +803,28 @@ export default function ExamBrowserView({
                             <span>Favorite</span>
                           </span>
                         )}
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        {isGenLocked ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/35 flex items-center gap-1">
+                            <Lock className="w-2.5 h-2.5 text-amber-400" />
+                            <span>{language === 'am' ? 'የተቆለፈ · ፕሮ' : 'Locked · Pro'}</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/35 flex items-center gap-1">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
+                            <span>{language === 'am' ? 'ክፍት · ነፃ' : 'Open · Free'}</span>
+                          </span>
+                        )}
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
                           {language === 'am' ? 'ሀገራዊ የጥያቄዎች ባንክ' : 'National Bank'}
                         </span>
                       </div>
                       <p className="text-xs text-slate-400 mt-0.5 truncate">
                         {generalSheets.length} {language === 'am' ? 'የፈተና ወረቀቶች' : 'exam papers'} · {totalQ} {language === 'am' ? 'ጥያቄዎች' : 'questions'}
+                        {isGenLocked && (
+                          <span className="text-amber-400/90 ml-1.5 font-medium">
+                            · {language === 'am' ? '(ለመክፈት ፕሮ ያስፈልጋል)' : '(Requires Pro to unlock)'}
+                          </span>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -828,7 +843,11 @@ export default function ExamBrowserView({
                       <Star className={`w-3.5 h-3.5 ${isGenFav ? 'fill-amber-400 text-amber-400' : ''}`} />
                     </button>
 
-                    <span className="text-xs font-bold text-amber-400 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${
+                      isGenLocked
+                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                        : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                    }`}>
                       {generalSheets.length} {generalSheets.length === 1 ? 'Paper' : 'Papers'}
                     </span>
                     <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-amber-400' : ''}`} />
@@ -837,6 +856,39 @@ export default function ExamBrowserView({
 
                 {isExpanded && (
                   <div className="p-4 pt-1 border-t border-slate-800/80 bg-[#0C1428]/60 space-y-4">
+                    {/* Locked for Purchase Banner */}
+                    {isGenLocked && (
+                      <div className="p-3.5 rounded-xl bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-transparent border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/35 flex items-center justify-center text-amber-400 shrink-0">
+                            <Lock className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-bold text-white flex items-center gap-2">
+                              <span>{language === 'am' ? 'አጠቃላይ የልምምድ ጥያቄዎች ለግዢ ተቆልፈዋል' : 'General Practice Questions are Locked for Purchase'}</span>
+                              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">PRO ONLY</span>
+                            </h4>
+                            <p className="text-[11px] text-slate-300 mt-0.5">
+                              {language === 'am'
+                                ? 'በነጻ ክፍት የሆኑት የወልቂጤ ዩኒቨርሲቲ ፈተናዎች ብቻ ናቸው። ይህን እና ሁሉንም የፈተና ጥያቄዎች ለመክፈት ወደ ፕሮ ያሳድጉ።'
+                                : 'Only Wolkite University past exams are open for free access. Upgrade to EthioLearn Pro to unlock all national question banks.'}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            playClickChime();
+                            onUpgrade?.();
+                          }}
+                          className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition shrink-0 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shadow"
+                        >
+                          <Award className="w-3.5 h-3.5 text-slate-950" />
+                          <span>{language === 'am' ? 'በፕሮ ክፈት' : 'Unlock with Pro'}</span>
+                        </button>
+                      </div>
+                    )}
                     {generalSheets.length === 0 ? (
                       <div className="p-4 text-center text-xs text-slate-400">
                         {language === 'am' ? 'ለዚህ ኮርስ ምንም አጠቃላይ የልምምድ ጥያቄ የለም።' : 'No general practice papers for the current filter.'}
@@ -1006,8 +1058,8 @@ export default function ExamBrowserView({
                             </h4>
                             <p className="text-[11px] text-slate-300 mt-0.5">
                               {language === 'am'
-                                ? 'በነጻ ክፍት የሆኑት የASTU (አዳማ) እና የወልቂጤ ዩኒቨርሲቲ ፈተናዎች ብቻ ናቸው። ይህን ዩኒቨርሲቲ እና ሁሉንም የፈተና ጥያቄዎች ለመክፈት ወደ ፕሮ ያሳድጉ።'
-                                : 'Only ASTU and Wolkite University past exams are open for free access. Upgrade to EthioLearn Pro to unlock this university and all authentic Ethiopian exams.'}
+                                ? 'በነጻ ክፍት የሆኑት የወልቂጤ ዩኒቨርሲቲ ፈተናዎች ብቻ ናቸው። ይህን ዩኒቨርሲቲ እና ሁሉንም የፈተና ጥያቄዎች ለመክፈት ወደ ፕሮ ያሳድጉ።'
+                                : 'Only Wolkite University past exams are open for free access. Upgrade to EthioLearn Pro to unlock this university and all authentic Ethiopian exams.'}
                             </p>
                           </div>
                         </div>

@@ -2160,8 +2160,8 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
                   </h3>
                   <p className="text-xs text-slate-300 leading-relaxed max-w-md mx-auto pt-1">
                     {language === 'am'
-                      ? 'በነጻ ክፍት የሆኑት የASTU (አዳማ ሳይንስና ቴክኖሎጂ) እና የወልቂጤ ዩኒቨርሲቲ ፈተናዎች ብቻ ናቸው። አዲስ አበባ ዩኒቨርሲቲ፣ ጅማ፣ ሀዋሳ፣ ባህር ዳር እና ሁሉንም የኢትዮጵያ ዩኒቨርሲቲዎች ለመክፈት ወደ EthioLearn Pro ያሳድጉ።'
-                      : 'Only ASTU and Wolkite University past exams are open for free access. All other universities are locked for purchase. Upgrade to EthioLearn Pro to unlock all 10,000+ authentic university past exams, full faculty proofs, and mock simulations.'}
+                      ? 'በነጻ ክፍት የሆኑት የወልቂጤ ዩኒቨርሲቲ ፈተናዎች ብቻ ናቸው። ASTU፣ አዲስ አበባ ዩኒቨርሲቲ፣ ጅማ፣ ሀዋሳ፣ ባህር ዳር እና ሁሉንም የኢትዮጵያ ዩኒቨርሲቲዎች ለመክፈት ወደ EthioLearn Pro ያሳድጉ።'
+                      : 'Only Wolkite University past exams are open for free access. All other universities (ASTU, AAU, Jimma, Hawassa, etc.) are locked for purchase. Upgrade to EthioLearn Pro to unlock all 10,000+ authentic university past exams, full faculty proofs, and mock simulations.'}
                   </p>
                 </div>
               </div>
