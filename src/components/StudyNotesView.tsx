@@ -1,35 +1,97 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- * EthioLearn Pro - Premium Visual Study Notes & Lecture Notebook
- * Authentic curriculum note studio supporting rich text and high-res diagrams/images.
- * Zero flashcards • 100% offline-ready & cloud-synced • Pro & Premium UI
+ * EthioLearn Pro - Premium Academic Digital Library & Study Compendium
+ * Modern university digital library featuring spacious layout, clean typography,
+ * deep navy header, warm academic white reading floor, color-coded faculty icons,
+ * real Supabase curriculum synchronization, offline IndexedDB downloads, and personal notes notebook.
  */
 
-import React, { Component, useState, useEffect, useRef, useMemo, useDeferredValue } from 'react';
+import React, { useState, useEffect, useMemo, useDeferredValue, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  BookOpen, Edit3, FileText, Download, Plus, Trash2, Check, 
-  HelpCircle, Save, AlertCircle, Search, ExternalLink, Filter, 
-  GraduationCap, Calendar, Clock, Bookmark, Sparkles, Eye, Share2,
-  Image as ImageIcon, Camera, Upload, X, ZoomIn, Link as LinkIcon,
-  Bold, Italic, Underline, Strikethrough, Heading1, Heading2,
-  List, ListOrdered, Quote, Code, Copy, Palette, CheckCircle2,
-  Maximize2, Minimize2, ArrowRight, Layers, SlidersHorizontal, RefreshCw
+import {
+  BookOpen,
+  Bookmark,
+  Clock,
+  Sparkles,
+  ChevronRight,
+  Filter,
+  RefreshCw,
+  WifiOff,
+  Flame,
+  CheckCircle2,
+  FolderOpen,
+  List as ListIcon,
+  Search,
+  Download,
+  Plus,
+  Trash2,
+  ExternalLink,
+  GraduationCap,
+  Image as ImageIcon,
+  ZoomIn,
+  X,
+  ArrowRight,
+  Save,
+  Edit3,
+  SlidersHorizontal,
+  Compass,
+  FileText,
+  Check,
+  Share2,
+  Library,
+  Layers,
+  HardDrive,
+  ArrowUpRight,
+  BookMarked,
+  Dna,
+  Atom,
+  Brain,
+  Cpu,
+  Calculator,
+  TrendingUp,
+  Users,
+  Languages,
+  MapPin,
+  Scale,
+  HeartHandshake
 } from 'lucide-react';
 import { CustomNote, NoteRecord } from '../types';
-import { INITIAL_NOTES } from '../data/initialFirestoreContent';
-import { fetchPublishedNotes } from '../utils/contentStore';
+import {
+  Subject,
+  Chapter,
+  NoteListItem,
+  UserNoteState,
+  SearchResult
+} from '../types/notes';
+import {
+  notesRepository,
+  canonicalSubjectId,
+  BIO_SUBJECT_ID,
+  ANTHRO_SUBJECT_ID,
+  CHEM_SUBJECT_ID,
+  PHYS_SUBJECT_ID,
+  SAMPLE_SUBJECT_ID,
+  TECH_SUBJECT_ID,
+  MATH_SUBJECT_ID,
+  ECON_SUBJECT_ID,
+  ENGLISH_SUBJECT_ID
+} from '../repositories/notesRepository';
+import {
+  isNoteDownloaded,
+  saveNoteOffline,
+  deleteDownloadedNote,
+  getOfflineStorageOverview,
+  formatStorageBytes,
+  OfflineNoteItem
+} from '../utils/offlineManager';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
 import { User } from 'firebase/auth';
 import { exportNoteToGoogleDoc, exportNotesToGoogleSheets } from '../utils/workspace';
 import { jsPDF } from 'jspdf';
 import { safeStorage } from '../utils/safeStorage';
 import DOMPurify from 'dompurify';
-import { NotesLibraryView } from './notes/NotesLibraryView';
 import { NoteReaderView } from './notes/NoteReaderView';
-import { canonicalSubjectId } from '../repositories/notesRepository';
-import { saveNoteOffline, deleteDownloadedNote } from '../utils/offlineManager';
 
 interface StudyNotesViewProps {
   apiKey?: string;
@@ -47,9 +109,11 @@ interface StudyNotesViewProps {
   userId?: string;
 }
 
-export default function StudyNotesView({ 
-  customNotes = [], 
-  onSaveCustomNotes = () => {}, 
+type LibraryTab = 'explore' | 'my-library' | 'bookmarks' | 'offline';
+
+export default function StudyNotesView({
+  customNotes = [],
+  onSaveCustomNotes = () => {},
   enrolledSubjects = [],
   googleUser,
   googleToken,
@@ -57,296 +121,560 @@ export default function StudyNotesView({
   onGoogleSignOut = async () => {},
   onOpenInAppViewer,
   language = 'en',
-  userId
+  userId = 'student_wku'
 }: StudyNotesViewProps) {
-  const [renderError, setRenderError] = useState<string | null>(null);
-  // Main view tab: default directly to Curriculum Notes
-  const [activeTab, setActiveTab] = useState<'curriculum' | 'notebook'>('curriculum');
+  const isAm = language === 'am';
+
+  // Active Reader state (opens high-res document viewer)
   const [readerNoteId, setReaderNoteId] = useState<string | null>(null);
-  const [isHeroMinimized, setIsHeroMinimized] = useState<boolean>(() => {
-    return safeStorage.getItem('ethiolearn_notes_hero_minimized') === 'true';
-  });
 
-  // Real Published Study Notes from Admin Firestore CMS
-  const [publishedNotes, setPublishedNotes] = useState<NoteRecord[]>(INITIAL_NOTES as NoteRecord[]);
-  const [selectedNoteId, setSelectedNoteId] = useState<string>(
-    (INITIAL_NOTES[0] && INITIAL_NOTES[0].id) ? INITIAL_NOTES[0].id : 'note_freshman_emte_1012'
-  );
+  // Digital Library Primary Tab: Explore | My Library | Bookmarks | Offline
+  const [activeTab, setActiveTab] = useState<LibraryTab>('explore');
+
+  // Supabase Data
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [notes, setNotes] = useState<NoteListItem[]>([]);
+  const [userStates, setUserStates] = useState<Record<string, UserNoteState>>({});
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Search state
   const [searchQuery, setSearchQuery] = useState('');
-  const deferredSearchQuery = useDeferredValue(searchQuery);
-  const [selectedSubjectFilter, setSelectedSubjectFilter] = useState('All');
-  const [isLoadingNotes, setIsLoadingNotes] = useState(false);
+  const deferredSearch = useDeferredValue(searchQuery);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
-  // Google Workspace Sync States
+  // Advanced Filters
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
+  const [selectedSemester, setSelectedSemester] = useState<string>('all');
+  const [selectedFormat, setSelectedFormat] = useState<string>('all'); // all, pdf, compendium
+  const [selectedStatus, setSelectedStatus] = useState<string>('all'); // all, unread, in-progress, completed
+  const [sortBy, setSortBy] = useState<'recent' | 'az' | 'readTime'>('recent');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  // Offline Download tracking (IndexedDB)
+  const [downloadedNoteIds, setDownloadedNoteIds] = useState<Set<string>>(new Set());
+  const [offlineOverview, setOfflineOverview] = useState<{
+    notes: OfflineNoteItem[];
+    totalBytes: number;
+    formattedSize: string;
+  }>({ notes: [], totalBytes: 0, formattedSize: '0 B' });
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  // Google Workspace Sync
   const [isSyncingDoc, setIsSyncingDoc] = useState(false);
   const [isSyncingSheet, setIsSyncingSheet] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [syncDocUrl, setSyncDocUrl] = useState<string | null>(null);
-  const [syncSheetUrl, setSyncSheetUrl] = useState<string | null>(null);
 
-  // Note editor Notepad state
+  // Personal Note Composer Drawer / Modal
+  const [showNoteComposer, setShowNoteComposer] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
-  const [noteTitle, setNoteTitle] = useState('');
-  const [noteContent, setNoteContent] = useState('');
-  const [noteSubject, setNoteSubject] = useState(enrolledSubjects[0] || 'Emerging Technologies');
-  const [noteColor, setNoteColor] = useState('bg-amber-950/20');
-  const [noteImages, setNoteImages] = useState<string[]>([]);
-  const [imageUrlInput, setImageUrlInput] = useState('');
-  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [composerTitle, setComposerTitle] = useState('');
+  const [composerContent, setComposerContent] = useState('');
+  const [composerSubject, setComposerSubject] = useState(enrolledSubjects[0] || 'General Biology');
+  const [composerImages, setComposerImages] = useState<string[]>([]);
   const [imageModalUrl, setImageModalUrl] = useState<string | null>(null);
-  const [isSavedToast, setIsSavedToast] = useState(false);
-  const [activeSubjectFilter, setActiveSubjectFilter] = useState<string>('All');
-  const [noteSearchTerm, setNoteSearchTerm] = useState<string>('');
-  const deferredNoteSearchTerm = useDeferredValue(noteSearchTerm);
+  const [composerToast, setComposerToast] = useState<string | null>(null);
+  const [imageUrlInput, setImageUrlInput] = useState('');
+  const [showUrlField, setShowUrlField] = useState(false);
 
   const editorRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Available subject choices
-  const fallbackSubjects = useMemo(() => [
-    'Emerging Technologies',
-    'Mathematics',
-    'General Physics',
-    'General Biology',
-    'General Chemistry',
-    'Critical Thinking',
-    'Economics',
-    'Geography of Ethiopia',
-    'Communicative English',
-    'Inclusiveness',
-    'Social Anthropology',
-    'Moral & Civics'
-  ], []);
+  // ───────────────────────────────────────────────────────────────────────────
+  // 1. DATA INITIALIZATION & SYNC
+  // ───────────────────────────────────────────────────────────────────────────
 
-  const subjectsPool = useMemo(() => {
-    const list = enrolledSubjects && enrolledSubjects.length > 0 ? enrolledSubjects : fallbackSubjects;
-    return Array.from(new Set(list));
-  }, [enrolledSubjects, fallbackSubjects]);
-
-  // Load published study notes from local safeStorage and Firestore on mount
-  useEffect(() => {
-    let isMounted = true;
-    const loadNotes = async () => {
-      // 1. Immediately load cached published notes for offline readiness
-      try {
-        const cachedStr = safeStorage.getItem('ethiolearn_cached_published_notes');
-        if (cachedStr) {
-          const parsed = JSON.parse(cachedStr);
-          if (Array.isArray(parsed) && parsed.length > 0 && isMounted) {
-            setPublishedNotes(parsed);
-            if (!parsed.find(n => n.id === selectedNoteId)) {
-              setSelectedNoteId(parsed[0].id);
-            }
-          }
-        }
-      } catch {}
-
-      // 2. Fetch fresh published notes when online and cache them
-      try {
-        setIsLoadingNotes(true);
-        const notes = await fetchPublishedNotes();
-        if (isMounted && notes && notes.length > 0) {
-          setPublishedNotes(notes);
-          try {
-            safeStorage.setItem('ethiolearn_cached_published_notes', JSON.stringify(notes));
-          } catch {}
-          if (!notes.find(n => n.id === selectedNoteId)) {
-            setSelectedNoteId(notes[0].id);
-          }
-        }
-      } catch (e) {
-        console.warn('Error loading published study notes (offline mode active):', e);
-      } finally {
-        if (isMounted) setIsLoadingNotes(false);
-      }
-    };
-    loadNotes();
-    return () => { isMounted = false; };
-  }, []);
-
-  // Filtered published notes (Instant debounced filtering)
-  const filteredPublishedNotes = useMemo(() => {
-    const q = deferredSearchQuery.trim().toLowerCase();
-    return (publishedNotes || []).filter(n => {
-      const title = (n?.title || '').toLowerCase();
-      const desc = (n?.description || '').toLowerCase();
-      const subj = (n?.subject || '').toLowerCase();
-      const unit = (n?.unit || '').toLowerCase();
-      const univ = (n?.university || '').toLowerCase();
-
-      const matchesSearch = !q || 
-        title.includes(q) ||
-        desc.includes(q) ||
-        subj.includes(q) ||
-        unit.includes(q) ||
-        univ.includes(q);
-
-      const matchesSubject = selectedSubjectFilter === 'All' || 
-        subj === selectedSubjectFilter.toLowerCase() ||
-        canonicalSubjectId(n?.subject) === canonicalSubjectId(selectedSubjectFilter);
-
-      return matchesSearch && matchesSubject;
-    });
-  }, [publishedNotes, deferredSearchQuery, selectedSubjectFilter]);
-
-  // Active selected note
-  const activeSelectedNote = useMemo(() => {
-    return filteredPublishedNotes.find(n => n.id === selectedNoteId) || filteredPublishedNotes[0] || null;
-  }, [filteredPublishedNotes, selectedNoteId]);
-
-  // Filtered personal notes (Instant debounced filtering)
-  const filteredPersonalNotes = useMemo(() => {
-    const q = deferredNoteSearchTerm.trim().toLowerCase();
-    const safeNotes = Array.isArray(customNotes) ? customNotes : [];
-    return safeNotes.filter(n => {
-      const nSub = (n?.subject || '').toLowerCase();
-      const aSub = activeSubjectFilter.toLowerCase();
-      const matchesSubject = activeSubjectFilter === 'All' || 
-        n?.subject === activeSubjectFilter ||
-        nSub.includes(aSub) ||
-        aSub.includes(nSub);
-      const matchesSearch = !q || 
-        ((n?.title || '').toLowerCase().includes(q)) ||
-        ((n?.content || '').toLowerCase().includes(q)) ||
-        nSub.includes(q);
-      return matchesSubject && matchesSearch;
-    });
-  }, [customNotes, activeSubjectFilter, deferredNoteSearchTerm]);
-
-  // Total images across all custom notes
-  const totalAttachedImages = useMemo(() => {
-    const safeNotes = Array.isArray(customNotes) ? customNotes : [];
-    return safeNotes.reduce((acc, curr) => {
-      const count = curr?.images?.length || (curr?.imageUrl ? 1 : 0);
-      return acc + count;
-    }, 0);
-  }, [customNotes]);
-
-  // Sync Note to Google Doc
-  const handleExportToGoogleDoc = async (title: string, subject: string, content: string) => {
-    if (!googleToken) {
-      setSyncMessage("Please connect your Google Account first!");
-      playFailureChime();
-      return;
-    }
-
-    setIsSyncingDoc(true);
-    setSyncMessage("Exporting to Google Docs...");
-    playClickChime();
-
+  const loadAllData = async () => {
+    setIsLoading(true);
     try {
-      const result = await exportNoteToGoogleDoc(title, subject, content, googleToken);
-      setSyncDocUrl(result.url);
-      setSyncMessage(`"${title}" exported as a Google Doc!`);
-      playSuccessChime();
-    } catch (e: any) {
-      setSyncMessage(`Doc Export Failed: ${e.message}`);
-      playFailureChime();
-    } finally {
-      setIsSyncingDoc(false);
-    }
-  };
-
-  // Sync All Custom Study Notes to Google Sheet
-  const handleExportAllToGoogleSheets = async () => {
-    if (!googleToken) {
-      setSyncMessage("Please connect your Google Account first!");
-      playFailureChime();
-      return;
-    }
-
-    if (customNotes.length === 0) {
-      setSyncMessage("No custom notes to export yet!");
-      playFailureChime();
-      return;
-    }
-
-    setIsSyncingSheet(true);
-    setSyncMessage("Saving notes database to Google Sheets...");
-    playClickChime();
-
-    try {
-      const rows = customNotes.map(n => [
-        n.title,
-        n.subject,
-        n.content.replace(/<[^>]*>/g, ' ').substring(0, 500),
-        n.date || new Date().toLocaleDateString(),
-        n.images?.length ? `${n.images.length} attached diagrams` : 'None'
+      const [fetchedSubjects, fetchedChapters, fetchedNotes, fetchedStates] = await Promise.all([
+        notesRepository.fetchSubjects(),
+        notesRepository.fetchChapters(),
+        notesRepository.fetchNotesList(),
+        notesRepository.fetchUserNoteStates(userId)
       ]);
 
-      const result = await exportNotesToGoogleSheets(customNotes, googleToken);
-      setSyncSheetUrl(result.url);
-      setSyncMessage("All study notes exported to Google Sheets!");
-      playSuccessChime();
-    } catch (e: any) {
-      setSyncMessage(`Sheets Sync Failed: ${e.message}`);
-      playFailureChime();
+      setSubjects(fetchedSubjects);
+      setChapters(fetchedChapters);
+      setNotes(fetchedNotes);
+      setUserStates(fetchedStates);
+
+      // Check IndexedDB downloaded items
+      refreshOfflineOverview();
+    } catch (e) {
+      console.warn('[EthioLearn Digital Library] Init Error:', e);
     } finally {
-      setIsSyncingSheet(false);
+      setIsLoading(false);
     }
   };
 
-  // Handle Image Upload and Compression
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    
-    Array.from(files).forEach((file: File) => {
-      if (!file.type.startsWith('image/')) return;
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const result = event.target?.result as string;
-        if (result) {
-          const img = new Image();
-          img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const MAX_DIM = 1200;
-            let width = img.width;
-            let height = img.height;
-            if (width > height) {
-              if (width > MAX_DIM) {
-                height = Math.round((height * MAX_DIM) / width);
-                width = MAX_DIM;
-              }
-            } else {
-              if (height > MAX_DIM) {
-                width = Math.round((width * MAX_DIM) / height);
-                height = MAX_DIM;
-              }
-            }
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx?.drawImage(img, 0, 0, width, height);
-            const compressed = canvas.toDataURL('image/jpeg', 0.85);
-            setNoteImages(prev => [...prev, compressed]);
-            playSuccessChime();
-          };
-          img.src = result;
+  const refreshOfflineOverview = async () => {
+    try {
+      const overview = await getOfflineStorageOverview();
+      const downloadedSet = new Set<string>();
+      (overview.notes || []).forEach(n => downloadedSet.add(n.id));
+      setDownloadedNoteIds(downloadedSet);
+      setOfflineOverview({
+        notes: overview.notes || [],
+        totalBytes: overview.totalBytes || 0,
+        formattedSize: formatStorageBytes(overview.totalBytes || 0)
+      });
+    } catch (err) {
+      console.warn('[Offline Overview Error]:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadAllData();
+
+    const handleLibraryUpdated = () => {
+      Promise.all([
+        notesRepository.fetchSubjects(),
+        notesRepository.fetchChapters(),
+        notesRepository.fetchNotesList()
+      ]).then(([s, c, n]) => {
+        setSubjects(s);
+        setChapters(c);
+        setNotes(n);
+      }).catch(() => {});
+      refreshOfflineOverview();
+    };
+
+    window.addEventListener('ethiolearn:notes-library-updated', handleLibraryUpdated);
+    window.addEventListener('ethiolearn:offline-content-changed', refreshOfflineOverview);
+
+    return () => {
+      window.removeEventListener('ethiolearn:notes-library-updated', handleLibraryUpdated);
+      window.removeEventListener('ethiolearn:offline-content-changed', refreshOfflineOverview);
+    };
+  }, [userId]);
+
+  // Handle Ultra-Fast Debounced Search using instant local lookup + search_notes RPC
+  useEffect(() => {
+    const trimmed = deferredSearch.trim();
+    if (!trimmed) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const results = await notesRepository.searchNotes(trimmed);
+        setSearchResults(results);
+      } catch (err) {
+        console.warn('Search error:', err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 120);
+
+    return () => clearTimeout(timer);
+  }, [deferredSearch]);
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 2. STRICT SUBJECT ISOLATION & ACCURATE MATCHING (BIOLOGY != ANTHROPOLOGY)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const chapterMap = useMemo(() => {
+    const map = new Map<string, Chapter>();
+    for (const c of chapters) map.set(c.id, c);
+    return map;
+  }, [chapters]);
+
+  const subjectMap = useMemo(() => {
+    const map = new Map<string, Subject>();
+    for (const s of subjects) {
+      map.set(s.id, s);
+      map.set(canonicalSubjectId(s.id), s);
+    }
+    return map;
+  }, [subjects]);
+
+  /**
+   * Strictly isolates note subjects:
+   * 1. Direct foreign key validation
+   * 2. Canonical mapping
+   * 3. Explicit heuristic precedence ensuring Anthropology NEVER leaks into Biology
+   */
+  const resolveNoteSubject = useMemo(() => {
+    return (note: NoteListItem): Subject | undefined => {
+      const noteObj = note as any;
+      const directKey = note.subject_id || noteObj.subject || noteObj.course;
+      const ch = chapterMap.get(note.chapter_id);
+
+      // Check text tokens for explicit Anthropology terms first
+      const noteTitle = (note.title || '').toLowerCase();
+      const chTitle = (ch?.title || '').toLowerCase();
+      const combinedText = `${noteTitle} ${chTitle}`;
+
+      const isExplicitAnthro =
+        combinedText.includes('anthro') ||
+        combinedText.includes('ethnograph') ||
+        combinedText.includes('kinship') ||
+        combinedText.includes('marriage rules') ||
+        combinedText.includes('customary system') ||
+        combinedText.includes('hominid') ||
+        combinedText.includes('lucy') ||
+        combinedText.includes('dinkinesh') ||
+        combinedText.includes('paleoanthro');
+
+      if (isExplicitAnthro) {
+        const anthroSub = subjects.find(s => canonicalSubjectId(s.id) === ANTHRO_SUBJECT_ID);
+        if (anthroSub) return anthroSub;
+      }
+
+      // Direct database foreign key on the note itself
+      if (directKey) {
+        const canonicalKey = canonicalSubjectId(directKey);
+        // Guard: if directKey mapped to Biology but text is clearly Anthropology, override to Anthropology
+        if (canonicalKey === BIO_SUBJECT_ID && isExplicitAnthro) {
+          const anthroSub = subjects.find(s => canonicalSubjectId(s.id) === ANTHRO_SUBJECT_ID);
+          if (anthroSub) return anthroSub;
         }
-      };
-      reader.readAsDataURL(file);
+        const sub = subjectMap.get(directKey) || subjectMap.get(canonicalKey);
+        if (sub) return sub;
+      }
+
+      // Direct database foreign key on the chapter
+      if (ch?.subject_id) {
+        const canonicalKey = canonicalSubjectId(ch.subject_id);
+        if (canonicalKey === BIO_SUBJECT_ID && isExplicitAnthro) {
+          const anthroSub = subjects.find(s => canonicalSubjectId(s.id) === ANTHRO_SUBJECT_ID);
+          if (anthroSub) return anthroSub;
+        }
+        const sub = subjectMap.get(ch.subject_id) || subjectMap.get(canonicalKey);
+        if (sub) return sub;
+      }
+
+      // Biology: Must explicitly contain biology concepts and NOT contain anthropology
+      if (
+        (combinedText.includes('biol') ||
+          combinedText.includes('cellular basis of life') ||
+          combinedText.includes('cellular respiration') ||
+          combinedText.includes('photosynthesis') ||
+          combinedText.includes('biomolecule') ||
+          combinedText.includes('mitosis') ||
+          combinedText.includes('genetics') ||
+          combinedText.includes('dna replication')) &&
+        !isExplicitAnthro
+      ) {
+        const bioSub = subjects.find(s => canonicalSubjectId(s.id) === BIO_SUBJECT_ID);
+        if (bioSub) return bioSub;
+      }
+
+      // Chemistry
+      if (
+        combinedText.includes('chem') ||
+        combinedText.includes('atomic structure') ||
+        combinedText.includes('chemical bonding') ||
+        combinedText.includes('periodic table') ||
+        combinedText.includes('stoichiometry')
+      ) {
+        const chemSub = subjects.find(s => canonicalSubjectId(s.id) === CHEM_SUBJECT_ID);
+        if (chemSub) return chemSub;
+      }
+
+      // Physics
+      if (
+        combinedText.includes('phys') ||
+        combinedText.includes('kinematic') ||
+        combinedText.includes("newton's") ||
+        combinedText.includes('vector') ||
+        combinedText.includes('dynamics')
+      ) {
+        const physSub = subjects.find(s => canonicalSubjectId(s.id) === PHYS_SUBJECT_ID);
+        if (physSub) return physSub;
+      }
+
+      // Logic & Critical Thinking
+      if (
+        combinedText.includes('critical thinking') ||
+        combinedText.includes('syllogism') ||
+        combinedText.includes('fallac') ||
+        combinedText.includes('logic and argument') ||
+        combinedText.includes('propositional logic')
+      ) {
+        const logicSub = subjects.find(s => canonicalSubjectId(s.id) === SAMPLE_SUBJECT_ID);
+        if (logicSub) return logicSub;
+      }
+
+      // Emerging Technologies
+      if (
+        combinedText.includes('industry 4.0') ||
+        combinedText.includes('artificial intelligence') ||
+        combinedText.includes('iot') ||
+        combinedText.includes('emerging tech')
+      ) {
+        const techSub = subjects.find(s => canonicalSubjectId(s.id) === TECH_SUBJECT_ID);
+        if (techSub) return techSub;
+      }
+
+      // Economics
+      if (
+        combinedText.includes('economics') ||
+        combinedText.includes('microeconomics') ||
+        combinedText.includes('macroeconomics') ||
+        combinedText.includes('market dynamics')
+      ) {
+        const econSub = subjects.find(s => canonicalSubjectId(s.id) === ECON_SUBJECT_ID);
+        if (econSub) return econSub;
+      }
+
+      // Mathematics
+      if (
+        combinedText.includes('math') ||
+        combinedText.includes('precalculus') ||
+        combinedText.includes('matrix') ||
+        combinedText.includes('calculus')
+      ) {
+        const mathSub = subjects.find(s => canonicalSubjectId(s.id) === MATH_SUBJECT_ID);
+        if (mathSub) return mathSub;
+      }
+
+      // English
+      if (
+        combinedText.includes('english') ||
+        combinedText.includes('reading comprehension') ||
+        combinedText.includes('discourse markers')
+      ) {
+        const engSub = subjects.find(s => canonicalSubjectId(s.id) === ENGLISH_SUBJECT_ID);
+        if (engSub) return engSub;
+      }
+
+      return undefined;
+    };
+  }, [chapterMap, subjectMap, subjects]);
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 3. COLOR-CODED FACULTY ICONS & STYLING
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const getSubjectIcon = (subId?: string) => {
+    const canon = canonicalSubjectId(subId);
+    switch (canon) {
+      case BIO_SUBJECT_ID:
+        return <Dna className="w-5 h-5 text-emerald-400" />;
+      case CHEM_SUBJECT_ID:
+        return <Atom className="w-5 h-5 text-sky-400" />;
+      case PHYS_SUBJECT_ID:
+        return <Compass className="w-5 h-5 text-blue-400" />;
+      case SAMPLE_SUBJECT_ID:
+        return <Brain className="w-5 h-5 text-amber-400" />;
+      case TECH_SUBJECT_ID:
+        return <Cpu className="w-5 h-5 text-purple-400" />;
+      case MATH_SUBJECT_ID:
+        return <Calculator className="w-5 h-5 text-rose-400" />;
+      case ECON_SUBJECT_ID:
+        return <TrendingUp className="w-5 h-5 text-amber-300" />;
+      case ANTHRO_SUBJECT_ID:
+        return <Users className="w-5 h-5 text-orange-400" />;
+      case ENGLISH_SUBJECT_ID:
+        return <Languages className="w-5 h-5 text-teal-400" />;
+      default:
+        return <BookOpen className="w-5 h-5 text-indigo-400" />;
+    }
+  };
+
+  const getSubjectBadgeStyle = (subId?: string) => {
+    const canon = canonicalSubjectId(subId);
+    switch (canon) {
+      case BIO_SUBJECT_ID:
+        return 'bg-emerald-950/50 text-emerald-300 border-emerald-500/30';
+      case CHEM_SUBJECT_ID:
+        return 'bg-sky-950/50 text-sky-300 border-sky-500/30';
+      case PHYS_SUBJECT_ID:
+        return 'bg-blue-950/50 text-blue-300 border-blue-500/30';
+      case SAMPLE_SUBJECT_ID:
+        return 'bg-amber-950/50 text-amber-300 border-amber-500/30';
+      case TECH_SUBJECT_ID:
+        return 'bg-purple-950/50 text-purple-300 border-purple-500/30';
+      case MATH_SUBJECT_ID:
+        return 'bg-rose-950/50 text-rose-300 border-rose-500/30';
+      case ECON_SUBJECT_ID:
+        return 'bg-yellow-950/50 text-yellow-300 border-yellow-500/30';
+      case ANTHRO_SUBJECT_ID:
+        return 'bg-orange-950/50 text-orange-300 border-orange-500/30';
+      case ENGLISH_SUBJECT_ID:
+        return 'bg-teal-950/50 text-teal-300 border-teal-500/30';
+      default:
+        return 'bg-indigo-950/50 text-indigo-300 border-indigo-500/30';
+    }
+  };
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 4. CONTINUE LEARNING (IN-PROGRESS SHELF)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const continueReadingNotes = useMemo(() => {
+    const inProgress = notes
+      .map(n => {
+        const state = userStates[n.id];
+        return {
+          note: n,
+          state,
+          progress: state?.progress || 0,
+          lastReadTime: state?.last_read_at ? new Date(state.last_read_at).getTime() : 0
+        };
+      })
+      .filter(item => item.progress > 0 && item.progress < 95)
+      .sort((a, b) => b.lastReadTime - a.lastReadTime);
+
+    return inProgress.slice(0, 4);
+  }, [notes, userStates]);
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 5. FILTERED & SORTED LATEST PUBLICATIONS
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const filteredNotes = useMemo(() => {
+    return notes.filter(n => {
+      const resolvedSub = resolveNoteSubject(n);
+      const state = userStates[n.id];
+      const isDownloaded = downloadedNoteIds.has(n.id);
+      const isBookmarked = !!state?.bookmarked;
+      const progress = state?.progress || 0;
+
+      // 1. Tab filter
+      if (activeTab === 'bookmarks' && !isBookmarked) return false;
+      if (activeTab === 'offline' && !isDownloaded) return false;
+      if (activeTab === 'my-library') {
+        // My library displays in-progress or completed or bookmarked
+        if (progress === 0 && !isBookmarked && !isDownloaded) return false;
+      }
+
+      // 2. Strict Subject Filter
+      if (selectedSubjectId) {
+        const targetCanonical = canonicalSubjectId(selectedSubjectId);
+        const noteCanonical = resolvedSub ? canonicalSubjectId(resolvedSub.id) : '';
+        if (resolvedSub?.id !== selectedSubjectId && noteCanonical !== targetCanonical) {
+          return false;
+        }
+      }
+
+      // 3. Status Filter
+      if (selectedStatus === 'unread' && progress > 0) return false;
+      if (selectedStatus === 'in-progress' && (progress === 0 || progress >= 95)) return false;
+      if (selectedStatus === 'completed' && progress < 95) return false;
+
+      // 4. Format Filter
+      const hasPdf = Boolean((n as any).pdf_url || (n as any).file_url);
+      if (selectedFormat === 'pdf' && !hasPdf) return false;
+      if (selectedFormat === 'compendium' && hasPdf) return false;
+
+      return true;
+    }).sort((a, b) => {
+      if (sortBy === 'az') return (a.title || '').localeCompare(b.title || '');
+      if (sortBy === 'readTime') return (b.read_time_min || 5) - (a.read_time_min || 5);
+      return (a.sort_order || 0) - (b.sort_order || 0);
     });
-    if (e.target) e.target.value = '';
-  };
+  }, [
+    notes,
+    resolveNoteSubject,
+    userStates,
+    downloadedNoteIds,
+    activeTab,
+    selectedSubjectId,
+    selectedStatus,
+    selectedFormat,
+    sortBy
+  ]);
 
-  const handleAddImageUrl = () => {
-    if (!imageUrlInput.trim()) return;
+  // Deduplicated Subject List for Faculty Cards & Sidebar (Hook placed unconditionally at top)
+  const dedupedSubjects = useMemo(() => {
+    const map = new Map<string, Subject>();
+    subjects.forEach(s => {
+      const canon = canonicalSubjectId(s.id);
+      if (!map.has(canon)) map.set(canon, s);
+    });
+    return Array.from(map.values()).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  }, [subjects]);
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 6. BOOKMARK & OFFLINE ACTIONS
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const handleToggleBookmark = async (noteId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     playClickChime();
-    setNoteImages(prev => [...prev, imageUrlInput.trim()]);
-    setImageUrlInput('');
-    setShowUrlInput(false);
-    playSuccessChime();
+    const currentState = userStates[noteId];
+    const willBookmark = !currentState?.bookmarked;
+
+    // Optimistic UI update
+    setUserStates(prev => ({
+      ...prev,
+      [noteId]: {
+        ...(prev[noteId] || { user_id: userId, note_id: noteId, progress: 0, scroll_position: 0 }),
+        bookmarked: willBookmark,
+        last_read_at: new Date().toISOString()
+      }
+    }));
+
+    try {
+      await notesRepository.upsertUserNoteState({
+        user_id: userId,
+        note_id: noteId,
+        bookmarked: willBookmark
+      });
+      if (willBookmark) playSuccessChime();
+    } catch (err) {
+      console.warn('Bookmark sync note:', err);
+    }
   };
 
-  const handleRemoveImage = (indexToRemove: number) => {
+  const handleToggleOfflineDownload = async (note: NoteListItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const isDownloaded = downloadedNoteIds.has(note.id);
+
+    if (isDownloaded) {
+      playClickChime();
+      await deleteDownloadedNote(note.id);
+      setDownloadedNoteIds(prev => {
+        const next = new Set(prev);
+        next.delete(note.id);
+        return next;
+      });
+      refreshOfflineOverview();
+      return;
+    }
+
+    setDownloadingId(note.id);
     playClickChime();
-    setNoteImages(prev => prev.filter((_, idx) => idx !== indexToRemove));
+
+    try {
+      // Fetch full note content
+      const fullNote = await notesRepository.fetchNoteById(note.id);
+      const ch = chapterMap.get(note.chapter_id);
+      const sub = resolveNoteSubject(note);
+
+      await saveNoteOffline({
+        id: note.id,
+        title: note.title,
+        subject: sub?.name || 'Ethiopian Higher Education',
+        chapter: ch?.title || 'Lecture Module',
+        content: fullNote?.content || '',
+        pdfUrl: (note as any).pdf_url || (note as any).file_url
+      });
+
+      setDownloadedNoteIds(prev => new Set(prev).add(note.id));
+      playSuccessChime();
+      refreshOfflineOverview();
+    } catch (err) {
+      console.warn('Offline download error:', err);
+      playFailureChime();
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
-  // Save current note into persistent storage
-  const saveToNotepad = () => {
-    if (!noteTitle.trim()) {
+  // ───────────────────────────────────────────────────────────────────────────
+  // 7. PERSONAL NOTE STUDIO ACTIONS
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const handleSavePersonalNote = () => {
+    if (!composerTitle.trim()) {
       playFailureChime();
       return;
     }
@@ -354,13 +682,13 @@ export default function StudyNotesView({
     playClickChime();
     const newNote: CustomNote = {
       id: editingNoteId || `custom_note_${Date.now()}`,
-      title: noteTitle.trim(),
-      content: noteContent.trim(),
-      subject: noteSubject,
+      title: composerTitle.trim(),
+      content: composerContent.trim(),
+      subject: composerSubject,
+      color: 'bg-amber-500/15',
       date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      color: noteColor,
-      images: noteImages,
-      imageUrl: noteImages[0] || undefined
+      images: composerImages,
+      imageUrl: composerImages[0] || undefined
     };
 
     if (editingNoteId) {
@@ -370,83 +698,55 @@ export default function StudyNotesView({
       onSaveCustomNotes([newNote, ...customNotes]);
     }
 
-    // Persist note into IndexedDB offline store for instant offline access
     saveNoteOffline({
       id: newNote.id,
       title: newNote.title,
       subject: newNote.subject,
       content: newNote.content
-    }).catch(err => console.warn('[Offline Notes Save]:', err));
+    }).catch(() => {});
 
-    setIsSavedToast(true);
-    setTimeout(() => setIsSavedToast(false), 2500);
+    setComposerToast(isAm ? 'ማስታወሻው ተቀምጧል!' : 'Note saved successfully to your library!');
+    setTimeout(() => {
+      setComposerToast(null);
+      setShowNoteComposer(false);
+      setEditingNoteId(null);
+      setComposerTitle('');
+      setComposerContent('');
+      setComposerImages([]);
+    }, 1200);
+
     playSuccessChime();
   };
 
-  // Delete note
-  const deleteNote = (id: string, e: React.MouseEvent) => {
+  const handleDeletePersonalNote = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm("Are you sure you want to delete this study note?")) {
+    if (window.confirm(isAm ? 'ይህን ማስታወሻ መሰረዝ ይፈልጋሉ?' : 'Are you sure you want to delete this study note?')) {
       playClickChime();
       const updated = customNotes.filter(n => n.id !== id);
       onSaveCustomNotes(updated);
       deleteDownloadedNote(id).catch(() => {});
-      if (editingNoteId === id) {
-        startNewNote();
-      }
     }
   };
 
-  // Clear inputs to draft new note
-  const startNewNote = () => {
-    playClickChime();
-    setEditingNoteId(null);
-    setNoteTitle('');
-    setNoteContent('');
-    setNoteImages([]);
-    setImageUrlInput('');
-    setShowUrlInput(false);
-    if (editorRef.current) {
-      editorRef.current.innerHTML = '';
-    }
-  };
-
-  // Copy curriculum note into personal editor
-  const handleCopyCurriculumToPersonal = (note: NoteRecord) => {
-    playClickChime();
-    setActiveTab('notebook');
-    setEditingNoteId(null);
-    setNoteTitle(`${note.title} (My Notes)`);
-    setNoteSubject(note.subject || subjectsPool[0]);
-    setNoteContent(note.content || '');
-    setNoteImages([]);
-    if (editorRef.current) {
-      editorRef.current.innerHTML = note.content || '';
-    }
-    playSuccessChime();
-  };
-
-  // Export note as PDF (with embedded images)
-  const exportNoteAsPdf = (title: string, content: string, imagesToEmbed: string[] = noteImages) => {
+  const exportNoteAsPdf = (title: string, content: string, subjectName: string) => {
     playClickChime();
     const doc = new jsPDF();
     const cleanContent = content.replace(/<[^>]*>/g, '\n').replace(/\n\s*\n/g, '\n\n').trim();
 
-    // Document Header
+    // Document Header with EthioLearn Academic styling
     doc.setFontSize(18);
-    doc.setTextColor(245, 158, 11); // Amber
-    doc.text(title || 'EthioLearn Pro - Study Notes', 14, 20);
+    doc.setTextColor(217, 119, 6); // Warm Amber
+    doc.text(title || 'EthioLearn Academic Digital Library', 14, 20);
 
     doc.setFontSize(10);
     doc.setTextColor(100, 116, 139);
-    doc.text(`Subject: ${noteSubject} | Generated: ${new Date().toLocaleDateString()}`, 14, 28);
+    doc.text(`Subject: ${subjectName} | Academic Repository | Date: ${new Date().toLocaleDateString()}`, 14, 28);
     doc.line(14, 32, 196, 32);
 
-    // Body text
     doc.setFontSize(11);
     doc.setTextColor(30, 41, 59);
     const splitText = doc.splitTextToSize(cleanContent, 180);
-    
+
     let y = 40;
     splitText.forEach((line: string) => {
       if (y > 275) {
@@ -457,80 +757,35 @@ export default function StudyNotesView({
       y += 6;
     });
 
-    // Embed images if available
-    if (imagesToEmbed && imagesToEmbed.length > 0) {
-      imagesToEmbed.forEach((imgSrc, idx) => {
-        if (y > 180) {
-          doc.addPage();
-          y = 20;
-        }
-        try {
-          doc.setFontSize(9);
-          doc.setTextColor(140, 140, 140);
-          doc.text(`[Diagram ${idx + 1}]`, 14, y + 4);
-          doc.addImage(imgSrc, 'JPEG', 14, y + 6, 80, 55);
-          y += 68;
-        } catch {
-          // If image format fails to parse into PDF, continue cleanly
-        }
-      });
-    }
-
     doc.save(`${(title || 'Study_Note').replace(/[^a-zA-Z0-9]/g, '_')}_EthioLearn.pdf`);
     playSuccessChime();
   };
 
-  // Color options for notes
-  const colorsList = [
-    { name: 'Warm Amber', class: 'bg-amber-500/15 border-amber-500/40 text-amber-300' },
-    { name: 'Emerald Green', class: 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' },
-    { name: 'Sky Blue', class: 'bg-sky-500/15 border-sky-500/40 text-sky-300' },
-    { name: 'Royal Indigo', class: 'bg-indigo-500/15 border-indigo-500/40 text-indigo-300' },
-    { name: 'Crimson Rose', class: 'bg-rose-500/15 border-rose-500/40 text-rose-300' }
-  ];
-
-  // Formatting tools
-  const triggerToolbarCommand = (cmd: string, val: string = '') => {
+  // Google Workspace Sync
+  const handleExportToGoogleDoc = async (title: string, subjectName: string, content: string) => {
+    if (!googleToken) {
+      setSyncMessage(isAm ? 'እባክዎ መጀመሪያ ጎግል አካውንትዎን ያገናኙ!' : 'Please connect Google Account first!');
+      playFailureChime();
+      return;
+    }
+    setIsSyncingDoc(true);
     playClickChime();
-    document.execCommand(cmd, false, val);
-    if (editorRef.current) {
-      setNoteContent(editorRef.current.innerHTML);
+    try {
+      const result = await exportNoteToGoogleDoc(title, subjectName, content, googleToken);
+      setSyncDocUrl(result.url);
+      setSyncMessage(`"${title}" exported as Google Doc!`);
+      playSuccessChime();
+    } catch (e: any) {
+      setSyncMessage(`Doc Export Failed: ${e.message}`);
+      playFailureChime();
+    } finally {
+      setIsSyncingDoc(false);
     }
   };
 
-  // Word count helper
-  const wordCount = useMemo(() => {
-    const plain = noteContent.replace(/<[^>]*>/g, ' ').trim();
-    if (!plain) return 0;
-    return plain.split(/\s+/).length;
-  }, [noteContent]);
-
-  if (renderError) {
-    const isAm = language === 'am';
-    return (
-      <div className="w-full min-h-[400px] flex flex-col items-center justify-center p-8 bg-[#0B1228] border border-amber-500/20 rounded-2xl text-center my-6">
-        <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mb-4 text-amber-400">
-          <AlertCircle className="w-6 h-6" />
-        </div>
-        <h3 className="text-lg font-black text-white mb-2">
-          {isAm ? 'ማስታወሻዎችን በማሳየት ላይ ችግር አጋጥሟል' : 'Notes Studio Temporarily Unavailable'}
-        </h3>
-        <p className="text-xs text-slate-400 max-w-md mb-5 leading-relaxed">
-          {renderError}
-        </p>
-        <button
-          onClick={() => {
-            setRenderError(null);
-            setReaderNoteId(null);
-          }}
-          className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider transition cursor-pointer shadow-md flex items-center gap-2 active:scale-95"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span>{isAm ? 'እንደገና ጫን' : 'Reload Notes Studio'}</span>
-        </button>
-      </div>
-    );
-  }
+  // ───────────────────────────────────────────────────────────────────────────
+  // 8. ACTIVE READER VIEW
+  // ───────────────────────────────────────────────────────────────────────────
 
   if (readerNoteId) {
     return (
@@ -545,867 +800,1172 @@ export default function StudyNotesView({
   }
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 py-6 text-slate-100 min-h-screen space-y-6">
+    <div className="w-full min-h-screen bg-slate-50 dark:bg-[#070D1E] text-slate-800 dark:text-slate-100 flex flex-col font-sans select-none transition-colors duration-200">
       
       {/* ========================================================================= */}
-      {/* 1. HERO STUDIO HEADER (MINIMIZED PRO STUDIO)                             */}
+      {/* 1. PREMIUM ETHIOLEARN ACADEMIC DIGITAL LIBRARY HEADER (DEEP NAVY)         */}
       {/* ========================================================================= */}
-      <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#0F172A] via-[#111C35] to-[#0A1128] border border-amber-500/25 shadow-xl transition-all duration-200 ${
-        isHeroMinimized ? 'p-3 sm:p-3.5' : 'p-4 sm:p-5'
-      }`}>
+      <header className="w-full bg-[#0A1128] border-b border-amber-500/20 text-white relative z-20 shadow-xl">
         {/* Subtle Ambient Radial Glow */}
-        <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-amber-500/10 blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-16 -left-16 w-64 h-64 rounded-full bg-blue-500/10 blur-3xl pointer-events-none" />
+        <div className="absolute top-0 right-1/4 w-96 h-36 bg-amber-500/10 blur-3xl pointer-events-none" />
+        <div className="absolute top-0 left-1/4 w-80 h-32 bg-blue-600/10 blur-3xl pointer-events-none" />
 
-        {isHeroMinimized ? (
-          /* Minimized Sleek Bar */
-          <div className="relative z-10 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-black bg-amber-500/15 text-amber-300 border border-amber-400/30 shrink-0">
-                <Sparkles className="w-2.5 h-2.5 fill-amber-300 text-amber-300" />
-                <span>STUDY NOTEBOOK</span>
-              </span>
-              <h2 className="text-xs sm:text-sm font-bold text-white truncate">
-                Visual Notes & Lecture Journal
-              </h2>
-              <span className="hidden md:inline text-[10.5px] text-slate-400 font-mono">
-                ({customNotes.length} notes · {subjectsPool.length} subjects)
-              </span>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 space-y-4">
+          
+          {/* Top Bar: Crest Branding, University Status, Quick Pro Actions */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-600/10 border border-amber-400/40 flex items-center justify-center text-amber-400 shadow-md">
+                <GraduationCap className="w-5 h-5" />
+              </div>
+              <div className="leading-tight">
+                <div className="flex items-center gap-2">
+                  <h1 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-1.5">
+                    <span>EthioLearn</span>
+                    <span className="text-amber-400 font-serif italic font-normal">Digital Library</span>
+                  </h1>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-400/30">
+                    <Sparkles className="w-2.5 h-2.5 fill-amber-300" />
+                    <span>Academic</span>
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 truncate max-w-xs sm:max-w-md">
+                  {isAm
+                    ? 'የኢትዮጵያ ዩኒቨርሲቲዎች ይፋዊ የካሪኩለም ማስታወሻዎች እና የጥናት ሰነዶች ማዕከል'
+                    : 'Official university curriculum compendiums, syllabi & lecture notebooks'}
+                </p>
+              </div>
             </div>
 
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('notebook');
-                  startNewNote();
-                }}
-                className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] rounded-lg transition-all shadow-xs flex items-center gap-1 cursor-pointer active:scale-95"
-                title="Create a new study note"
-              >
-                <Plus className="w-3 h-3 stroke-[2.5]" />
-                <span>New Note</span>
-              </button>
-
-              {customNotes.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => exportNoteAsPdf(noteTitle || "My_EthioLearn_Notes", noteContent)}
-                  className="px-2 py-1 bg-[#17233D] hover:bg-[#1E2D4E] border border-slate-700 text-slate-300 hover:text-white font-medium text-[11px] rounded-lg transition-all flex items-center gap-1 cursor-pointer"
-                  title="Export active note as PDF"
-                >
-                  <Download className="w-3 h-3 text-amber-400" />
-                  <span className="hidden xs:inline">PDF</span>
-                </button>
-              )}
-
+            {/* Quick Actions (Create Note, Offline Status, Google Sync) */}
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => {
                   playClickChime();
-                  setIsHeroMinimized(false);
-                  safeStorage.setItem('ethiolearn_notes_hero_minimized', 'false');
+                  setEditingNoteId(null);
+                  setComposerTitle('');
+                  setComposerContent('');
+                  setComposerImages([]);
+                  setShowNoteComposer(true);
                 }}
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-                title="Expand header"
-                aria-label="Expand header"
-              >
-                <Maximize2 className="w-3.5 h-3.5 text-slate-400 hover:text-white" />
-              </button>
-            </div>
-          </div>
-        ) : (
-          /* Expanded Bar with Compact Pro Layout and Minimize Button */
-          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-3.5">
-            <div className="space-y-1 min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-gradient-to-r from-amber-500/25 via-amber-400/20 to-amber-600/10 text-amber-300 border border-amber-400/40 shadow-xs shadow-amber-500/10">
-                  <Sparkles className="w-2.5 h-2.5 fill-amber-300 text-amber-300" />
-                  <span>PRO STUDY NOTEBOOK</span>
-                  <span className="text-slate-400 font-normal">|</span>
-                  <span className="font-sans">የጥናት ማስታወሻ ስቱዲዮ</span>
-                </span>
-
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                  Rich Text & Diagram Studio
-                </span>
-              </div>
-
-              <h1 className="text-base sm:text-lg font-black text-white tracking-tight leading-snug">
-                Visual Notes & Lecture Journal
-              </h1>
-              <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
-                Capture formulas, attach whiteboard screenshots and textbook diagrams, format chapter takeaways, and export clean PDF documents ready for exam revision.
-              </p>
-
-              {/* Quick Stat Highlights */}
-              <div className="flex flex-wrap items-center gap-2 pt-0.5 text-[10.5px] text-slate-300">
-                <div className="flex items-center gap-1.5 bg-slate-900/80 px-2 py-0.5 rounded-lg border border-slate-800">
-                  <Edit3 className="w-3 h-3 text-amber-400" />
-                  <span className="font-bold text-white">{customNotes.length}</span>
-                  <span className="text-slate-400">Personal Notes</span>
-                </div>
-                <div className="flex items-center gap-1.5 bg-slate-900/80 px-2 py-0.5 rounded-lg border border-slate-800">
-                  <ImageIcon className="w-3 h-3 text-emerald-400" />
-                  <span className="font-bold text-white">{totalAttachedImages}</span>
-                  <span className="text-slate-400">Attached Diagrams</span>
-                </div>
-                <div className="flex items-center gap-1.5 bg-slate-900/80 px-2 py-0.5 rounded-lg border border-slate-800">
-                  <GraduationCap className="w-3 h-3 text-sky-400" />
-                  <span className="font-bold text-white">{subjectsPool.length}</span>
-                  <span className="text-slate-400">Active Subjects</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Header Actions */}
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('notebook');
-                  startNewNote();
-                }}
-                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs transition-all shadow-md shadow-amber-500/10 flex items-center gap-1.5 cursor-pointer active:scale-95"
               >
                 <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>Create New Note</span>
+                <span className="hidden xs:inline">{isAm ? 'ማስታወሻ ጻፍ' : 'Create Note'}</span>
+                <span className="xs:hidden">{isAm ? 'አዲስ' : 'New'}</span>
               </button>
 
-              {customNotes.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => exportNoteAsPdf(noteTitle || "My_EthioLearn_Notes", noteContent)}
-                  className="px-2.5 py-1.5 bg-[#17233D] hover:bg-[#1E2D4E] border border-slate-700 text-slate-200 hover:text-white font-semibold text-xs rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                  title="Export active note as PDF"
+              {offlineOverview.notes.length > 0 && (
+                <div 
+                  onClick={() => setActiveTab('offline')}
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 text-[11px] text-slate-300 font-mono cursor-pointer hover:border-amber-400/40 transition"
+                  title="Offline Ready Documents in IndexedDB"
                 >
-                  <Download className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Export PDF</span>
-                </button>
+                  <HardDrive className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{offlineOverview.notes.length} Cached</span>
+                </div>
               )}
 
+              {googleUser ? (
+                <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 text-[11px] text-slate-300">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="truncate max-w-[120px]">{googleUser.email?.split('@')[0]}</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onGoogleSignIn}
+                  className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-850 border border-slate-800 text-slate-300 hover:text-amber-300 text-[11px] font-medium transition cursor-pointer"
+                  title="Connect Google Drive to export notes"
+                >
+                  <FileText className="w-3 h-3 text-amber-400" />
+                  <span>Google Drive</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* 2. LARGE SEARCH BAR WITH ADVANCED FILTERS                                 */}
+          {/* ========================================================================= */}
+          <div className="space-y-2 pt-1">
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={
+                    isAm
+                      ? 'በርዕስ፣ በዩኒቨርሲቲ፣ በምዕራፍ ወይም በቁልፍ ቃላት ይፈልጉ (ለምሳሌ: Photosynthesis, Fallacy, Logic)...'
+                      : 'Search by course, concept, formula, or university topic (e.g., Photosynthesis, Logic, Vectors)...'
+                  }
+                  className="w-full bg-[#111C35] border border-slate-700/80 focus:border-amber-400 text-white rounded-xl pl-10 pr-9 py-2.5 text-xs sm:text-sm placeholder-slate-400 focus:outline-none transition-all shadow-inner"
+                />
+                {searchQuery ? (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                ) : isSearching ? (
+                  <RefreshCw className="w-4 h-4 text-amber-400 animate-spin absolute right-3 top-1/2 -translate-y-1/2" />
+                ) : null}
+              </div>
+
+              {/* Advanced Filter Toggle */}
               <button
                 type="button"
                 onClick={() => {
                   playClickChime();
-                  setIsHeroMinimized(true);
-                  safeStorage.setItem('ethiolearn_notes_hero_minimized', 'true');
+                  setShowAdvancedFilters(prev => !prev);
                 }}
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-                title="Minimize header banner"
-                aria-label="Minimize header banner"
+                className={`px-3 py-2.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  showAdvancedFilters || selectedSubjectId || selectedStatus !== 'all' || selectedFormat !== 'all'
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold'
+                    : 'bg-[#111C35] border-slate-700 text-slate-300 hover:text-white'
+                }`}
               >
-                <Minimize2 className="w-3.5 h-3.5 text-slate-400 hover:text-white" />
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{isAm ? 'ማጣሪያዎች' : 'Filters'}</span>
+                {(selectedSubjectId || selectedStatus !== 'all' || selectedFormat !== 'all') && (
+                  <span className="w-2 h-2 rounded-full bg-slate-950 shrink-0" />
+                )}
               </button>
             </div>
-          </div>
-        )}
-      </div>
 
-      {/* ========================================================================= */}
-      {/* 2. PRO SEGMENTED TAB SELECTOR (PERSONAL NOTEBOOK vs FACULTY CURRICULUM)   */}
-      {/* ========================================================================= */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
-        <div className="inline-flex p-1.5 rounded-2xl bg-[#0B1228] border border-slate-800 text-xs font-bold">
-          <button
-            onClick={() => { playClickChime(); setActiveTab('notebook'); }}
-            className={`px-4 sm:px-5 py-2 rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
-              activeTab === 'notebook'
-                ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Edit3 className="w-3.5 h-3.5" />
-            <span>My Study Notes & Diagrams</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
-              activeTab === 'notebook' ? 'bg-slate-950/30 text-slate-950' : 'bg-slate-800 text-slate-300'
-            }`}>
-              {customNotes.length}
-            </span>
-          </button>
+            {/* Collapsible Advanced Filters Tray */}
+            <AnimatePresence>
+              {showAdvancedFilters && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.18 }}
+                  className="overflow-hidden bg-[#111C35]/95 border border-slate-700/80 rounded-2xl p-4 space-y-3 text-xs"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700/60 pb-2.5">
+                    <span className="font-bold text-amber-400 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                      <Filter className="w-3.5 h-3.5" />
+                      <span>{isAm ? 'ዝርዝር ማጣሪያዎች' : 'Multi-Facet Filters'}</span>
+                    </span>
 
-          <button
-            onClick={() => { playClickChime(); setActiveTab('curriculum'); }}
-            className={`px-4 sm:px-5 py-2 rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
-              activeTab === 'curriculum'
-                ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <BookOpen className="w-3.5 h-3.5" />
-            <span>Faculty Curriculum Notes</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
-              activeTab === 'curriculum' ? 'bg-slate-950/30 text-slate-950' : 'bg-slate-800 text-slate-300'
-            }`}>
-              {publishedNotes.length}
-            </span>
-          </button>
-        </div>
-
-        {/* Google Cloud Workspace status */}
-        <div className="flex items-center gap-2 text-xs">
-          {googleUser ? (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900/90 border border-slate-800 rounded-xl text-slate-300">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[11px] truncate max-w-[180px] text-slate-400 font-mono">
-                {googleUser.email}
-              </span>
-              <button
-                onClick={onGoogleSignOut}
-                className="text-[10px] text-slate-400 hover:text-red-400 underline cursor-pointer ml-1"
-              >
-                Disconnect
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={onGoogleSignIn}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-amber-400 rounded-xl transition text-xs font-semibold cursor-pointer"
-            >
-              <FileText className="w-3.5 h-3.5 text-amber-400" />
-              <span>Connect Google Drive</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Sync Status Banner */}
-      {syncMessage && (
-        <div className="p-3 bg-slate-900/90 border border-amber-500/30 rounded-xl flex items-center justify-between gap-3 text-xs text-amber-300 animate-fadeIn">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>{syncMessage}</span>
-          </div>
-          {syncDocUrl && onOpenInAppViewer && (
-            <button
-              onClick={() => onOpenInAppViewer(syncDocUrl, "Google Doc")}
-              className="px-2.5 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-500/30 flex items-center gap-1 font-bold"
-            >
-              <ExternalLink className="w-3 h-3" /> View Doc
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 3. MAIN WORKSPACE TABS                                                    */}
-      {/* ========================================================================= */}
-      <AnimatePresence mode="wait">
-        
-        {/* TAB 1: PERSONAL NOTEBOOK (IMAGE & TEXT COMPOSER) */}
-        {activeTab === 'notebook' && (
-          <motion.div
-            key="personal_notebook"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.18 }}
-            className="grid grid-cols-1 lg:grid-cols-12 gap-6"
-          >
-            {/* ─── LEFT COLUMN: SAVED NOTES CATALOG (4 Cols) ─── */}
-            <div className="lg:col-span-4 space-y-4">
-              <div className="bg-[#111C35] border border-slate-800 rounded-2xl p-4 space-y-3.5 shadow-xl">
-                
-                {/* Search notes bar */}
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={noteSearchTerm}
-                    onChange={(e) => setNoteSearchTerm(e.target.value)}
-                    placeholder="Search notes, formulas, topics..."
-                    className="w-full pl-9 pr-8 py-2 rounded-xl bg-[#0B1228] border border-slate-800 text-slate-100 text-xs placeholder-slate-500 focus:outline-none focus:border-amber-400 transition"
-                  />
-                  {noteSearchTerm && (
                     <button
-                      onClick={() => setNoteSearchTerm('')}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                      type="button"
+                      onClick={() => {
+                        setSelectedSubjectId(null);
+                        setSelectedStatus('all');
+                        setSelectedFormat('all');
+                        setSortBy('recent');
+                      }}
+                      className="text-slate-400 hover:text-amber-300 underline text-[11px] cursor-pointer"
                     >
-                      <X className="w-3.5 h-3.5" />
+                      {isAm ? 'ማጣሪያዎችን ዳግም ጀምር' : 'Reset All Filters'}
                     </button>
-                  )}
-                </div>
+                  </div>
 
-                {/* Subject Filter Chips */}
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {/* Filter by Subject */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                        {isAm ? 'የትምህርት ዘርፍ' : 'Course Subject'}
+                      </label>
+                      <select
+                        value={selectedSubjectId || ''}
+                        onChange={(e) => setSelectedSubjectId(e.target.value || null)}
+                        className="w-full bg-[#0A1128] border border-slate-700 text-slate-200 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:border-amber-400 cursor-pointer"
+                      >
+                        <option value="">{isAm ? 'ሁሉም የትምህርት ዘርፎች' : 'All Academic Subjects'}</option>
+                        {dedupedSubjects.map(s => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Filter by Reading Status */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                        {isAm ? 'የንባብ ሁኔታ' : 'Reading Progress'}
+                      </label>
+                      <select
+                        value={selectedStatus}
+                        onChange={(e) => setSelectedStatus(e.target.value)}
+                        className="w-full bg-[#0A1128] border border-slate-700 text-slate-200 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:border-amber-400 cursor-pointer"
+                      >
+                        <option value="all">{isAm ? 'ሁሉም ሰነዶች' : 'All Documents'}</option>
+                        <option value="in-progress">{isAm ? 'በሂደት ላይ ያሉ' : 'In Progress'}</option>
+                        <option value="completed">{isAm ? 'የተጠናቀቁ' : 'Completed'}</option>
+                        <option value="unread">{isAm ? 'ያልተነበቡ' : 'Unread'}</option>
+                      </select>
+                    </div>
+
+                    {/* Sort Options */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                        {isAm ? 'ቅደም ተከተል' : 'Sort Order'}
+                      </label>
+                      <select
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value as any)}
+                        className="w-full bg-[#0A1128] border border-slate-700 text-slate-200 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:border-amber-400 cursor-pointer"
+                      >
+                        <option value="recent">{isAm ? 'የቅርብ ጊዜ ህትመቶች' : 'Curriculum Order (Recent)'}</option>
+                        <option value="az">{isAm ? 'በርዕስ (A-Z)' : 'Title (A - Z)'}</option>
+                        <option value="readTime">{isAm ? 'የንባብ ጊዜ' : 'Estimated Read Time'}</option>
+                      </select>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Sync status toast */}
+          {syncMessage && (
+            <div className="p-2.5 bg-slate-900/90 border border-amber-500/30 rounded-xl flex items-center justify-between gap-2 text-xs text-amber-300">
+              <span className="flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                <span>{syncMessage}</span>
+              </span>
+              {syncDocUrl && onOpenInAppViewer && (
+                <button
+                  onClick={() => onOpenInAppViewer(syncDocUrl, 'Google Doc')}
+                  className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[11px] font-bold hover:bg-emerald-500/30 flex items-center gap-1"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  <span>Open Doc</span>
+                </button>
+              )}
+            </div>
+          )}
+
+        </div>
+      </header>
+
+      {/* ========================================================================= */}
+      {/* 3. MAIN WORKSPACE WITH DESKTOP SIDEBAR & DUAL THEME READING FLOOR         */}
+      {/* ========================================================================= */}
+      <div className="max-w-7xl mx-auto w-full flex-1 flex flex-col lg:flex-row min-h-[calc(100vh-140px)]">
+        
+        {/* ─── DESKTOP SIDEBAR NAVIGATION (LARGE SCREENS) ────────────────────── */}
+        <aside className="hidden lg:flex flex-col w-64 xl:w-72 shrink-0 bg-white dark:bg-[#0B132B] border-r border-slate-200 dark:border-slate-800/80 p-5 space-y-6 text-slate-700 dark:text-slate-200 transition-colors duration-200">
+          
+          {/* Main 4 Library Tabs */}
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3">
+              {isAm ? 'ቤተ-መጻሕፍት' : 'Library Navigation'}
+            </span>
+
+            <nav className="space-y-1 pt-1">
+              <button
+                type="button"
+                onClick={() => { playClickChime(); setActiveTab('explore'); setSelectedSubjectId(null); }}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                  activeTab === 'explore' && !selectedSubjectId
+                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-black'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-950 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Compass className="w-4 h-4 text-amber-500 dark:text-amber-400" />
+                  <span>{isAm ? 'ዳሰሳ' : 'Explore Library'}</span>
+                </div>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
+                  activeTab === 'explore' && !selectedSubjectId ? 'bg-slate-950/30 text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                }`}>
+                  {notes.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { playClickChime(); setActiveTab('my-library'); }}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                  activeTab === 'my-library'
+                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-black'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-950 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <BookOpen className="w-4 h-4 text-amber-500 dark:text-amber-400" />
+                  <span>{isAm ? 'የኔ ማስታወሻዎች' : 'My Library'}</span>
+                </div>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
+                  activeTab === 'my-library' ? 'bg-slate-950/30 text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                }`}>
+                  {customNotes.length + continueReadingNotes.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { playClickChime(); setActiveTab('bookmarks'); }}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                  activeTab === 'bookmarks'
+                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-black'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-950 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Bookmark className="w-4 h-4 text-amber-500 dark:text-amber-400" />
+                  <span>{isAm ? 'የተመረጡ ሰነዶች' : 'Bookmarks'}</span>
+                </div>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
+                  activeTab === 'bookmarks' ? 'bg-slate-950/30 text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                }`}>
+                  {notes.filter(n => userStates[n.id]?.bookmarked).length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { playClickChime(); setActiveTab('offline'); }}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                  activeTab === 'offline'
+                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-black'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-950 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <HardDrive className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
+                  <span>{isAm ? 'ከመስመር ውጭ' : 'Offline Storage'}</span>
+                </div>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-mono font-bold border border-emerald-500/30">
+                  {offlineOverview.notes.length}
+                </span>
+              </button>
+            </nav>
+          </div>
+
+          {/* Faculty / Subject Directory */}
+          <div className="space-y-2 flex-1 overflow-y-auto pr-1">
+            <div className="flex items-center justify-between px-3">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                {isAm ? 'የትምህርት ክፍሎች' : 'Academic Faculties'}
+              </span>
+              {selectedSubjectId && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedSubjectId(null)}
+                  className="text-[10px] text-amber-500 dark:text-amber-400 hover:underline font-bold cursor-pointer"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-1">
+              {dedupedSubjects.map(sub => {
+                const isSelected = selectedSubjectId === sub.id || canonicalSubjectId(selectedSubjectId) === canonicalSubjectId(sub.id);
+                const count = notes.filter(n => {
+                  const s = resolveNoteSubject(n);
+                  return s && canonicalSubjectId(s.id) === canonicalSubjectId(sub.id);
+                }).length;
+
+                return (
                   <button
-                    onClick={() => { playClickChime(); setActiveSubjectFilter('All'); }}
-                    className={`px-2.5 py-1 rounded-lg shrink-0 font-bold text-[11px] transition ${
-                      activeSubjectFilter === 'All'
-                        ? 'bg-amber-500 text-slate-950 font-black'
-                        : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+                    key={sub.id}
+                    type="button"
+                    onClick={() => {
+                      playClickChime();
+                      setSelectedSubjectId(isSelected ? null : sub.id);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs transition-all text-left cursor-pointer ${
+                      isSelected
+                        ? 'bg-amber-500/15 border border-amber-500/40 text-amber-800 dark:text-amber-300 font-black'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-950 dark:hover:text-white font-medium'
                     }`}
                   >
-                    All ({customNotes.length})
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: sub.color || '#D97706' }}
+                      />
+                      <span className="truncate">{sub.name.split('(')[0].trim()}</span>
+                    </div>
+                    {count > 0 && (
+                      <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500 shrink-0">
+                        {count}
+                      </span>
+                    )}
                   </button>
-                  {subjectsPool.map(sub => {
-                    const count = customNotes.filter(n => {
-                      const nSub = (n.subject || '').toLowerCase();
-                      const sSub = sub.toLowerCase();
-                      return n.subject === sub || nSub.includes(sSub) || sSub.includes(nSub);
-                    }).length;
-                    return (
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Sidebar Storage Widget */}
+          <div className="p-3.5 bg-slate-50 dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-2xl space-y-2 text-xs text-slate-600 dark:text-slate-300 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <HardDrive className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
+                <span>IndexedDB Storage</span>
+              </span>
+              <span className="text-[10px] font-mono text-slate-400">{offlineOverview.formattedSize}</span>
+            </div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+              {offlineOverview.notes.length > 0
+                ? `${offlineOverview.notes.length} compendiums ready for zero-network reading.`
+                : 'Save notes offline to read without mobile data.'}
+            </p>
+          </div>
+        </aside>
+
+        {/* ─── MAIN CONTENT READING FLOOR (DUAL THEME / LIGHT WARM & NIGHT NAVY) ──────────── */}
+        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 space-y-7 pb-24 lg:pb-12 text-slate-800 dark:text-slate-100 transition-colors duration-200">
+          
+          {/* SEARCH RESULTS OVERLAY (When typing in the top search bar) */}
+          {searchQuery.trim().length > 0 ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                    {isAm ? 'የፍለጋ ውጤቶች' : 'Search Results'}
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Matching <strong className="text-amber-600 dark:text-amber-400 font-bold">"{searchQuery}"</strong> across university syllabi
+                  </p>
+                </div>
+                <span className="text-xs font-mono font-bold text-slate-500 dark:text-slate-400">
+                  {searchResults.length} {isAm ? 'ውጤቶች' : 'results'}
+                </span>
+              </div>
+
+              {searchResults.length === 0 && !isSearching ? (
+                <div className="p-12 text-center bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-2xl space-y-2 shadow-xs">
+                  <BookOpen className="w-8 h-8 text-slate-400 dark:text-slate-500 mx-auto" />
+                  <p className="text-sm font-bold text-slate-800 dark:text-slate-300">
+                    {isAm ? 'ምንም የሚመሳሰል ማስታወሻ አልተገኘም' : 'No matching notes found'}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {isAm ? 'የተለየ ቁልፍ ቃል ወይም ርዕስ ይሞክሩ' : 'Try searching for another formula, theorem, or chapter topic.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {searchResults.map(res => (
+                    <div
+                      key={res.id}
+                      onClick={() => setReaderNoteId(res.id)}
+                      className="p-4 bg-white dark:bg-[#111C35] hover:bg-slate-50 dark:hover:bg-[#162342] border border-slate-200/90 dark:border-slate-800 hover:border-amber-400/50 rounded-2xl shadow-sm dark:shadow-md transition-all cursor-pointer group flex items-start justify-between gap-3 text-slate-900 dark:text-white"
+                    >
+                      <div className="space-y-1 min-w-0 flex-1">
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors">
+                          {res.title}
+                        </h4>
+                        {res.snippet && (
+                          <p
+                            className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 leading-relaxed opacity-90 [&_mark]:bg-amber-500/30 [&_mark]:text-amber-900 dark:[&_mark]:text-amber-200 [&_mark]:px-1 [&_mark]:rounded"
+                            dangerouslySetInnerHTML={{ __html: res.snippet }}
+                          />
+                        )}
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-slate-400 dark:text-slate-500 group-hover:text-amber-500 dark:group-hover:text-amber-400 transition-colors shrink-0 mt-1" />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* ========================================================================= */}
+              {/* 4. CONTINUE LEARNING SECTION (RECENTLY OPENED IN-PROGRESS NOTES)          */}
+              {/* ========================================================================= */}
+              {activeTab === 'explore' && continueReadingNotes.length > 0 && (
+                <section className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 dark:text-amber-400">
+                        <Flame className="w-4 h-4" />
+                      </div>
+                      <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                        {isAm ? 'ንባብዎን ይቀጥሉ' : 'Continue Learning'}
+                      </h2>
+                    </div>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                      {continueReadingNotes.length} {isAm ? 'በሂደት ላይ' : 'in progress'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    {continueReadingNotes.map(({ note: cNote, progress }) => {
+                      const sub = resolveNoteSubject(cNote);
+                      const badgeClass = getSubjectBadgeStyle(sub?.id);
+
+                      return (
+                        <div
+                          key={cNote.id}
+                          onClick={() => { playClickChime(); setReaderNoteId(cNote.id); }}
+                          className="p-4 bg-white dark:bg-[#111C35] hover:bg-slate-50 dark:hover:bg-[#162342] border border-slate-200/90 dark:border-slate-800 hover:border-amber-400/60 rounded-2xl shadow-sm dark:shadow-lg dark:shadow-black/20 transition-all cursor-pointer flex flex-col justify-between gap-3 group text-slate-900 dark:text-white"
+                        >
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider truncate max-w-[170px] ${badgeClass}`}>
+                                {sub?.name.split('(')[0] || 'Curriculum'}
+                              </span>
+                              <span className="text-xs font-mono font-bold text-amber-600 dark:text-amber-400">
+                                {Math.round(progress)}%
+                              </span>
+                            </div>
+
+                            <h3 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors line-clamp-1">
+                              {cNote.title}
+                            </h3>
+                          </div>
+
+                          {/* Progress bar */}
+                          <div className="space-y-1.5 pt-1">
+                            <div className="w-full bg-slate-200 dark:bg-slate-800/90 h-1.5 rounded-full overflow-hidden">
+                              <div
+                                className="bg-amber-400 h-full rounded-full transition-all duration-300"
+                                style={{ width: `${progress}%` }}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-slate-400 dark:text-slate-500" />
+                                <span>{cNote.read_time_min || 5}m read</span>
+                              </span>
+                              <span className="text-amber-600 dark:text-amber-400 font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
+                                <span>Resume</span>
+                                <ArrowRight className="w-3 h-3" />
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+
+              {/* ========================================================================= */}
+              {/* 5. SUBJECT CATEGORIES IN A CLEAN 2-COLUMN MOBILE GRID                     */}
+              {/* ========================================================================= */}
+              {activeTab === 'explore' && (
+                <section className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-500 dark:text-indigo-400">
+                        <Library className="w-4 h-4" />
+                      </div>
+                      <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                        {isAm ? 'የትምህርት ዘርፎች ማውጫ' : 'Academic Subject Compendiums'}
+                      </h2>
+                    </div>
+
+                    {selectedSubjectId && (
                       <button
-                        key={sub}
-                        onClick={() => { playClickChime(); setActiveSubjectFilter(sub); }}
-                        className={`px-2.5 py-1 rounded-lg shrink-0 font-bold text-[11px] transition flex items-center gap-1.5 ${
-                          activeSubjectFilter === sub
-                            ? 'bg-amber-500 text-slate-950 font-black'
-                            : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
-                        }`}
+                        type="button"
+                        onClick={() => setSelectedSubjectId(null)}
+                        className="text-xs text-amber-500 dark:text-amber-400 hover:underline font-bold cursor-pointer"
                       >
-                        <span>{sub}</span>
-                        {count > 0 && <span className="opacity-70 text-[10px]">({count})</span>}
+                        {isAm ? 'ሁሉንም አሳይ' : 'Show All'}
                       </button>
-                    );
-                  })}
+                    )}
+                  </div>
+
+                  {/* 2-column on mobile, 3-column tablet, 4-column desktop */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                    {dedupedSubjects.map(sub => {
+                      const isSelected = selectedSubjectId === sub.id || canonicalSubjectId(selectedSubjectId) === canonicalSubjectId(sub.id);
+                      const subNotes = notes.filter(n => {
+                        const s = resolveNoteSubject(n);
+                        return s && canonicalSubjectId(s.id) === canonicalSubjectId(sub.id);
+                      });
+                      const count = subNotes.length;
+                      const completed = subNotes.filter(n => (userStates[n.id]?.progress || 0) >= 95).length;
+                      const pct = count > 0 ? Math.round((completed / count) * 100) : 0;
+
+                      return (
+                        <div
+                          key={sub.id}
+                          onClick={() => {
+                            playClickChime();
+                            setSelectedSubjectId(isSelected ? null : sub.id);
+                          }}
+                          className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-3 relative ${
+                            isSelected
+                              ? 'bg-amber-500/15 border-amber-500 text-amber-800 dark:text-amber-300 shadow-md ring-2 ring-amber-400/20'
+                              : 'bg-white dark:bg-[#0F172A] border-slate-200/90 dark:border-slate-800/90 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-[#131E38] text-slate-900 dark:text-white shadow-xs'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center shrink-0">
+                              {getSubjectIcon(sub.id)}
+                            </div>
+                            {pct > 0 && (
+                              <span className="text-[10px] font-mono font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-500/30 dark:border-emerald-800/60">
+                                {pct}%
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="space-y-0.5">
+                            <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white leading-snug line-clamp-1" title={sub.name}>
+                              {sub.name.split('(')[0].trim()}
+                            </h3>
+                            <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                              <span>{count} {isAm ? 'ሰነዶች' : 'modules'}</span>
+                              <span className="text-slate-400 dark:text-slate-500 text-[10px]">
+                                {sub.name.includes('(') ? sub.name.split('(')[1].replace(')', '') : ''}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+
+              {/* ========================================================================= */}
+              {/* 6. LATEST PUBLICATIONS IN A READABLE DOCUMENT-LIST LAYOUT                 */}
+              {/* ========================================================================= */}
+              <section className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-amber-500 dark:text-amber-400" />
+                      <span>
+                        {activeTab === 'bookmarks'
+                          ? (isAm ? 'የተመረጡ ማስታወሻዎች' : 'Saved Bookmarks')
+                          : activeTab === 'offline'
+                          ? (isAm ? 'ከመስመር ውጭ የተጫኑ' : 'Offline Stored Documents')
+                          : activeTab === 'my-library'
+                          ? (isAm ? 'የኔ የትምህርት ማስታወሻዎች' : 'My Personal Library & Notebook')
+                          : selectedSubjectId
+                          ? `${subjects.find(s => s.id === selectedSubjectId || canonicalSubjectId(s.id) === canonicalSubjectId(selectedSubjectId))?.name || 'Subject'} Compendiums`
+                          : (isAm ? 'አዳዲስ ህትመቶች እና የትምህርት ክፍሎች' : 'Latest Curriculum Publications')}
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      {isAm
+                        ? 'በዩኒቨርሲቲ መምህራን የተዘጋጁ ይፋዊ የትምህርት ይዘቶች'
+                        : 'Accredited university lecture modules, compendiums & formula reference sheets'}
+                    </p>
+                  </div>
+
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono font-bold">
+                    {filteredNotes.length} {isAm ? 'ሰነዶች' : 'items'}
+                  </span>
                 </div>
 
-                {/* Notes List */}
-                <div className="space-y-2.5 max-h-[620px] overflow-y-auto pr-1">
-                  {filteredPersonalNotes.length === 0 ? (
-                    <div className="py-12 px-4 text-center rounded-xl border border-dashed border-slate-800 space-y-2">
-                      <Edit3 className="w-8 h-8 text-slate-600 mx-auto" />
-                      <p className="text-xs font-bold text-slate-300">No notes found</p>
-                      <p className="text-[11px] text-slate-500">
-                        {noteSearchTerm || activeSubjectFilter !== 'All'
-                          ? 'Try resetting your search or filter.'
-                          : 'Use the editor on the right to compose your first study note with text and diagrams.'}
-                      </p>
+                {/* MY LIBRARY: PERSONAL NOTEBOOK DRAWER / CARDS */}
+                {activeTab === 'my-library' && (
+                  <div className="p-4 bg-slate-50 dark:bg-[#111C35] border border-amber-500/30 rounded-2xl shadow-sm dark:shadow-xl space-y-3 mb-4 text-slate-900 dark:text-white">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Edit3 className="w-4 h-4 text-amber-500 dark:text-amber-400" />
+                        <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                          {isAm ? 'የግል ማስታወሻ ደብተር' : 'Personal Study Notebook & Diagrams'}
+                        </h3>
+                      </div>
                       <button
-                        onClick={startNewNote}
-                        className="mt-2 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-xs rounded-lg transition"
+                        type="button"
+                        onClick={() => {
+                          playClickChime();
+                          setEditingNoteId(null);
+                          setComposerTitle('');
+                          setComposerContent('');
+                          setComposerImages([]);
+                          setShowNoteComposer(true);
+                        }}
+                        className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg transition cursor-pointer flex items-center gap-1 shadow-xs"
                       >
-                        + Create Note
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>{isAm ? 'አዲስ ጻፍ' : 'New Note'}</span>
                       </button>
                     </div>
-                  ) : (
-                    filteredPersonalNotes.map((note) => {
-                      const isEditing = editingNoteId === note.id;
-                      const imgs = note.images || (note.imageUrl ? [note.imageUrl] : []);
-                      const wordApprox = note.content ? note.content.replace(/<[^>]*>/g, ' ').trim().split(/\s+/).length : 0;
+
+                    {customNotes.length === 0 ? (
+                      <p className="text-xs text-slate-500 dark:text-slate-400 py-3 text-center">
+                        {isAm
+                          ? 'እስካሁን ምንም የግል ማስታወሻ አልጻፉም። ማስታወሻዎችን በፎቶ እና ስዕላዊ መግለጫዎች እዚህ ማዘጋጀት ይችላሉ።'
+                          : 'No personal notes yet. Use the composer to attach whiteboard photos, formulas, and diagrams.'}
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        {customNotes.map(cNote => (
+                          <div
+                            key={cNote.id}
+                            className="p-3.5 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-xl space-y-2 relative group text-slate-900 dark:text-white shadow-xs"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider font-mono">
+                                  {cNote.subject}
+                                </span>
+                                <h4 className="text-xs font-bold text-slate-900 dark:text-white line-clamp-1">
+                                  {cNote.title}
+                                </h4>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleDeletePersonalNote(cNote.id, e)}
+                                  className="text-slate-400 hover:text-red-500 p-1 transition cursor-pointer"
+                                  title="Delete Note"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                            <p className="text-[11px] text-slate-600 dark:text-slate-300 line-clamp-2">
+                              {cNote.content.replace(/<[^>]*>/g, ' ') || 'No content...'}
+                            </p>
+                            <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-800">
+                              <span>{cNote.date || 'Saved'}</span>
+                              <button
+                                type="button"
+                                onClick={() => exportNoteAsPdf(cNote.title, cNote.content, cNote.subject)}
+                                className="text-amber-600 dark:text-amber-400 hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                              >
+                                <Download className="w-3 h-3" />
+                                <span>PDF</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Document List Loading / Empty / Loaded */}
+                {isLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3, 4].map(i => (
+                      <div key={i} className="p-5 bg-white dark:bg-[#111C35] border border-slate-200 dark:border-slate-800 rounded-2xl animate-pulse space-y-3 shadow-xs">
+                        <div className="w-1/4 h-4 bg-slate-200 dark:bg-slate-800 rounded" />
+                        <div className="w-3/4 h-5 bg-slate-200 dark:bg-slate-800 rounded" />
+                        <div className="w-1/2 h-3 bg-slate-100 dark:bg-slate-900 rounded" />
+                      </div>
+                    ))}
+                  </div>
+                ) : filteredNotes.length === 0 ? (
+                  <div className="p-12 text-center bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-2xl space-y-2 shadow-xs">
+                    <FolderOpen className="w-9 h-9 text-slate-400 dark:text-slate-500 mx-auto" />
+                    <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                      {isAm ? 'ምንም ማስታወሻ አልተገኘም' : 'No documents found'}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                      {isAm
+                        ? 'በተመረጠው ማጣሪያ መሰረት ሰነዶች የሉም። ማጣሪያውን በመቀየር እንደገና ይሞክሩ።'
+                        : 'There are no compendiums matching your selected filter. Try clearing subject or status filters.'}
+                    </p>
+                  </div>
+                ) : (
+                  /* Single-column on mobile, spacious card list on tablet & desktop */
+                  <div className="space-y-3">
+                    {filteredNotes.map((note) => {
+                      const sub = resolveNoteSubject(note);
+                      const ch = chapterMap.get(note.chapter_id);
+                      const state = userStates[note.id];
+                      const progress = state?.progress || 0;
+                      const isCompleted = progress >= 95;
+                      const isBookmarked = !!state?.bookmarked;
+                      const isDownloaded = downloadedNoteIds.has(note.id);
+                      const isDownloadingThis = downloadingId === note.id;
+                      const badgeClass = getSubjectBadgeStyle(sub?.id);
 
                       return (
                         <div
                           key={note.id}
                           onClick={() => {
-                            setEditingNoteId(note.id);
-                            setNoteTitle(note.title);
-                            setNoteContent(note.content);
-                            setNoteSubject(note.subject);
-                            setNoteColor(note.color || 'bg-amber-950/20');
-                            setNoteImages(imgs);
-                            if (editorRef.current) {
-                              editorRef.current.innerHTML = note.content || '';
-                            }
                             playClickChime();
+                            setReaderNoteId(note.id);
                           }}
-                          className={`p-3.5 rounded-xl border transition-all cursor-pointer relative group text-left ${
-                            isEditing
-                              ? 'bg-amber-500/10 border-amber-500/60 shadow-lg shadow-amber-500/5'
-                              : 'bg-[#0B1228] border-slate-800 hover:border-slate-700 hover:bg-[#0E1733]'
-                          }`}
+                          className="p-4 sm:p-5 bg-white dark:bg-[#111C35] hover:bg-slate-50 dark:hover:bg-[#162342] border border-slate-200/90 dark:border-slate-800/90 hover:border-amber-400/60 rounded-2xl shadow-sm dark:shadow-lg dark:shadow-black/20 transition-all duration-200 cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4 group text-slate-900 dark:text-white"
                         >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="space-y-1 min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 font-mono truncate">
-                                  {note.subject}
+                          {/* Left: Document Info */}
+                          <div className="space-y-1.5 min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border uppercase tracking-wider shrink-0 ${badgeClass}`}>
+                                {sub?.name.split('(')[0] || 'General'}
+                              </span>
+
+                              {ch?.title && (
+                                <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-xs">
+                                  {ch.title}
                                 </span>
-                                {note.date && (
-                                  <span className="text-[10px] text-slate-500">
-                                    • {note.date}
-                                  </span>
-                                )}
-                              </div>
+                              )}
 
-                              <h3 className={`text-sm font-bold truncate leading-snug ${isEditing ? 'text-amber-300' : 'text-white'}`}>
-                                {note.title}
-                              </h3>
-
-                              <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
-                                {note.content.replace(/<[^>]*>/g, ' ').trim() || 'No preview text...'}
-                              </p>
+                              {isCompleted && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-500/30 dark:border-emerald-800/60 shrink-0">
+                                  <Check className="w-3 h-3" />
+                                  <span>{isAm ? 'ተጠናቋል' : 'Completed'}</span>
+                                </span>
+                              )}
                             </div>
 
-                            <button
-                              onClick={(e) => deleteNote(note.id, e)}
-                              className="text-slate-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition cursor-pointer shrink-0 opacity-70 group-hover:opacity-100"
-                              title="Delete Note"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors leading-snug">
+                              {note.title}
+                            </h3>
+
+                            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400 font-mono">
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+                                <span>{note.read_time_min || 5} min read</span>
+                              </span>
+                              <span>•</span>
+                              <span>{isAm ? 'ካሪኩለም ማስታወሻ' : 'Lecture Module'}</span>
+                              {progress > 0 && progress < 95 && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-amber-600 dark:text-amber-400 font-bold">{Math.round(progress)}% read</span>
+                                </>
+                              )}
+                            </div>
                           </div>
 
-                          {/* Thumbnail Strip if images exist */}
-                          {imgs.length > 0 && (
-                            <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between">
-                              <div className="flex items-center gap-1.5 overflow-hidden">
-                                {imgs.slice(0, 3).map((im, iIdx) => (
-                                  <img
-                                    key={iIdx}
-                                    src={im}
-                                    alt="diagram"
-                                    className="w-7 h-7 rounded-md object-cover border border-slate-700 shrink-0"
-                                  />
-                                ))}
-                                {imgs.length > 3 && (
-                                  <span className="text-[10px] text-slate-500 font-bold">
-                                    +{imgs.length - 3}
-                                  </span>
-                                )}
-                              </div>
+                          {/* Right: Action Buttons */}
+                          <div className="flex items-center gap-2 shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200 dark:border-slate-800 justify-end">
+                            
+                            {/* Bookmark Action */}
+                            <button
+                              type="button"
+                              onClick={(e) => handleToggleBookmark(note.id, e)}
+                              className={`p-2 rounded-xl border transition-colors cursor-pointer ${
+                                isBookmarked
+                                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-600 dark:text-amber-400'
+                                  : 'bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                              }`}
+                              title={isBookmarked ? 'Remove Bookmark' : 'Bookmark Note'}
+                            >
+                              <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-amber-500 dark:fill-amber-400 text-amber-500 dark:text-amber-400' : ''}`} />
+                            </button>
 
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                                <ImageIcon className="w-3 h-3" />
-                                <span>{imgs.length} {imgs.length === 1 ? 'Diagram' : 'Diagrams'}</span>
-                              </span>
-                            </div>
-                          )}
+                            {/* Offline Download Action (IndexedDB) */}
+                            <button
+                              type="button"
+                              onClick={(e) => handleToggleOfflineDownload(note, e)}
+                              disabled={isDownloadingThis}
+                              className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                                isDownloaded
+                                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-700 dark:text-emerald-300'
+                                  : 'bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                              }`}
+                              title={isDownloaded ? 'Cached Offline in IndexedDB' : 'Save for Offline Reading'}
+                            >
+                              {isDownloadingThis ? (
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-500 dark:text-amber-400" />
+                              ) : isDownloaded ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
+                                  <span className="hidden sm:inline text-[11px] font-mono">Offline</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Download className="w-3.5 h-3.5" />
+                                  <span className="hidden sm:inline text-[11px]">Save</span>
+                                </>
+                              )}
+                            </button>
 
-                          <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500 font-medium">
-                            <span>{wordApprox} words</span>
-                            <span className="text-amber-400 font-semibold flex items-center gap-1">
-                              <span>Edit</span>
-                              <ArrowRight className="w-3 h-3" />
-                            </span>
+                            {/* Read Now Primary CTA */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                playClickChime();
+                                setReaderNoteId(note.id);
+                              }}
+                              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-md shadow-amber-500/10 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                            >
+                              <BookOpen className="w-3.5 h-3.5 stroke-[2.2]" />
+                              <span>{isAm ? 'አንብብ' : 'Read'}</span>
+                            </button>
+
                           </div>
                         </div>
                       );
-                    })
-                  )}
+                    })}
+                  </div>
+                )}
+              </section>
+            </>
+          )}
+
+        </main>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 7. SIMPLE BOTTOM NAVIGATION ON MOBILE (FIXED THUMB BAR)                   */}
+      {/* ========================================================================= */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#0A1128]/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 px-2 py-1 shadow-2xl flex items-center justify-around">
+        <button
+          type="button"
+          onClick={() => { playClickChime(); setActiveTab('explore'); setSelectedSubjectId(null); }}
+          className={`flex-1 py-1.5 flex flex-col items-center gap-0.5 text-[10px] font-bold transition-all cursor-pointer ${
+            activeTab === 'explore'
+              ? 'text-amber-600 dark:text-amber-400 font-black'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          <Compass className="w-5 h-5" />
+          <span>{isAm ? 'ዳሰሳ' : 'Explore'}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => { playClickChime(); setActiveTab('my-library'); }}
+          className={`flex-1 py-1.5 flex flex-col items-center gap-0.5 text-[10px] font-bold transition-all cursor-pointer ${
+            activeTab === 'my-library'
+              ? 'text-amber-600 dark:text-amber-400 font-black'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          <BookOpen className="w-5 h-5" />
+          <span>{isAm ? 'የኔ ማስታወሻ' : 'My Library'}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => { playClickChime(); setActiveTab('bookmarks'); }}
+          className={`flex-1 py-1.5 flex flex-col items-center gap-0.5 text-[10px] font-bold transition-all cursor-pointer ${
+            activeTab === 'bookmarks'
+              ? 'text-amber-600 dark:text-amber-400 font-black'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          <Bookmark className="w-5 h-5" />
+          <span>{isAm ? 'የተመረጡ' : 'Bookmarks'}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => { playClickChime(); setActiveTab('offline'); }}
+          className={`flex-1 py-1.5 flex flex-col items-center gap-0.5 text-[10px] font-bold transition-all cursor-pointer ${
+            activeTab === 'offline'
+              ? 'text-emerald-600 dark:text-emerald-400 font-black'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          <HardDrive className="w-5 h-5" />
+          <span>{isAm ? 'ከመስመር ውጭ' : 'Offline'}</span>
+        </button>
+      </nav>
+
+      {/* ========================================================================= */}
+      {/* 8. PERSONAL NOTE COMPOSER MODAL (RICH TEXT & DIAGRAM ATTACHMENTS)         */}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {showNoteComposer && (
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white dark:bg-[#0F172A] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden text-slate-800 dark:text-slate-100"
+            >
+              {/* Modal Header */}
+              <div className="p-4 bg-slate-50 dark:bg-[#0A1128] text-slate-900 dark:text-white flex items-center justify-between border-b border-slate-200 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-500 dark:text-amber-400 flex items-center justify-center">
+                    <Edit3 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      {editingNoteId ? 'Edit Study Note' : (isAm ? 'አዲስ የጥናት ማስታወሻ ይጻፉ' : 'Create Visual Study Note')}
+                    </h3>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                      Rich Text • Attached Diagrams • PDF Export
+                    </p>
+                  </div>
                 </div>
 
-                {/* Footer sync option */}
-                {customNotes.length > 0 && googleUser && (
-                  <button
-                    onClick={handleExportAllToGoogleSheets}
-                    disabled={isSyncingSheet}
-                    className="w-full py-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 font-semibold text-xs rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40"
-                  >
-                    <FileText className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Sync All Notes to Google Sheets</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setShowNoteComposer(false)}
+                  className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-            </div>
 
-            {/* ─── RIGHT COLUMN: PRO NOTE STUDIO CANVAS (8 Cols) ─── */}
-            <div className="lg:col-span-8 space-y-4">
-              <div className="bg-[#111C35] border border-slate-800 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xl relative">
-                
-                {/* Editor Header Bar */}
-                <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                      <Edit3 className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h2 className="font-bold text-sm sm:text-base text-white">
-                        {editingNoteId ? 'Edit Study Note' : 'Draft New Study Note'}
-                      </h2>
-                      <span className="text-[11px] text-slate-400">
-                        {wordCount} words • ~{Math.max(1, Math.ceil(wordCount / 180))} min read
-                      </span>
-                    </div>
+              {/* Modal Body */}
+              <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+                {composerToast && (
+                  <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-500/40 text-emerald-800 dark:text-emerald-300 rounded-xl flex items-center gap-2 font-bold">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
+                    <span>{composerToast}</span>
                   </div>
+                )}
 
-                  <div className="flex items-center gap-2">
-                    {editingNoteId && (
-                      <button
-                        onClick={startNewNote}
-                        className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 text-xs font-semibold transition cursor-pointer"
-                        title="Clear editor to draft a blank note"
-                      >
-                        + New Blank Note
-                      </button>
-                    )}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    {isAm ? 'የትምህርት ዘርፍ' : 'Subject'}
+                  </label>
+                  <select
+                    value={composerSubject}
+                    onChange={(e) => setComposerSubject(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-[#0A1128] border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-amber-400 font-semibold cursor-pointer"
+                  >
+                    {dedupedSubjects.map(s => (
+                      <option key={s.id} value={s.name.split('(')[0].trim()}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                    {isSavedToast && (
-                      <span className="px-3 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5 animate-pulse">
-                        <Check className="w-3.5 h-3.5" /> Saved
-                      </span>
-                    )}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    {isAm ? 'የማስታወሻው ርዕስ' : 'Note Title'}
+                  </label>
+                  <input
+                    type="text"
+                    value={composerTitle}
+                    onChange={(e) => setComposerTitle(e.target.value)}
+                    placeholder="e.g., Cellular Respiration & ATP Cycle Summary"
+                    className="w-full bg-slate-50 dark:bg-[#0A1128] border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-amber-400"
+                  />
+                </div>
 
+                {/* Editor Content */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    {isAm ? 'የማስታወሻ ይዘት' : 'Notes & Key Takeaways'}
+                  </label>
+                  <textarea
+                    rows={6}
+                    value={composerContent}
+                    onChange={(e) => setComposerContent(e.target.value)}
+                    placeholder="Write definitions, exam formulas, theorem explanations, and summary points here..."
+                    className="w-full bg-slate-50 dark:bg-[#0A1128] border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl p-3 text-xs focus:outline-none focus:border-amber-400 leading-relaxed font-sans"
+                  />
+                </div>
+
+                {/* Diagram URL Attachment */}
+                <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <ImageIcon className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
+                      <span>Attached Diagrams ({composerImages.length})</span>
+                    </span>
                     <button
-                      onClick={saveToNotepad}
-                      disabled={!noteTitle.trim()}
-                      className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer disabled:opacity-40 shadow-md shadow-amber-500/20 active:scale-95"
+                      type="button"
+                      onClick={() => setShowUrlField(prev => !prev)}
+                      className="text-[11px] text-amber-600 dark:text-amber-400 hover:underline font-bold cursor-pointer"
                     >
-                      <Save className="w-3.5 h-3.5" />
-                      <span>Save Note</span>
+                      + Add Image URL
                     </button>
                   </div>
-                </div>
 
-                {/* Note Metadata Row (Title, Subject, Category Color) */}
-                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                  <div className="sm:col-span-8">
-                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                      Note Title / Topic
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Chapter 4: Emerging Tech - 4IR Principles & Smart Contracts"
-                      value={noteTitle}
-                      onChange={(e) => setNoteTitle(e.target.value)}
-                      className="w-full bg-[#0B1228] border border-slate-800 focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-bold text-white placeholder-slate-500 outline-none transition"
-                    />
-                  </div>
-
-                  <div className="sm:col-span-4">
-                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                      Subject
-                    </label>
-                    <select
-                      value={noteSubject}
-                      onChange={(e) => setNoteSubject(e.target.value)}
-                      className="w-full bg-[#0B1228] border border-slate-800 focus:border-amber-400 rounded-xl px-3 py-2.5 text-xs font-semibold text-white outline-none cursor-pointer"
-                    >
-                      {subjectsPool.map(s => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* ─── PRO FORMATTING & IMAGE TOOLBAR ─── */}
-                <div className="bg-[#0B1228] border border-slate-800 rounded-xl p-3 space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    
-                    {/* Rich text formatting tools */}
-                    <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-lg border border-slate-800">
-                      <button
-                        type="button"
-                        onClick={() => triggerToolbarCommand('bold')}
-                        className="p-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-amber-400 font-bold transition cursor-pointer"
-                        title="Bold"
-                      >
-                        <Bold className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => triggerToolbarCommand('italic')}
-                        className="p-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-amber-400 italic transition cursor-pointer"
-                        title="Italic"
-                      >
-                        <Italic className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => triggerToolbarCommand('underline')}
-                        className="p-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-amber-400 transition cursor-pointer"
-                        title="Underline"
-                      >
-                        <Underline className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => triggerToolbarCommand('strikeThrough')}
-                        className="p-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-amber-400 transition cursor-pointer"
-                        title="Strikethrough"
-                      >
-                        <Strikethrough className="w-3.5 h-3.5" />
-                      </button>
-                      
-                      <div className="w-px h-4 bg-slate-800 mx-1" />
-
-                      <button
-                        type="button"
-                        onClick={() => triggerToolbarCommand('formatBlock', '<h2>')}
-                        className="p-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-amber-400 font-black text-xs transition cursor-pointer"
-                        title="Heading"
-                      >
-                        <Heading1 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => triggerToolbarCommand('formatBlock', '<h3>')}
-                        className="p-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-amber-400 font-bold text-xs transition cursor-pointer"
-                        title="Subheading"
-                      >
-                        <Heading2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => triggerToolbarCommand('insertUnorderedList')}
-                        className="p-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-amber-400 transition cursor-pointer"
-                        title="Bullet List"
-                      >
-                        <List className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => triggerToolbarCommand('insertOrderedList')}
-                        className="p-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-amber-400 transition cursor-pointer"
-                        title="Numbered List"
-                      >
-                        <ListOrdered className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => triggerToolbarCommand('formatBlock', '<blockquote>')}
-                        className="p-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-amber-400 transition cursor-pointer"
-                        title="Quote"
-                      >
-                        <Quote className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
-                    {/* Image Attachment Trigger Buttons */}
+                  {showUrlField && (
                     <div className="flex items-center gap-2">
                       <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleImageUpload}
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                      />
-                      
-                      {/* Mobile camera snap or file browser */}
-                      <button
-                        type="button"
-                        onClick={() => { playClickChime(); fileInputRef.current?.click(); }}
-                        className="px-3 py-1.5 bg-gradient-to-r from-amber-500/20 to-amber-500/10 hover:from-amber-500/30 hover:to-amber-500/20 border border-amber-500/40 text-amber-300 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
-                        title="Upload photos, whiteboard snapshots, or diagrams"
-                      >
-                        <Camera className="w-3.5 h-3.5 text-amber-400" />
-                        <span>Add Photo / Diagram</span>
-                      </button>
-
-                      {/* URL Attachment toggle */}
-                      <button
-                        type="button"
-                        onClick={() => { playClickChime(); setShowUrlInput(!showUrlInput); }}
-                        className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 text-xs rounded-xl font-medium transition cursor-pointer flex items-center gap-1"
-                        title="Paste web image link"
-                      >
-                        <LinkIcon className="w-3 h-3 text-slate-400" />
-                        <span>Image Link</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Optional Image URL Input Field */}
-                  {showUrlInput && (
-                    <div className="flex items-center gap-2 pt-1 animate-fadeIn">
-                      <input
                         type="url"
-                        placeholder="Paste web image link (https://...)..."
                         value={imageUrlInput}
                         onChange={(e) => setImageUrlInput(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') handleAddImageUrl(); }}
-                        className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none focus:border-amber-400"
+                        placeholder="https://... image URL (whiteboard diagram, textbook scan)"
+                        className="flex-1 bg-slate-50 dark:bg-[#0A1128] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-400"
                       />
                       <button
                         type="button"
-                        onClick={handleAddImageUrl}
-                        className="px-3 py-1.5 bg-amber-500 text-slate-950 font-bold text-xs rounded-xl hover:bg-amber-400 cursor-pointer"
+                        onClick={() => {
+                          if (imageUrlInput.trim()) {
+                            setComposerImages(prev => [...prev, imageUrlInput.trim()]);
+                            setImageUrlInput('');
+                            setShowUrlField(false);
+                            playSuccessChime();
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs hover:bg-amber-400 cursor-pointer"
                       >
                         Attach
                       </button>
                     </div>
                   )}
 
-                  {/* ─── ATTACHED IMAGE GALLERY CAROUSEL ─── */}
-                  {noteImages.length > 0 && (
-                    <div className="pt-2 border-t border-slate-800/80 space-y-2">
-                      <div className="flex items-center justify-between text-xs font-semibold">
-                        <span className="flex items-center gap-1.5 text-amber-300">
-                          <ImageIcon className="w-3.5 h-3.5" />
-                          <span>Attached Diagrams & Images ({noteImages.length})</span>
-                        </span>
-                        <span className="text-[11px] text-slate-500">
-                          Click any image to view in full resolution
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-thin">
-                        {noteImages.map((imgSrc, idx) => (
-                          <div
-                            key={idx}
-                            className="relative group shrink-0 w-28 h-28 rounded-xl overflow-hidden border border-amber-500/30 bg-black shadow-lg"
+                  {composerImages.length > 0 && (
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                      {composerImages.map((imgSrc, iIdx) => (
+                        <div key={iIdx} className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shrink-0 group bg-slate-100 dark:bg-black">
+                          <img
+                            src={imgSrc}
+                            alt="diagram"
+                            className="w-full h-full object-cover cursor-pointer"
+                            onClick={() => setImageModalUrl(imgSrc)}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setComposerImages(prev => prev.filter((_, idx) => idx !== iIdx))}
+                            className="absolute top-1 right-1 p-0.5 bg-red-600 text-white rounded-full opacity-80 hover:opacity-100 cursor-pointer"
                           >
-                            <img
-                              src={imgSrc}
-                              alt={`Attachment ${idx + 1}`}
-                              className="w-full h-full object-cover transition-transform group-hover:scale-105 cursor-pointer"
-                              onClick={() => setImageModalUrl(imgSrc)}
-                            />
-                            
-                            {/* Diagram Number Tag */}
-                            <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-black/75 text-amber-300 font-mono text-[9px] font-black">
-                              #{idx + 1}
-                            </span>
-
-                            {/* Hover overlay with zoom */}
-                            <button
-                              type="button"
-                              onClick={() => setImageModalUrl(imgSrc)}
-                              className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition cursor-pointer"
-                              title="Zoom diagram"
-                            >
-                              <ZoomIn className="w-6 h-6 text-amber-300 drop-shadow-md" />
-                            </button>
-
-                            {/* Remove button */}
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); handleRemoveImage(idx); }}
-                              className="absolute top-1 right-1 p-1 bg-red-600/90 hover:bg-red-500 text-white rounded-full shadow-md transition cursor-pointer"
-                              title="Remove image"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
-
-                {/* Category Color Selector */}
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                    Card Highlight:
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    {colorsList.map((c) => (
-                      <button
-                        key={c.name}
-                        type="button"
-                        onClick={() => { setNoteColor(c.class); playClickChime(); }}
-                        className={`h-5 w-5 rounded-full border cursor-pointer transition-transform ${c.class.split(' ')[0]} ${
-                          noteColor === c.class ? 'scale-125 border-amber-400 ring-2 ring-amber-400/40' : 'border-slate-800'
-                        }`}
-                        title={c.name}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {/* ─── RICH CONTENTEDITABLE EDITOR CANVAS ─── */}
-                <div
-                  ref={editorRef}
-                  contentEditable
-                  onPaste={(e) => {
-                    const items = e.clipboardData?.items;
-                    if (!items) return;
-                    for (let i = 0; i < items.length; i++) {
-                      if (items[i].type.indexOf('image') !== -1) {
-                        const file = items[i].getAsFile();
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = (event) => {
-                            if (event.target?.result) {
-                              setNoteImages(prev => [...prev, event.target!.result as string]);
-                              playSuccessChime();
-                            }
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }
-                    }
-                  }}
-                  onInput={(e) => setNoteContent(e.currentTarget.innerHTML)}
-                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(noteContent) }}
-                  className="w-full min-h-[320px] max-h-[500px] overflow-y-auto bg-[#0B1228] border border-slate-800 focus:border-amber-400/80 rounded-2xl p-4 text-xs sm:text-sm text-slate-100 leading-relaxed outline-none font-sans space-y-2 select-text"
-                  placeholder="Type or paste your study notes, definitions, formulas, and lecture summaries here... You can also paste clipboard screenshots (Ctrl+V) directly."
-                />
-
-                {/* ─── BOTTOM PRO ACTION DOCK ─── */}
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
-                  <div className="flex items-center gap-3 text-xs">
-                    <button
-                      onClick={() => exportNoteAsPdf(noteTitle || "Study_Note", noteContent)}
-                      disabled={!noteTitle.trim()}
-                      className="text-slate-400 hover:text-amber-400 font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-30 transition"
-                      title="Export note as formatted PDF with embedded diagrams"
-                    >
-                      <Download className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Download PDF</span>
-                    </button>
-
-                    {googleUser && (
-                      <button
-                        onClick={() => handleExportToGoogleDoc(noteTitle, noteSubject, noteContent)}
-                        disabled={!noteTitle.trim() || isSyncingDoc}
-                        className="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-30 transition"
-                      >
-                        <FileText className="w-3.5 h-3.5" />
-                        <span>{isSyncingDoc ? 'Exporting...' : 'Sync to Google Doc'}</span>
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={saveToNotepad}
-                      disabled={!noteTitle.trim()}
-                      className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl cursor-pointer flex items-center gap-1.5 disabled:opacity-30 shadow-lg shadow-amber-500/20 active:scale-95 transition"
-                    >
-                      <Save className="w-4 h-4" />
-                      <span>Save Study Note</span>
-                    </button>
-                  </div>
-                </div>
-
               </div>
-            </div>
-          </motion.div>
-        )}
 
-        {/* TAB 2: SUPABASE ACADEMIC CURRICULUM NOTES LIBRARY */}
-        {activeTab === 'curriculum' && (
-          <motion.div
-            key="curriculum_notes"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.18 }}
-            className="w-full"
-          >
-            <NotesLibraryView
-              userId={userId || googleUser?.uid || 'student_wku'}
-              onOpenNote={(id) => setReaderNoteId(id)}
-              language={language}
-            />
-          </motion.div>
-        )}
+              {/* Modal Footer */}
+              <div className="p-4 bg-slate-50 dark:bg-[#0A1128] border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  {composerTitle.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => exportNoteAsPdf(composerTitle, composerContent, composerSubject)}
+                      className="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
+                      <span>Export PDF</span>
+                    </button>
+                  )}
+                </div>
 
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowNoteComposer(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                  >
+                    {isAm ? 'ሰርዝ' : 'Cancel'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSavePersonalNote}
+                    disabled={!composerTitle.trim()}
+                    className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-950 font-black text-xs shadow-md transition cursor-pointer flex items-center gap-1.5 active:scale-95"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{isAm ? 'ማስታወሻ አስቀምጥ' : 'Save Note'}</span>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
       </AnimatePresence>
 
       {/* ========================================================================= */}
-      {/* 4. FULL-SCREEN LIGHTBOX ZOOM MODAL FOR DIAGRAMS & IMAGES                  */}
+      {/* 9. LIGHTBOX IMAGE ZOOM MODAL                                             */}
       {/* ========================================================================= */}
       {imageModalUrl && (
-        <div 
-          className="fixed inset-0 z-[999999] bg-black/95 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn"
+        <div
+          className="fixed inset-0 z-[999999] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn"
           onClick={() => setImageModalUrl(null)}
         >
-          <div 
-            className="relative max-w-5xl w-full max-h-[92vh] flex flex-col items-center justify-center"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-full flex items-center justify-between pb-3 text-xs text-slate-400">
-              <span className="flex items-center gap-2 text-amber-400 font-bold">
-                <ImageIcon className="w-4 h-4" />
-                <span>Full Resolution Diagram View</span>
-              </span>
-              <button 
-                onClick={() => setImageModalUrl(null)}
-                className="p-2 text-slate-300 hover:text-white bg-slate-900 border border-slate-800 rounded-full transition cursor-pointer"
-                title="Close Lightbox"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <img 
-              src={imageModalUrl} 
-              alt="High-resolution study diagram" 
-              className="max-h-[82vh] max-w-full rounded-2xl object-contain shadow-2xl border border-white/20 select-none bg-black" 
+          <div className="relative max-w-4xl w-full flex flex-col items-center">
+            <button
+              onClick={() => setImageModalUrl(null)}
+              className="absolute -top-10 right-0 p-1.5 text-white bg-slate-800 rounded-full hover:bg-slate-700 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <img
+              src={imageModalUrl}
+              alt="Diagram Zoom"
+              className="max-h-[85vh] max-w-full rounded-2xl object-contain border border-white/20 shadow-2xl bg-black"
             />
           </div>
         </div>

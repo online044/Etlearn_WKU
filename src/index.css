@@ -2,7 +2,7 @@
 @import url('https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css');
 @import "tailwindcss";
 
-@variant dark (&:where(.dark, .dark *));
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --font-sans: "Inter", "Noto Sans Ethiopic", system-ui, -apple-system, sans-serif;
@@ -132,88 +132,36 @@ img, video, canvas, svg, iframe {
 }
 
 :root {
-  --bg-main: #F1F5F9; /* Clean, modern slate blue-grey page background */
+  --bg-main: #F8FAFC; /* Clean, modern academic slate-light page background */
   --bg-surface: #FFFFFF; /* Crisp white card surface */
   --border-subtle: #E2E8F0; /* Clean light slate border */
-  --text-title: #0F172A; /* High contrast deep navy/slate */
-  --text-explain: #334155; /* Highly readable dark slate for long reading sessions */
-  --accent-interactive: #4F46E5; /* Vibrant indigo brand color */
-  --shadow-ambient: 0 4px 18px rgba(79, 70, 229, 0.04);
+  --text-title: #0F172A; /* High contrast deep slate */
+  --text-explain: #334155; /* Highly readable dark slate */
+  --accent-interactive: #D97706; /* Vibrant warm amber/gold */
+  --shadow-ambient: 0 4px 18px rgba(0, 0, 0, 0.06);
 }
 
 .dark {
-  --bg-main: #0B0F19; /* Eye-safe deep space midnight blue page background */
-  --bg-surface: #121A2E; /* Distinct elevated deep blue-slate card background */
+  --bg-main: #070D1E; /* Eye-safe deep space midnight blue page background */
+  --bg-surface: #111C35; /* Distinct elevated deep blue-slate card background */
   --border-subtle: #1E293B; /* Subtle slate blue border */
   --text-title: #F8FAFC; /* Crisp light white-slate */
   --text-explain: #94A3B8; /* Highly readable soft lavender-slate */
-  --accent-interactive: #6366F1; /* Vibrant indigo brand color for dark mode */
-  --shadow-ambient: 0 8px 30px rgba(99, 102, 241, 0.12);
-}
-
-/* Dynamic High-Readability Safety Net for Dark Mode */
-.dark .bg-white,
-.dark .bg-slate-50,
-.dark .bg-slate-100,
-.dark .bg-zinc-50,
-.dark .bg-zinc-100,
-.dark .bg-gray-50,
-.dark .bg-gray-100 {
-  background-color: var(--bg-surface) !important;
-}
-
-.dark .border-slate-100,
-.dark .border-slate-200,
-.dark .border-zinc-100,
-.dark .border-zinc-200,
-.dark .border-gray-100,
-.dark .border-gray-200 {
-  border-color: var(--border-subtle) !important;
-}
-
-.dark .text-slate-950,
-.dark .text-slate-900,
-.dark .text-slate-850,
-.dark .text-slate-800,
-.dark .text-zinc-950,
-.dark .text-zinc-900,
-.dark .text-zinc-850,
-.dark .text-zinc-800,
-.dark .text-gray-950,
-.dark .text-gray-900,
-.dark .text-gray-800,
-.dark .text-neutral-950,
-.dark .text-neutral-900,
-.dark .text-neutral-800 {
-  color: var(--text-title) !important;
-}
-
-.dark .text-slate-700,
-.dark .text-slate-600,
-.dark .text-slate-500,
-.dark .text-zinc-700,
-.dark .text-zinc-600,
-.dark .text-zinc-500,
-.dark .text-gray-700,
-.dark .text-gray-600,
-.dark .text-gray-500,
-.dark .text-neutral-700,
-.dark .text-neutral-600,
-.dark .text-neutral-500 {
-  color: var(--text-explain) !important;
+  --accent-interactive: #F59E0B; /* EthioLearn brand amber/gold */
+  --shadow-ambient: 0 8px 30px rgba(0, 0, 0, 0.55);
 }
 
 .dark input,
 .dark textarea,
 .dark select {
-  background-color: var(--bg-surface) !important;
-  color: var(--text-title) !important;
-  border-color: var(--border-subtle) !important;
+  background-color: #0E1730;
+  color: #F8FAFC;
+  border-color: #1E293B;
 }
 
 .dark input::placeholder,
 .dark textarea::placeholder {
-  color: var(--text-explain) !important;
+  color: #94A3B8;
   opacity: 0.65;
 }
 

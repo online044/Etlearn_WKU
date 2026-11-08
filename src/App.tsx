@@ -7,7 +7,8 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Home as HomeIcon, Bot, Trophy, Award, Sparkles, Calendar, User as UserIcon, BookOpen, CheckCircle,
-  Share, X, ShieldCheck, Download, WifiOff, GraduationCap, FileText, Menu, MoreVertical, Type, Megaphone, Bell
+  Share, X, ShieldCheck, Download, WifiOff, GraduationCap, FileText, Menu, MoreVertical, Type, Megaphone, Bell,
+  Moon, Sun
 } from 'lucide-react';
 
 import { StudentProfile, CustomNote, Flashcard, AITeacherContext, ExamAttemptRecord } from './types';
@@ -264,7 +265,7 @@ export default function App() {
   const [aiContext, setAiContext] = useState<AITeacherContext | null>(null);
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() => {
     const saved = safeStorage.getItem('ethiolearn_theme');
-    return (saved === 'light' || saved === 'dark') ? saved : 'light';
+    return saved === 'light' ? 'light' : 'dark';
   });
 
   // Load custom notes and flashcards
@@ -1598,13 +1599,13 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-slate-50 dark:bg-[#050508] text-slate-800 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-200 tma-container">
+    <div className="min-h-screen w-full bg-slate-50 dark:bg-[#070D1E] text-slate-800 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200 tma-container">
       {/* 🚀 Telegram Mini App Pro Verified Bar (Visible in Telegram Mini App) */}
       <TelegramMiniAppHeader language={language} />
       
       {/* HEADER BAR FOR TITLE AND ETHIOPIAN CALENDAR */}
       <header 
-        className="sticky top-0 z-50 bg-white/95 dark:bg-[#0c0d12]/95 backdrop-blur-md border-b border-slate-200 dark:border-zinc-800/85 shadow-sm select-none"
+        className="sticky top-0 z-50 bg-white/95 dark:bg-[#0A1128]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/90 shadow-sm select-none text-slate-800 dark:text-slate-100 transition-colors"
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
       >
         <div className="w-full max-w-7xl mx-auto px-2 min-[360px]:px-3 sm:px-4 h-14 sm:h-16 flex justify-between items-center gap-1.5 sm:gap-4 relative">
@@ -1617,7 +1618,7 @@ export default function App() {
                 playClickChime();
                 setIsSidebarOpen(true);
               }}
-              className="p-1.5 sm:p-2 rounded-xl text-slate-600 dark:text-zinc-300 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-zinc-900 border border-transparent hover:border-slate-200 dark:hover:border-zinc-800 transition-all cursor-pointer flex items-center justify-center shrink-0 min-h-[40px] min-w-[40px] sm:min-h-[44px] sm:min-w-[44px]"
+              className="p-1.5 sm:p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 transition-all cursor-pointer flex items-center justify-center shrink-0 min-h-[40px] min-w-[40px] sm:min-h-[44px] sm:min-w-[44px]"
               title={language === 'en' ? 'Open App Menu & Info' : 'የአፕሊኬሽን ሜኑ እና መረጃ'}
               aria-label="Toggle App Sidebar"
             >
@@ -1637,8 +1638,8 @@ export default function App() {
                 <div className="flex items-center gap-1.5 whitespace-nowrap">
                   <span className="font-serif font-black text-slate-900 dark:text-white text-sm sm:text-base tracking-tight whitespace-nowrap shrink-0">EthioLearn</span>
                   {profile.isPro ? (
-                    <span className="inline-flex items-center gap-0.5 text-amber-400 text-[8.5px] sm:text-[9px] font-black px-1.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500/25 via-amber-400/20 to-amber-600/10 border border-amber-400/40 font-sans tracking-wider uppercase shadow-xs shadow-amber-500/10 shrink-0">
-                      <Sparkles className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                    <span className="inline-flex items-center gap-0.5 text-amber-500 dark:text-amber-400 text-[8.5px] sm:text-[9px] font-black px-1.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500/25 via-amber-400/20 to-amber-600/10 border border-amber-400/40 font-sans tracking-wider uppercase shadow-xs shadow-amber-500/10 shrink-0">
+                      <Sparkles className="w-2.5 h-2.5 fill-amber-400 text-amber-500 dark:text-amber-400" />
                       <span>PRO</span>
                     </span>
                   ) : (!profile.isRegistered || profile.id?.startsWith('guest')) ? (
@@ -1648,16 +1649,16 @@ export default function App() {
                         playClickChime();
                         setCurrentPage('upgrade');
                       }}
-                      className="text-emerald-400 text-[8.5px] sm:text-[9px] font-extrabold px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 font-sans tracking-wide cursor-pointer hover:bg-emerald-500/25 shrink-0"
+                      className="text-emerald-500 dark:text-emerald-400 text-[8.5px] sm:text-[9px] font-extrabold px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 font-sans tracking-wide cursor-pointer hover:bg-emerald-500/25 shrink-0"
                       title={language === 'am' ? 'የእንግዳ መለያ (ማየት ብቻ) - ለመመዝገብ ወይም ፕሮ ለማድረግ ይጫኑ' : 'Guest mode (Preview only) - Tap to register or upgrade'}
                     >
                       {language === 'am' ? 'እንግዳ' : 'GUEST'}
                     </span>
                   ) : (
-                    <span className="text-slate-400 dark:text-zinc-400 text-[8.5px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-200 dark:bg-zinc-800 font-sans shrink-0">CAMPUS</span>
+                    <span className="text-slate-600 dark:text-slate-300 text-[8.5px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/70 font-sans shrink-0">CAMPUS</span>
                   )}
                 </div>
-                <span className="text-[9.5px] sm:text-[10px] text-slate-500 dark:text-zinc-400 font-medium truncate max-w-[110px] min-[360px]:max-w-[140px] sm:max-w-none block mt-0.5 leading-tight">
+                <span className="text-[9.5px] sm:text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate max-w-[110px] min-[360px]:max-w-[140px] sm:max-w-none block mt-0.5 leading-tight">
                   {profile.university || 'Wolkite University'}
                 </span>
               </div>
@@ -1672,13 +1673,13 @@ export default function App() {
           </div>
 
           {/* Direct Desktop Navigation Bar for Easy Access to Books & Exams */}
-          <nav className="hidden lg:flex items-center gap-1 bg-slate-100 dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-800 p-1 rounded-xl">
+          <nav className="hidden lg:flex items-center gap-1 bg-slate-100 dark:bg-[#0E1730] border border-slate-200 dark:border-slate-800 p-1 rounded-xl">
             <button
               onClick={() => { playClickChime(); setCurrentPage('home'); }}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 currentPage === 'home'
                   ? 'bg-amber-500 text-slate-950 shadow-xs'
-                  : 'text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-white/5'
               }`}
             >
               {language === 'en' ? 'Home' : 'ዋና ገጽ'}
@@ -1688,7 +1689,7 @@ export default function App() {
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 relative group ${
                 currentPage === 'bookstore'
                   ? 'bg-amber-500 text-slate-950 shadow-xs'
-                  : 'text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-white/5'
               }`}
             >
               <div className="relative flex items-center">
@@ -1701,7 +1702,7 @@ export default function App() {
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                 currentPage === 'university'
                   ? 'bg-amber-500 text-slate-950 shadow-xs'
-                  : 'text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-white/5'
               }`}
             >
               <GraduationCap className="w-3.5 h-3.5" />
@@ -1712,7 +1713,7 @@ export default function App() {
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                 currentPage === 'notes'
                   ? 'bg-amber-500 text-slate-950 shadow-xs'
-                  : 'text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-white/5'
               }`}
             >
               <FileText className="w-3.5 h-3.5" />
@@ -1721,9 +1722,9 @@ export default function App() {
           </nav>
 
           {/* Ethiopian Date Widget */}
-          <div className="hidden md:flex items-center gap-2 border border-slate-200 dark:border-zinc-800 px-3 py-1.5 bg-slate-50 dark:bg-zinc-900/60 rounded-xl">
+          <div className="hidden md:flex items-center gap-2 border border-slate-200 dark:border-slate-800 px-3 py-1.5 bg-slate-100 dark:bg-[#0E1730] text-slate-700 dark:text-slate-200 rounded-xl">
             <span className="text-sm">📅</span>
-            <span className="font-bold text-slate-700 dark:text-zinc-200 text-xs font-serif leading-tight">{ethDate.formatted}</span>
+            <span className="font-bold text-slate-700 dark:text-slate-200 text-xs font-serif leading-tight">{ethDate.formatted}</span>
           </div>
 
           <div className="flex items-center gap-1 min-[360px]:gap-1.5 sm:gap-2 shrink-0">
@@ -1735,13 +1736,44 @@ export default function App() {
                 const nextSize = textSize === 'moderate' ? 'large' : textSize === 'large' ? 'xlarge' : textSize === 'xlarge' ? 'normal' : 'moderate';
                 setTextSize(nextSize);
               }}
-              className="hidden min-[480px]:flex items-center gap-1.5 px-2.5 py-1 rounded-lg sm:rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-100 dark:bg-zinc-900/90 text-slate-700 dark:text-zinc-200 hover:text-amber-500 transition-colors cursor-pointer"
+              className="hidden min-[480px]:flex items-center gap-1.5 px-2.5 py-1 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-[#0E1730] text-slate-700 dark:text-slate-200 hover:text-amber-500 transition-colors cursor-pointer"
               title={`Reading Text Size: ${textSize.toUpperCase()} (Click to toggle)`}
             >
               <Type className="w-3.5 h-3.5 text-amber-500" />
               <span className="font-mono text-xs font-black">
                 {textSize === 'normal' ? 'A' : textSize === 'moderate' ? 'A+' : textSize === 'large' ? 'A++' : 'A+++'}
               </span>
+            </button>
+
+            {/* 🌙 / ☀️ Night Mode Quick Toggle (First Night, Then Light) */}
+            <button
+              type="button"
+              onClick={() => {
+                triggerHaptic('light');
+                playClickChime();
+                setThemeMode(prev => prev === 'dark' ? 'light' : 'dark');
+              }}
+              className="hidden min-[480px]:flex items-center gap-1.5 px-2.5 py-1 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-[#0E1730] text-slate-700 dark:text-slate-200 hover:text-amber-500 transition-colors cursor-pointer"
+              title={themeMode === 'dark'
+                ? (language === 'am' ? 'የሌሊት ሁነታ (ገባሪ) - ወደ ቀን ለመቀየር ይጫኑ' : 'Night Mode (Active) - Tap for Light Mode')
+                : (language === 'am' ? 'የቀን ሁነታ (ገባሪ) - ወደ ሌሊት ለመቀየር ይጫኑ' : 'Light Mode (Active) - Tap for Night Mode')}
+              aria-label="Toggle Night/Light Mode"
+            >
+              {themeMode === 'dark' ? (
+                <>
+                  <Moon className="w-3.5 h-3.5 text-amber-400 fill-amber-400/20" />
+                  <span className="font-mono text-xs font-bold text-amber-400 uppercase">
+                    {language === 'am' ? 'ሌሊት' : 'Night'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Sun className="w-3.5 h-3.5 text-amber-600 fill-amber-500/20" />
+                  <span className="font-mono text-xs font-bold text-amber-600 uppercase">
+                    {language === 'am' ? 'ቀን' : 'Light'}
+                  </span>
+                </>
+              )}
             </button>
 
             {/* Desktop / Tablet Controls (Visible on sm screens and up) */}
@@ -1800,7 +1832,7 @@ export default function App() {
                   playClickChime();
                   setIsHeaderOverflowOpen(!isHeaderOverflowOpen);
                 }}
-                className="p-1.5 rounded-lg border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 text-slate-600 dark:text-zinc-300 hover:text-amber-500 cursor-pointer transition-colors"
+                className="p-1.5 rounded-lg border border-slate-800 bg-[#0E1730] text-slate-300 hover:text-amber-400 cursor-pointer transition-colors"
                 title="More options"
                 aria-label="More options"
               >
@@ -1814,7 +1846,31 @@ export default function App() {
                     className="fixed inset-0 z-40"
                     onClick={() => setIsHeaderOverflowOpen(false)}
                   />
-                  <div className="absolute right-0 top-full mt-2 w-52 bg-white dark:bg-[#0c0d12] border border-slate-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-2 z-50 space-y-1 text-slate-800 dark:text-zinc-200 text-xs">
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-[#0E1730] border border-slate-800 rounded-2xl shadow-2xl p-2 z-50 space-y-1 text-slate-100 text-xs">
+
+                    {/* Night Mode toggle in mobile overflow */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playClickChime();
+                        triggerHaptic('light');
+                        setThemeMode(prev => prev === 'dark' ? 'light' : 'dark');
+                        setIsHeaderOverflowOpen(false);
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-800 text-slate-200 cursor-pointer font-bold"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        {themeMode === 'dark' ? (
+                          <Moon className="w-4 h-4 text-amber-400 fill-amber-400/20" />
+                        ) : (
+                          <Sun className="w-4 h-4 text-amber-500" />
+                        )}
+                        <span>{language === 'am' ? 'የሌሊት ሁነታ' : 'Night Mode'}</span>
+                      </div>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 uppercase font-black">
+                        {themeMode === 'dark' ? (language === 'am' ? 'ገባሪ' : 'ON') : (language === 'am' ? 'ጠፍቷል' : 'OFF')}
+                      </span>
+                    </button>
 
                     {/* APKPure App Install */}
                     <div onClick={() => setIsHeaderOverflowOpen(false)} className="w-full">
@@ -1860,9 +1916,9 @@ export default function App() {
                           setCurrentPage('upgrade');
                           setIsHeaderOverflowOpen(false);
                         }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-blue-500 hover:bg-blue-500/10 cursor-pointer font-bold"
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-blue-400 hover:bg-blue-500/10 cursor-pointer font-bold"
                       >
-                        <CheckCircle className="w-4 h-4 fill-blue-500 text-white" />
+                        <CheckCircle className="w-4 h-4 fill-blue-500 text-slate-900" />
                         <span>Verified Pro</span>
                       </button>
                     )}
@@ -2061,7 +2117,7 @@ export default function App() {
 
       {/* PERSISTENT BOTTOM NAVIGATION TAB BAR (Native Android Style) */}
       <nav 
-        className="fixed bottom-0 left-0 right-0 z-40 bg-[#0B1228]/95 backdrop-blur-md border-t border-slate-800/90 shadow-lg"
+        className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#0B1228]/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800/90 shadow-lg text-slate-600 dark:text-slate-300 transition-colors"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 6px)' }}
       >
         <div className="grid grid-cols-5 max-w-xl mx-auto px-1 py-1.5 items-center justify-items-center relative">
@@ -2070,13 +2126,13 @@ export default function App() {
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('home'); }}
             className={`flex flex-col items-center justify-center w-full min-h-[48px] py-1 transition-colors cursor-pointer rounded-xl px-0.5 min-[360px]:px-1 ${
-              currentPage === 'home' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'
+              currentPage === 'home' ? 'text-amber-500 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            <div className={`px-2 min-[360px]:px-3 py-0.5 min-[360px]:py-1 rounded-full transition-colors ${currentPage === 'home' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
+            <div className={`px-2 min-[360px]:px-3 py-0.5 min-[360px]:py-1 rounded-full transition-colors ${currentPage === 'home' ? 'bg-amber-500/15 text-amber-500 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400'}`}>
               <HomeIcon className="w-4 h-4 min-[360px]:w-5 min-[360px]:h-5 shrink-0" />
             </div>
-            <span className={`text-[10px] min-[360px]:text-[11px] sm:text-xs mt-0.5 truncate max-w-[58px] min-[360px]:max-w-[76px] sm:max-w-[88px] text-center leading-tight ${currentPage === 'home' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
+            <span className={`text-[10px] min-[360px]:text-[11px] sm:text-xs mt-0.5 truncate max-w-[58px] min-[360px]:max-w-[76px] sm:max-w-[88px] text-center leading-tight ${currentPage === 'home' ? 'font-bold text-amber-500 dark:text-amber-400' : 'font-medium text-slate-600 dark:text-slate-300'}`}>
               {language === 'en' ? 'Home' : 'ዋና'}
             </span>
           </button>
@@ -2085,13 +2141,13 @@ export default function App() {
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('notes'); }}
             className={`flex flex-col items-center justify-center w-full min-h-[48px] py-1 transition-colors cursor-pointer rounded-xl px-0.5 min-[360px]:px-1 ${
-              currentPage === 'notes' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'
+              currentPage === 'notes' ? 'text-amber-500 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            <div className={`px-2 min-[360px]:px-3 py-0.5 min-[360px]:py-1 rounded-full transition-colors ${currentPage === 'notes' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
+            <div className={`px-2 min-[360px]:px-3 py-0.5 min-[360px]:py-1 rounded-full transition-colors ${currentPage === 'notes' ? 'bg-amber-500/15 text-amber-500 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400'}`}>
               <FileText className="w-4 h-4 min-[360px]:w-5 min-[360px]:h-5 shrink-0" />
             </div>
-            <span className={`text-[10px] min-[360px]:text-[11px] sm:text-xs mt-0.5 truncate max-w-[58px] min-[360px]:max-w-[76px] sm:max-w-[88px] text-center leading-tight ${currentPage === 'notes' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
+            <span className={`text-[10px] min-[360px]:text-[11px] sm:text-xs mt-0.5 truncate max-w-[58px] min-[360px]:max-w-[76px] sm:max-w-[88px] text-center leading-tight ${currentPage === 'notes' ? 'font-bold text-amber-500 dark:text-amber-400' : 'font-medium text-slate-600 dark:text-slate-300'}`}>
               {language === 'en' ? 'Notes' : 'ማስታወሻ'}
             </span>
           </button>
@@ -2100,13 +2156,13 @@ export default function App() {
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('bookstore'); }}
             className={`flex flex-col items-center justify-center w-full min-h-[48px] py-1 transition-colors cursor-pointer rounded-xl px-0.5 min-[360px]:px-1 ${
-              currentPage === 'bookstore' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'
+              currentPage === 'bookstore' ? 'text-amber-500 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            <div className={`px-2 min-[360px]:px-3 py-0.5 min-[360px]:py-1 rounded-full transition-colors ${currentPage === 'bookstore' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
+            <div className={`px-2 min-[360px]:px-3 py-0.5 min-[360px]:py-1 rounded-full transition-colors ${currentPage === 'bookstore' ? 'bg-amber-500/15 text-amber-500 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400'}`}>
               <BookOpen className="w-4 h-4 min-[360px]:w-5 min-[360px]:h-5 shrink-0" />
             </div>
-            <span className={`text-[10px] min-[360px]:text-[11px] sm:text-xs mt-0.5 truncate max-w-[58px] min-[360px]:max-w-[76px] sm:max-w-[88px] text-center leading-tight ${currentPage === 'bookstore' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
+            <span className={`text-[10px] min-[360px]:text-[11px] sm:text-xs mt-0.5 truncate max-w-[58px] min-[360px]:max-w-[76px] sm:max-w-[88px] text-center leading-tight ${currentPage === 'bookstore' ? 'font-bold text-amber-500 dark:text-amber-400' : 'font-medium text-slate-600 dark:text-slate-300'}`}>
               {language === 'en' ? 'Books' : 'መጽሐፍት'}
             </span>
           </button>
@@ -2115,14 +2171,14 @@ export default function App() {
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('university'); }}
             className={`flex flex-col items-center justify-center w-full min-h-[48px] py-1 transition-colors cursor-pointer rounded-xl px-0.5 min-[360px]:px-1 ${
-              currentPage === 'university' || currentPage === 'examengine' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'
+              currentPage === 'university' || currentPage === 'examengine' ? 'text-amber-500 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
             title="University Exams"
           >
-            <div className={`px-2 min-[360px]:px-3 py-0.5 min-[360px]:py-1 rounded-full transition-colors ${currentPage === 'university' || currentPage === 'examengine' ? 'bg-amber-400/15 text-amber-400' : 'text-slate-400'}`}>
+            <div className={`px-2 min-[360px]:px-3 py-0.5 min-[360px]:py-1 rounded-full transition-colors ${currentPage === 'university' || currentPage === 'examengine' ? 'bg-amber-500/15 text-amber-500 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400'}`}>
               <Award className="w-4 h-4 min-[360px]:w-5 min-[360px]:h-5 shrink-0" />
             </div>
-            <span className={`text-[10px] min-[360px]:text-[11px] sm:text-xs mt-0.5 truncate max-w-[58px] min-[360px]:max-w-[76px] sm:max-w-[88px] text-center leading-tight ${currentPage === 'university' || currentPage === 'examengine' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
+            <span className={`text-[10px] min-[360px]:text-[11px] sm:text-xs mt-0.5 truncate max-w-[58px] min-[360px]:max-w-[76px] sm:max-w-[88px] text-center leading-tight ${currentPage === 'university' || currentPage === 'examengine' ? 'font-bold text-amber-500 dark:text-amber-400' : 'font-medium text-slate-600 dark:text-slate-300'}`}>
               {language === 'en' ? 'Uni Exam' : 'ዩኒቨርሲቲ'}
             </span>
           </button>
@@ -2131,18 +2187,18 @@ export default function App() {
           <button
             onClick={() => { triggerHaptic('light'); playClickChime(); setCurrentPage('profile'); }}
             className={`flex flex-col items-center justify-center w-full min-h-[48px] py-1 transition-colors cursor-pointer rounded-xl px-0.5 min-[360px]:px-1 ${
-              currentPage === 'profile' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'
+              currentPage === 'profile' ? 'text-amber-500 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            <div className={`px-1.5 min-[360px]:px-2 py-0.5 rounded-full transition-colors ${currentPage === 'profile' ? 'bg-amber-400/15' : ''}`}>
+            <div className={`px-1.5 min-[360px]:px-2 py-0.5 rounded-full transition-colors ${currentPage === 'profile' ? 'bg-amber-500/15' : ''}`}>
               <StudentAvatar 
                 avatar={profile.avatar} 
                 name={profile.name} 
                 size={20} 
-                className={`transition-all ${currentPage === 'profile' ? 'border-2 border-amber-400 scale-105' : 'border border-slate-700 opacity-80'}`}
+                className={`transition-all ${currentPage === 'profile' ? 'border-2 border-amber-500 dark:border-amber-400 scale-105' : 'border border-slate-300 dark:border-slate-700 opacity-80'}`}
               />
             </div>
-            <span className={`text-[10px] min-[360px]:text-[11px] sm:text-xs mt-0.5 truncate max-w-[58px] min-[360px]:max-w-[76px] sm:max-w-[88px] text-center leading-tight ${currentPage === 'profile' ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
+            <span className={`text-[10px] min-[360px]:text-[11px] sm:text-xs mt-0.5 truncate max-w-[58px] min-[360px]:max-w-[76px] sm:max-w-[88px] text-center leading-tight ${currentPage === 'profile' ? 'font-bold text-amber-500 dark:text-amber-400' : 'font-medium text-slate-600 dark:text-slate-300'}`}>
               {language === 'en' ? 'Profile' : 'መገለጫ'}
             </span>
           </button>
