@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { UniversityQuestionItem } from '../types';
 import { playClickChime, playSuccessChime, playFailureChime } from '../utils/audio';
+import UniversityLogo from './UniversityLogo';
 
 export interface FocusedQuestionViewProps {
   paperTitle: string;
@@ -136,13 +137,16 @@ export default function FocusedQuestionView({
           <span>{language === 'am' ? 'ወደ ፈተና ዝርዝር' : 'Exam Details'}</span>
         </button>
 
-        <div className="text-center hidden sm:block">
-          <span className="text-sm font-bold text-white block truncate max-w-[280px]">
-            {paperTitle}
-          </span>
-          <span className="text-xs text-amber-400 font-semibold block">
-            {university} • {subject}
-          </span>
+        <div className="hidden sm:flex items-center gap-2.5 min-w-0 max-w-[320px]">
+          <UniversityLogo university={university} size="xs" />
+          <div className="text-left min-w-0">
+            <span className="text-xs sm:text-sm font-bold text-white block truncate">
+              {paperTitle}
+            </span>
+            <span className="text-[11px] text-amber-400 font-semibold block truncate">
+              {university} • {subject}
+            </span>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

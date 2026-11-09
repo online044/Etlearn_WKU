@@ -25,6 +25,8 @@ import { getBuiltinAuthenticExamSheets } from '../data/authenticExamSheets';
 import ExamBrowserView, { isUniversityFree } from './ExamBrowserView';
 import FocusedQuestionView from './FocusedQuestionView';
 import ExamDetailView from './ExamDetailView';
+import UniversityLogo from './UniversityLogo';
+import { syncUniversitiesWithSupabase } from '../repositories/universitiesRepository';
 import { enqueueOfflineProgress, getOfflineStorageOverview } from '../utils/offlineManager';
 
 export interface ExamQuestion {
@@ -200,6 +202,13 @@ export default function UniversityExamsView({
     } catch {}
     return merged;
   });
+
+  // Proactively fetch and cache universities and logos from Supabase "universities" table into IndexedDB
+  useEffect(() => {
+    syncUniversitiesWithSupabase().catch(err => {
+      console.warn('[UniversityExamsView] Background university sync notice:', err);
+    });
+  }, []);
 
   // Sync with IndexedDB offline store so downloaded exams appear instantly even when offline
   useEffect(() => {
@@ -2260,8 +2269,9 @@ ${currentQuestion.amharicExplanation || currentQuestion.explanation}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                      {language === 'am' ? 'ዩኒቨርሲቲ' : 'University'}
+                    <label className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                      <span>{language === 'am' ? 'ዩኒቨርሲቲ' : 'University'}</span>
+                      {newFileUni && <UniversityLogo university={newFileUni} size="xs" />}
                     </label>
                     <input
                       type="text"

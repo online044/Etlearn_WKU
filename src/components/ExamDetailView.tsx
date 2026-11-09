@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { ExamPaperSheet, ExamQuestion } from './UniversityExamsView';
 import { playClickChime } from '../utils/audio';
+import UniversityLogo from './UniversityLogo';
 
 export interface ExamDetailViewProps {
   activeSheet: ExamPaperSheet;
@@ -224,8 +225,9 @@ export default function ExamDetailView({
               <ShieldCheck className="w-3 h-3" />
               <span>{language === 'am' ? 'የተረጋገጠ ፈተና' : 'Official Paper'}</span>
             </span>
-            <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[11px] font-extrabold uppercase tracking-wider">
-              {activeSheet.university}
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[11px] font-extrabold uppercase tracking-wider">
+              <UniversityLogo university={activeSheet.university} size="xs" />
+              <span>{activeSheet.university}</span>
             </span>
             <span className="px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-slate-300 font-mono text-[11px] font-bold">
               {activeSheet.year}
@@ -237,16 +239,24 @@ export default function ExamDetailView({
             )}
           </div>
 
-          {/* Exam Title */}
-          <div>
-            <h1 className="text-xl sm:text-2xl font-black font-serif text-white tracking-tight leading-snug">
-              {activeSheet.title}
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-300 line-clamp-1 mt-0.5">
-              {language === 'am'
-                ? `ይፋዊ የ${activeSheet.university} የፈተና ጥያቄዎች ከደረጃ በደረጃ ማብራሪያና የአማርኛ ትርጉም ጋር።`
-                : `Verified past paper questions from ${activeSheet.university} with faculty solutions.`}
-            </p>
+          {/* Exam Title with Official University Crest */}
+          <div className="flex items-start gap-3 sm:gap-4">
+            <UniversityLogo
+              university={activeSheet.university}
+              size="lg"
+              showBadge={true}
+              className="mt-0.5 shadow-md shadow-amber-500/10 shrink-0"
+            />
+            <div className="min-w-0 flex-1">
+              <h1 className="text-xl sm:text-2xl font-black font-serif text-white tracking-tight leading-snug">
+                {activeSheet.title}
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-300 line-clamp-1 mt-0.5">
+                {language === 'am'
+                  ? `ይፋዊ የ${activeSheet.university} የፈተና ጥያቄዎች ከደረጃ በደረጃ ማብራሪያና የአማርኛ ትርጉም ጋር።`
+                  : `Verified past paper questions from ${activeSheet.university} with faculty solutions.`}
+              </p>
+            </div>
           </div>
 
           {/* Key Metrics Strip (Sleek & Space-Efficient) */}

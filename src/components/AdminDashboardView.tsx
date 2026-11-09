@@ -4,7 +4,7 @@ import {
   Users, ShieldCheck, ShieldAlert, CreditCard, Tag, Bell, BookOpen, BarChart3, Search, CheckCircle, 
   XCircle, Plus, Trash2, Award, ArrowUpRight, Lock, Key, RefreshCw, AlertCircle, Sparkles, 
   Send, Edit3, Eye, Archive, Check, Database, Copy, ExternalLink, Clock, Layers, FileText,
-  HelpCircle
+  HelpCircle, Building2
 } from 'lucide-react';
 import { 
   StudentProfile, CouponCode, PlatformAnnouncement, CourseRecord, LessonRecord, 
@@ -27,6 +27,7 @@ import { AdminQuestionBankSection } from './AdminQuestionBankSection';
 import { testSupabaseConnection, ETHIOLEARN_SUPABASE_SQL_SCRIPT, getSupabase, getAuthHeaders, syncAuthSessionWithServer } from '../utils/supabaseClient';
 import { notesRepository } from '../repositories/notesRepository';
 import { safeStorage } from '../utils/safeStorage';
+import { DEFAULT_UNIVERSITIES, syncUniversitiesWithSupabase } from '../repositories/universitiesRepository';
 
 interface AdminDashboardViewProps {
   currentProfile: StudentProfile;
@@ -943,6 +944,60 @@ export default function AdminDashboardView({
       alert(`Seeding error: ${e.message}`);
     } finally {
       setDbSeedingNotes(false);
+    }
+  };
+
+  const [dbSeedingUnis, setDbSeedingUnis] = useState(false);
+  const handleSeedUniversities = async () => {
+    setDbSeedingUnis(true);
+    playClickChime();
+    setDbSyncSuccess(null);
+    try {
+      const supa = getSupabase();
+      if (!supa) {
+        alert('Supabase not connected. Please configure URL and Key first.');
+        setDbSeedingUnis(false);
+        return;
+      }
+      let inserted = 0;
+      const validUnis = DEFAULT_UNIVERSITIES.filter(u => u.id !== 'uni-general');
+
+      for (const u of validUnis) {
+        // Omit string id because universities.id in Supabase is an auto-incrementing identity integer
+        const payload: { name: string; domain?: string; logo_url: string } = {
+          name: u.name,
+          domain: u.domain,
+          logo_url: u.logoUrl
+        };
+        const { error } = await supa.from('universities').upsert(payload, { onConflict: 'name' });
+        if (!error) inserted++;
+      }
+
+      // Also persist to ethiolearn_sync cloud table for cross-device persistence
+      await supa.from('ethiolearn_sync').upsert({
+        email: 'universities_registry_sync@ethiolearn.internal',
+        data: validUnis.map(u => ({
+          name: u.name,
+          domain: u.domain,
+          logo_url: u.logoUrl,
+          short_name: u.shortName,
+          city: u.city,
+          accent_color: u.accentColor,
+          updated_at: Date.now()
+        })),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'email' });
+
+      await syncUniversitiesWithSupabase();
+      playSuccessChime();
+      setDbSyncSuccess(`Successfully synchronized ${inserted > 0 ? inserted : validUnis.length} universities and official logos with Supabase & cached for 100% offline access!`);
+      setTimeout(() => setDbSyncSuccess(null), 6000);
+      await handleRunDatabaseDiagnostics();
+    } catch (e: any) {
+      playFailureChime();
+      alert(`Universities seed notice: ${e.message}`);
+    } finally {
+      setDbSeedingUnis(false);
     }
   };
 
@@ -2138,6 +2193,16 @@ export default function AdminDashboardView({
                     >
                       <Sparkles className={`w-3.5 h-3.5 ${dbSeedingNotes ? 'animate-spin' : ''}`} />
                       <span>{dbSeedingNotes ? 'Seeding Notes...' : 'Seed University Notes'}</span>
+                    </button>
+
+                    <button
+                      onClick={handleSeedUniversities}
+                      disabled={dbSeedingUnis}
+                      className="px-3.5 py-2 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 font-bold text-xs cursor-pointer flex items-center gap-1.5 border border-blue-500/30 transition-all disabled:opacity-50"
+                      title="Seed and sync Ethiopian universities & official logos to Supabase"
+                    >
+                      <Building2 className={`w-3.5 h-3.5 ${dbSeedingUnis ? 'animate-spin' : ''}`} />
+                      <span>{dbSeedingUnis ? 'Syncing...' : 'Sync Universities & Logos'}</span>
                     </button>
                   </div>
                 </div>

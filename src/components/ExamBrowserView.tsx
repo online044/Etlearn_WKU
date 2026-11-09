@@ -16,32 +16,47 @@ import { ExamPaperSheet } from '../types';
 import { playClickChime, playSuccessChime } from '../utils/audio';
 import { saveExamOffline, isExamDownloaded } from '../utils/offlineManager';
 import { safeStorage } from '../utils/safeStorage';
+import UniversityLogo from './UniversityLogo';
+import { syncUniversitiesWithSupabase } from '../repositories/universitiesRepository';
 
 export const ETHIOPIAN_UNIVERSITIES = [
-  'Adama Science and Technology University (ASTU)',
   'Addis Ababa University',
-  'Arba Minch University',
-  'Bahir Dar University',
-  'Debre Birhan University',
-  'Debre Markos University',
-  'Dilla University',
-  'Dire Dawa University',
-  'Haramaya University',
-  'Hawassa University',
   'Jimma University',
+  'Bahir Dar University',
+  'Hawassa University',
   'Mekelle University',
   'University of Gondar',
-  'Wolkite University'
+  'Haramaya University',
+  'Adama Science and Technology University',
+  'Arba Minch University',
+  'Wolkite University',
+  'Dire Dawa University',
+  'Debre Markos University',
+  'Addis Ababa Science and Technology University',
+  'Debre Birhan University',
+  'Wolaita Sodo University',
+  'Wollo University',
+  'Woldia University',
+  'Dilla University',
+  'Ambo University',
+  'Jigjiga University',
+  'Semera University',
+  'Adigrat University',
+  'Aksum University',
+  'Assosa University',
+  'Mizan Tepi University'
 ];
 
 /**
  * Check if a university past exam is free/open for non-Pro students.
- * Only Wolkite University is open for complimentary access; all other universities (ASTU, AAU, Jimma, etc.) are locked for purchase.
+ * Wolkite University (WKU) and Adama Science and Technology University (ASTU) are open for complimentary access.
+ * All other universities (AAU, Jimma, AASTU, etc.) are locked for purchase.
  */
 export function isUniversityFree(uniName?: string | null): boolean {
   if (!uniName) return false;
   const lower = uniName.trim().toLowerCase();
   if (lower.includes('wolkite') || lower.includes('wku')) return true;
+  if ((lower.includes('adama') || lower.includes('astu')) && !lower.includes('addis ababa') && !lower.includes('aastu')) return true;
   return false;
 }
 
@@ -208,6 +223,13 @@ export default function ExamBrowserView({
     return () => { mounted = false; };
   }, [filteredSheets]);
 
+  // Synchronize universities table from Supabase and cache in IndexedDB for offline access
+  useEffect(() => {
+    syncUniversitiesWithSupabase().catch(err => {
+      console.warn('[ExamBrowserView] University sync notice:', err);
+    });
+  }, []);
+
   const hasActiveFilters = 
     Boolean(searchQuery) || 
     selectedUniversity !== 'all' || 
@@ -274,6 +296,22 @@ export default function ExamBrowserView({
       return a.localeCompare(b);
     });
   }, [sheetsByUniversity, favoriteUnis, showOnlyFavorites]);
+
+  // Complete catalog of universities with official logos from Supabase & offline store
+  const allKnownUniversities = useMemo(() => {
+    const list = [...ETHIOPIAN_UNIVERSITIES];
+    return list.sort((a, b) => {
+      const aFav = favoriteUnis.includes(a);
+      const bFav = favoriteUnis.includes(b);
+      if (aFav && !bFav) return -1;
+      if (!aFav && bFav) return 1;
+      const aFree = isUniversityFree(a);
+      const bFree = isUniversityFree(b);
+      if (aFree && !bFree) return -1;
+      if (!aFree && bFree) return 1;
+      return a.localeCompare(b);
+    });
+  }, [favoriteUnis]);
 
   // Helper to group exam sheets within a university by Academic Year, Semester, and Exam Type
   const groupUniversityExams = (sheets: ExamPaperSheet[]) => {
@@ -349,9 +387,9 @@ export default function ExamBrowserView({
             {sheet.title}
           </h3>
 
-          {/* University Name */}
-          <div className="text-xs sm:text-sm font-medium text-slate-200 truncate flex items-center gap-1.5">
-            <Building2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          {/* University Name with Official Logo */}
+          <div className="text-xs sm:text-sm font-semibold text-slate-200 truncate flex items-center gap-2">
+            <UniversityLogo university={sheet.university} size="xs" />
             <span className="truncate">{sheet.university}</span>
           </div>
 
@@ -488,6 +526,80 @@ export default function ExamBrowserView({
             <Zap className="w-3.5 h-3.5 fill-current" />
             <span>{language === 'am' ? 'የዕለቱ ፈተና' : 'Daily Challenge'}</span>
           </button>
+        </div>
+      </div>
+
+      {/* ─── University Selector Row with Official Logos (UniExam) ─── */}
+      <div className="bg-[#111C35] border border-slate-800 rounded-2xl p-3.5 sm:p-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+            <GraduationCap className="w-3.5 h-3.5 text-amber-400" />
+            <span>{language === 'am' ? 'በዩኒቨርሲቲ ይፈልጉ (Select University):' : 'Browse by Ethiopian University:'}</span>
+          </label>
+          {selectedUniversity !== 'all' && (
+            <button
+              onClick={() => { playClickChime(); onSelectUniversity('all'); }}
+              className="text-[11px] font-semibold text-slate-400 hover:text-amber-400 cursor-pointer"
+            >
+              {language === 'am' ? 'ሁሉንም አሳይ' : 'Clear University Filter'}
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-thin">
+          {/* All Universities Pill */}
+          <button
+            type="button"
+            onClick={() => {
+              playClickChime();
+              onSelectUniversity('all');
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border cursor-pointer shrink-0 flex items-center gap-2 ${
+              selectedUniversity === 'all'
+                ? 'bg-amber-500 border-amber-400 text-slate-950 shadow-md shadow-amber-500/20'
+                : 'bg-[#0B1228] hover:bg-[#17233D] border-slate-800 text-slate-300 hover:text-white'
+            }`}
+          >
+            <UniversityLogo university="General Practice Questions" size="xs" />
+            <span>{language === 'am' ? 'ሁሉም ዩኒቨርሲቲዎች' : 'All Universities'}</span>
+          </button>
+
+          {allKnownUniversities.map(uniName => {
+            const isSelected = selectedUniversity.toLowerCase() === uniName.toLowerCase();
+            const isUniLocked = !isUniversityFree(uniName);
+            const shortName = uniName.includes('(')
+              ? uniName.match(/\(([^)]+)\)/)?.[1] || uniName.split(' ')[0]
+              : uniName.replace(/ University.*/, '');
+
+            return (
+              <button
+                key={`uni-pill-top-${uniName}`}
+                type="button"
+                onClick={() => {
+                  playClickChime();
+                  onSelectUniversity(isSelected ? 'all' : uniName);
+                }}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border cursor-pointer shrink-0 flex items-center gap-2 ${
+                  isSelected
+                    ? 'bg-amber-500 border-amber-400 text-slate-950 shadow-md shadow-amber-500/20'
+                    : 'bg-[#0B1228] hover:bg-[#17233D] border-slate-800 text-slate-300 hover:text-white'
+                }`}
+                title={uniName}
+              >
+                <UniversityLogo university={uniName} size="xs" />
+                <span>{shortName}</span>
+                {isUniLocked ? (
+                  <Lock className={`w-2.5 h-2.5 ${isSelected ? 'text-slate-950' : 'text-amber-400'}`} />
+                ) : (
+                  <span className={`text-[8.5px] px-1 py-0.2 rounded font-black uppercase ${
+                    isSelected ? 'bg-slate-950 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'
+                  }`}>
+                    {language === 'am' ? 'ነፃ' : 'Free'}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -789,8 +901,13 @@ export default function ExamBrowserView({
                   className="w-full p-4 flex items-center justify-between text-left hover:bg-white/[0.02] transition cursor-pointer select-none"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
-                      {isGenLocked ? <Lock className="w-4 h-4 text-amber-400" /> : <Sparkles className="w-5 h-5" />}
+                    <div className="relative shrink-0">
+                      <UniversityLogo university="General Practice Questions" size="md" />
+                      {isGenLocked && (
+                        <div className="absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center border border-slate-900 shadow">
+                          <Lock className="w-2.5 h-2.5 text-slate-950 stroke-[3]" />
+                        </div>
+                      )}
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -948,21 +1065,17 @@ export default function ExamBrowserView({
                   className="w-full p-4 flex items-center justify-between text-left hover:bg-white/[0.02] transition cursor-pointer select-none"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
-                      isFavorite
-                        ? 'bg-amber-500/20 border-amber-500/40 text-amber-400'
-                        : isUniLocked
-                        ? 'bg-amber-500/10 border-amber-500/25 text-amber-400/90'
-                        : uniSheets.length > 0
-                        ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
-                        : 'bg-slate-800/60 border-slate-700 text-slate-500'
-                    }`}>
-                      {isFavorite ? (
-                        <Star className="w-5 h-5 fill-amber-400" />
-                      ) : isUniLocked ? (
-                        <Lock className="w-4 h-4 text-amber-400" />
-                      ) : (
-                        <Building2 className="w-5 h-5" />
+                    <div className="relative shrink-0">
+                      <UniversityLogo
+                        university={uniName}
+                        size="md"
+                        showBadge={true}
+                        className={isFavorite ? 'ring-2 ring-amber-400/60' : ''}
+                      />
+                      {isUniLocked && (
+                        <div className="absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center border border-slate-900 shadow">
+                          <Lock className="w-2.5 h-2.5 text-slate-950 stroke-[3]" />
+                        </div>
                       )}
                     </div>
 

@@ -10,14 +10,25 @@ import { getSupabase } from './supabaseClient';
 import { safeStorage } from './safeStorage';
 
 const DB_NAME = 'ethiolearn_offline_store_v2';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export const STORES = {
   NOTES: 'downloaded_notes',
   EXAMS: 'downloaded_exams',
   PDFS: 'downloaded_pdfs',
-  QUEUE: 'offline_progress_queue'
+  QUEUE: 'offline_progress_queue',
+  UNIVERSITIES: 'downloaded_universities'
 } as const;
+
+export interface OfflineUniversityItem {
+  id: string;
+  name: string;
+  domain?: string;
+  logoUrl: string;
+  cachedLogoDataUrl?: string;
+  shortName?: string;
+  updatedAt: number;
+}
 
 export interface OfflineNoteItem {
   id: string;
@@ -71,6 +82,7 @@ export interface OfflineProgressQueueItem {
 const memoryNotes = new Map<string, OfflineNoteItem>();
 const memoryExams = new Map<string, OfflineExamItem>();
 const memoryPdfs = new Map<string, OfflinePdfItem>();
+const memoryUniversities = new Map<string, OfflineUniversityItem>();
 const memoryQueue: OfflineProgressQueueItem[] = [];
 
 function openDB(): Promise<IDBDatabase> {
@@ -108,6 +120,11 @@ function openDB(): Promise<IDBDatabase> {
           store.createIndex('email', 'email', { unique: false });
           store.createIndex('synced', 'synced', { unique: false });
           store.createIndex('createdAt', 'createdAt', { unique: false });
+        }
+
+        if (!db.objectStoreNames.contains(STORES.UNIVERSITIES)) {
+          const store = db.createObjectStore(STORES.UNIVERSITIES, { keyPath: 'name' });
+          store.createIndex('updatedAt', 'updatedAt', { unique: false });
         }
       };
 
@@ -832,6 +849,76 @@ export async function syncOfflineProgressWithSupabase(
     syncedCount,
     errors
   };
+}
+
+// ============================================================================
+// 5. UNIVERSITIES & LOGOS CACHING (Supabase & Offline)
+// ============================================================================
+
+export async function saveUniversitiesOffline(items: OfflineUniversityItem[]): Promise<boolean> {
+  if (!items || items.length === 0) return false;
+  items.forEach(u => memoryUniversities.set(u.name, u));
+  try {
+    const db = await openDB();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORES.UNIVERSITIES, 'readwrite');
+      const store = tx.objectStore(STORES.UNIVERSITIES);
+      items.forEach(u => store.put(u));
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    return true;
+  } catch (err) {
+    console.warn('[OfflineStore] Failed to save universities in IndexedDB:', err);
+    return false;
+  }
+}
+
+export async function getOfflineUniversities(): Promise<OfflineUniversityItem[]> {
+  try {
+    const db = await openDB();
+    return new Promise(resolve => {
+      const tx = db.transaction(STORES.UNIVERSITIES, 'readonly');
+      const store = tx.objectStore(STORES.UNIVERSITIES);
+      const req = store.getAll();
+      req.onsuccess = () => {
+        const results = req.result as OfflineUniversityItem[];
+        if (results && results.length > 0) {
+          results.forEach(u => memoryUniversities.set(u.name, u));
+          resolve(results);
+        } else {
+          resolve(Array.from(memoryUniversities.values()));
+        }
+      };
+      req.onerror = () => resolve(Array.from(memoryUniversities.values()));
+    });
+  } catch {
+    return Array.from(memoryUniversities.values());
+  }
+}
+
+export async function getOfflineUniversityByName(name: string): Promise<OfflineUniversityItem | null> {
+  if (!name) return null;
+  if (memoryUniversities.has(name)) return memoryUniversities.get(name)!;
+  try {
+    const db = await openDB();
+    return new Promise(resolve => {
+      const tx = db.transaction(STORES.UNIVERSITIES, 'readonly');
+      const store = tx.objectStore(STORES.UNIVERSITIES);
+      const req = store.get(name);
+      req.onsuccess = () => {
+        if (req.result) {
+          memoryUniversities.set(name, req.result);
+          resolve(req.result);
+        } else {
+          resolve(null);
+        }
+      };
+      req.onerror = () => resolve(null);
+    });
+  } catch {
+    return memoryUniversities.get(name) || null;
+  }
 }
 
 // Auto-trigger sync when connectivity is restored
