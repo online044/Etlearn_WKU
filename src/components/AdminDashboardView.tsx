@@ -963,14 +963,19 @@ export default function AdminDashboardView({
       const validUnis = DEFAULT_UNIVERSITIES.filter(u => u.id !== 'uni-general');
 
       for (const u of validUnis) {
-        // Omit string id because universities.id in Supabase is an auto-incrementing identity integer
         const payload: { name: string; domain?: string; logo_url: string } = {
           name: u.name,
           domain: u.domain,
           logo_url: u.logoUrl
         };
-        const { error } = await supa.from('universities').upsert(payload, { onConflict: 'name' });
-        if (!error) inserted++;
+        const { data: existingRows } = await supa.from('universities').select('id').eq('name', u.name);
+        if (existingRows && existingRows.length > 0) {
+          const { error } = await supa.from('universities').update(payload).eq('name', u.name);
+          if (!error) inserted++;
+        } else {
+          const { error } = await supa.from('universities').insert(payload);
+          if (!error) inserted++;
+        }
       }
 
       // Also persist to ethiolearn_sync cloud table for cross-device persistence

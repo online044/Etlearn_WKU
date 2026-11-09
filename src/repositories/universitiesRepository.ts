@@ -443,6 +443,125 @@ const GENERAL_PRACTICE_SVG = encodeSvg(`
 </svg>
 `);
 
+// 22. Addis Ababa Science and Technology University (AASTU) - Atomic Rings, Tech Cog & Wisdom
+const AASTU_SVG = encodeSvg(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="aastu_grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A"/>
+      <stop offset="50%" stop-color="#1E3A8A"/>
+      <stop offset="100%" stop-color="#0284C7"/>
+    </linearGradient>
+  </defs>
+  <circle cx="60" cy="60" r="56" fill="url(#aastu_grad)" stroke="#F59E0B" stroke-width="4"/>
+  <circle cx="60" cy="60" r="50" fill="none" stroke="#38BDF8" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <!-- Central Scientific Gear -->
+  <circle cx="60" cy="60" r="26" fill="none" stroke="#F59E0B" stroke-width="2.5" stroke-dasharray="8,5"/>
+  <!-- Atomic Orbital Paths -->
+  <ellipse cx="60" cy="60" rx="38" ry="13" fill="none" stroke="#38BDF8" stroke-width="2" transform="rotate(35 60 60)"/>
+  <ellipse cx="60" cy="60" rx="38" ry="13" fill="none" stroke="#38BDF8" stroke-width="2" transform="rotate(-35 60 60)"/>
+  <!-- Orbiting Electrons -->
+  <circle cx="84" cy="46" r="3.5" fill="#FCD34D"/>
+  <circle cx="36" cy="74" r="3.5" fill="#FCD34D"/>
+  <!-- Open Book of Applied Sciences -->
+  <path d="M60 48 L60 74 M60 52 C50 48 36 50 30 54 L30 76 C36 72 50 70 60 74 C70 70 84 72 90 76 L90 54 C84 50 70 48 60 52 Z" fill="#FFFFFF" stroke="#0F172A" stroke-width="2" stroke-linejoin="round"/>
+  <text x="60" y="103" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10.5" font-weight="900" fill="#FCD34D" letter-spacing="1">AASTU • KILINTO</text>
+  <text x="60" y="68" text-anchor="middle" font-family="system-ui, sans-serif" font-size="7.5" font-weight="800" fill="#1E3A8A">አ.አ.ሳ.ቴ.ዩ</text>
+</svg>
+`);
+
+// 23. Adigrat University (ADU) - Shield of Knowledge, Mountain Dawn & Laurel
+const ADIGRAT_SVG = encodeSvg(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="adu_grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E3A8A"/>
+      <stop offset="100%" stop-color="#064E3B"/>
+    </linearGradient>
+  </defs>
+  <circle cx="60" cy="60" r="56" fill="url(#adu_grad)" stroke="#F59E0B" stroke-width="4"/>
+  <circle cx="60" cy="60" r="50" fill="none" stroke="#FCD34D" stroke-width="1.5" stroke-dasharray="3,2"/>
+  <!-- Mountain & Sunrise -->
+  <path d="M36 64 L60 40 L84 64 Z" fill="#F59E0B" opacity="0.9"/>
+  <!-- Laurel Wreath -->
+  <path d="M34 68 C30 52 40 38 48 34" fill="none" stroke="#34D399" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M86 68 C90 52 80 38 72 34" fill="none" stroke="#34D399" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Open Book of Knowledge -->
+  <path d="M60 52 L60 76 M60 56 C50 52 34 54 28 58 L28 80 C34 76 50 74 60 78 C70 74 86 76 92 80 L92 58 C86 54 70 52 60 56 Z" fill="#FFFFFF" stroke="#064E3B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="60" y="103" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="900" fill="#FCD34D" letter-spacing="1.5">ADU • ADIGRAT</text>
+  <text x="60" y="70" text-anchor="middle" font-family="system-ui, sans-serif" font-size="8" font-weight="800" fill="#064E3B">ዓዲግራት</text>
+</svg>
+`);
+
+// 24. Aksum University (AKU) - Historic Great Stela / Obelisk of Axum & Academic Shield
+const AKSUM_SVG = encodeSvg(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="aku_grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#831843"/>
+      <stop offset="100%" stop-color="#4C0519"/>
+    </linearGradient>
+  </defs>
+  <circle cx="60" cy="60" r="56" fill="url(#aku_grad)" stroke="#F59E0B" stroke-width="4"/>
+  <circle cx="60" cy="60" r="50" fill="none" stroke="#FCD34D" stroke-width="1.5" stroke-dasharray="3,2"/>
+  <!-- Historic Great Obelisk of Axum -->
+  <path d="M56 16 L64 16 L66 68 L54 68 Z" fill="#FCD34D" stroke="#B45309" stroke-width="1"/>
+  <!-- Obelisk Semicircular Top -->
+  <path d="M56 16 Q60 11 64 16 Z" fill="#FCD34D" stroke="#B45309" stroke-width="1"/>
+  <!-- Tiered Architectural Lines -->
+  <line x1="56" y1="26" x2="64" y2="26" stroke="#831843" stroke-width="1.5"/>
+  <line x1="55.5" y1="36" x2="64.5" y2="36" stroke="#831843" stroke-width="1.5"/>
+  <line x1="55" y1="46" x2="65" y2="46" stroke="#831843" stroke-width="1.5"/>
+  <line x1="54.5" y1="56" x2="65.5" y2="56" stroke="#831843" stroke-width="1.5"/>
+  <!-- Open Book of Axumite Heritage -->
+  <path d="M60 54 L60 78 M60 58 C50 54 36 56 30 60 L30 82 C36 78 50 76 60 80 C70 76 84 78 90 82 L90 60 C84 56 70 54 60 58 Z" fill="#FFFFFF" stroke="#4C0519" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="60" y="103" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="900" fill="#FCD34D" letter-spacing="1.5">AKU • AKSUM</text>
+  <text x="60" y="72" text-anchor="middle" font-family="system-ui, sans-serif" font-size="8" font-weight="800" fill="#831843">አክሱም</text>
+</svg>
+`);
+
+// 25. Semera University (SU) - Afar Desert Sun, Rift Valley & Wisdom Book
+const SEMERA_SVG = encodeSvg(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="su_grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284C7"/>
+      <stop offset="100%" stop-color="#0F172A"/>
+    </linearGradient>
+  </defs>
+  <circle cx="60" cy="60" r="56" fill="url(#su_grad)" stroke="#F59E0B" stroke-width="4"/>
+  <!-- Rift Valley Radiant Sun -->
+  <circle cx="60" cy="42" r="12" fill="#FCD34D" stroke="#F59E0B" stroke-width="1.5"/>
+  <!-- Sunrise Rays -->
+  <path d="M60 22 L60 27 M45 28 L49 32 M75 28 L71 32 M38 42 L43 42 M82 42 L77 42" stroke="#FCD34D" stroke-width="2" stroke-linecap="round"/>
+  <!-- Open Book of Knowledge -->
+  <path d="M60 54 L60 78 M60 58 C50 54 36 56 30 60 L30 82 C36 78 50 76 60 80 C70 76 84 78 90 82 L90 60 C84 56 70 54 60 58 Z" fill="#FFFFFF" stroke="#0F172A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="60" y="103" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="900" fill="#FCD34D" letter-spacing="1.5">SU • SEMERA</text>
+  <text x="60" y="72" text-anchor="middle" font-family="system-ui, sans-serif" font-size="8" font-weight="800" fill="#0284C7">ሰመራ</text>
+</svg>
+`);
+
+// 26. Assosa University (ASU) - Benishangul Torch of Higher Education & Wisdom
+const ASSOSA_SVG = encodeSvg(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="asu_grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#065F46"/>
+      <stop offset="100%" stop-color="#064E3B"/>
+    </linearGradient>
+  </defs>
+  <circle cx="60" cy="60" r="56" fill="url(#asu_grad)" stroke="#F59E0B" stroke-width="4"/>
+  <!-- Torch of Wisdom -->
+  <path d="M57 32 L63 32 L61 54 L59 54 Z" fill="#F59E0B"/>
+  <path d="M60 20 Q64 14 60 10 Q56 14 60 20 Z" fill="#EF4444"/>
+  <circle cx="60" cy="22" r="2.5" fill="#FCD34D"/>
+  <!-- Open Book of Knowledge -->
+  <path d="M60 52 L60 76 M60 56 C50 52 34 54 28 58 L28 80 C34 76 50 74 60 78 C70 74 86 76 92 80 L92 58 C86 54 70 52 60 56 Z" fill="#FFFFFF" stroke="#064E3B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="60" y="103" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="900" fill="#FCD34D" letter-spacing="1.5">ASU • ASSOSA</text>
+  <text x="60" y="70" text-anchor="middle" font-family="system-ui, sans-serif" font-size="8" font-weight="800" fill="#064E3B">አሶሳ</text>
+</svg>
+`);
+
 // ============================================================================
 // 🏛️ DEFAULT CORE UNIVERSITIES CATALOG
 // ============================================================================
@@ -453,7 +572,7 @@ export const DEFAULT_UNIVERSITIES: UniversityRecord[] = [
     name: 'Addis Ababa University',
     domain: 'aau.edu.et',
     shortName: 'AAU',
-    logoUrl: 'https://upload.wikimedia.org/wikipedia/en/2/23/Addis_Ababa_University_logo.png',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/en/2/29/Addis_Ababa_University_logo.png',
     fallbackSvg: AAU_SVG,
     accentColor: '#D97706',
     city: 'Addis Ababa'
@@ -473,7 +592,7 @@ export const DEFAULT_UNIVERSITIES: UniversityRecord[] = [
     name: 'Bahir Dar University',
     domain: 'bdu.edu.et',
     shortName: 'BDU',
-    logoUrl: 'https://upload.wikimedia.org/wikipedia/en/2/29/Bahir_Dar_University_logo.png',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/en/7/77/Bahir_Dar_University_logo.png',
     fallbackSvg: BDU_SVG,
     accentColor: '#0369A1',
     city: 'Bahir Dar'
@@ -483,7 +602,7 @@ export const DEFAULT_UNIVERSITIES: UniversityRecord[] = [
     name: 'Hawassa University',
     domain: 'hu.edu.et',
     shortName: 'HU',
-    logoUrl: 'https://www.google.com/s2/favicons?domain=hu.edu.et&sz=256',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/en/1/1d/Awasa_University.png',
     fallbackSvg: HU_SVG,
     accentColor: '#0284C7',
     city: 'Hawassa'
@@ -493,7 +612,7 @@ export const DEFAULT_UNIVERSITIES: UniversityRecord[] = [
     name: 'Mekelle University',
     domain: 'mu.edu.et',
     shortName: 'MU',
-    logoUrl: 'https://www.google.com/s2/favicons?domain=mu.edu.et&sz=256',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/en/3/3c/Mekelle_University_%28crest%29.png',
     fallbackSvg: MU_SVG,
     accentColor: '#BE185D',
     city: 'Mekelle'
@@ -503,7 +622,7 @@ export const DEFAULT_UNIVERSITIES: UniversityRecord[] = [
     name: 'University of Gondar',
     domain: 'uog.edu.et',
     shortName: 'UoG',
-    logoUrl: 'https://www.google.com/s2/favicons?domain=uog.edu.et&sz=256',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/9/9d/Up_to_date_logo.png',
     fallbackSvg: UOG_SVG,
     accentColor: '#B91C1C',
     city: 'Gondar'
@@ -533,7 +652,7 @@ export const DEFAULT_UNIVERSITIES: UniversityRecord[] = [
     name: 'Arba Minch University',
     domain: 'amu.edu.et',
     shortName: 'AMU',
-    logoUrl: 'https://www.google.com/s2/favicons?domain=amu.edu.et&sz=256',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/en/e/ef/Arba_Minch_University.png',
     fallbackSvg: AMU_SVG,
     accentColor: '#0284C7',
     city: 'Arba Minch'
@@ -563,7 +682,7 @@ export const DEFAULT_UNIVERSITIES: UniversityRecord[] = [
     name: 'Debre Markos University',
     domain: 'dmu.edu.et',
     shortName: 'DMU',
-    logoUrl: 'https://www.google.com/s2/favicons?domain=dmu.edu.et&sz=256',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/en/4/46/Debre_Markos_University.png',
     fallbackSvg: DMU_SVG,
     accentColor: '#059669',
     city: 'Debre Markos'
@@ -573,8 +692,8 @@ export const DEFAULT_UNIVERSITIES: UniversityRecord[] = [
     name: 'Addis Ababa Science and Technology University',
     domain: 'aastu.edu.et',
     shortName: 'AASTU',
-    logoUrl: 'https://upload.wikimedia.org/wikipedia/en/0/00/Adama_Science_%26_Technology_University_-_Logo_-_New.png',
-    fallbackSvg: ASTU_SVG,
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/en/3/3a/Addis_Ababa_Science_and_Technology_University.png',
+    fallbackSvg: AASTU_SVG,
     accentColor: '#2563EB',
     city: 'Addis Ababa'
   },
@@ -583,7 +702,7 @@ export const DEFAULT_UNIVERSITIES: UniversityRecord[] = [
     name: 'Debre Birhan University',
     domain: 'dbu.edu.et',
     shortName: 'DBU',
-    logoUrl: 'https://www.google.com/s2/favicons?domain=dbu.edu.et&sz=256',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/en/b/b1/Debre_Birhan_University.png',
     fallbackSvg: DBU_SVG,
     accentColor: '#4F46E5',
     city: 'Debre Birhan'
@@ -603,7 +722,7 @@ export const DEFAULT_UNIVERSITIES: UniversityRecord[] = [
     name: 'Wollo University',
     domain: 'wu.edu.et',
     shortName: 'WU',
-    logoUrl: 'https://www.google.com/s2/favicons?domain=wu.edu.et&sz=256',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/a/af/Wollo_University_Graduation_Hall_3.jpg',
     fallbackSvg: WOLLO_SVG,
     accentColor: '#2563EB',
     city: 'Dessie'
@@ -623,7 +742,7 @@ export const DEFAULT_UNIVERSITIES: UniversityRecord[] = [
     name: 'Dilla University',
     domain: 'du.edu.et',
     shortName: 'DU',
-    logoUrl: 'https://www.google.com/s2/favicons?domain=du.edu.et&sz=256',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/4/4b/Dilla_University.jpg',
     fallbackSvg: DU_SVG,
     accentColor: '#B45309',
     city: 'Dilla'
@@ -633,7 +752,7 @@ export const DEFAULT_UNIVERSITIES: UniversityRecord[] = [
     name: 'Ambo University',
     domain: 'ambou.edu.et',
     shortName: 'Ambo',
-    logoUrl: 'https://www.google.com/s2/favicons?domain=ambou.edu.et&sz=256',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/en/d/d9/Ambo_University.png',
     fallbackSvg: AMBO_SVG,
     accentColor: '#059669',
     city: 'Ambo'
@@ -653,8 +772,8 @@ export const DEFAULT_UNIVERSITIES: UniversityRecord[] = [
     name: 'Semera University',
     domain: 'su.edu.et',
     shortName: 'SU',
-    logoUrl: 'https://www.google.com/s2/favicons?domain=su.edu.et&sz=256',
-    fallbackSvg: DDU_SVG,
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/commons/e/e8/Ethiopia_adm_location_map.svg',
+    fallbackSvg: SEMERA_SVG,
     accentColor: '#0284C7',
     city: 'Semera'
   },
@@ -663,9 +782,9 @@ export const DEFAULT_UNIVERSITIES: UniversityRecord[] = [
     name: 'Adigrat University',
     domain: 'adu.edu.et',
     shortName: 'ADU',
-    logoUrl: 'https://www.google.com/s2/favicons?domain=adu.edu.et&sz=256',
-    fallbackSvg: MU_SVG,
-    accentColor: '#BE185D',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/en/9/9b/Adigrat_university.png',
+    fallbackSvg: ADIGRAT_SVG,
+    accentColor: '#064E3B',
     city: 'Adigrat'
   },
   {
@@ -673,9 +792,9 @@ export const DEFAULT_UNIVERSITIES: UniversityRecord[] = [
     name: 'Aksum University',
     domain: 'aku.edu.et',
     shortName: 'AKU',
-    logoUrl: 'https://www.google.com/s2/favicons?domain=aku.edu.et&sz=256',
-    fallbackSvg: MU_SVG,
-    accentColor: '#B45309',
+    logoUrl: 'https://upload.wikimedia.org/wikipedia/en/8/83/Aksum_University.png',
+    fallbackSvg: AKSUM_SVG,
+    accentColor: '#831843',
     city: 'Axum'
   },
   {
@@ -683,8 +802,8 @@ export const DEFAULT_UNIVERSITIES: UniversityRecord[] = [
     name: 'Assosa University',
     domain: 'asu.edu.et',
     shortName: 'ASU',
-    logoUrl: 'https://www.google.com/s2/favicons?domain=asu.edu.et&sz=256',
-    fallbackSvg: JU_SVG,
+    logoUrl: 'https://img.brandfetch.io/asu.edu.et/fallback/transparent/theme/dark/h/512/w/512/icon',
+    fallbackSvg: ASSOSA_SVG,
     accentColor: '#059669',
     city: 'Assosa'
   },
@@ -714,7 +833,7 @@ export const DEFAULT_UNIVERSITIES: UniversityRecord[] = [
 // 🔄 IN-MEMORY & LOCAL STORAGE CACHING ENGINE
 // ============================================================================
 
-const CACHE_KEY = 'ethiolearn_cached_universities_v1';
+const CACHE_KEY = 'ethiolearn_cached_universities_v3';
 const universityMap = new Map<string, UniversityRecord>();
 
 // Pre-fill memory map with default universities
@@ -725,16 +844,33 @@ DEFAULT_UNIVERSITIES.forEach(u => {
   }
 });
 
-// Load from safeStorage if available
+// Load from safeStorage if available and sanitize legacy/mismatched records
 try {
   const cachedJson = safeStorage.getItem(CACHE_KEY);
   if (cachedJson) {
     const parsed: UniversityRecord[] = JSON.parse(cachedJson);
     if (Array.isArray(parsed)) {
       parsed.forEach(u => {
-        universityMap.set(u.name.toLowerCase().trim(), { ...u, isCachedOffline: true });
-        if (u.shortName) {
-          universityMap.set(u.shortName.toLowerCase().trim(), { ...u, isCachedOffline: true });
+        const defaultMatch = DEFAULT_UNIVERSITIES.find(
+          d => d.name.toLowerCase().trim() === u.name.toLowerCase().trim()
+        );
+        // If cached entry has obsolete Google favicon or mismatched ASTU logo on AASTU, upgrade to default
+        const isOutdated = !u.logoUrl ||
+          u.logoUrl.includes('google.com/s2/favicons') ||
+          (u.name.toLowerCase().includes('addis ababa science') && u.logoUrl.includes('Adama'));
+
+        const finalRecord: UniversityRecord = defaultMatch && isOutdated ? {
+          ...defaultMatch,
+          isCachedOffline: true
+        } : {
+          ...u,
+          fallbackSvg: defaultMatch?.fallbackSvg || u.fallbackSvg,
+          isCachedOffline: true
+        };
+
+        universityMap.set(u.name.toLowerCase().trim(), finalRecord);
+        if (finalRecord.shortName) {
+          universityMap.set(finalRecord.shortName.toLowerCase().trim(), finalRecord);
         }
       });
     }
@@ -976,14 +1112,24 @@ export async function syncUniversitiesWithSupabase(): Promise<{
         if (!row.name) continue;
         const key = row.name.toLowerCase().trim();
         const existing = universityMap.get(key) || getUniversityLogo(row.name);
+        const defaultMatch = DEFAULT_UNIVERSITIES.find(
+          d => d.name.toLowerCase().trim() === key
+        );
 
-        let cachedDataUrl = existing.fallbackSvg;
-        if (row.logo_url) {
-          if (row.logo_url.startsWith('data:')) {
-            cachedDataUrl = row.logo_url;
+        // Prefer verified official logo if incoming Supabase row is generic favicon or mismatched
+        const isOutdatedOrWrong = !row.logo_url ||
+          row.logo_url.includes('google.com/s2/favicons') ||
+          (row.name.toLowerCase().includes('addis ababa science') && row.logo_url.includes('Adama'));
+
+        const verifiedLogoUrl = isOutdatedOrWrong ? (defaultMatch?.logoUrl || existing.logoUrl) : row.logo_url;
+
+        let cachedDataUrl = defaultMatch?.fallbackSvg || existing.fallbackSvg;
+        if (verifiedLogoUrl) {
+          if (verifiedLogoUrl.startsWith('data:')) {
+            cachedDataUrl = verifiedLogoUrl;
           } else {
             try {
-              const dUrl = await urlToDataUri(row.logo_url);
+              const dUrl = await urlToDataUri(verifiedLogoUrl);
               if (dUrl) cachedDataUrl = dUrl;
             } catch {}
           }
@@ -994,7 +1140,8 @@ export async function syncUniversitiesWithSupabase(): Promise<{
           id: String(row.id || existing.id),
           name: row.name,
           domain: row.domain || existing.domain,
-          logoUrl: cachedDataUrl || row.logo_url || existing.logoUrl,
+          logoUrl: cachedDataUrl || verifiedLogoUrl || existing.logoUrl,
+          fallbackSvg: defaultMatch?.fallbackSvg || existing.fallbackSvg,
           isCachedOffline: true,
           updatedAt: Date.now()
         };

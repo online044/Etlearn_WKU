@@ -70,7 +70,7 @@ export default function UniversityLogo({
 
   return (
     <div
-      className={`relative inline-flex items-center justify-center shrink-0 rounded-xl overflow-hidden bg-white dark:bg-[#0B132B] border border-slate-200 dark:border-slate-700/80 shadow-xs transition-transform ${SIZE_MAP[size]} ${className}`}
+      className={`relative inline-flex items-center justify-center shrink-0 rounded-xl overflow-hidden bg-white dark:bg-[#0E172E] border border-slate-200 dark:border-slate-700/80 shadow-xs p-1 transition-transform ${SIZE_MAP[size]} ${className}`}
       title={record.name}
     >
       {stage === 'inline' || !currentSrc ? (
