@@ -16,6 +16,7 @@ import HomeDashboard from './components/HomeDashboard';
 import StudentAvatar from './components/StudentAvatar';
 import EthioLearnLogo from './components/EthioLearnLogo';
 import EthioLearnAppPromoBanner from './components/EthioLearnAppPromoBanner';
+import GoogleAdBanner from './components/GoogleAdBanner';
 import AppSidebar from './components/AppSidebar';
 import PWADownloadAssistant from './components/PWADownloadAssistant';
 import { OfflineIndicator } from './components/OfflineIndicator';
@@ -1967,14 +1968,22 @@ export default function App() {
         
         {/* EthioLearn Native Mini Highlight / Announcement Bar */}
         {currentPage !== 'upgrade' && (
-          <EthioLearnAppPromoBanner 
-            profile={profile}
-            language={language}
-            onUpgradeClick={() => setCurrentPage('upgrade')}
-            onNavigate={(page) => setCurrentPage(page as any)}
-            onInstallClick={triggerPWAInstall}
-            positionContext={`app-${currentPage}-top`}
-          />
+          <div className="space-y-2 mb-2">
+            <EthioLearnAppPromoBanner 
+              profile={profile}
+              language={language}
+              onUpgradeClick={() => setCurrentPage('upgrade')}
+              onNavigate={(page) => setCurrentPage(page as any)}
+              onInstallClick={triggerPWAInstall}
+              positionContext={`app-${currentPage}-top`}
+            />
+            {/* Google AdSense Responsive Ad Unit */}
+            <GoogleAdBanner 
+              profile={profile}
+              slotId="6112187514"
+              client="ca-pub-7081291575190781"
+            />
+          </div>
         )}
 
         <AnimatePresence mode="wait">
