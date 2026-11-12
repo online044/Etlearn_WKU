@@ -1977,11 +1977,13 @@ export default function App() {
               onInstallClick={triggerPWAInstall}
               positionContext={`app-${currentPage}-top`}
             />
-            {/* Google AdSense Responsive Ad Unit */}
+            {/* Google AdSense (Web) & AdMob (Android Wrapper) Responsive Ad Unit */}
             <GoogleAdBanner 
               profile={profile}
               slotId="6112187514"
               client="ca-pub-7081291575190781"
+              admobAppId="ca-app-pub-7081291575190781~6693490063"
+              admobAdUnitId="ca-app-pub-7081291575190781/6293889020"
             />
           </div>
         )}

@@ -194,6 +194,21 @@ app.get(['/manifest.json', '/manifest.webmanifest'], (req: Request, res: Respons
   return res.status(404).send('Manifest not found');
 });
 
+app.get(['/app-ads.txt', '/ads.txt'], (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  const fileName = req.path === '/app-ads.txt' ? 'app-ads.txt' : 'ads.txt';
+  const distPath = path.join(process.cwd(), 'dist', fileName);
+  const publicPath = path.join(process.cwd(), 'public', fileName);
+  if (fs.existsSync(distPath)) {
+    return res.sendFile(distPath);
+  }
+  if (fs.existsSync(publicPath)) {
+    return res.sendFile(publicPath);
+  }
+  return res.send('google.com, pub-7081291575190781, DIRECT, f08c47fec0942fa0\n');
+});
+
 // Static assets: pdfjs with explicit JavaScript MIME type for .mjs
 app.use('/pdfjs', (req: Request, res: Response, next: NextFunction) => {
   if (req.path.endsWith('.mjs') || req.path.endsWith('.js')) {

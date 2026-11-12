@@ -26,4 +26,12 @@ export const GOOGLE_SERVICES_PROJECT = {
   ]
 };
 
+export const ADMOB_CONFIG = {
+  publisherId: 'pub-7081291575190781',
+  appId: 'ca-app-pub-7081291575190781~6693490063',
+  bannerAdUnitId: 'ca-app-pub-7081291575190781/6293889020',
+  adsenseClient: 'ca-pub-7081291575190781',
+  adsenseBannerSlot: '6112187514'
+} as const;
+
 export default GOOGLE_SERVICES_PROJECT;

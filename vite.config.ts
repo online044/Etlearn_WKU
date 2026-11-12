@@ -27,6 +27,8 @@ export default defineConfig(() => {
           'icons/icon-512-maskable.png',
           'icons/apple-touch-icon.png',
           'offline.html',
+          'app-ads.txt',
+          'ads.txt',
         ],
         manifest: {
           id: '/',
@@ -125,7 +127,7 @@ export default defineConfig(() => {
           globPatterns: ['**/*.{js,mjs,css,html,ico,png,svg,jpg,jpeg,webp,woff,woff2}'],
           cleanupOutdatedCaches: true,
           navigateFallback: '/index.html',
-          navigateFallbackDenylist: [/^\/api\//, /^\/auth\//],
+          navigateFallbackDenylist: [/^\/api\//, /^\/auth\//, /^\/(?:app-)?ads\.txt$/i],
           runtimeCaching: [
             {
               // Google Fonts stylesheets
